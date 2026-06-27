@@ -43,6 +43,23 @@ checku: check
 data:  ## Import a pinned vPIC dump into vpic/ (usage: make data DUMP=path.zip MONTH=YYYY_MM).
 	@cargo run -p ultravin-build --release -- --dump "$(DUMP)" --month "$(MONTH)" --out vpic
 
+download:  ## Download a pinned vPIC dump into downloads/ (usage: make download MONTH=YYYY_MM).
+	@mkdir -p downloads
+	@curl -fSL "https://vpic.nhtsa.dot.gov/Downloads/vPICList_lite_$(MONTH).plain.zip" -o "downloads/vPICList_lite_$(MONTH).plain.zip"
+	@echo "downloaded downloads/vPICList_lite_$(MONTH).plain.zip"
+
+oracle-up:  ## Start the Postgres parity oracle (Docker).
+	@bash scripts/oracle.sh up
+
+oracle-load:  ## Load a dump into the oracle (usage: make oracle-load DUMP=path.zip).
+	@bash scripts/oracle.sh load "$(DUMP)"
+
+oracle-decode:  ## Decode a VIN via the oracle (usage: make oracle-decode VIN=...).
+	@bash scripts/oracle.sh decode "$(VIN)"
+
+oracle-down:  ## Stop and remove the oracle.
+	@bash scripts/oracle.sh down
+
 install-uv:  # Install uv if not already installed
 	@if ! uv --help >/dev/null 2>&1; then \
 		echo "Installing uv..."; \
