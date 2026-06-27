@@ -7,6 +7,7 @@
 //! best-of, Conversion/Vehicle-Specs sources, and suggested-VIN are W2.
 
 mod checkdigit;
+mod conversion;
 pub mod db;
 mod decode;
 mod errors;
@@ -99,31 +100,158 @@ pub fn decode(input: &str) -> DecodeResult {
     decode_with(Db::embedded(), input, secs * 1_000_000, epoch_to_year(secs))
 }
 
-/// Decode a VIN against an explicit database and clock (injectable for tests).
+/// Decode a VIN against an explicit database and clock (injectable for tests),
+/// with no caller-supplied model year.
 pub fn decode_with(db: &Db, input: &str, now_micros: i64, current_year: i32) -> DecodeResult {
+    decode_full(db, input, now_micros, current_year, None)
+}
+
+/// One decode pass (a single `spvindecode_core` invocation): its items (with the
+/// 142/143/144/156/191/196 corrections appended, values still pre-resolution) and
+/// the metadata the scorer and result need.
+struct Pass {
+    id: i32,
+    model_year: Option<i32>,
+    items: Vec<decode::DecodingItem>,
+    codes: Vec<i32>,
+    corrected_vin: String,
+    check_digit_valid: bool,
+}
+
+/// The full wrapper (`vpic.spvindecode`): up to 4 best-of passes, scoring, and
+/// the GroupName-ordered projection. `caller_year` is the optional caller MY.
+pub fn decode_full(
+    db: &Db,
+    input: &str,
+    now_micros: i64,
+    current_year: i32,
+    caller_year: Option<i32>,
+) -> DecodeResult {
     let vin = input.trim().to_ascii_uppercase();
     let var_wmi = vin_wmi(&vin);
     let descriptor = vin_descriptor(&vin);
-
-    let yc = year::choose_model_year(&vin, db, current_year);
     let var_keys = decode::build_var_keys(&vin);
 
-    let core = decode::decode_core(
-        db,
-        &var_wmi,
-        &var_keys,
-        yc.model_year,
-        &yc.source,
-        now_micros,
-    );
+    let v_limit = current_year + 2;
+    let plan = year::resolve_years(&vin, db, current_year);
 
-    let wmi_row = db.wmi_by_str(&var_wmi, now_micros);
-    let err = errors::compute_errors(db, &vin, &core, yc.model_year, wmi_row);
+    // Pass 1 (descriptor/dmy) is permanently dead in the proc — skipped here.
+    let mut passes: Vec<Pass> = Vec::new();
+    let mut model_year_source = "***X*|Y".to_string();
+    let mut do3and4 = true;
 
-    let mut items = core.items;
+    // Pass 2: caller year, only when in [1980, v_limit] and not already a candidate.
+    if let Some(yc) = caller_year {
+        if (1980..=v_limit).contains(&yc) {
+            if Some(yc) == plan.rmy || Some(yc) == plan.omy {
+                do3and4 = true;
+            } else {
+                model_year_source = yc.to_string();
+                let p = run_pass(
+                    db,
+                    &vin,
+                    &var_wmi,
+                    &var_keys,
+                    now_micros,
+                    &descriptor,
+                    2,
+                    Some(yc),
+                    &model_year_source,
+                    true,
+                    true,
+                );
+                do3and4 = p.codes.contains(&8) && plan.rmy.is_some();
+                passes.push(p);
+            }
+        }
+    }
+
+    if do3and4 {
+        // Pass 3: rmy.
+        let e12 = caller_year.is_some() && plan.rmy.is_some() && caller_year != plan.rmy;
+        passes.push(run_pass(
+            db,
+            &vin,
+            &var_wmi,
+            &var_keys,
+            now_micros,
+            &descriptor,
+            3,
+            plan.rmy,
+            &model_year_source,
+            plan.conclusive,
+            e12,
+        ));
+        // Pass 4: omy (only when inconclusive).
+        if let Some(omy) = plan.omy {
+            let e12 = caller_year.is_some() && caller_year != Some(omy);
+            passes.push(run_pass(
+                db,
+                &vin,
+                &var_wmi,
+                &var_keys,
+                now_micros,
+                &descriptor,
+                4,
+                Some(omy),
+                &model_year_source,
+                plan.conclusive,
+                e12,
+            ));
+        }
+    }
+
+    let best_id = best_pass(&passes, db, caller_year);
+    let best = passes
+        .into_iter()
+        .find(|p| p.id == best_id)
+        .expect("at least one pass ran");
+
+    let mut items = best.items;
+    // QC override + TobeQCed delete (inert with current data) then XXX resolution.
+    items.retain(|it| !it.to_be_qced);
     resolve::resolve_xxx(db, &mut items);
 
-    // Corrections pseudo-elements (142,143,144,156,191,196).
+    let elements = project(db, &items);
+
+    DecodeResult {
+        vin,
+        wmi: var_wmi,
+        descriptor,
+        model_year: best.model_year,
+        error_codes: best.codes,
+        check_digit_valid: best.check_digit_valid,
+        corrected_vin: best.corrected_vin,
+        elements,
+    }
+}
+
+/// Run one `spvindecode_core` pass and append its corrections.
+#[allow(clippy::too_many_arguments)]
+fn run_pass(
+    db: &Db,
+    vin: &str,
+    var_wmi: &str,
+    var_keys: &str,
+    now_micros: i64,
+    descriptor: &str,
+    id: i32,
+    model_year: Option<i32>,
+    model_year_source: &str,
+    conclusive: bool,
+    error12: bool,
+) -> Pass {
+    let core = decode::decode_core(
+        db,
+        var_wmi,
+        var_keys,
+        model_year,
+        model_year_source,
+        now_micros,
+    );
+    let err = errors::compute_errors(db, vin, var_wmi, &core, model_year, error12, conclusive);
+
+    let mut items = core.items;
     let codes_csv = err
         .codes
         .iter()
@@ -131,16 +259,100 @@ pub fn decode_with(db: &Db, input: &str, now_micros: i64, current_year: i32) -> 
         .collect::<Vec<_>>()
         .join(",");
     let error_text = error_messages(db, &err);
-    append_correction(&mut items, 142, "");
+    append_correction(&mut items, 142, &err.corrected_vin);
     append_correction(&mut items, 143, &codes_csv);
-    append_correction(&mut items, 144, "");
-    append_correction(&mut items, 156, "");
+    append_correction(&mut items, 144, &err.error_bytes);
+    append_correction(&mut items, 156, &err.additional_info);
     append_correction(&mut items, 191, &error_text);
-    append_correction(&mut items, 196, &descriptor);
+    append_correction(&mut items, 196, descriptor);
 
-    // Project items -> output elements (element decode present, non-empty, public).
-    let mut elements: Vec<DecodedElement> = Vec::new();
-    for it in &items {
+    Pass {
+        id,
+        model_year,
+        items,
+        codes: err.codes,
+        corrected_vin: err.corrected_vin,
+        check_digit_valid: err.check_digit_valid,
+    }
+}
+
+/// Pick the best pass by the `x` scoring table: ErrorValue desc, ElementsWeight
+/// desc, Patterns desc, ModelYear desc (NULLs last), then lowest pass id.
+fn best_pass(passes: &[Pass], db: &Db, caller_year: Option<i32>) -> i32 {
+    passes
+        .iter()
+        .max_by(|a, b| {
+            let sa = score(a, db, caller_year);
+            let sb = score(b, db, caller_year);
+            // a is "greater" (preferred) when its tuple ranks higher.
+            sa.0.cmp(&sb.0)
+                .then(sa.1.cmp(&sb.1))
+                .then(sa.2.cmp(&sb.2))
+                .then(cmp_year_nulls_last(sa.3, sb.3))
+                .then(b.id.cmp(&a.id)) // lower id wins ties
+        })
+        .map(|p| p.id)
+        .unwrap_or(0)
+}
+
+/// (ErrorValue, ElementsWeight, Patterns, ModelYear+bonus) for a pass.
+fn score(pass: &Pass, db: &Db, caller_year: Option<i32>) -> (i32, i32, i32, Option<i32>) {
+    let error_value: i32 = pass
+        .codes
+        .iter()
+        .map(|c| tables::errorcode_weight(*c))
+        .sum();
+
+    let mut weighted: std::collections::HashSet<i32> = std::collections::HashSet::new();
+    for it in &pass.items {
+        if !it.value.is_empty() {
+            weighted.insert(it.element_id);
+        }
+    }
+    let elements_weight: i32 = weighted
+        .iter()
+        .filter_map(|eid| db.element_by_id(*eid))
+        .map(|e| e.weight)
+        .filter(|w| *w != tables::NULL_I32)
+        .sum();
+
+    let patterns = pass
+        .items
+        .iter()
+        .filter(|it| {
+            matches!(
+                it.source.as_str(),
+                "Pattern" | "EngineModelPattern" | "Formula Pattern"
+            ) && !it.value.is_empty()
+                && it.value != "Not Applicable"
+        })
+        .count() as i32;
+
+    let model_year = pass
+        .items
+        .iter()
+        .find(|it| it.element_id == 29)
+        .and_then(|it| it.value.parse::<i32>().ok())
+        .map(|y| y + if caller_year == Some(y) { 10000 } else { 0 });
+
+    (error_value, elements_weight, patterns, model_year)
+}
+
+/// DESC ordering with NULLs last: `Some` always beats `None`.
+fn cmp_year_nulls_last(a: Option<i32>, b: Option<i32>) -> std::cmp::Ordering {
+    match (a, b) {
+        (Some(x), Some(y)) => x.cmp(&y),
+        (Some(_), None) => std::cmp::Ordering::Greater,
+        (None, Some(_)) => std::cmp::Ordering::Less,
+        (None, None) => std::cmp::Ordering::Equal,
+    }
+}
+
+/// Project the surviving items into output elements (non-empty Decode, public),
+/// ordered by the GroupName CASE rank then element id.
+fn project(db: &Db, items: &[decode::DecodingItem]) -> Vec<DecodedElement> {
+    let mut elements: Vec<(i32, DecodedElement)> = Vec::new();
+    for it in items {
         let Some(e) = db.element_by_id(it.element_id) else {
             continue;
         };
@@ -148,38 +360,33 @@ pub fn decode_with(db: &Db, input: &str, now_micros: i64, current_year: i32) -> 
         if !e.decode_present || decode_str.is_empty() || e.isprivate {
             continue;
         }
-        elements.push(DecodedElement {
-            group_name: db.s(e.groupname).to_string(),
-            variable: db.s(e.name).to_string(),
-            value: scrub(&it.value),
-            element_id: it.element_id,
-            attribute_id: it.attribute_id.clone(),
-            code: db.s(e.code).to_string(),
-            data_type: db.s(e.datatype).to_string(),
-            decode: decode_str.to_string(),
-            source: it.source.clone(),
-            pattern_id: opt_i32(it.pattern_id),
-            vin_schema_id: opt_i32(it.vin_schema_id),
-            keys: it.keys.clone(),
-            created_on: opt_i64(it.created_on),
-            wmi_id: opt_i32(it.wmi_id),
-            to_be_qced: it.to_be_qced,
-        });
+        let group_name = db.s(e.groupname).to_string();
+        let rank = tables::group_rank(&group_name);
+        elements.push((
+            rank,
+            DecodedElement {
+                group_name,
+                variable: db.s(e.name).to_string(),
+                value: scrub(&it.value),
+                element_id: it.element_id,
+                attribute_id: it.attribute_id.clone(),
+                code: db.s(e.code).to_string(),
+                data_type: db.s(e.datatype).to_string(),
+                decode: decode_str.to_string(),
+                source: it.source.clone(),
+                pattern_id: opt_i32(it.pattern_id),
+                vin_schema_id: opt_i32(it.vin_schema_id),
+                keys: it.keys.clone(),
+                created_on: opt_i64(it.created_on),
+                wmi_id: opt_i32(it.wmi_id),
+                to_be_qced: it.to_be_qced,
+            },
+        ));
     }
-    // W1 orders by element id (GroupName ordering is W2). Stable: exempt dups keep order.
-    elements.sort_by_key(|e| e.element_id);
-
-    let corrected_vin = err.corrected_vin_w1();
-    DecodeResult {
-        vin,
-        wmi: var_wmi,
-        descriptor,
-        model_year: yc.model_year,
-        error_codes: err.codes,
-        check_digit_valid: err.check_digit_valid,
-        corrected_vin,
-        elements,
-    }
+    // GroupName CASE rank, then element id (the proc leaves intra-group order to
+    // the scan; element id is the deterministic, stable secondary key).
+    elements.sort_by_key(|(rank, e)| (*rank, e.element_id));
+    elements.into_iter().map(|(_, e)| e).collect()
 }
 
 /// Build the element-191 error text: error-code names joined by `; `.
@@ -223,13 +430,6 @@ fn append_correction(items: &mut Vec<decode::DecodingItem>, element_id: i32, val
         priority: 999,
         to_be_qced: false,
     });
-}
-
-impl errors::ErrorState {
-    /// W1 suggested/corrected VIN is always empty (W2).
-    fn corrected_vin_w1(&self) -> String {
-        String::new()
-    }
 }
 
 #[cfg(test)]

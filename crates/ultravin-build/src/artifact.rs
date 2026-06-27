@@ -8,9 +8,10 @@ use std::path::Path;
 
 use ultravin_core::sqlwild_to_regex;
 use ultravin_core::tables::{
-    serialize_artifact, tag_of_table, DefaultValue, Element, EngineModel, EngineModelPattern,
-    LookupRow, MakeModel, Pattern, VinException, VinSchema, VpicData, Wmi, WmiMake, WmiVinSchema,
-    NULL_I32, NULL_I64,
+    serialize_artifact, tag_of_table, Conversion, DefaultValue, Element, EngineModel,
+    EngineModelPattern, LookupRow, MakeModel, Pattern, VSpecPattern, VSpecSchema, VSpecSchemaModel,
+    VSpecSchemaPattern, VSpecSchemaYear, VinException, VinSchema, VpicData, Wmi, WmiMake,
+    WmiVinSchema, NULL_I32, NULL_I64,
 };
 
 /// Tables that get their own typed array (vs. the generic lookups).
@@ -26,6 +27,12 @@ const DEDICATED: &[&str] = &[
     "enginemodelpattern",
     "defaultvalue",
     "vinexception",
+    "conversion",
+    "vehiclespecschema",
+    "vspecschemapattern",
+    "vehiclespecpattern",
+    "vehiclespecschema_model",
+    "vehiclespecschema_year",
 ];
 
 // Raw (pre-intern) rows — owned strings, parsed numerics.
@@ -56,6 +63,7 @@ struct RElement {
     datatype: String,
     decode: String,
     decode_present: bool,
+    weight: i32,
 }
 struct REngineModel {
     id: i32,
@@ -80,6 +88,20 @@ struct RVinExc {
     vin: String,
     checkdigit: bool,
 }
+struct RConversion {
+    id: i32,
+    fromelementid: i32,
+    toelementid: i32,
+    formula: String,
+}
+struct RVSpecPattern {
+    id: i32,
+    vspecschemapatternid: i32,
+    iskey: bool,
+    elementid: i32,
+    attributeid: String,
+    changedon_key: i64,
+}
 
 #[derive(Default)]
 pub struct ArtifactBuilder {
@@ -94,6 +116,12 @@ pub struct ArtifactBuilder {
     enginemodelpattern: Vec<REmp>,
     defaultvalue: Vec<RDefault>,
     vinexception: Vec<RVinExc>,
+    conversion: Vec<RConversion>,
+    vspecschema: Vec<VSpecSchema>,
+    vspecschemapattern: Vec<VSpecSchemaPattern>,
+    vspecpattern: Vec<RVSpecPattern>,
+    vspecschemamodel: Vec<VSpecSchemaModel>,
+    vspecschemayear: Vec<VSpecSchemaYear>,
     lookups: Vec<(u16, i32, String)>,
     cur: Option<Ctx>,
 }
@@ -270,6 +298,7 @@ impl ArtifactBuilder {
                     datatype: get("datatype").unwrap_or_default(),
                     decode_present: decode.is_some(),
                     decode: decode.unwrap_or_default(),
+                    weight: geti_or("weight", NULL_I32),
                 })
             }
             "make_model" => self.make_model.push(MakeModel {
@@ -305,6 +334,38 @@ impl ArtifactBuilder {
             "vinexception" => self.vinexception.push(RVinExc {
                 vin: get("vin").unwrap_or_default(),
                 checkdigit: get("checkdigit").as_deref() == Some("t"),
+            }),
+            "conversion" => self.conversion.push(RConversion {
+                id: geti_or("id", 0),
+                fromelementid: geti_or("fromelementid", 0),
+                toelementid: geti_or("toelementid", 0),
+                formula: get("formula").unwrap_or_default(),
+            }),
+            "vehiclespecschema" => self.vspecschema.push(VSpecSchema {
+                id: geti_or("id", 0),
+                makeid: geti_or("makeid", NULL_I32),
+                vehicletypeid: geti_or("vehicletypeid", NULL_I32),
+                tobeqced: get("tobeqced").as_deref() == Some("t"),
+            }),
+            "vspecschemapattern" => self.vspecschemapattern.push(VSpecSchemaPattern {
+                id: geti_or("id", 0),
+                schemaid: geti_or("schemaid", 0),
+            }),
+            "vehiclespecpattern" => self.vspecpattern.push(RVSpecPattern {
+                id: geti_or("id", 0),
+                vspecschemapatternid: geti_or("vspecschemapatternid", 0),
+                iskey: get("iskey").as_deref() == Some("t"),
+                elementid: geti_or("elementid", 0),
+                attributeid: get("attributeid").unwrap_or_default(),
+                changedon_key: created_key("createdon", "updatedon"),
+            }),
+            "vehiclespecschema_model" => self.vspecschemamodel.push(VSpecSchemaModel {
+                schemaid: geti_or("vehiclespecschemaid", 0),
+                modelid: geti_or("modelid", 0),
+            }),
+            "vehiclespecschema_year" => self.vspecschemayear.push(VSpecSchemaYear {
+                schemaid: geti_or("vehiclespecschemaid", 0),
+                year: geti_or("year", 0),
             }),
             _ => {}
         }
@@ -343,8 +404,22 @@ impl ArtifactBuilder {
         self.defaultvalue
             .sort_by(|a, b| a.vehicletypeid.cmp(&b.vehicletypeid).then(a.id.cmp(&b.id)));
         self.vinexception.sort_by(|a, b| a.vin.cmp(&b.vin));
+        self.conversion.sort_by_key(|c| c.id);
         self.lookups
             .sort_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)));
+        self.vspecschema
+            .sort_by(|a, b| a.makeid.cmp(&b.makeid).then(a.id.cmp(&b.id)));
+        self.vspecschemapattern
+            .sort_by(|a, b| a.schemaid.cmp(&b.schemaid).then(a.id.cmp(&b.id)));
+        self.vspecpattern.sort_by(|a, b| {
+            a.vspecschemapatternid
+                .cmp(&b.vspecschemapatternid)
+                .then(a.id.cmp(&b.id))
+        });
+        self.vspecschemamodel
+            .sort_by(|a, b| a.schemaid.cmp(&b.schemaid).then(a.modelid.cmp(&b.modelid)));
+        self.vspecschemayear
+            .sort_by(|a, b| a.schemaid.cmp(&b.schemaid).then(a.year.cmp(&b.year)));
 
         // --- First-seen interner over the sorted traversal in fixed table order.
         let mut intern = Interner::new();
@@ -397,6 +472,7 @@ impl ArtifactBuilder {
                 datatype: intern.get(&r.datatype),
                 decode: intern.get(&r.decode),
                 decode_present: r.decode_present,
+                weight: r.weight,
             })
             .collect();
 
@@ -443,6 +519,17 @@ impl ArtifactBuilder {
             })
             .collect();
 
+        let conversion: Vec<Conversion> = self
+            .conversion
+            .iter()
+            .map(|r| Conversion {
+                id: r.id,
+                fromelementid: r.fromelementid,
+                toelementid: r.toelementid,
+                formula: intern.get(&r.formula),
+            })
+            .collect();
+
         let lookups: Vec<LookupRow> = self
             .lookups
             .iter()
@@ -450,6 +537,19 @@ impl ArtifactBuilder {
                 tag: *tag,
                 id: *id,
                 name: intern.get(name),
+            })
+            .collect();
+
+        let vspecpattern: Vec<VSpecPattern> = self
+            .vspecpattern
+            .iter()
+            .map(|r| VSpecPattern {
+                id: r.id,
+                vspecschemapatternid: r.vspecschemapatternid,
+                iskey: r.iskey,
+                elementid: r.elementid,
+                attributeid: intern.get(&r.attributeid),
+                changedon_key: r.changedon_key,
             })
             .collect();
 
@@ -467,7 +567,13 @@ impl ArtifactBuilder {
             enginemodelpattern,
             defaultvalue,
             vinexception,
+            conversion,
             lookups,
+            vspecschema: self.vspecschema,
+            vspecschemapattern: self.vspecschemapattern,
+            vspecpattern,
+            vspecschemamodel: self.vspecschemamodel,
+            vspecschemayear: self.vspecschemayear,
         };
 
         let bytes = serialize_artifact(&data, builder_version);

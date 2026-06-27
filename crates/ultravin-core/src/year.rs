@@ -47,25 +47,31 @@ pub fn vin_model_year_raw(vin: &str, db: &Db, current_year: i32) -> Option<i32> 
     Some(if conclusive { my } else { -my })
 }
 
-/// The chosen model year for W1.
-pub struct YearChoice {
-    pub model_year: Option<i32>,
-    /// The `Keys` recorded on the ModelYear (element 29) item.
-    pub source: String,
+/// The model-year candidates the wrapper feeds into the decode passes.
+pub struct YearPlan {
+    /// Primary candidate (pass 3). `None` when position 10 is unmapped.
+    pub rmy: Option<i32>,
+    /// Alternate candidate (pass 4), set only when the year is inconclusive.
+    pub omy: Option<i32>,
+    /// `false` when `fVinModelYear2` was inconclusive (drives pass 4 + note 156).
+    pub conclusive: bool,
 }
 
-/// Wrapper single-best-year choice, including the `altMY` ±30 schema-count swap.
-pub fn choose_model_year(vin: &str, db: &Db, current_year: i32) -> YearChoice {
+/// Port of the wrapper's year computation: `rmy`/`omy`/`conclusive`, including
+/// the `altMY` ±30 schema-count swap (only when conclusive). The dead descriptor
+/// pass is skipped (it never runs in the proc — see PLAN.md).
+pub fn resolve_years(vin: &str, db: &Db, current_year: i32) -> YearPlan {
     let v_limit = current_year + 2;
-    let source = "***X*|Y".to_string();
     match vin_model_year_raw(vin, db, current_year) {
-        None => YearChoice {
-            model_year: None,
-            source,
+        None => YearPlan {
+            rmy: None,
+            omy: None,
+            conclusive: true,
         },
         Some(raw) => {
             let conclusive = raw > 0;
             let mut rmy = raw.abs();
+            let omy = if conclusive { None } else { Some(rmy - 30) };
             if conclusive {
                 let alt = if (1980..=v_limit - 30).contains(&rmy) {
                     Some(rmy + 30)
@@ -80,9 +86,10 @@ pub fn choose_model_year(vin: &str, db: &Db, current_year: i32) -> YearChoice {
                     }
                 }
             }
-            YearChoice {
-                model_year: Some(rmy),
-                source,
+            YearPlan {
+                rmy: Some(rmy),
+                omy,
+                conclusive,
             }
         }
     }

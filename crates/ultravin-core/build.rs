@@ -33,7 +33,13 @@ fn main() {
             enginemodelpattern: Vec::new(),
             defaultvalue: Vec::new(),
             vinexception: Vec::new(),
+            conversion: Vec::new(),
             lookups: Vec::new(),
+            vspecschema: Vec::new(),
+            vspecschemapattern: Vec::new(),
+            vspecpattern: Vec::new(),
+            vspecschemamodel: Vec::new(),
+            vspecschemayear: Vec::new(),
         };
         let bytes = tables::serialize_artifact(&empty, 0);
         std::fs::write(&path, bytes).unwrap();

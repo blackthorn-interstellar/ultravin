@@ -22,6 +22,59 @@ pub fn is_exempt(element_id: i32) -> bool {
     EXEMPT_ELEMENTS.contains(&element_id)
 }
 
+/// `ErrorCode.weight` for best-pass scoring (port of the `vpic.ErrorCode` table,
+/// summed by `fErrorValue`). Unlisted ids (0, 9, 10) weigh 0.
+pub fn errorcode_weight(id: i32) -> i32 {
+    match id {
+        1 => -5,
+        2 | 3 => -100,
+        4 => -200,
+        5 => -300,
+        6 => -10,
+        7 => -10000,
+        8 => -1000,
+        11 | 12 => -20,
+        14 => -30,
+        400 => -40,
+        _ => 0,
+    }
+}
+
+/// The output `ORDER BY` rank for a `GroupName` (port of the `spvindecode`
+/// `CASE coalesce(e.GroupName, '')`). Unlisted groups rank 99.
+pub fn group_rank(group_name: &str) -> i32 {
+    match group_name {
+        "" => 0,
+        "General" => 1,
+        "Exterior / Body" => 2,
+        "Exterior / Dimension" => 3,
+        "Exterior / Truck" => 4,
+        "Exterior / Trailer" => 5,
+        "Exterior / Wheel tire" => 6,
+        "Exterior / Motorcycle" => 7,
+        "Exterior / Bus" => 8,
+        "Interior" => 9,
+        "Interior / Seat" => 10,
+        "Mechanical / Transmission" => 11,
+        "Mechanical / Drivetrain" => 12,
+        "Mechanical / Brake" => 13,
+        "Mechanical / Battery" => 14,
+        "Mechanical / Battery / Charger" => 15,
+        "Engine" => 16,
+        "Passive Safety System" => 17,
+        "Passive Safety System / Air Bag Location" => 18,
+        "Active Safety System" => 19,
+        "Active Safety System / Maintaining Safe Distance" => 20,
+        "Active Safety System / Forward Collision Prevention" => 21,
+        "Active Safety System / Lane and Side Assist" => 22,
+        "Active Safety System / Backing Up and Parking" => 23,
+        "Active Safety System / 911 Notification" => 24,
+        "Active Safety System / Lighting Technologies" => 25,
+        "Internal" => 26,
+        _ => 99,
+    }
+}
+
 /// Lookup source tables, in a fixed canonical order; the index is the `tag`.
 /// (NCSA views 96/97/98 are W2 — deferred.)
 pub const LOOKUP_TABLES: &[&str] = &[
@@ -243,6 +296,8 @@ pub struct Element {
     pub datatype: u32,
     pub decode: u32,
     pub decode_present: bool,
+    /// `Element.weight` for best-pass scoring (`NULL_I32` when null).
+    pub weight: i32,
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
@@ -289,10 +344,60 @@ pub struct VinException {
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
+pub struct Conversion {
+    pub id: i32,
+    pub fromelementid: i32,
+    pub toelementid: i32,
+    pub formula: u32,
+}
+
+#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
 pub struct LookupRow {
     pub tag: u16,
     pub id: i32,
     pub name: u32,
+}
+
+/// `vpic.VehicleSpecSchema` (id, makeid, vehicletypeid, tobeqced).
+#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
+pub struct VSpecSchema {
+    pub id: i32,
+    pub makeid: i32,
+    pub vehicletypeid: i32, // NULL_I32 = none
+    pub tobeqced: bool,
+}
+
+/// `vpic.VSpecSchemaPattern` (id, schemaid).
+#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
+pub struct VSpecSchemaPattern {
+    pub id: i32,
+    pub schemaid: i32,
+}
+
+/// `vpic.VehicleSpecPattern` (id, vspecschemapatternid, iskey, elementid,
+/// attributeid, changedon=coalesce(updatedon,createdon)).
+#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
+pub struct VSpecPattern {
+    pub id: i32,
+    pub vspecschemapatternid: i32,
+    pub iskey: bool,
+    pub elementid: i32,
+    pub attributeid: u32,
+    pub changedon_key: i64,
+}
+
+/// `vpic.VehicleSpecSchema_Model` (vehiclespecschemaid, modelid).
+#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
+pub struct VSpecSchemaModel {
+    pub schemaid: i32,
+    pub modelid: i32,
+}
+
+/// `vpic.VehicleSpecSchema_Year` (vehiclespecschemaid, year).
+#[derive(Archive, Serialize, Deserialize, Debug, Clone)]
+pub struct VSpecSchemaYear {
+    pub schemaid: i32,
+    pub year: i32,
 }
 
 /// The root archive. Every `Vec` is totally ordered (see field comments) so the
@@ -324,8 +429,20 @@ pub struct VpicData {
     pub defaultvalue: Vec<DefaultValue>,
     /// SORTED by vin string ASC.
     pub vinexception: Vec<VinException>,
+    /// SORTED by id ASC.
+    pub conversion: Vec<Conversion>,
     /// SORTED by (tag ASC, id ASC).
     pub lookups: Vec<LookupRow>,
+    /// SORTED by (makeid ASC, id ASC).
+    pub vspecschema: Vec<VSpecSchema>,
+    /// SORTED by (schemaid ASC, id ASC).
+    pub vspecschemapattern: Vec<VSpecSchemaPattern>,
+    /// SORTED by (vspecschemapatternid ASC, id ASC).
+    pub vspecpattern: Vec<VSpecPattern>,
+    /// SORTED by (schemaid ASC, modelid ASC).
+    pub vspecschemamodel: Vec<VSpecSchemaModel>,
+    /// SORTED by (schemaid ASC, year ASC).
+    pub vspecschemayear: Vec<VSpecSchemaYear>,
 }
 
 /// Artifact magic bytes.

@@ -19,6 +19,7 @@ ultravin = "ultravin.cli:main"
 dev = [
     "coverage",
     "maturin>=1.7,<2",
+    "psycopg[binary]>=3.3.4",
     "pytest",
     "pytest-asyncio",
     "pytest-randomly",

@@ -1,6 +1,6 @@
-//! The W1 decode core: pattern pass + layered sources + dedup + make + defaults,
-//! in the exact order of `spvindecode_core`. Conversion / Formula Pattern /
-//! Vehicle Specs are W2 and deliberately omitted.
+//! The decode core, in the exact order of `spvindecode_core`: pattern pass,
+//! layered sources, dedup, make, conversion, vehicle specs, and defaults.
+//! Formula Pattern is still W2.
 
 use std::cmp::Ordering;
 
@@ -239,6 +239,12 @@ pub fn decode_core(
         wmi.createdon_key,
     );
 
+    // --- Conversion (priority 100): derive sibling elements via vpic.conversion.
+    append_conversions(db, &mut items);
+
+    // --- Vehicle Specs (priority -100): make/model/year/vehicletype matching.
+    append_vehicle_specs(db, &mut items, var_wmi, model_year);
+
     // --- DefaultValue (priority 10).
     append_default_values(db, &mut items);
 
@@ -429,6 +435,258 @@ fn append_make(
                 to_be_qced: false,
             });
         }
+    }
+}
+
+/// Conversion (priority 100): the `vpic.conversion` cursor loop. For each decoded
+/// item whose `ElementId` is a conversion `FromElementId`, evaluate the formula
+/// (`#x#` = the item's `AttributeId`) and emit the `ToElementId` — but only when
+/// that target is not already present for this pass. The cursor order
+/// (Priority DESC, CreatedOn DESC NULLS FIRST, conversion id ASC) decides which
+/// source wins when several would produce the same target.
+fn append_conversions(db: &Db, items: &mut Vec<DecodingItem>) {
+    struct Row<'a> {
+        priority: i32,
+        created_on: i64,
+        conv_id: i32,
+        to_elem: i32,
+        formula: &'a str,
+        value: String,
+        keys: String,
+        pattern_id: i32,
+        vin_schema_id: i32,
+        wmi_id: i32,
+    }
+
+    // Snapshot the cursor rows before any insert (PostgreSQL evaluates the FOR
+    // query once, so conversion-derived items never spawn further conversions).
+    let mut rows: Vec<Row> = Vec::new();
+    for it in items.iter() {
+        for c in db.conversions_from(it.element_id) {
+            rows.push(Row {
+                priority: it.priority,
+                created_on: it.created_on,
+                conv_id: c.id,
+                to_elem: c.toelementid,
+                formula: db.s(c.formula),
+                value: it.attribute_id.clone(),
+                keys: it.keys.clone(),
+                pattern_id: it.pattern_id,
+                vin_schema_id: it.vin_schema_id,
+                wmi_id: it.wmi_id,
+            });
+        }
+    }
+    rows.sort_by(|a, b| {
+        b.priority
+            .cmp(&a.priority)
+            .then(created_desc_nulls_first(a.created_on, b.created_on))
+            .then(a.conv_id.cmp(&b.conv_id))
+    });
+
+    let mut present: std::collections::HashSet<i32> =
+        items.iter().map(|it| it.element_id).collect();
+    for r in rows {
+        if !present.insert(r.to_elem) {
+            continue;
+        }
+        let result = crate::conversion::eval(r.formula, &r.value);
+        let source = conversion_source(r.conv_id, r.formula, &r.value);
+        items.push(DecodingItem {
+            created_on: NULL_I64,
+            pattern_id: r.pattern_id,
+            keys: r.keys,
+            vin_schema_id: r.vin_schema_id,
+            wmi_id: r.wmi_id,
+            element_id: r.to_elem,
+            attribute_id: result.clone(),
+            value: result,
+            source,
+            priority: 100,
+            to_be_qced: false,
+        });
+    }
+}
+
+/// `left('Conversion ' || id || ': ' || replace(formula,'#x#',value), 50)`.
+fn conversion_source(conv_id: i32, formula: &str, value: &str) -> String {
+    let full = format!("Conversion {conv_id}: {}", formula.replace("#x#", value));
+    full.chars().take(50).collect()
+}
+
+/// Element ids that never block a non-key spec in STEP 3 even when already
+/// decoded (the proc's `ElementId NOT IN (1,114,...)` carve-out — note it
+/// includes element 1, unlike the dedup-exempt list).
+const SPEC_EXEMPT: [i32; 9] = [1, 114, 121, 129, 150, 154, 155, 169, 186];
+
+/// Vehicle Specs (priority -100): the `spvindecode_core` spec sub-pass.
+///
+/// Runs once per pass after Conversion (only when a WMI was found). Selects
+/// candidate `VSpecSchemaPattern`s by make/vehicletype/model/year, keeps only
+/// those whose every `IsKey` pattern matches a decoded item of this pass, then
+/// emits each non-key spec attribute for an element not already decoded
+/// (modulo [`SPEC_EXEMPT`]), deduped to one row per element by latest ChangedOn.
+fn append_vehicle_specs(
+    db: &Db,
+    items: &mut Vec<DecodingItem>,
+    var_wmi: &str,
+    model_year: Option<i32>,
+) {
+    use std::collections::{HashMap, HashSet};
+
+    // STEP 0: tVehicleType (element 39) and var_modelId (element 28). Either NULL
+    // => the candidate join matches nothing, so no specs are produced.
+    let Some(veh_type) = items
+        .iter()
+        .find(|it| it.element_id == 39)
+        .and_then(|it| it.attribute_id.parse::<i32>().ok())
+    else {
+        return;
+    };
+    let Some(model_id) = items
+        .iter()
+        .find(|it| it.element_id == 28)
+        .and_then(|it| it.attribute_id.parse::<i32>().ok())
+    else {
+        return;
+    };
+
+    // STEP 1: candidate (VSpecSchemaPattern id, schema id, tobeqced). A schema
+    // qualifies on make in {wmi's makes}, vehicletype, a model row == model_id,
+    // year (no year rows match any, else exact), tobeqced gate, and having >=1
+    // key pattern. (includeNotPublicilyAvailable is false here, as in W1.)
+    let makeids = db.makeids_for_wmi_str(var_wmi);
+    struct Candidate {
+        sp_id: i32,
+        schema_id: i32,
+        tobeqced: bool,
+    }
+    let mut candidates: Vec<Candidate> = Vec::new();
+    for &makeid in &makeids {
+        for s in db.vspecschemas_for_make(makeid) {
+            if s.vehicletypeid != veh_type || s.tobeqced {
+                continue;
+            }
+            if !db
+                .vspecschema_models_for(s.id)
+                .iter()
+                .any(|m| m.modelid == model_id)
+            {
+                continue;
+            }
+            let years = db.vspecschema_years_for(s.id);
+            let year_ok = match (years.is_empty(), model_year) {
+                (true, _) => true,
+                (false, Some(my)) => years.iter().any(|y| y.year == my),
+                (false, None) => false,
+            };
+            if !year_ok {
+                continue;
+            }
+            for sp in db.vspecschemapatterns_for(s.id) {
+                if db.vspecpatterns_for(sp.id).iter().any(|p| p.iskey) {
+                    candidates.push(Candidate {
+                        sp_id: sp.id,
+                        schema_id: s.id,
+                        tobeqced: s.tobeqced,
+                    });
+                }
+            }
+        }
+    }
+
+    // STEP 2: key elimination. Keep a candidate iff cntTotal == cntMatch, where
+    // cntTotal sums max(matches,1) over its key patterns (the left-join null-row)
+    // and cntMatch is the count of distinct decoded items any key pattern matched.
+    candidates.retain(|c| {
+        let mut cnt_total = 0usize;
+        let mut matched: HashSet<usize> = HashSet::new();
+        for p in db.vspecpatterns_for(c.sp_id) {
+            if !p.iskey {
+                continue;
+            }
+            let attr = db.s(p.attributeid).to_ascii_lowercase();
+            let mut n = 0usize;
+            for (i, it) in items.iter().enumerate() {
+                if it.element_id == p.elementid && it.attribute_id.to_ascii_lowercase() == attr {
+                    matched.insert(i);
+                    n += 1;
+                }
+            }
+            cnt_total += n.max(1);
+        }
+        cnt_total == matched.len()
+    });
+
+    // STEP 3: non-key attributes for elements not already decoded (exempt set
+    // never blocks). Emit one tbl1 row per surviving non-key pattern.
+    let decoded_nonexempt: HashSet<i32> = items
+        .iter()
+        .map(|it| it.element_id)
+        .filter(|e| !SPEC_EXEMPT.contains(e))
+        .collect();
+    struct Tbl1 {
+        schema_id: i32,
+        sp_id: i32,
+        element_id: i32,
+        attribute_id: String,
+        changed_on: i64,
+        tobeqced: bool,
+    }
+    let mut tbl1: Vec<Tbl1> = Vec::new();
+    for c in &candidates {
+        for p in db.vspecpatterns_for(c.sp_id) {
+            if p.iskey || decoded_nonexempt.contains(&p.elementid) {
+                continue;
+            }
+            tbl1.push(Tbl1 {
+                schema_id: c.schema_id,
+                sp_id: c.sp_id,
+                element_id: p.elementid,
+                attribute_id: db.s(p.attributeid).to_string(),
+                changed_on: p.changedon_key,
+                tobeqced: c.tobeqced,
+            });
+        }
+    }
+
+    // STEP 4: dedup to one per element by latest ChangedOn. Ties (rare) break by
+    // highest VSpecSchemaPattern id then highest schema id — deterministic.
+    let mut best: HashMap<i32, usize> = HashMap::new();
+    for (i, t) in tbl1.iter().enumerate() {
+        match best.get(&t.element_id) {
+            None => {
+                best.insert(t.element_id, i);
+            }
+            Some(&b) => {
+                let cur = &tbl1[b];
+                let better = (t.changed_on, t.sp_id, t.schema_id)
+                    > (cur.changed_on, cur.sp_id, cur.schema_id);
+                if better {
+                    best.insert(t.element_id, i);
+                }
+            }
+        }
+    }
+
+    // STEP 5: emit the surviving spec items (value 'XXX', source 'Vehicle Specs').
+    let mut keep: Vec<usize> = best.into_values().collect();
+    keep.sort_unstable();
+    for i in keep {
+        let t = &tbl1[i];
+        items.push(DecodingItem {
+            created_on: t.changed_on,
+            pattern_id: t.sp_id,
+            keys: String::new(),
+            vin_schema_id: t.schema_id,
+            wmi_id: NULL_I32,
+            element_id: t.element_id,
+            attribute_id: t.attribute_id.clone(),
+            value: "XXX".to_string(),
+            source: "Vehicle Specs".to_string(),
+            priority: -100,
+            to_be_qced: t.tobeqced,
+        });
     }
 }
 

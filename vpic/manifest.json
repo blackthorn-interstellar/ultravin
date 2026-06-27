@@ -122,6 +122,6 @@
     "spvindecode_errorcode",
     "sqlwild_to_regex"
   ],
-  "artifact_blake3": "c527a5cb25e1986e30608e96dd25720e3b33a8a70cdf28a32140cadf33b32c9b",
-  "artifact_bytes": 75615048
+  "artifact_blake3": "05a67204679bf7dba0f294558fa062ef947bebee9deca40d4ff18756793fae1f",
+  "artifact_bytes": 83271240
 }

@@ -78,6 +78,51 @@ pub fn check_digit(vin: &str) -> Option<char> {
     check_digit_with_flag(vin, false)
 }
 
+/// Per-position validity for the single-arg `fVINCheckDigit` (used by error code
+/// 3). Differs from `fVINCheckDigit2`: positions 13 AND 14 are numeric whenever
+/// position 3 is not `'9'` (no car/MPV/LT gating on position 13).
+fn valid_at_v1(i: usize, c: u8, pos3: u8) -> bool {
+    let my =
+        matches!(c, b'A'..=b'H' | b'J'..=b'N' | b'P' | b'R'..=b'T' | b'V'..=b'Y' | b'1'..=b'9');
+    let nums = c.is_ascii_digit();
+    let default = matches!(c, b'A'..=b'H' | b'J'..=b'N' | b'P' | b'R'..=b'Z' | b'0'..=b'9');
+    match i {
+        10 => my,
+        13 | 14 if pos3 != b'9' => nums,
+        _ if i >= 15 => nums,
+        _ => default,
+    }
+}
+
+/// Port of the single-arg `vpic.fVINCheckDigit` (canonical:
+/// `vpic/procs/fvincheckdigit.sql`). Same transliteration/weights as
+/// `fVINCheckDigit2`; only the position 13/14 validity classes differ.
+pub fn check_digit_v1(vin: &str) -> Option<char> {
+    let b = vin.as_bytes();
+    if b.len() != 17 {
+        return None;
+    }
+    let pos3 = b[2];
+    let weights: [u32; 17] = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
+    let mut sum: u32 = 0;
+    for (idx, &c) in b.iter().enumerate() {
+        let i = idx + 1;
+        if !valid_at_v1(i, c, pos3) {
+            return Some('?');
+        }
+        let Some(v) = translit(c) else {
+            return Some('?');
+        };
+        sum += v * weights[idx];
+    }
+    let r = sum % 11;
+    Some(if r == 10 {
+        'X'
+    } else {
+        (b'0' + r as u8) as char
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

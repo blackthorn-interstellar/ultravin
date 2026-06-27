@@ -12,7 +12,8 @@ use rkyv::rancor;
 
 use crate::tables::{
     ArchivedVpicData, DefaultValue, Element, EngineModel, EngineModelPattern, LookupRow, MakeModel,
-    Pattern, VinSchema, VpicData, Wmi, WmiMake, WmiVinSchema, FORMAT_VERSION, HEADER_LEN, MAGIC,
+    Pattern, VSpecPattern, VSpecSchema, VSpecSchemaModel, VSpecSchemaPattern, VSpecSchemaYear,
+    VinSchema, VpicData, Wmi, WmiMake, WmiVinSchema, FORMAT_VERSION, HEADER_LEN, MAGIC,
 };
 
 /// The artifact baked into the binary (a build product; see `build.rs`).
@@ -149,6 +150,72 @@ impl Db {
         v.get(lo)
             .map(|r| self.data.s(r.vin) == vin && r.checkdigit)
             .unwrap_or(false)
+    }
+
+    /// Conversions whose `FromElementId` equals `from_element_id` (`vpic.conversion`).
+    pub fn conversions_from(
+        &self,
+        from_element_id: i32,
+    ) -> impl Iterator<Item = &crate::tables::Conversion> {
+        self.data
+            .conversion
+            .iter()
+            .filter(move |c| c.fromelementid == from_element_id)
+    }
+
+    /// All make ids linked (via `Wmi_Make`) to any `Wmi` row whose string equals
+    /// `wmi` (no public-availability filter, matching the spec candidate join).
+    pub fn makeids_for_wmi_str(&self, wmi: &str) -> Vec<i32> {
+        let v = &self.data.wmi;
+        let mut i = v.partition_point(|w| self.data.s(w.wmi) < wmi);
+        let mut out: Vec<i32> = Vec::new();
+        while i < v.len() && self.data.s(v[i].wmi) == wmi {
+            for m in self.wmi_makes_for(v[i].id) {
+                out.push(m.makeid);
+            }
+            i += 1;
+        }
+        out.sort_unstable();
+        out.dedup();
+        out
+    }
+
+    /// All `Wmi.id`s whose string equals `wmi` (no availability filter), for the
+    /// `fExtractValidCharsPerWmiYear` join (correction charset).
+    pub fn wmi_ids_for_str(&self, wmi: &str) -> Vec<i32> {
+        let v = &self.data.wmi;
+        let mut i = v.partition_point(|w| self.data.s(w.wmi) < wmi);
+        let mut out = Vec::new();
+        while i < v.len() && self.data.s(v[i].wmi) == wmi {
+            out.push(v[i].id);
+            i += 1;
+        }
+        out
+    }
+
+    /// `VehicleSpecSchema` rows for a make id.
+    pub fn vspecschemas_for_make(&self, makeid: i32) -> &[VSpecSchema] {
+        slice_eq(&self.data.vspecschema, makeid, |r| r.makeid)
+    }
+
+    /// `VSpecSchemaPattern` rows for a schema id.
+    pub fn vspecschemapatterns_for(&self, schemaid: i32) -> &[VSpecSchemaPattern] {
+        slice_eq(&self.data.vspecschemapattern, schemaid, |r| r.schemaid)
+    }
+
+    /// `VehicleSpecPattern` rows for a `VSpecSchemaPattern` id.
+    pub fn vspecpatterns_for(&self, vspid: i32) -> &[VSpecPattern] {
+        slice_eq(&self.data.vspecpattern, vspid, |r| r.vspecschemapatternid)
+    }
+
+    /// `VehicleSpecSchema_Model` rows for a schema id.
+    pub fn vspecschema_models_for(&self, schemaid: i32) -> &[VSpecSchemaModel] {
+        slice_eq(&self.data.vspecschemamodel, schemaid, |r| r.schemaid)
+    }
+
+    /// `VehicleSpecSchema_Year` rows for a schema id.
+    pub fn vspecschema_years_for(&self, schemaid: i32) -> &[VSpecSchemaYear] {
+        slice_eq(&self.data.vspecschemayear, schemaid, |r| r.schemaid)
     }
 
     /// Resolve a lookup (`tag`, numeric id) to its name.
