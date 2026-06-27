@@ -1,6 +1,6 @@
 {
-  "total_failures": 44713,
-  "distinct_signatures": 26,
+  "total_failures": 134661,
+  "distinct_signatures": 35,
   "vins": [
     {
       "vin": "3JB1024W",
@@ -43,7 +43,109 @@
       ],
       "missing": [],
       "extra": [],
-      "hit_count": 26
+      "hit_count": 172
+    },
+    {
+      "vin": "5D18Q03T",
+      "mode": "random",
+      "note": "r159432",
+      "fingerprint": {
+        "field_diffs": [
+          [
+            143,
+            "attribute_id",
+            "6,11,14,400",
+            "6,8,11,400"
+          ],
+          [
+            143,
+            "value",
+            "6,11,14,400",
+            "6,8,11,400"
+          ],
+          [
+            156,
+            "attribute_id",
+            "Unused position(s): 4,5,8. Invalid character(s): 5:Q.",
+            "Invalid character(s): 5:Q."
+          ],
+          [
+            156,
+            "value",
+            "Unused position(s): 4,5,8. Invalid character(s): 5:Q.",
+            "Invalid character(s): 5:Q."
+          ],
+          [
+            191,
+            "attribute_id",
+            "6 - Incomplete VIN; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+            "6 - Incomplete VIN; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present"
+          ],
+          [
+            191,
+            "value",
+            "6 - Incomplete VIN; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+            "6 - Incomplete VIN; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present"
+          ]
+        ],
+        "missing": [
+          [
+            118,
+            "03"
+          ]
+        ],
+        "extra": [],
+        "order_ok": false
+      },
+      "field_diffs": [
+        {
+          "element_id": 143,
+          "field": "value",
+          "oracle": "6,11,14,400",
+          "ultravin": "6,8,11,400",
+          "feature": "error"
+        },
+        {
+          "element_id": 143,
+          "field": "attribute_id",
+          "oracle": "6,11,14,400",
+          "ultravin": "6,8,11,400",
+          "feature": "error"
+        },
+        {
+          "element_id": 156,
+          "field": "value",
+          "oracle": "Unused position(s): 4,5,8. Invalid character(s): 5:Q.",
+          "ultravin": "Invalid character(s): 5:Q.",
+          "feature": "error"
+        },
+        {
+          "element_id": 156,
+          "field": "attribute_id",
+          "oracle": "Unused position(s): 4,5,8. Invalid character(s): 5:Q.",
+          "ultravin": "Invalid character(s): 5:Q.",
+          "feature": "error"
+        },
+        {
+          "element_id": 191,
+          "field": "value",
+          "oracle": "6 - Incomplete VIN; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+          "ultravin": "6 - Incomplete VIN; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present",
+          "feature": "error"
+        },
+        {
+          "element_id": 191,
+          "field": "attribute_id",
+          "oracle": "6 - Incomplete VIN; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+          "ultravin": "6 - Incomplete VIN; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present",
+          "feature": "error"
+        }
+      ],
+      "missing": [
+        118
+      ],
+      "extra": [],
+      "hit_count": 55
     },
     {
       "vin": "5EN5EJT4",
@@ -145,7 +247,7 @@
         41
       ],
       "extra": [],
-      "hit_count": 77
+      "hit_count": 228
     },
     {
       "vin": "7K8BJ70H",
@@ -195,7 +297,62 @@
         118
       ],
       "extra": [],
-      "hit_count": 92
+      "hit_count": 383
+    },
+    {
+      "vin": "7X6SU964",
+      "mode": "random",
+      "note": "r233906",
+      "fingerprint": {
+        "field_diffs": [
+          [
+            156,
+            "attribute_id",
+            "Unused position(s): 4.",
+            "Unused position(s): 4,6,7,8."
+          ],
+          [
+            156,
+            "value",
+            "Unused position(s): 4.",
+            "Unused position(s): 4,6,7,8."
+          ]
+        ],
+        "missing": [
+          [
+            41,
+            "4"
+          ],
+          [
+            118,
+            "96"
+          ]
+        ],
+        "extra": [],
+        "order_ok": false
+      },
+      "field_diffs": [
+        {
+          "element_id": 156,
+          "field": "value",
+          "oracle": "Unused position(s): 4.",
+          "ultravin": "Unused position(s): 4,6,7,8.",
+          "feature": "error"
+        },
+        {
+          "element_id": 156,
+          "field": "attribute_id",
+          "oracle": "Unused position(s): 4.",
+          "ultravin": "Unused position(s): 4,6,7,8.",
+          "feature": "error"
+        }
+      ],
+      "missing": [
+        41,
+        118
+      ],
+      "extra": [],
+      "hit_count": 113
     },
     {
       "vin": "RN0P0A13",
@@ -245,7 +402,7 @@
         41
       ],
       "extra": [],
-      "hit_count": 497
+      "hit_count": 1700
     },
     {
       "vin": "1EZZF081E8M",
@@ -404,7 +561,268 @@
         118
       ],
       "extra": [],
-      "hit_count": 37
+      "hit_count": 109
+    },
+    {
+      "vin": "4WWJ330M20A",
+      "mode": "random",
+      "note": "r176122",
+      "fingerprint": {
+        "field_diffs": [
+          [
+            143,
+            "attribute_id",
+            "6,11,14,400",
+            "6,8,11,400"
+          ],
+          [
+            143,
+            "value",
+            "6,11,14,400",
+            "6,8,11,400"
+          ],
+          [
+            156,
+            "attribute_id",
+            "Unused position(s): 4,8,11. Invalid character(s): 10:0.",
+            "Invalid character(s): 10:0."
+          ],
+          [
+            156,
+            "value",
+            "Unused position(s): 4,8,11. Invalid character(s): 10:0.",
+            "Invalid character(s): 10:0."
+          ],
+          [
+            191,
+            "attribute_id",
+            "6 - Incomplete VIN; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+            "6 - Incomplete VIN; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present"
+          ],
+          [
+            191,
+            "value",
+            "6 - Incomplete VIN; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+            "6 - Incomplete VIN; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present"
+          ]
+        ],
+        "missing": [
+          [
+            41,
+            "0"
+          ],
+          [
+            118,
+            "33"
+          ]
+        ],
+        "extra": [],
+        "order_ok": false
+      },
+      "field_diffs": [
+        {
+          "element_id": 143,
+          "field": "value",
+          "oracle": "6,11,14,400",
+          "ultravin": "6,8,11,400",
+          "feature": "error"
+        },
+        {
+          "element_id": 143,
+          "field": "attribute_id",
+          "oracle": "6,11,14,400",
+          "ultravin": "6,8,11,400",
+          "feature": "error"
+        },
+        {
+          "element_id": 156,
+          "field": "value",
+          "oracle": "Unused position(s): 4,8,11. Invalid character(s): 10:0.",
+          "ultravin": "Invalid character(s): 10:0.",
+          "feature": "error"
+        },
+        {
+          "element_id": 156,
+          "field": "attribute_id",
+          "oracle": "Unused position(s): 4,8,11. Invalid character(s): 10:0.",
+          "ultravin": "Invalid character(s): 10:0.",
+          "feature": "error"
+        },
+        {
+          "element_id": 191,
+          "field": "value",
+          "oracle": "6 - Incomplete VIN; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+          "ultravin": "6 - Incomplete VIN; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present",
+          "feature": "error"
+        },
+        {
+          "element_id": 191,
+          "field": "attribute_id",
+          "oracle": "6 - Incomplete VIN; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+          "ultravin": "6 - Incomplete VIN; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present",
+          "feature": "error"
+        }
+      ],
+      "missing": [
+        41,
+        118
+      ],
+      "extra": [],
+      "hit_count": 14
+    },
+    {
+      "vin": "5RE16F3Q7M8",
+      "mode": "random",
+      "note": "r164755",
+      "fingerprint": {
+        "field_diffs": [
+          [
+            142,
+            "attribute_id",
+            "5RE!!!3!7M!",
+            "5RE16F3!7M8"
+          ],
+          [
+            142,
+            "value",
+            "5RE!!!3!7M!",
+            "5RE16F3!7M8"
+          ],
+          [
+            143,
+            "attribute_id",
+            "5,6,14,400",
+            "6,8,400"
+          ],
+          [
+            143,
+            "value",
+            "5,6,14,400",
+            "6,8,400"
+          ],
+          [
+            144,
+            "attribute_id",
+            "(4:CFST)(5:ABCDEFGHJKLMNPRTUVWXYZ)(6:0123456789)(8:345678H)(11:LS)",
+            ""
+          ],
+          [
+            144,
+            "value",
+            "(4:CFST)(5:ABCDEFGHJKLMNPRTUVWXYZ)(6:0123456789)(8:345678H)(11:LS)",
+            ""
+          ],
+          [
+            156,
+            "attribute_id",
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,8,11. Invalid character(s): 8:Q. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to",
+            "Invalid character(s): 8:Q. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information."
+          ],
+          [
+            156,
+            "value",
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,8,11. Invalid character(s): 8:Q. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to",
+            "Invalid character(s): 8:Q. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information."
+          ],
+          [
+            191,
+            "attribute_id",
+            "5 - VIN has errors in few positions; 6 - Incomplete VIN; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+            "6 - Incomplete VIN; 8 - No detailed data available currently; 400 - Invalid Characters Present"
+          ],
+          [
+            191,
+            "value",
+            "5 - VIN has errors in few positions; 6 - Incomplete VIN; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+            "6 - Incomplete VIN; 8 - No detailed data available currently; 400 - Invalid Characters Present"
+          ]
+        ],
+        "missing": [
+          [
+            41,
+            "3"
+          ]
+        ],
+        "extra": [],
+        "order_ok": false
+      },
+      "field_diffs": [
+        {
+          "element_id": 142,
+          "field": "value",
+          "oracle": "5RE!!!3!7M!",
+          "ultravin": "5RE16F3!7M8",
+          "feature": "error"
+        },
+        {
+          "element_id": 142,
+          "field": "attribute_id",
+          "oracle": "5RE!!!3!7M!",
+          "ultravin": "5RE16F3!7M8",
+          "feature": "error"
+        },
+        {
+          "element_id": 143,
+          "field": "value",
+          "oracle": "5,6,14,400",
+          "ultravin": "6,8,400",
+          "feature": "error"
+        },
+        {
+          "element_id": 143,
+          "field": "attribute_id",
+          "oracle": "5,6,14,400",
+          "ultravin": "6,8,400",
+          "feature": "error"
+        },
+        {
+          "element_id": 144,
+          "field": "value",
+          "oracle": "(4:CFST)(5:ABCDEFGHJKLMNPRTUVWXYZ)(6:0123456789)(8:345678H)(11:LS)",
+          "ultravin": "",
+          "feature": "error"
+        },
+        {
+          "element_id": 144,
+          "field": "attribute_id",
+          "oracle": "(4:CFST)(5:ABCDEFGHJKLMNPRTUVWXYZ)(6:0123456789)(8:345678H)(11:LS)",
+          "ultravin": "",
+          "feature": "error"
+        },
+        {
+          "element_id": 156,
+          "field": "value",
+          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,8,11. Invalid character(s): 8:Q. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to",
+          "ultravin": "Invalid character(s): 8:Q. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
+          "feature": "error"
+        },
+        {
+          "element_id": 156,
+          "field": "attribute_id",
+          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,8,11. Invalid character(s): 8:Q. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to",
+          "ultravin": "Invalid character(s): 8:Q. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
+          "feature": "error"
+        },
+        {
+          "element_id": 191,
+          "field": "value",
+          "oracle": "5 - VIN has errors in few positions; 6 - Incomplete VIN; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+          "ultravin": "6 - Incomplete VIN; 8 - No detailed data available currently; 400 - Invalid Characters Present",
+          "feature": "error"
+        },
+        {
+          "element_id": 191,
+          "field": "attribute_id",
+          "oracle": "5 - VIN has errors in few positions; 6 - Incomplete VIN; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+          "ultravin": "6 - Incomplete VIN; 8 - No detailed data available currently; 400 - Invalid Characters Present",
+          "feature": "error"
+        }
+      ],
+      "missing": [
+        41
+      ],
+      "extra": [],
+      "hit_count": 1193
     },
     {
       "vin": "ZKU2I5NH180",
@@ -447,25 +865,25 @@
       ],
       "missing": [],
       "extra": [],
-      "hit_count": 43424
+      "hit_count": 130359
     },
     {
-      "vin": "582ZCQL2HF2GB4",
+      "vin": "4EU2L56ROMSN8S",
       "mode": "random",
-      "note": "r55710",
+      "note": "r210865",
       "fingerprint": {
         "field_diffs": [
           [
             142,
             "attribute_id",
-            "582!!!!2!F!GB4",
-            "582ZC!L2!F2GB4"
+            "4EU!L56!!M!N8!",
+            "4EU2L56R!MSN8!"
           ],
           [
             142,
             "value",
-            "582!!!!2!F!GB4",
-            "582ZC!L2!F2GB4"
+            "4EU!L56!!M!N8!",
+            "4EU2L56R!MSN8!"
           ],
           [
             143,
@@ -482,26 +900,26 @@
           [
             144,
             "attribute_id",
-            "(4:EF)(5:LMSU)(6:0123456789)(7:0123456789)(11:M)",
+            "(4:CFT)(8:0123456789)(11:A)",
             ""
           ],
           [
             144,
             "value",
-            "(4:EF)(5:LMSU)(6:0123456789)(7:0123456789)(11:M)",
+            "(4:CFT)(8:0123456789)(11:A)",
             ""
           ],
           [
             156,
             "attribute_id",
-            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,7,11. Invalid character(s): 6:Q, 9:H. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode agai",
-            "Invalid character(s): 6:Q, 9:H. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information."
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,8,11. Invalid character(s): 9:O, 14:S. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again",
+            "Invalid character(s): 9:O, 14:S. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information."
           ],
           [
             156,
             "value",
-            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,7,11. Invalid character(s): 6:Q, 9:H. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode agai",
-            "Invalid character(s): 6:Q, 9:H. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information."
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,8,11. Invalid character(s): 9:O, 14:S. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again",
+            "Invalid character(s): 9:O, 14:S. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information."
           ],
           [
             191,
@@ -518,8 +936,8 @@
         ],
         "missing": [
           [
-            41,
-            "2"
+            118,
+            "56"
           ]
         ],
         "extra": [],
@@ -529,15 +947,15 @@
         {
           "element_id": 142,
           "field": "value",
-          "oracle": "582!!!!2!F!GB4",
-          "ultravin": "582ZC!L2!F2GB4",
+          "oracle": "4EU!L56!!M!N8!",
+          "ultravin": "4EU2L56R!MSN8!",
           "feature": "error"
         },
         {
           "element_id": 142,
           "field": "attribute_id",
-          "oracle": "582!!!!2!F!GB4",
-          "ultravin": "582ZC!L2!F2GB4",
+          "oracle": "4EU!L56!!M!N8!",
+          "ultravin": "4EU2L56R!MSN8!",
           "feature": "error"
         },
         {
@@ -557,29 +975,29 @@
         {
           "element_id": 144,
           "field": "value",
-          "oracle": "(4:EF)(5:LMSU)(6:0123456789)(7:0123456789)(11:M)",
+          "oracle": "(4:CFT)(8:0123456789)(11:A)",
           "ultravin": "",
           "feature": "error"
         },
         {
           "element_id": 144,
           "field": "attribute_id",
-          "oracle": "(4:EF)(5:LMSU)(6:0123456789)(7:0123456789)(11:M)",
+          "oracle": "(4:CFT)(8:0123456789)(11:A)",
           "ultravin": "",
           "feature": "error"
         },
         {
           "element_id": 156,
           "field": "value",
-          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,7,11. Invalid character(s): 6:Q, 9:H. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode agai",
-          "ultravin": "Invalid character(s): 6:Q, 9:H. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
+          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,8,11. Invalid character(s): 9:O, 14:S. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again",
+          "ultravin": "Invalid character(s): 9:O, 14:S. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
           "feature": "error"
         },
         {
           "element_id": 156,
           "field": "attribute_id",
-          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,7,11. Invalid character(s): 6:Q, 9:H. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode agai",
-          "ultravin": "Invalid character(s): 6:Q, 9:H. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
+          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,8,11. Invalid character(s): 9:O, 14:S. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again",
+          "ultravin": "Invalid character(s): 9:O, 14:S. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
           "feature": "error"
         },
         {
@@ -598,10 +1016,10 @@
         }
       ],
       "missing": [
-        41
+        118
       ],
       "extra": [],
-      "hit_count": 400
+      "hit_count": 243
     },
     {
       "vin": "5RYV5T68V6IS2S",
@@ -755,55 +1173,79 @@
         125
       ],
       "extra": [],
-      "hit_count": 1
+      "hit_count": 2
     },
     {
-      "vin": "7RSHA83SRQQSZZ",
+      "vin": "5ZZDGA78GBXR96KJ",
       "mode": "random",
-      "note": "r77602",
+      "note": "r221439",
       "fingerprint": {
         "field_diffs": [
           [
+            142,
+            "attribute_id",
+            "5ZZ!!!78!B!R96!!",
+            "5ZZDGA78!BXR96!!"
+          ],
+          [
+            142,
+            "value",
+            "5ZZ!!!78!B!R96!!",
+            "5ZZDGA78!BXR96!!"
+          ],
+          [
             143,
             "attribute_id",
-            "6,11,14,400",
-            "6,8,11,400"
+            "5,6,14,400",
+            "6,8,400"
           ],
           [
             143,
             "value",
-            "6,11,14,400",
-            "6,8,11,400"
+            "5,6,14,400",
+            "6,8,400"
+          ],
+          [
+            144,
+            "attribute_id",
+            "(4:T)(5:P)(6:E)(11:L)",
+            ""
+          ],
+          [
+            144,
+            "value",
+            "(4:T)(5:P)(6:E)(11:L)",
+            ""
           ],
           [
             156,
             "attribute_id",
-            "Unused position(s): 4,5,8,11. Invalid character(s): 9:R, 10:Q, 11:Q, 14:Z.",
-            "Invalid character(s): 9:R, 10:Q, 11:Q, 14:Z."
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,11. Invalid character(s): 9:G, 15:K, 16:J. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode",
+            "Invalid character(s): 9:G, 15:K, 16:J. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information."
           ],
           [
             156,
             "value",
-            "Unused position(s): 4,5,8,11. Invalid character(s): 9:R, 10:Q, 11:Q, 14:Z.",
-            "Invalid character(s): 9:R, 10:Q, 11:Q, 14:Z."
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,11. Invalid character(s): 9:G, 15:K, 16:J. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode",
+            "Invalid character(s): 9:G, 15:K, 16:J. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information."
           ],
           [
             191,
             "attribute_id",
-            "6 - Incomplete VIN; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
-            "6 - Incomplete VIN; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present"
+            "5 - VIN has errors in few positions; 6 - Incomplete VIN; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+            "6 - Incomplete VIN; 8 - No detailed data available currently; 400 - Invalid Characters Present"
           ],
           [
             191,
             "value",
-            "6 - Incomplete VIN; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
-            "6 - Incomplete VIN; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present"
+            "5 - VIN has errors in few positions; 6 - Incomplete VIN; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+            "6 - Incomplete VIN; 8 - No detailed data available currently; 400 - Invalid Characters Present"
           ]
         ],
         "missing": [
           [
-            118,
-            "83"
+            71,
+            "78"
           ]
         ],
         "extra": [],
@@ -811,53 +1253,290 @@
       },
       "field_diffs": [
         {
+          "element_id": 142,
+          "field": "value",
+          "oracle": "5ZZ!!!78!B!R96!!",
+          "ultravin": "5ZZDGA78!BXR96!!",
+          "feature": "error"
+        },
+        {
+          "element_id": 142,
+          "field": "attribute_id",
+          "oracle": "5ZZ!!!78!B!R96!!",
+          "ultravin": "5ZZDGA78!BXR96!!",
+          "feature": "error"
+        },
+        {
           "element_id": 143,
           "field": "value",
-          "oracle": "6,11,14,400",
-          "ultravin": "6,8,11,400",
+          "oracle": "5,6,14,400",
+          "ultravin": "6,8,400",
           "feature": "error"
         },
         {
           "element_id": 143,
           "field": "attribute_id",
-          "oracle": "6,11,14,400",
-          "ultravin": "6,8,11,400",
+          "oracle": "5,6,14,400",
+          "ultravin": "6,8,400",
+          "feature": "error"
+        },
+        {
+          "element_id": 144,
+          "field": "value",
+          "oracle": "(4:T)(5:P)(6:E)(11:L)",
+          "ultravin": "",
+          "feature": "error"
+        },
+        {
+          "element_id": 144,
+          "field": "attribute_id",
+          "oracle": "(4:T)(5:P)(6:E)(11:L)",
+          "ultravin": "",
           "feature": "error"
         },
         {
           "element_id": 156,
           "field": "value",
-          "oracle": "Unused position(s): 4,5,8,11. Invalid character(s): 9:R, 10:Q, 11:Q, 14:Z.",
-          "ultravin": "Invalid character(s): 9:R, 10:Q, 11:Q, 14:Z.",
+          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,11. Invalid character(s): 9:G, 15:K, 16:J. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode",
+          "ultravin": "Invalid character(s): 9:G, 15:K, 16:J. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
           "feature": "error"
         },
         {
           "element_id": 156,
           "field": "attribute_id",
-          "oracle": "Unused position(s): 4,5,8,11. Invalid character(s): 9:R, 10:Q, 11:Q, 14:Z.",
-          "ultravin": "Invalid character(s): 9:R, 10:Q, 11:Q, 14:Z.",
+          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,11. Invalid character(s): 9:G, 15:K, 16:J. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode",
+          "ultravin": "Invalid character(s): 9:G, 15:K, 16:J. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
           "feature": "error"
         },
         {
           "element_id": 191,
           "field": "value",
-          "oracle": "6 - Incomplete VIN; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
-          "ultravin": "6 - Incomplete VIN; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present",
+          "oracle": "5 - VIN has errors in few positions; 6 - Incomplete VIN; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+          "ultravin": "6 - Incomplete VIN; 8 - No detailed data available currently; 400 - Invalid Characters Present",
           "feature": "error"
         },
         {
           "element_id": 191,
           "field": "attribute_id",
-          "oracle": "6 - Incomplete VIN; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
-          "ultravin": "6 - Incomplete VIN; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present",
+          "oracle": "5 - VIN has errors in few positions; 6 - Incomplete VIN; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+          "ultravin": "6 - Incomplete VIN; 8 - No detailed data available currently; 400 - Invalid Characters Present",
+          "feature": "error"
+        }
+      ],
+      "missing": [
+        71
+      ],
+      "extra": [],
+      "hit_count": 4
+    },
+    {
+      "vin": "10B8AA511ZF111111",
+      "mode": "covfuzz",
+      "note": "cov+8",
+      "fingerprint": {
+        "field_diffs": [],
+        "missing": [
+          [
+            118,
+            "1"
+          ]
+        ],
+        "extra": [],
+        "order_ok": false
+      },
+      "field_diffs": [],
+      "missing": [
+        118
+      ],
+      "extra": [],
+      "hit_count": 11
+    },
+    {
+      "vin": "112LM320JN0ZM9L9V",
+      "mode": "random",
+      "note": "r192009",
+      "fingerprint": {
+        "field_diffs": [
+          [
+            29,
+            "attribute_id",
+            "2022",
+            "1992"
+          ],
+          [
+            29,
+            "value",
+            "2022",
+            "1992"
+          ],
+          [
+            142,
+            "attribute_id",
+            "112LM320!N!ZM9!9!",
+            "112!!!20!N!ZM9!9!"
+          ],
+          [
+            142,
+            "value",
+            "112LM320!N!ZM9!9!",
+            "112!!!20!N!ZM9!9!"
+          ],
+          [
+            143,
+            "attribute_id",
+            "1,4,14,400",
+            "1,5,14,400"
+          ],
+          [
+            143,
+            "value",
+            "1,4,14,400",
+            "1,5,14,400"
+          ],
+          [
+            144,
+            "attribute_id",
+            "(11:ALT)",
+            "(4:0BDFGHOT)(5:0ABDGHLOSTX)(6:ABDFHLPRST)(11:AST)"
+          ],
+          [
+            144,
+            "value",
+            "(11:ALT)",
+            "(4:0BDFGHOT)(5:0ABDGHLOSTX)(6:ABDFHLPRST)(11:AST)"
+          ],
+          [
+            156,
+            "attribute_id",
+            "In the Possible values section, the Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position. Unused position(s): 4,5,6,11. Invalid character(s): 9:J, 15:L, 17:V. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,7,11. Invalid character(s): 9:J, 15:L, 17:V. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and deco"
+          ],
+          [
+            156,
+            "value",
+            "In the Possible values section, the Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position. Unused position(s): 4,5,6,11. Invalid character(s): 9:J, 15:L, 17:V. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,7,11. Invalid character(s): 9:J, 15:L, 17:V. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and deco"
+          ],
+          [
+            191,
+            "attribute_id",
+            "1 - Check Digit (9th position) does not calculate properly; 4 - VIN corrected, error in one position only (indicated by ! in Suggested VIN), multiple matches found; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+            "1 - Check Digit (9th position) does not calculate properly; 5 - VIN has errors in few positions; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present"
+          ],
+          [
+            191,
+            "value",
+            "1 - Check Digit (9th position) does not calculate properly; 4 - VIN corrected, error in one position only (indicated by ! in Suggested VIN), multiple matches found; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+            "1 - Check Digit (9th position) does not calculate properly; 5 - VIN has errors in few positions; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present"
+          ]
+        ],
+        "missing": [
+          [
+            118,
+            "20"
+          ]
+        ],
+        "extra": [
+          [
+            114,
+            "0= standard  length  , 2= 2ft 0\" longer than standard etc and letters will represent shorter deck length i.e A= 1 ft 0\" shorter, B = 2 ft shorter etc"
+          ]
+        ],
+        "order_ok": false
+      },
+      "field_diffs": [
+        {
+          "element_id": 29,
+          "field": "value",
+          "oracle": "2022",
+          "ultravin": "1992",
+          "feature": "year"
+        },
+        {
+          "element_id": 29,
+          "field": "attribute_id",
+          "oracle": "2022",
+          "ultravin": "1992",
+          "feature": "year"
+        },
+        {
+          "element_id": 142,
+          "field": "value",
+          "oracle": "112LM320!N!ZM9!9!",
+          "ultravin": "112!!!20!N!ZM9!9!",
+          "feature": "error"
+        },
+        {
+          "element_id": 142,
+          "field": "attribute_id",
+          "oracle": "112LM320!N!ZM9!9!",
+          "ultravin": "112!!!20!N!ZM9!9!",
+          "feature": "error"
+        },
+        {
+          "element_id": 143,
+          "field": "value",
+          "oracle": "1,4,14,400",
+          "ultravin": "1,5,14,400",
+          "feature": "error"
+        },
+        {
+          "element_id": 143,
+          "field": "attribute_id",
+          "oracle": "1,4,14,400",
+          "ultravin": "1,5,14,400",
+          "feature": "error"
+        },
+        {
+          "element_id": 144,
+          "field": "value",
+          "oracle": "(11:ALT)",
+          "ultravin": "(4:0BDFGHOT)(5:0ABDGHLOSTX)(6:ABDFHLPRST)(11:AST)",
+          "feature": "error"
+        },
+        {
+          "element_id": 144,
+          "field": "attribute_id",
+          "oracle": "(11:ALT)",
+          "ultravin": "(4:0BDFGHOT)(5:0ABDGHLOSTX)(6:ABDFHLPRST)(11:AST)",
+          "feature": "error"
+        },
+        {
+          "element_id": 156,
+          "field": "value",
+          "oracle": "In the Possible values section, the Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position. Unused position(s): 4,5,6,11. Invalid character(s): 9:J, 15:L, 17:V. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
+          "ultravin": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,7,11. Invalid character(s): 9:J, 15:L, 17:V. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and deco",
+          "feature": "error"
+        },
+        {
+          "element_id": 156,
+          "field": "attribute_id",
+          "oracle": "In the Possible values section, the Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position. Unused position(s): 4,5,6,11. Invalid character(s): 9:J, 15:L, 17:V. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
+          "ultravin": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,7,11. Invalid character(s): 9:J, 15:L, 17:V. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and deco",
+          "feature": "error"
+        },
+        {
+          "element_id": 191,
+          "field": "value",
+          "oracle": "1 - Check Digit (9th position) does not calculate properly; 4 - VIN corrected, error in one position only (indicated by ! in Suggested VIN), multiple matches found; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+          "ultravin": "1 - Check Digit (9th position) does not calculate properly; 5 - VIN has errors in few positions; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+          "feature": "error"
+        },
+        {
+          "element_id": 191,
+          "field": "attribute_id",
+          "oracle": "1 - Check Digit (9th position) does not calculate properly; 4 - VIN corrected, error in one position only (indicated by ! in Suggested VIN), multiple matches found; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+          "ultravin": "1 - Check Digit (9th position) does not calculate properly; 5 - VIN has errors in few positions; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
           "feature": "error"
         }
       ],
       "missing": [
         118
       ],
-      "extra": [],
-      "hit_count": 17
+      "extra": [
+        114
+      ],
+      "hit_count": 1
     },
     {
       "vin": "1SLGYPP91TO8MBNE3",
@@ -1057,7 +1736,7 @@
       "extra": [
         155
       ],
-      "hit_count": 2
+      "hit_count": 4
     },
     {
       "vin": "1SVXP4L7MKNBWZ8L6",
@@ -1439,7 +2118,7 @@
       "extra": [
         76
       ],
-      "hit_count": 1
+      "hit_count": 2
     },
     {
       "vin": "1SYYNVL25REVGH4DE",
@@ -1645,7 +2324,7 @@
         41
       ],
       "extra": [],
-      "hit_count": 1
+      "hit_count": 2
     },
     {
       "vin": "1VR3RU3EBWK9DWRDJ",
@@ -1825,79 +2504,31 @@
         41
       ],
       "extra": [],
-      "hit_count": 3
+      "hit_count": 8
     },
     {
-      "vin": "1YAEM84BF19YCB9A5",
+      "vin": "1YJTTTC0938ZX1LJ7",
       "mode": "random",
-      "note": "r406",
+      "note": "r197079",
       "fingerprint": {
         "field_diffs": [
           [
-            142,
-            "attribute_id",
-            "1YA!!84!!1!YC!9!5",
-            "1YAEM84B!19YC!9!5"
-          ],
-          [
-            142,
-            "value",
-            "1YA!!84!!1!YC!9!5",
-            "1YAEM84B!19YC!9!5"
-          ],
-          [
-            143,
-            "attribute_id",
-            "1,5,14,400",
-            "1,8,400"
-          ],
-          [
-            143,
-            "value",
-            "1,5,14,400",
-            "1,8,400"
-          ],
-          [
-            144,
-            "attribute_id",
-            "(4:U)(5:T)(8:0123456789)(11:1)",
-            ""
-          ],
-          [
-            144,
-            "value",
-            "(4:U)(5:T)(8:0123456789)(11:1)",
-            ""
-          ],
-          [
             156,
             "attribute_id",
-            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,8,11. Invalid character(s): 9:F, 14:B, 16:A.",
-            "Invalid character(s): 9:F, 14:B, 16:A."
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6,7,11. Invalid character(s): 15:L, 16:J.",
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6,7,8,11. Invalid character(s): 15:L, 16:J."
           ],
           [
             156,
             "value",
-            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,8,11. Invalid character(s): 9:F, 14:B, 16:A.",
-            "Invalid character(s): 9:F, 14:B, 16:A."
-          ],
-          [
-            191,
-            "attribute_id",
-            "1 - Check Digit (9th position) does not calculate properly; 5 - VIN has errors in few positions; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
-            "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 400 - Invalid Characters Present"
-          ],
-          [
-            191,
-            "value",
-            "1 - Check Digit (9th position) does not calculate properly; 5 - VIN has errors in few positions; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
-            "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 400 - Invalid Characters Present"
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6,7,11. Invalid character(s): 15:L, 16:J.",
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6,7,8,11. Invalid character(s): 15:L, 16:J."
           ]
         ],
         "missing": [
           [
-            118,
-            "84"
+            33,
+            "0"
           ]
         ],
         "extra": [],
@@ -1905,81 +2536,294 @@
       },
       "field_diffs": [
         {
-          "element_id": 142,
-          "field": "value",
-          "oracle": "1YA!!84!!1!YC!9!5",
-          "ultravin": "1YAEM84B!19YC!9!5",
-          "feature": "error"
-        },
-        {
-          "element_id": 142,
-          "field": "attribute_id",
-          "oracle": "1YA!!84!!1!YC!9!5",
-          "ultravin": "1YAEM84B!19YC!9!5",
-          "feature": "error"
-        },
-        {
-          "element_id": 143,
-          "field": "value",
-          "oracle": "1,5,14,400",
-          "ultravin": "1,8,400",
-          "feature": "error"
-        },
-        {
-          "element_id": 143,
-          "field": "attribute_id",
-          "oracle": "1,5,14,400",
-          "ultravin": "1,8,400",
-          "feature": "error"
-        },
-        {
-          "element_id": 144,
-          "field": "value",
-          "oracle": "(4:U)(5:T)(8:0123456789)(11:1)",
-          "ultravin": "",
-          "feature": "error"
-        },
-        {
-          "element_id": 144,
-          "field": "attribute_id",
-          "oracle": "(4:U)(5:T)(8:0123456789)(11:1)",
-          "ultravin": "",
-          "feature": "error"
-        },
-        {
           "element_id": 156,
           "field": "value",
-          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,8,11. Invalid character(s): 9:F, 14:B, 16:A.",
-          "ultravin": "Invalid character(s): 9:F, 14:B, 16:A.",
+          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6,7,11. Invalid character(s): 15:L, 16:J.",
+          "ultravin": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6,7,8,11. Invalid character(s): 15:L, 16:J.",
           "feature": "error"
         },
         {
           "element_id": 156,
           "field": "attribute_id",
-          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,8,11. Invalid character(s): 9:F, 14:B, 16:A.",
-          "ultravin": "Invalid character(s): 9:F, 14:B, 16:A.",
-          "feature": "error"
-        },
-        {
-          "element_id": 191,
-          "field": "value",
-          "oracle": "1 - Check Digit (9th position) does not calculate properly; 5 - VIN has errors in few positions; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
-          "ultravin": "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 400 - Invalid Characters Present",
-          "feature": "error"
-        },
-        {
-          "element_id": 191,
-          "field": "attribute_id",
-          "oracle": "1 - Check Digit (9th position) does not calculate properly; 5 - VIN has errors in few positions; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
-          "ultravin": "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 400 - Invalid Characters Present",
+          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6,7,11. Invalid character(s): 15:L, 16:J.",
+          "ultravin": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6,7,8,11. Invalid character(s): 15:L, 16:J.",
           "feature": "error"
         }
       ],
       "missing": [
-        118
+        33
       ],
       "extra": [],
-      "hit_count": 83
+      "hit_count": 1
+    },
+    {
+      "vin": "1Z9AA5AA0GA236111",
+      "mode": "covfuzz",
+      "note": "cov+4",
+      "fingerprint": {
+        "field_diffs": [
+          [
+            156,
+            "attribute_id",
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,7,8. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,7,8. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate informatio"
+          ],
+          [
+            156,
+            "value",
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,7,8. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,7,8. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate informatio"
+          ]
+        ],
+        "missing": [
+          [
+            9,
+            "5"
+          ]
+        ],
+        "extra": [],
+        "order_ok": false
+      },
+      "field_diffs": [
+        {
+          "element_id": 156,
+          "field": "value",
+          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,7,8. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
+          "ultravin": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,7,8. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate informatio",
+          "feature": "error"
+        },
+        {
+          "element_id": 156,
+          "field": "attribute_id",
+          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,7,8. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
+          "ultravin": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,7,8. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate informatio",
+          "feature": "error"
+        }
+      ],
+      "missing": [
+        9
+      ],
+      "extra": [],
+      "hit_count": 3
+    },
+    {
+      "vin": "3E1RN959HRG05ULH5",
+      "mode": "random",
+      "note": "r169672",
+      "fingerprint": {
+        "field_diffs": [
+          [
+            29,
+            "attribute_id",
+            "1994",
+            "2024"
+          ],
+          [
+            29,
+            "value",
+            "1994",
+            "2024"
+          ],
+          [
+            41,
+            "attribute_id",
+            "TBD",
+            "5"
+          ],
+          [
+            41,
+            "created_on",
+            1736174918000000,
+            1673444939997000
+          ],
+          [
+            41,
+            "keys",
+            "***#",
+            "***5"
+          ],
+          [
+            41,
+            "pattern_id",
+            2160480,
+            1879546
+          ],
+          [
+            41,
+            "source",
+            "Formula Pattern",
+            "Pattern"
+          ],
+          [
+            41,
+            "vin_schema_id",
+            10792,
+            25004
+          ],
+          [
+            41,
+            "wmi_id",
+            null,
+            6792
+          ],
+          [
+            142,
+            "attribute_id",
+            "3E1!!95!!R!05!!!5",
+            "3E1!!!5!!R!05!!!5"
+          ],
+          [
+            142,
+            "value",
+            "3E1!!95!!R!05!!!5",
+            "3E1!!!5!!R!05!!!5"
+          ],
+          [
+            144,
+            "attribute_id",
+            "(4:ABDEFGV)(5:ABCD)(8:01234)(11:FLMPST)",
+            "(4:ABCD)(5:ABC)(6:ABCD)(8:01234)(11:S)"
+          ],
+          [
+            144,
+            "value",
+            "(4:ABDEFGV)(5:ABCD)(8:01234)(11:FLMPST)",
+            "(4:ABCD)(5:ABC)(6:ABCD)(8:01234)(11:S)"
+          ],
+          [
+            156,
+            "attribute_id",
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,8,11. Invalid character(s): 9:H, 14:U, 15:L, 16:H. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and",
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,8,11. Invalid character(s): 9:H, 14:U, 15:L, 16:H. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it an"
+          ],
+          [
+            156,
+            "value",
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,8,11. Invalid character(s): 9:H, 14:U, 15:L, 16:H. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and",
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,8,11. Invalid character(s): 9:H, 14:U, 15:L, 16:H. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it an"
+          ]
+        ],
+        "missing": [
+          [
+            155,
+            "Vessel Capacity: greater than or equal to 9000 gallons but less than 10000 gallons."
+          ]
+        ],
+        "extra": [],
+        "order_ok": false
+      },
+      "field_diffs": [
+        {
+          "element_id": 29,
+          "field": "value",
+          "oracle": "1994",
+          "ultravin": "2024",
+          "feature": "year"
+        },
+        {
+          "element_id": 29,
+          "field": "attribute_id",
+          "oracle": "1994",
+          "ultravin": "2024",
+          "feature": "year"
+        },
+        {
+          "element_id": 41,
+          "field": "pattern_id",
+          "oracle": 2160480,
+          "ultravin": 1879546,
+          "feature": "pattern"
+        },
+        {
+          "element_id": 41,
+          "field": "vin_schema_id",
+          "oracle": 10792,
+          "ultravin": 25004,
+          "feature": "pattern"
+        },
+        {
+          "element_id": 41,
+          "field": "keys",
+          "oracle": "***#",
+          "ultravin": "***5",
+          "feature": "pattern"
+        },
+        {
+          "element_id": 41,
+          "field": "attribute_id",
+          "oracle": "TBD",
+          "ultravin": "5",
+          "feature": "pattern"
+        },
+        {
+          "element_id": 41,
+          "field": "created_on",
+          "oracle": 1736174918000000,
+          "ultravin": 1673444939997000,
+          "feature": "pattern"
+        },
+        {
+          "element_id": 41,
+          "field": "wmi_id",
+          "oracle": null,
+          "ultravin": 6792,
+          "feature": "pattern"
+        },
+        {
+          "element_id": 41,
+          "field": "source",
+          "oracle": "Formula Pattern",
+          "ultravin": "Pattern",
+          "feature": "pattern"
+        },
+        {
+          "element_id": 142,
+          "field": "value",
+          "oracle": "3E1!!95!!R!05!!!5",
+          "ultravin": "3E1!!!5!!R!05!!!5",
+          "feature": "error"
+        },
+        {
+          "element_id": 142,
+          "field": "attribute_id",
+          "oracle": "3E1!!95!!R!05!!!5",
+          "ultravin": "3E1!!!5!!R!05!!!5",
+          "feature": "error"
+        },
+        {
+          "element_id": 144,
+          "field": "value",
+          "oracle": "(4:ABDEFGV)(5:ABCD)(8:01234)(11:FLMPST)",
+          "ultravin": "(4:ABCD)(5:ABC)(6:ABCD)(8:01234)(11:S)",
+          "feature": "error"
+        },
+        {
+          "element_id": 144,
+          "field": "attribute_id",
+          "oracle": "(4:ABDEFGV)(5:ABCD)(8:01234)(11:FLMPST)",
+          "ultravin": "(4:ABCD)(5:ABC)(6:ABCD)(8:01234)(11:S)",
+          "feature": "error"
+        },
+        {
+          "element_id": 156,
+          "field": "value",
+          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,8,11. Invalid character(s): 9:H, 14:U, 15:L, 16:H. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and",
+          "ultravin": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,8,11. Invalid character(s): 9:H, 14:U, 15:L, 16:H. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it an",
+          "feature": "error"
+        },
+        {
+          "element_id": 156,
+          "field": "attribute_id",
+          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,8,11. Invalid character(s): 9:H, 14:U, 15:L, 16:H. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and",
+          "ultravin": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,8,11. Invalid character(s): 9:H, 14:U, 15:L, 16:H. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it an",
+          "feature": "error"
+        }
+      ],
+      "missing": [
+        155
+      ],
+      "extra": [],
+      "hit_count": 1
     },
     {
       "vin": "4HZMYSP230NJ7B49F",
@@ -1999,6 +2843,108 @@
       "field_diffs": [],
       "missing": [
         41
+      ],
+      "extra": [],
+      "hit_count": 4
+    },
+    {
+      "vin": "4ZLWOX28CZKGAGSIE",
+      "mode": "random",
+      "note": "r255092",
+      "fingerprint": {
+        "field_diffs": [
+          [
+            143,
+            "attribute_id",
+            "1,11,14,400",
+            "1,8,11,400"
+          ],
+          [
+            143,
+            "value",
+            "1,11,14,400",
+            "1,8,11,400"
+          ],
+          [
+            156,
+            "attribute_id",
+            "Unused position(s): 4,5,6,11. Invalid character(s): 5:O, 9:C, 10:Z, 14:G, 15:S, 16:I, 17:E.",
+            "Invalid character(s): 5:O, 9:C, 10:Z, 14:G, 15:S, 16:I, 17:E."
+          ],
+          [
+            156,
+            "value",
+            "Unused position(s): 4,5,6,11. Invalid character(s): 5:O, 9:C, 10:Z, 14:G, 15:S, 16:I, 17:E.",
+            "Invalid character(s): 5:O, 9:C, 10:Z, 14:G, 15:S, 16:I, 17:E."
+          ],
+          [
+            191,
+            "attribute_id",
+            "1 - Check Digit (9th position) does not calculate properly; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+            "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present"
+          ],
+          [
+            191,
+            "value",
+            "1 - Check Digit (9th position) does not calculate properly; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+            "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present"
+          ]
+        ],
+        "missing": [
+          [
+            71,
+            "28"
+          ]
+        ],
+        "extra": [],
+        "order_ok": false
+      },
+      "field_diffs": [
+        {
+          "element_id": 143,
+          "field": "value",
+          "oracle": "1,11,14,400",
+          "ultravin": "1,8,11,400",
+          "feature": "error"
+        },
+        {
+          "element_id": 143,
+          "field": "attribute_id",
+          "oracle": "1,11,14,400",
+          "ultravin": "1,8,11,400",
+          "feature": "error"
+        },
+        {
+          "element_id": 156,
+          "field": "value",
+          "oracle": "Unused position(s): 4,5,6,11. Invalid character(s): 5:O, 9:C, 10:Z, 14:G, 15:S, 16:I, 17:E.",
+          "ultravin": "Invalid character(s): 5:O, 9:C, 10:Z, 14:G, 15:S, 16:I, 17:E.",
+          "feature": "error"
+        },
+        {
+          "element_id": 156,
+          "field": "attribute_id",
+          "oracle": "Unused position(s): 4,5,6,11. Invalid character(s): 5:O, 9:C, 10:Z, 14:G, 15:S, 16:I, 17:E.",
+          "ultravin": "Invalid character(s): 5:O, 9:C, 10:Z, 14:G, 15:S, 16:I, 17:E.",
+          "feature": "error"
+        },
+        {
+          "element_id": 191,
+          "field": "value",
+          "oracle": "1 - Check Digit (9th position) does not calculate properly; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+          "ultravin": "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present",
+          "feature": "error"
+        },
+        {
+          "element_id": 191,
+          "field": "attribute_id",
+          "oracle": "1 - Check Digit (9th position) does not calculate properly; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+          "ultravin": "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present",
+          "feature": "error"
+        }
+      ],
+      "missing": [
+        71
       ],
       "extra": [],
       "hit_count": 1
@@ -2051,302 +2997,30 @@
         71
       ],
       "extra": [],
-      "hit_count": 5
+      "hit_count": 15
     },
     {
-      "vin": "5VAVG386NUZ3VWQ0O",
+      "vin": "5YUTET20LVE91FG49",
       "mode": "random",
-      "note": "r43665",
-      "fingerprint": {
-        "field_diffs": [
-          [
-            143,
-            "attribute_id",
-            "1,11,14,400",
-            "1,8,11,400"
-          ],
-          [
-            143,
-            "value",
-            "1,11,14,400",
-            "1,8,11,400"
-          ],
-          [
-            156,
-            "attribute_id",
-            "Unused position(s): 4,5,11. Invalid character(s): 9:N, 10:U, 14:W, 15:Q, 17:O.",
-            "Invalid character(s): 9:N, 10:U, 14:W, 15:Q, 17:O."
-          ],
-          [
-            156,
-            "value",
-            "Unused position(s): 4,5,11. Invalid character(s): 9:N, 10:U, 14:W, 15:Q, 17:O.",
-            "Invalid character(s): 9:N, 10:U, 14:W, 15:Q, 17:O."
-          ],
-          [
-            191,
-            "attribute_id",
-            "1 - Check Digit (9th position) does not calculate properly; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
-            "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present"
-          ],
-          [
-            191,
-            "value",
-            "1 - Check Digit (9th position) does not calculate properly; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
-            "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present"
-          ]
-        ],
-        "missing": [
-          [
-            41,
-            "6"
-          ],
-          [
-            118,
-            "38"
-          ]
-        ],
-        "extra": [],
-        "order_ok": false
-      },
-      "field_diffs": [
-        {
-          "element_id": 143,
-          "field": "value",
-          "oracle": "1,11,14,400",
-          "ultravin": "1,8,11,400",
-          "feature": "error"
-        },
-        {
-          "element_id": 143,
-          "field": "attribute_id",
-          "oracle": "1,11,14,400",
-          "ultravin": "1,8,11,400",
-          "feature": "error"
-        },
-        {
-          "element_id": 156,
-          "field": "value",
-          "oracle": "Unused position(s): 4,5,11. Invalid character(s): 9:N, 10:U, 14:W, 15:Q, 17:O.",
-          "ultravin": "Invalid character(s): 9:N, 10:U, 14:W, 15:Q, 17:O.",
-          "feature": "error"
-        },
-        {
-          "element_id": 156,
-          "field": "attribute_id",
-          "oracle": "Unused position(s): 4,5,11. Invalid character(s): 9:N, 10:U, 14:W, 15:Q, 17:O.",
-          "ultravin": "Invalid character(s): 9:N, 10:U, 14:W, 15:Q, 17:O.",
-          "feature": "error"
-        },
-        {
-          "element_id": 191,
-          "field": "value",
-          "oracle": "1 - Check Digit (9th position) does not calculate properly; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
-          "ultravin": "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present",
-          "feature": "error"
-        },
-        {
-          "element_id": 191,
-          "field": "attribute_id",
-          "oracle": "1 - Check Digit (9th position) does not calculate properly; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
-          "ultravin": "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 11 - Incorrect Model Year - Position 10 does not match valid model year codes (I, O, Q, U, Z, 0). Decoded data may not be accurate.; 400 - Invalid Characters Present",
-          "feature": "error"
-        }
-      ],
-      "missing": [
-        41,
-        118
-      ],
-      "extra": [],
-      "hit_count": 4
-    },
-    {
-      "vin": "5ZZ7AP45EGYN11HB1",
-      "mode": "random",
-      "note": "r106378",
-      "fingerprint": {
-        "field_diffs": [
-          [
-            142,
-            "attribute_id",
-            "5ZZ!!!45!G!N11!!1",
-            "5ZZ7AP45!GYN11!!1"
-          ],
-          [
-            142,
-            "value",
-            "5ZZ!!!45!G!N11!!1",
-            "5ZZ7AP45!GYN11!!1"
-          ],
-          [
-            143,
-            "attribute_id",
-            "1,5,14,400",
-            "1,8,400"
-          ],
-          [
-            143,
-            "value",
-            "1,5,14,400",
-            "1,8,400"
-          ],
-          [
-            144,
-            "attribute_id",
-            "(4:T)(5:P)(6:E)(11:L)",
-            ""
-          ],
-          [
-            144,
-            "value",
-            "(4:T)(5:P)(6:E)(11:L)",
-            ""
-          ],
-          [
-            156,
-            "attribute_id",
-            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,11. Invalid character(s): 9:E, 15:H, 16:B. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode",
-            "Invalid character(s): 9:E, 15:H, 16:B. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information."
-          ],
-          [
-            156,
-            "value",
-            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,11. Invalid character(s): 9:E, 15:H, 16:B. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode",
-            "Invalid character(s): 9:E, 15:H, 16:B. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information."
-          ],
-          [
-            191,
-            "attribute_id",
-            "1 - Check Digit (9th position) does not calculate properly; 5 - VIN has errors in few positions; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
-            "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 400 - Invalid Characters Present"
-          ],
-          [
-            191,
-            "value",
-            "1 - Check Digit (9th position) does not calculate properly; 5 - VIN has errors in few positions; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
-            "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 400 - Invalid Characters Present"
-          ]
-        ],
-        "missing": [
-          [
-            71,
-            "45"
-          ]
-        ],
-        "extra": [],
-        "order_ok": false
-      },
-      "field_diffs": [
-        {
-          "element_id": 142,
-          "field": "value",
-          "oracle": "5ZZ!!!45!G!N11!!1",
-          "ultravin": "5ZZ7AP45!GYN11!!1",
-          "feature": "error"
-        },
-        {
-          "element_id": 142,
-          "field": "attribute_id",
-          "oracle": "5ZZ!!!45!G!N11!!1",
-          "ultravin": "5ZZ7AP45!GYN11!!1",
-          "feature": "error"
-        },
-        {
-          "element_id": 143,
-          "field": "value",
-          "oracle": "1,5,14,400",
-          "ultravin": "1,8,400",
-          "feature": "error"
-        },
-        {
-          "element_id": 143,
-          "field": "attribute_id",
-          "oracle": "1,5,14,400",
-          "ultravin": "1,8,400",
-          "feature": "error"
-        },
-        {
-          "element_id": 144,
-          "field": "value",
-          "oracle": "(4:T)(5:P)(6:E)(11:L)",
-          "ultravin": "",
-          "feature": "error"
-        },
-        {
-          "element_id": 144,
-          "field": "attribute_id",
-          "oracle": "(4:T)(5:P)(6:E)(11:L)",
-          "ultravin": "",
-          "feature": "error"
-        },
-        {
-          "element_id": 156,
-          "field": "value",
-          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,11. Invalid character(s): 9:E, 15:H, 16:B. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode",
-          "ultravin": "Invalid character(s): 9:E, 15:H, 16:B. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
-          "feature": "error"
-        },
-        {
-          "element_id": 156,
-          "field": "attribute_id",
-          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,6,11. Invalid character(s): 9:E, 15:H, 16:B. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode",
-          "ultravin": "Invalid character(s): 9:E, 15:H, 16:B. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
-          "feature": "error"
-        },
-        {
-          "element_id": 191,
-          "field": "value",
-          "oracle": "1 - Check Digit (9th position) does not calculate properly; 5 - VIN has errors in few positions; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
-          "ultravin": "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 400 - Invalid Characters Present",
-          "feature": "error"
-        },
-        {
-          "element_id": 191,
-          "field": "attribute_id",
-          "oracle": "1 - Check Digit (9th position) does not calculate properly; 5 - VIN has errors in few positions; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
-          "ultravin": "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 400 - Invalid Characters Present",
-          "feature": "error"
-        }
-      ],
-      "missing": [
-        71
-      ],
-      "extra": [],
-      "hit_count": 1
-    },
-    {
-      "vin": "7T0M6TGCURDSNZTHF",
-      "mode": "random",
-      "note": "r140114",
-      "error": "InvalidRegularExpression('invalid regular expression: invalid character range\\nCONTEXT:  PL/pgSQL function vpic.fvalidcharsinregex(character varying) line 22 at IF\\nPL/pgSQL function vpic.fvalidcharsinkey(character varying) line 68 at assignment\\nSQL statement \"insert into tbl_spVinDecode_ErrorCode1",
-      "hit_count": 1
-    },
-    {
-      "vin": "7W4WB208TR9XZMBF1",
-      "mode": "random",
-      "note": "r746",
+      "note": "r162238",
       "fingerprint": {
         "field_diffs": [
           [
             156,
             "attribute_id",
-            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,11. Invalid character(s): 9:T, 14:M, 15:B, 16:F. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and deco",
-            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6,7,8,11. Invalid character(s): 9:T, 14:M, 15:B, 16:F. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it an"
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6. Invalid character(s): 9:L, 14:F, 15:G. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode agai",
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6,7,8. Invalid character(s): 9:L, 14:F, 15:G. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode"
           ],
           [
             156,
             "value",
-            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,11. Invalid character(s): 9:T, 14:M, 15:B, 16:F. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and deco",
-            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6,7,8,11. Invalid character(s): 9:T, 14:M, 15:B, 16:F. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it an"
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6. Invalid character(s): 9:L, 14:F, 15:G. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode agai",
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6,7,8. Invalid character(s): 9:L, 14:F, 15:G. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode"
           ]
         ],
         "missing": [
           [
-            41,
-            "8"
-          ],
-          [
-            118,
+            125,
             "20"
           ]
         ],
@@ -2357,24 +3031,30 @@
         {
           "element_id": 156,
           "field": "value",
-          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,11. Invalid character(s): 9:T, 14:M, 15:B, 16:F. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and deco",
-          "ultravin": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6,7,8,11. Invalid character(s): 9:T, 14:M, 15:B, 16:F. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it an",
+          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6. Invalid character(s): 9:L, 14:F, 15:G. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode agai",
+          "ultravin": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6,7,8. Invalid character(s): 9:L, 14:F, 15:G. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode",
           "feature": "error"
         },
         {
           "element_id": 156,
           "field": "attribute_id",
-          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,11. Invalid character(s): 9:T, 14:M, 15:B, 16:F. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and deco",
-          "ultravin": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6,7,8,11. Invalid character(s): 9:T, 14:M, 15:B, 16:F. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it an",
+          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6. Invalid character(s): 9:L, 14:F, 15:G. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode agai",
+          "ultravin": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,6,7,8. Invalid character(s): 9:L, 14:F, 15:G. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode",
           "feature": "error"
         }
       ],
       "missing": [
-        41,
-        118
+        125
       ],
       "extra": [],
-      "hit_count": 31
+      "hit_count": 3
+    },
+    {
+      "vin": "7T0M6TGCURDSNZTHF",
+      "mode": "random",
+      "note": "r140114",
+      "error": "InvalidRegularExpression('invalid regular expression: invalid character range\\nCONTEXT:  PL/pgSQL function vpic.fvalidcharsinregex(character varying) line 22 at IF\\nPL/pgSQL function vpic.fvalidcharsinkey(character varying) line 68 at assignment\\nSQL statement \"insert into tbl_spVinDecode_ErrorCode1",
+      "hit_count": 3
     },
     {
       "vin": "JHCL9GZ0KHWPZ2DVV",
@@ -2396,7 +3076,161 @@
         111
       ],
       "extra": [],
-      "hit_count": 3
+      "hit_count": 8
+    },
+    {
+      "vin": "LK8M12RUTH5Z4TU41",
+      "mode": "random",
+      "note": "r202124",
+      "fingerprint": {
+        "field_diffs": [
+          [
+            142,
+            "attribute_id",
+            "LK8!!2!!!H!Z4!!41",
+            "LK8M12RU!H5Z4!!41"
+          ],
+          [
+            142,
+            "value",
+            "LK8!!2!!!H!Z4!!41",
+            "LK8M12RU!H5Z4!!41"
+          ],
+          [
+            143,
+            "attribute_id",
+            "1,5,14,400",
+            "1,8,400"
+          ],
+          [
+            143,
+            "value",
+            "1,5,14,400",
+            "1,8,400"
+          ],
+          [
+            144,
+            "attribute_id",
+            "(4:YZ)(5:PRS)(7:A)(8:ABCD)(11:SY)",
+            ""
+          ],
+          [
+            144,
+            "value",
+            "(4:YZ)(5:PRS)(7:A)(8:ABCD)(11:SY)",
+            ""
+          ],
+          [
+            156,
+            "attribute_id",
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,7,8,11. Invalid character(s): 9:T, 14:T, 15:U. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and deco",
+            "Invalid character(s): 9:T, 14:T, 15:U. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information."
+          ],
+          [
+            156,
+            "value",
+            "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,7,8,11. Invalid character(s): 9:T, 14:T, 15:U. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and deco",
+            "Invalid character(s): 9:T, 14:T, 15:U. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information."
+          ],
+          [
+            191,
+            "attribute_id",
+            "1 - Check Digit (9th position) does not calculate properly; 5 - VIN has errors in few positions; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+            "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 400 - Invalid Characters Present"
+          ],
+          [
+            191,
+            "value",
+            "1 - Check Digit (9th position) does not calculate properly; 5 - VIN has errors in few positions; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+            "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 400 - Invalid Characters Present"
+          ]
+        ],
+        "missing": [
+          [
+            21,
+            "2"
+          ]
+        ],
+        "extra": [],
+        "order_ok": false
+      },
+      "field_diffs": [
+        {
+          "element_id": 142,
+          "field": "value",
+          "oracle": "LK8!!2!!!H!Z4!!41",
+          "ultravin": "LK8M12RU!H5Z4!!41",
+          "feature": "error"
+        },
+        {
+          "element_id": 142,
+          "field": "attribute_id",
+          "oracle": "LK8!!2!!!H!Z4!!41",
+          "ultravin": "LK8M12RU!H5Z4!!41",
+          "feature": "error"
+        },
+        {
+          "element_id": 143,
+          "field": "value",
+          "oracle": "1,5,14,400",
+          "ultravin": "1,8,400",
+          "feature": "error"
+        },
+        {
+          "element_id": 143,
+          "field": "attribute_id",
+          "oracle": "1,5,14,400",
+          "ultravin": "1,8,400",
+          "feature": "error"
+        },
+        {
+          "element_id": 144,
+          "field": "value",
+          "oracle": "(4:YZ)(5:PRS)(7:A)(8:ABCD)(11:SY)",
+          "ultravin": "",
+          "feature": "error"
+        },
+        {
+          "element_id": 144,
+          "field": "attribute_id",
+          "oracle": "(4:YZ)(5:PRS)(7:A)(8:ABCD)(11:SY)",
+          "ultravin": "",
+          "feature": "error"
+        },
+        {
+          "element_id": 156,
+          "field": "value",
+          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,7,8,11. Invalid character(s): 9:T, 14:T, 15:U. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and deco",
+          "ultravin": "Invalid character(s): 9:T, 14:T, 15:U. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
+          "feature": "error"
+        },
+        {
+          "element_id": 156,
+          "field": "attribute_id",
+          "oracle": "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position Unused position(s): 4,5,7,8,11. Invalid character(s): 9:T, 14:T, 15:U. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and deco",
+          "ultravin": "Invalid character(s): 9:T, 14:T, 15:U. The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information.",
+          "feature": "error"
+        },
+        {
+          "element_id": 191,
+          "field": "value",
+          "oracle": "1 - Check Digit (9th position) does not calculate properly; 5 - VIN has errors in few positions; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+          "ultravin": "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 400 - Invalid Characters Present",
+          "feature": "error"
+        },
+        {
+          "element_id": 191,
+          "field": "attribute_id",
+          "oracle": "1 - Check Digit (9th position) does not calculate properly; 5 - VIN has errors in few positions; 14 - Unable to provide information for some of the characters in the VIN, based on the manufacturer submission.; 400 - Invalid Characters Present",
+          "ultravin": "1 - Check Digit (9th position) does not calculate properly; 8 - No detailed data available currently; 400 - Invalid Characters Present",
+          "feature": "error"
+        }
+      ],
+      "missing": [
+        21
+      ],
+      "extra": [],
+      "hit_count": 1
     },
     {
       "vin": "SJJFJ6JN9JSTQC703",
@@ -2446,7 +3280,7 @@
         21
       ],
       "extra": [],
-      "hit_count": 1
+      "hit_count": 2
     },
     {
       "vin": "SJJUW1SO0U0DJUPHX",
@@ -2548,7 +3382,29 @@
         21
       ],
       "extra": [],
-      "hit_count": 1
+      "hit_count": 2
+    },
+    {
+      "vin": "UJG4Z804YQJQIGX35",
+      "mode": "random",
+      "note": "r242768",
+      "fingerprint": {
+        "field_diffs": [],
+        "missing": [
+          [
+            21,
+            "8"
+          ]
+        ],
+        "extra": [],
+        "order_ok": false
+      },
+      "field_diffs": [],
+      "missing": [
+        21
+      ],
+      "extra": [],
+      "hit_count": 2
     },
     {
       "vin": "W1LSB0L72VEJV2EPX",
@@ -2695,7 +3551,7 @@
       ],
       "missing": [],
       "extra": [],
-      "hit_count": 1
+      "hit_count": 2
     },
     {
       "vin": "WBKTRABEF8M4RJDVH",
@@ -2725,7 +3581,7 @@
       ],
       "missing": [],
       "extra": [],
-      "hit_count": 2
+      "hit_count": 8
     },
     {
       "vin": "ZJMZVN52JTYH3HEBH",
@@ -2905,7 +3761,7 @@
         71
       ],
       "extra": [],
-      "hit_count": 1
+      "hit_count": 2
     }
   ]
 }
