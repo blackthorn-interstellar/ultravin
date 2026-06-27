@@ -13,6 +13,5 @@ services:
       interval: 2s
       timeout: 3s
       retries: 40
-    tmpfs:
-      # Keep the 10.9M-row load in RAM; the oracle is ephemeral/disposable.
-      - /var/lib/postgresql/data
+    # Data lives on the container's normal (disk-backed) storage, not RAM. The
+    # oracle is disposable; recreate + `make oracle-load` to rebuild it.
