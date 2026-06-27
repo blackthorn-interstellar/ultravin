@@ -329,9 +329,39 @@ def cmd_dedupe(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_check(args: argparse.Namespace) -> int:
+    """Decode a fixed VIN list vs the oracle; nonzero exit if any still diverge.
+    The success fence for the fix pass (repro set 35 -> 0)."""
+    with open(args.vins) as f:
+        data = json.load(f)
+    vins = [v["vin"] for v in data["vins"]] if isinstance(data, dict) else list(data)
+    fails: list[tuple[str, str]] = []
+    with oracle.connect() as conn:
+        for vin in vins:
+            try:
+                o = [normalize.from_oracle(r) for r in oracle.decode(conn, vin)]
+                m = normalize.ultravin_rows(ultravin.decode(vin))
+                d = normalize.diff_rows(o, m)
+            except Exception as e:  # noqa: BLE001
+                fails.append((vin, f"error:{e!r}"[:90]))
+                continue
+            if not d["ok"]:
+                fields = sorted({(fd["element_id"], fd["field"]) for fd in d["field_diffs"]})
+                miss = sorted({r["element_id"] for r in d["missing"]})
+                extra = sorted({r["element_id"] for r in d["extra"]})
+                fails.append((vin, f"fields={fields} missing={miss} extra={extra}"))
+    print(f"[check] {len(vins)} VINs, {len(fails)} still failing", file=sys.stderr)
+    for vin, info in fails[:60]:
+        print(f"  FAIL {vin}: {info}", file=sys.stderr)
+    return 1 if fails else 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Brutal VIN parity campaign vs the oracle.")
     sub = ap.add_subparsers(dest="cmd", required=True)
+
+    c = sub.add_parser("check", help="decode a VIN list vs oracle; nonzero exit if any diverge")
+    c.add_argument("--vins", required=True, help="JSON: {vins:[{vin}]} or a plain list of VINs")
 
     r = sub.add_parser("run", help="generate + diff vs oracle + log failures")
     r.add_argument("--modes", default="all", help="comma list of random,systematic,fuzz,covfuzz (or 'all')")
@@ -362,6 +392,8 @@ def main(argv: list[str] | None = None) -> int:
         return cmd_run(args)
     if args.cmd == "dedupe":
         return cmd_dedupe(args)
+    if args.cmd == "check":
+        return cmd_check(args)
     return 1
 
 
