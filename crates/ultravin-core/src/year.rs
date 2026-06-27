@@ -26,22 +26,29 @@ pub fn vin_model_year_raw(vin: &str, db: &Db, current_year: i32) -> Option<i32> 
     };
 
     let mut conclusive = false;
+    // `fVinWMI` always returns a non-null string for a VIN this long, so the SQL's
+    // `if var_wmi is not null` guard is always taken. The `Wmi` row lookup only
+    // gates the carLT (position-7) branches; the future-year correction below runs
+    // even when the WMI is absent from the table (e.g. an unknown WMI like `ZKU`).
     let wmi = vin_wmi(vin);
-    if let Some(w) = db.wmi_any(&wmi) {
-        let vt = w.vehicletypeid.to_native();
-        let car_lt = matches!(vt, 2 | 7) || (vt == 3 && w.trucktypeid.to_native() == 1);
-        let pos7 = b.get(6).copied().unwrap_or(b' ');
-        if car_lt && pos7.is_ascii_digit() {
-            my -= 30;
-            conclusive = true;
-        }
-        if car_lt && pos7.is_ascii_uppercase() {
-            conclusive = true;
-        }
-        if my > current_year + 2 {
-            my -= 30;
-            conclusive = true;
-        }
+    let car_lt = db
+        .wmi_any(&wmi)
+        .map(|w| {
+            let vt = w.vehicletypeid.to_native();
+            matches!(vt, 2 | 7) || (vt == 3 && w.trucktypeid.to_native() == 1)
+        })
+        .unwrap_or(false);
+    let pos7 = b.get(6).copied().unwrap_or(b' ');
+    if car_lt && pos7.is_ascii_digit() {
+        my -= 30;
+        conclusive = true;
+    }
+    if car_lt && pos7.is_ascii_uppercase() {
+        conclusive = true;
+    }
+    if my > current_year + 2 {
+        my -= 30;
+        conclusive = true;
     }
 
     Some(if conclusive { my } else { -my })

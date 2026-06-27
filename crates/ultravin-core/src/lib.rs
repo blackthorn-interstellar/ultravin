@@ -432,9 +432,9 @@ fn error_messages(db: &Db, err: &errors::ErrorState) -> String {
         }
         parts.push(name);
     }
-    let mut s = parts.join("; ");
-    s.truncate(500);
-    s
+    // `left(errorMessages, 500)` counts CHARACTERS, not bytes; multi-byte chars
+    // (e.g. the en-dash in the code-10 message) must not be split mid-codepoint.
+    parts.join("; ").chars().take(500).collect()
 }
 
 fn append_correction(items: &mut Vec<decode::DecodingItem>, element_id: i32, value: &str) {

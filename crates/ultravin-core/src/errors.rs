@@ -354,10 +354,14 @@ pub fn compute_errors(
     let mut error_bytes = String::new();
     let mut unused_positions: Option<String> = None;
 
-    // C1: code 7 (no WMI) / code 8 (no pattern) / else the errorcode helper.
+    // C1: code 7 (no WMI) / code 8 (no PatternId-bearing item) / else the
+    // errorcode helper. Per spvindecode_core L380 the code-8 gate counts EVERY
+    // DecodingItem with a non-null PatternId (regular/engine/formula patterns,
+    // pattern-model make, propagated conversions, vehicle specs) — not just the
+    // regular Pattern matches.
     if !core.wmi_found {
         raw.insert(7);
-    } else if core.pattern_count == 0 {
+    } else if items.iter().filter(|it| it.pattern_id != NULL_I32).count() == 0 {
         raw.insert(8);
     } else {
         let matched_keys: Vec<String> = items

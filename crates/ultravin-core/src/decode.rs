@@ -1,6 +1,6 @@
 //! The decode core, in the exact order of `spvindecode_core`: pattern pass,
-//! layered sources, dedup, make, conversion, vehicle specs, and defaults.
-//! Formula Pattern is still W2.
+//! layered sources, Formula Pattern, dedup, make, conversion, vehicle specs,
+//! and defaults.
 
 use std::cmp::Ordering;
 
@@ -28,7 +28,6 @@ pub struct DecodingItem {
 pub struct CoreResult {
     pub items: Vec<DecodingItem>,
     pub wmi_found: bool,
-    pub pattern_count: usize,
 }
 
 /// `var_keys = vin[3..8] || ('|' || vin[9..17])` (1-based 4-8 and 10-17).
@@ -63,7 +62,6 @@ pub fn decode_core(
         return CoreResult {
             items,
             wmi_found: false,
-            pattern_count: 0,
         };
     };
     let wmiid = wmi.id.to_native();
@@ -110,7 +108,6 @@ pub fn decode_core(
         }
     }
     matched.sort_by_key(|p| p.id.to_native());
-    let pattern_count = matched.len();
     for p in matched {
         items.push(DecodingItem {
             created_on: p.createdon_key.to_native(),
@@ -167,7 +164,7 @@ pub fn decode_core(
                     wmi_id: wmiid,
                     element_id: 39,
                     attribute_id: veh_type_id.to_string(),
-                    value: name.to_ascii_uppercase(),
+                    value: name.to_uppercase(),
                     source: "VehType".to_string(),
                     priority: 100,
                     to_be_qced: false,
@@ -181,7 +178,7 @@ pub fn decode_core(
     if mfr_id != NULL_I32 {
         let mfr_name = element_lookup_tag(27)
             .and_then(|t| db.lookup(t, mfr_id))
-            .map(|n| n.to_ascii_uppercase())
+            .map(|n| n.to_uppercase())
             .unwrap_or_default();
         items.push(DecodingItem {
             created_on: NULL_I64,
@@ -228,6 +225,10 @@ pub fn decode_core(
         });
     }
 
+    // --- Formula Pattern (priority 100): patterns whose keys carry `#` digit
+    // placeholders; the matched VIN digits become the value directly.
+    append_formula_patterns(db, &mut items, wmiid, var_keys, model_year);
+
     // --- Dedup (once).
     dedup_per_element(&mut items);
 
@@ -253,8 +254,93 @@ pub fn decode_core(
     CoreResult {
         items,
         wmi_found: true,
-        pattern_count,
     }
+}
+
+/// Formula Pattern insert (port of `spvindecode_core` L150-173). `formulaKeys`
+/// is `var_keys` with every digit replaced by `#`; a pattern qualifies when its
+/// `keys` contain a `#`, its element is not in {26,27,29,39}, and `formulaKeys
+/// LIKE replace(keys,'*','_')||'%'`. The emitted value is the slice of
+/// `var_keys` spanning the pattern's first-to-last `#`. No Decode/IsPrivate/
+/// TobeQCed/PublicAvailability filtering (only `INNER JOIN Element`).
+fn append_formula_patterns(
+    db: &Db,
+    items: &mut Vec<DecodingItem>,
+    wmiid: i32,
+    var_keys: &str,
+    model_year: Option<i32>,
+) {
+    let formula_keys: String = var_keys
+        .chars()
+        .map(|c| if c.is_ascii_digit() { '#' } else { c })
+        .collect();
+    let fk = formula_keys.as_bytes();
+    let mut seen_vs: std::collections::HashSet<i32> = std::collections::HashSet::new();
+    let mut new_items: Vec<DecodingItem> = Vec::new();
+    for wvs in db.wmi_vinschema_for(wmiid) {
+        if let Some(my) = model_year {
+            let to = if wvs.yearto.to_native() == NULL_I32 {
+                2999
+            } else {
+                wvs.yearto.to_native()
+            };
+            if my < wvs.yearfrom.to_native() || my > to {
+                continue;
+            }
+        }
+        let vsid = wvs.vinschemaid.to_native();
+        if !seen_vs.insert(vsid) {
+            continue;
+        }
+        for p in db.patterns_for(vsid) {
+            if matches!(p.elementid.to_native(), 26 | 27 | 29 | 39) {
+                continue;
+            }
+            let keys = db.s(p.keys.to_native());
+            if !keys.contains('#') {
+                continue;
+            }
+            if db.element_by_id(p.elementid.to_native()).is_none() {
+                continue;
+            }
+            if !like_match(fk, keys.as_bytes()) {
+                continue;
+            }
+            new_items.push(DecodingItem {
+                created_on: p.createdon_key.to_native(),
+                pattern_id: p.id.to_native(),
+                keys: keys.to_string(),
+                vin_schema_id: vsid,
+                wmi_id: NULL_I32,
+                element_id: p.elementid.to_native(),
+                attribute_id: db.s(p.attributeid.to_native()).to_string(),
+                value: formula_value(var_keys, keys),
+                source: "Formula Pattern".to_string(),
+                priority: 100,
+                to_be_qced: false,
+            });
+        }
+    }
+    items.extend(new_items);
+}
+
+/// `SUBSTRING(var_keys, STRPOS(keys,'#'), last_hash - first_hash + 1)` — the
+/// slice of `var_keys` covering the pattern's first-to-last `#` (1-based, port
+/// of the L163 STRPOS/REVERSE expression).
+fn formula_value(var_keys: &str, keys: &str) -> String {
+    let kb = keys.as_bytes();
+    let (Some(first), Some(last)) = (
+        kb.iter().position(|&c| c == b'#'),
+        kb.iter().rposition(|&c| c == b'#'),
+    ) else {
+        return String::new();
+    };
+    let vb = var_keys.as_bytes();
+    if first >= vb.len() {
+        return String::new();
+    }
+    let end = (last + 1).min(vb.len());
+    String::from_utf8_lossy(&vb[first..end]).into_owned()
 }
 
 /// The Pattern source priority is `Wmi_VinSchema.YearFrom`. Find the YearFrom
@@ -410,7 +496,7 @@ fn append_make(
                 let makeid = mm.makeid.to_native();
                 let name = element_lookup_tag(26)
                     .and_then(|t| db.lookup(t, makeid))
-                    .map(|n| n.to_ascii_uppercase())
+                    .map(|n| n.to_uppercase())
                     .unwrap_or_default();
                 items.push(DecodingItem {
                     created_on: NULL_I64,
@@ -437,7 +523,7 @@ fn append_make(
             let makeid = distinct[0];
             let name = element_lookup_tag(26)
                 .and_then(|t| db.lookup(t, makeid))
-                .map(|n| n.to_ascii_uppercase())
+                .map(|n| n.to_uppercase())
                 .unwrap_or_default();
             items.push(DecodingItem {
                 created_on: wmi_created,
