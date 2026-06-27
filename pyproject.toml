@@ -1,0 +1,85 @@
+[project]
+name = "ultravin"
+authors = [
+    {name = "Bryce Drennan"},
+]
+description = ""
+readme = "README.md"
+requires-python = ">=3.12.8"
+dynamic = ["version"]
+dependencies = []
+license = "MIT"
+
+[dependency-groups]
+dev = [
+    "build",
+    "coverage",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-randomly",
+    "pytest-sugar",
+    "ruff",
+    "twine",
+    "ty",
+    "wheel",
+]
+
+[project.urls]
+Documentation = "https://github.com/brycedrennan/ultravin"
+Source = "https://github.com/brycedrennan/ultravin"
+
+[build-system]
+requires = ["setuptools>=76", "setuptools_scm[toml]>=8.1"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["ultravin"]
+
+[tool.setuptools_scm]
+write_to = "ultravin/_version.py"
+
+[tool.ruff]
+extend-exclude = []
+line-length = 120
+output-format = "concise"
+
+[tool.ruff.lint]
+extend-ignore = [
+    "E501", 
+    "G004", 
+    "ISC001", 
+    "PT011", 
+    "RET504", 
+    "SIM114", 
+    "TC002", "TC003",
+    "TRY003", "TRY400", "TRY401", 
+    "RUF012", "RUF100"
+]
+extend-select = [
+    "I", "E", "W", "UP", "ASYNC", "BLE", "A001", "A002",
+    "C4", "DTZ", "T10", "EM", "ISC", "ICN", "G", "PIE", "PT",
+    "Q", "SIM", "TID", "TCH", "PLC", "PLE", "TRY", "RUF"
+]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+
+[tool.ruff.lint.flake8-errmsg]
+max-string-length = 50
+
+[tool.pytest.ini_options]
+addopts = "-s --tb=short -v --durations=10"
+norecursedirs = ["build", "dist"]
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = [
+    "ignore:.*:DeprecationWarning:litellm.*",
+    "ignore:Support for class-based `config` is deprecated.*:DeprecationWarning:pydantic._internal._config",
+]
+
+[tool.ty.terminal]
+output-format = "concise"
+
+[tool.ty.rules]
+missing-argument = "ignore"
+# buggy with nonlocal
+unresolved-reference = "ignore"

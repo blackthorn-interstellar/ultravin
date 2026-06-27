@@ -1,0 +1,67 @@
+name: Python Checks
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+jobs:
+  autoformat:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version-file: pyproject.toml
+    - uses: astral-sh/setup-uv@v6
+      with:
+        enable-cache: false
+    - run: echo "UV_PYTHON=$pythonLocation" >> $GITHUB_ENV
+    - run: uv pip install $(uv export --no-hashes --frozen | grep '^ruff==')
+    - run: uv run --frozen --no-sync -- ruff format . --check
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version-file: pyproject.toml
+    - uses: astral-sh/setup-uv@v6
+      with:
+        enable-cache: false
+    - run: echo "UV_PYTHON=$pythonLocation" >> $GITHUB_ENV
+    - run: uv pip install $(uv export --no-hashes --frozen | grep '^ruff==')
+    - run: |
+        uv run --frozen --no-sync -- ruff check .
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version-file: pyproject.toml
+    - uses: astral-sh/setup-uv@v6
+      with:
+        enable-cache: false
+    - run: echo "UV_PYTHON=$pythonLocation" >> $GITHUB_ENV
+    - run: uv sync --frozen --all-extras
+    - run: uv pip install ty
+    - name: Typecheck
+      run: uv run --frozen -- ty check
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+    - uses: astral-sh/setup-uv@v6
+      with:
+        enable-cache: false
+    - run: echo "UV_PYTHON=$pythonLocation" >> $GITHUB_ENV
+    - run: uv sync --frozen --all-extras
+    - name: Test with python ${{ matrix.python-version }}
+      run: uv run --frozen --all-extras -- pytest -v
