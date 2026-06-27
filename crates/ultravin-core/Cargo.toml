@@ -12,6 +12,17 @@ name = "ultravin_core"
 
 [features]
 default = []
+external-data = ["dep:memmap2"]
 
 [lints]
 workspace = true
+
+[dependencies]
+blake3 = "1.8.5"
+memmap2 = { version = "0.9.11", optional = true }
+regex = "1.12.4"
+rkyv = "0.8"
+
+[build-dependencies]
+blake3 = "1.8.5"
+rkyv = "0.8"

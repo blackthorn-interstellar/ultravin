@@ -17,6 +17,9 @@ use clap::Parser;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
+mod artifact;
+use artifact::ArtifactBuilder;
+
 #[derive(Parser)]
 #[command(
     name = "vpic-import",
@@ -32,6 +35,9 @@ struct Cli {
     /// Output directory for the committed text (schema/, procs/, manifest.json).
     #[arg(long, default_value = "vpic")]
     out: PathBuf,
+    /// Path for the embedded rkyv artifact (a gitignored build product).
+    #[arg(long, default_value = "crates/ultravin-core/data/vpic.rkyv")]
+    emit_artifact: PathBuf,
 }
 
 #[derive(Serialize)]
@@ -46,6 +52,8 @@ struct Manifest {
     total_rows: u64,
     tables: BTreeMap<String, u64>,
     functions: Vec<String>,
+    artifact_blake3: String,
+    artifact_bytes: usize,
 }
 
 /// Parse a `pg_dump` TOC header: `-- [Data for ]Name: <n>; Type: <t>; Schema:..`.
@@ -212,20 +220,24 @@ fn run(cli: &Cli) -> Result<(), Box<dyn Error>> {
     let mut cur: Option<(String, String)> = None; // (type, basename)
     let mut body: Vec<String> = Vec::new();
     let mut data_mode: Option<(String, u64)> = None; // (table, row count)
+    let mut builder = ArtifactBuilder::default();
 
     for line in reader.lines() {
         let line = line?;
         if let Some((table, count)) = data_mode.as_mut() {
             if line == "\\." {
                 imp.tables.insert(table.clone(), *count);
+                builder.end_copy();
                 data_mode = None;
             } else {
                 *count += 1;
+                builder.feed(&line);
             }
             continue;
         }
         if line.starts_with("COPY ") && line.trim_end().ends_with("FROM stdin;") {
             if let Some(table) = copy_table(&line) {
+                builder.begin_copy(&table, &line);
                 data_mode = Some((table, 0));
             }
             continue;
@@ -271,6 +283,15 @@ fn run(cli: &Cli) -> Result<(), Box<dyn Error>> {
         write_file(&cli.out.join("schema/_misc.sql"), &imp.misc.join("\n\n"))?;
     }
 
+    // Build the embedded artifact (deterministic content-addressed product).
+    let builder_version: u32 = env!("CARGO_PKG_VERSION")
+        .split('.')
+        .next()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(0);
+    let (artifact_bytes, artifact_blake3) =
+        artifact::write_artifact(builder, &cli.emit_artifact, builder_version)?;
+
     let total_rows: u64 = imp.tables.values().sum();
     let manifest = Manifest {
         month: cli.month.clone(),
@@ -286,6 +307,8 @@ fn run(cli: &Cli) -> Result<(), Box<dyn Error>> {
         total_rows,
         tables: imp.tables.clone(),
         functions: imp.functions.iter().cloned().collect(),
+        artifact_blake3,
+        artifact_bytes,
     };
     write_file(
         &cli.out.join("manifest.json"),
