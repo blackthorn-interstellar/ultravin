@@ -1,22 +1,27 @@
-"""Daemonize the campaign supervisor (double-fork + setsid) so it fully detaches
-from this shell/agent and keeps running across the session. Run from the repo
-root: `uv run python scripts/spawn_campaign.py`. Logs go to campaign/supervisor.out.
+"""Launch the campaign supervisor fully detached (its own session) so it keeps
+running across this shell/agent session. Run from anywhere:
+
+    uv run python scripts/spawn_campaign.py
+
+`start_new_session=True` puts the supervisor in a new session/process-group, so
+it survives the launching process being reaped or its process group killed.
+Output goes to campaign/supervisor.out.
 """
 
-import os
+import subprocess
 import sys
 from pathlib import Path
 
-Path("campaign").mkdir(exist_ok=True)
+ROOT = Path(__file__).resolve().parents[1]
+(ROOT / "campaign").mkdir(exist_ok=True)
 
-if os.fork() > 0:
-    sys.exit(0)  # original parent returns to the caller immediately
-os.setsid()  # new session: detach from the controlling terminal + process group
-if os.fork() > 0:
-    os._exit(0)  # session leader exits so the daemon can't reacquire a terminal
-
-out = open("campaign/supervisor.out", "a")  # noqa: SIM115
-os.dup2(out.fileno(), 1)
-os.dup2(out.fileno(), 2)
-os.dup2(open(os.devnull).fileno(), 0)  # noqa: SIM115
-os.execvp("bash", ["bash", "scripts/campaign-supervisor.sh"])
+out = open(ROOT / "campaign" / "supervisor.out", "a")  # noqa: SIM115
+subprocess.Popen(  # noqa: S603
+    ["bash", str(ROOT / "scripts" / "campaign-supervisor.sh")],
+    cwd=str(ROOT),
+    stdin=subprocess.DEVNULL,
+    stdout=out,
+    stderr=subprocess.STDOUT,
+    start_new_session=True,
+)
+print("supervisor spawned (detached)", file=sys.stderr)
