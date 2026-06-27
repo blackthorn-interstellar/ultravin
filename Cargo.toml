@@ -1,0 +1,19 @@
+[workspace]
+resolver = "2"
+members = ["crates/ultravin-core", "crates/ultravin-build", "crates/ultravin-py"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["Bryce Drennan"]
+repository = "https://github.com/brycedrennan/ultravin"
+
+[workspace.lints.clippy]
+# Keep the bar high; deny on warnings is enforced in `make check`.
+all = "warn"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1

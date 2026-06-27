@@ -111,3 +111,7 @@ ENV/
 
 
 **/_version.py
+# Rust
+/target
+# gitignored build artifact (rebuilt deterministically from the pinned dump)
+/crates/ultravin-core/data/

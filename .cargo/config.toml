@@ -1,0 +1,8 @@
+# Let `cargo build`/`cargo run` link the PyO3 extension-module cdylib locally on
+# macOS by leaving Python symbols to be resolved at runtime (what maturin does
+# under the hood). No effect on Linux/Windows CI wheel builds (handled by maturin).
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]
+
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "link-arg=-undefined", "-C", "link-arg=dynamic_lookup"]

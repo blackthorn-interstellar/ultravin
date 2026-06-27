@@ -1,0 +1,19 @@
+[package]
+name = "ultravin-py"
+description = "PyO3 bindings for the ultravin VIN decoder"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lib]
+name = "_ultravin"
+crate-type = ["cdylib"]
+
+[dependencies]
+ultravin-core = { path = "../ultravin-core" }
+pyo3 = { version = "0.23", features = ["abi3-py312", "extension-module"] }
+
+[lints]
+workspace = true

@@ -3,25 +3,28 @@ name = "ultravin"
 authors = [
     {name = "Bryce Drennan"},
 ]
-description = ""
+description = "Pure-Rust NHTSA vPIC VIN decoder — CLI + library, with spVinDecode parity."
 readme = "README.md"
-requires-python = ">=3.12.8"
+requires-python = ">=3.12"
 dynamic = ["version"]
-dependencies = []
+dependencies = [
+    "typer",
+]
 license = "MIT"
+
+[project.scripts]
+ultravin = "ultravin.cli:main"
 
 [dependency-groups]
 dev = [
-    "build",
     "coverage",
+    "maturin>=1.7,<2",
     "pytest",
     "pytest-asyncio",
     "pytest-randomly",
     "pytest-sugar",
     "ruff",
-    "twine",
     "ty",
-    "wheel",
 ]
 
 [project.urls]
@@ -29,14 +32,14 @@ Documentation = "https://github.com/brycedrennan/ultravin"
 Source = "https://github.com/brycedrennan/ultravin"
 
 [build-system]
-requires = ["setuptools>=76", "setuptools_scm[toml]>=8.1"]
-build-backend = "setuptools.build_meta"
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
 
-[tool.setuptools]
-packages = ["ultravin"]
-
-[tool.setuptools_scm]
-write_to = "ultravin/_version.py"
+[tool.maturin]
+python-source = "python"
+module-name = "ultravin._ultravin"
+manifest-path = "crates/ultravin-py/Cargo.toml"
+features = ["pyo3/extension-module"]
 
 [tool.ruff]
 extend-exclude = []
@@ -45,14 +48,14 @@ output-format = "concise"
 
 [tool.ruff.lint]
 extend-ignore = [
-    "E501", 
-    "G004", 
-    "ISC001", 
-    "PT011", 
-    "RET504", 
-    "SIM114", 
+    "E501",
+    "G004",
+    "ISC001",
+    "PT011",
+    "RET504",
+    "SIM114",
     "TC002", "TC003",
-    "TRY003", "TRY400", "TRY401", 
+    "TRY003", "TRY400", "TRY401",
     "RUF012", "RUF100"
 ]
 extend-select = [
@@ -69,12 +72,8 @@ max-string-length = 50
 
 [tool.pytest.ini_options]
 addopts = "-s --tb=short -v --durations=10"
-norecursedirs = ["build", "dist"]
+norecursedirs = ["build", "dist", "target"]
 asyncio_default_fixture_loop_scope = "function"
-filterwarnings = [
-    "ignore:.*:DeprecationWarning:litellm.*",
-    "ignore:Support for class-based `config` is deprecated.*:DeprecationWarning:pydantic._internal._config",
-]
 
 [tool.ty.terminal]
 output-format = "concise"

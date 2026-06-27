@@ -1,0 +1,6 @@
+"""Type stubs for the compiled `ultravin._ultravin` extension module."""
+
+__version__: str
+
+def decode(vin: str) -> dict[str, object]: ...
+def decode_batch(vins: list[str]) -> list[dict[str, object]]: ...
