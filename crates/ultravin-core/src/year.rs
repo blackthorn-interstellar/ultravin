@@ -28,8 +28,8 @@ pub fn vin_model_year_raw(vin: &str, db: &Db, current_year: i32) -> Option<i32> 
     let mut conclusive = false;
     let wmi = vin_wmi(vin);
     if let Some(w) = db.wmi_any(&wmi) {
-        let car_lt =
-            matches!(w.vehicletypeid, 2 | 7) || (w.vehicletypeid == 3 && w.trucktypeid == 1);
+        let vt = w.vehicletypeid.to_native();
+        let car_lt = matches!(vt, 2 | 7) || (vt == 3 && w.trucktypeid.to_native() == 1);
         let pos7 = b.get(6).copied().unwrap_or(b' ');
         if car_lt && pos7.is_ascii_digit() {
             my -= 30;
@@ -101,11 +101,15 @@ fn schema_count(vin: &str, db: &Db, year: i32) -> i32 {
     let Some(w) = db.wmi_any(&wmi) else {
         return 0;
     };
-    db.wmi_vinschema_for(w.id)
+    db.wmi_vinschema_for(w.id.to_native())
         .iter()
         .filter(|r| {
-            let to = if r.yearto == NULL_I32 { 2999 } else { r.yearto };
-            year >= r.yearfrom && year <= to
+            let to = if r.yearto.to_native() == NULL_I32 {
+                2999
+            } else {
+                r.yearto.to_native()
+            };
+            year >= r.yearfrom.to_native() && year <= to
         })
         .count() as i32
 }

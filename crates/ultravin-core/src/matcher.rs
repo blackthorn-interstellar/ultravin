@@ -5,7 +5,20 @@
 //! Postgres `~` regex produced by [`sqlwild_to_regex`] (a port of the SQL of
 //! the same name, since the stored `keys_regex` column is absent from the dump).
 
+use std::cell::RefCell;
+use std::collections::HashMap;
+
 use regex::Regex;
+
+thread_local! {
+    /// Per-thread cache of compiled bracket-pattern regexes, keyed by the
+    /// interned `keys_regex` string id. The archive is immutable, so a given id
+    /// always maps to the same pattern; caching turns the hot path from
+    /// "compile a regex per pattern per decode" into a single compile per
+    /// distinct pattern per worker thread. `None` = the string failed to
+    /// compile (kept so the miss isn't retried), matching the old `false` path.
+    static REGEX_CACHE: RefCell<HashMap<u32, Option<Regex>>> = RefCell::new(HashMap::new());
+}
 
 /// Port of `vpic.sqlwild_to_regex`: turn a wildcard key into an anchored regex.
 pub fn sqlwild_to_regex(pattern: &str) -> String {
@@ -44,11 +57,18 @@ pub fn like_match(var_keys: &[u8], keys: &[u8]) -> bool {
     true
 }
 
-/// SQL `var_keys ~ keys_regex` for the bracket branch.
-pub fn regex_match(regex: &str, var_keys: &str) -> bool {
-    Regex::new(regex)
-        .map(|r| r.is_match(var_keys))
-        .unwrap_or(false)
+/// SQL `var_keys ~ keys_regex` for the bracket branch. `regex_id` is the
+/// interned `keys_regex` string id, `regex` its text; the compiled regex is
+/// memoized per thread. Behaviour is identical to compiling `regex` fresh every
+/// call (same `is_match`, same `false` on a compile error).
+pub fn regex_match_cached(regex_id: u32, regex: &str, var_keys: &str) -> bool {
+    REGEX_CACHE.with(|c| {
+        let mut cache = c.borrow_mut();
+        let entry = cache
+            .entry(regex_id)
+            .or_insert_with(|| Regex::new(regex).ok());
+        entry.as_ref().is_some_and(|r| r.is_match(var_keys))
+    })
 }
 
 #[cfg(test)]
@@ -67,7 +87,7 @@ mod tests {
     fn bracket_regex_matches() {
         let re = sqlwild_to_regex("CM82[67]");
         assert_eq!(re, "^CM82[67].*");
-        assert!(regex_match(&re, "CM826|3A004352"));
-        assert!(!regex_match(&re, "CM825|3A004352"));
+        assert!(regex_match_cached(1, &re, "CM826|3A004352"));
+        assert!(!regex_match_cached(1, &re, "CM825|3A004352"));
     }
 }

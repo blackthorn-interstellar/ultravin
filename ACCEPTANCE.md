@@ -49,13 +49,13 @@ Concrete, measurable gates. A phase/workflow is **not done** until its gate is g
 
 Targets (hard numbers; beat corgi v2 ~30ms / v3 ~12ms and ~21MB):
 
-- [ ] **Warm single-decode < 50µs** (criterion + pytest-benchmark).
-- [ ] **Cold-start (fresh process, first decode incl. mmap) < 5ms** — must NOT regress to corgi-v2 territory.
-- [ ] **Batch throughput > 100k VIN/s/core** single-thread; near-linear scaling on 8 cores via rayon.
-- [ ] **Artifact download size ≤ ~21MB** (≤ corgi gzip); on-disk uncompressed reported honestly.
-- [ ] Published, reproducible benchmark table: ultravin (warm/cold/batch) vs corgi v2/v3 vs Postgres vs MS SQL on the identical corpus.
-- [ ] **W2 parity remains 100%** after every optimization (parity corpus is the correctness fence).
-- **Gate:** all latency/throughput/size targets met and beating corgi; parity unchanged; `make check` green.
+- [ ] **Warm single-decode < 50µs** — NOT met: **202.8µs** (21x better than the 4.20ms baseline; bounded by per-decode `String` alloc + regex/LIKE; deferred to protect parity).
+- [x] **Cold-start < 5ms** — **1.26ms** (23x, via zero-copy archived rkyv access — no deserialize-to-owned on load).
+- [ ] **Batch throughput > 100k VIN/s/core** — NOT met: **4342 VIN/s/core** (13x baseline; ~31k VIN/s @10 cores via rayon).
+- [x] **Artifact download ≤ ~21MB** — **19.25MB** gzip-9 / 14.18MB zstd-19 (on-disk ~79MB, reported honestly).
+- [x] Published, reproducible benchmark table (`BENCHMARKS.md`): ultravin vs corgi v2/v3 (published) vs Postgres oracle; MS SQL deferred (needs the `.bak` + mssql docker).
+- [x] **W2 parity remains 100%** — `make check` 226 green + live sweep 500/500 exact after every optimization.
+- **Gate (partial):** cold-start + download targets met; parity unchanged; `make check` green; ultravin ~59x faster than corgi v3 (published) / ~300x vs the Postgres oracle. Warm + batch micro-targets deferred — closing them needs hot-path alloc elimination that risks parity.
 
 ---
 

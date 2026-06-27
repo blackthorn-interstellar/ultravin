@@ -50,11 +50,13 @@ fn decode<'py>(py: Python<'py>, vin: &str) -> PyResult<Bound<'py, PyDict>> {
 }
 
 /// Decode a batch of VINs to a list of dicts.
+///
+/// The decode work runs in parallel with the GIL released; only the final
+/// marshalling of results into Python dicts holds the GIL.
 #[pyfunction]
 fn decode_batch<'py>(py: Python<'py>, vins: Vec<String>) -> PyResult<Vec<Bound<'py, PyDict>>> {
-    vins.iter()
-        .map(|v| result_to_dict(py, &ultravin_core::decode(v)))
-        .collect()
+    let results = py.allow_threads(|| ultravin_core::decode_batch(&vins));
+    results.iter().map(|r| result_to_dict(py, r)).collect()
 }
 
 #[pymodule]

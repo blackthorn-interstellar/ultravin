@@ -5,7 +5,7 @@
 use std::cmp::Ordering;
 
 use crate::db::Db;
-use crate::matcher::{like_match, regex_match};
+use crate::matcher::{like_match, regex_match_cached};
 use crate::tables::{element_lookup_tag, is_exempt, NULL_I32, NULL_I64};
 
 /// A single decoding item (the `tblDecodingItem` ROW), pre-resolution.
@@ -66,62 +66,63 @@ pub fn decode_core(
             pattern_count: 0,
         };
     };
-    let wmiid = wmi.id;
+    let wmiid = wmi.id.to_native();
 
     // --- Pattern pass: collect matches, then order globally by Pattern.Id ASC.
     let vkb = var_keys.as_bytes();
-    let mut matched: Vec<&crate::tables::Pattern> = Vec::new();
+    let mut matched: Vec<&crate::tables::ArchivedPattern> = Vec::new();
     for wvs in db.wmi_vinschema_for(wmiid) {
         if let Some(my) = model_year {
-            let to = if wvs.yearto == NULL_I32 {
+            let to = if wvs.yearto.to_native() == NULL_I32 {
                 2999
             } else {
-                wvs.yearto
+                wvs.yearto.to_native()
             };
-            if my < wvs.yearfrom || my > to {
+            if my < wvs.yearfrom.to_native() || my > to {
                 continue;
             }
         }
-        let Some(vs) = db.vinschema_by_id(wvs.vinschemaid) else {
+        let Some(vs) = db.vinschema_by_id(wvs.vinschemaid.to_native()) else {
             continue;
         };
         if vs.tobeqced {
             continue;
         }
-        for p in db.patterns_for(wvs.vinschemaid) {
-            if matches!(p.elementid, 26 | 27 | 29 | 39) {
+        for p in db.patterns_for(wvs.vinschemaid.to_native()) {
+            if matches!(p.elementid.to_native(), 26 | 27 | 29 | 39) {
                 continue;
             }
-            let Some(e) = db.element_by_id(p.elementid) else {
+            let Some(e) = db.element_by_id(p.elementid.to_native()) else {
                 continue;
             };
             if !e.decode_present || e.isprivate {
                 continue;
             }
             let hit = if p.has_bracket {
-                regex_match(db.s(p.keys_regex), var_keys)
+                let rid = p.keys_regex.to_native();
+                regex_match_cached(rid, db.s(rid), var_keys)
             } else {
-                like_match(vkb, db.s(p.keys).as_bytes())
+                like_match(vkb, db.s(p.keys.to_native()).as_bytes())
             };
             if hit {
                 matched.push(p);
             }
         }
     }
-    matched.sort_by_key(|p| p.id);
+    matched.sort_by_key(|p| p.id.to_native());
     let pattern_count = matched.len();
     for p in matched {
         items.push(DecodingItem {
-            created_on: p.createdon_key,
-            pattern_id: p.id,
-            keys: db.s(p.keys).to_ascii_uppercase(),
-            vin_schema_id: p.vinschemaid,
+            created_on: p.createdon_key.to_native(),
+            pattern_id: p.id.to_native(),
+            keys: db.s(p.keys.to_native()).to_ascii_uppercase(),
+            vin_schema_id: p.vinschemaid.to_native(),
             wmi_id: wmiid,
-            element_id: p.elementid,
-            attribute_id: db.s(p.attributeid).to_string(),
+            element_id: p.elementid.to_native(),
+            attribute_id: db.s(p.attributeid.to_native()).to_string(),
             value: "XXX".to_string(),
             source: "Pattern".to_string(),
-            priority: schema_year_from(db, wmiid, p.vinschemaid, model_year),
+            priority: schema_year_from(db, wmiid, p.vinschemaid.to_native(), model_year),
             to_be_qced: false,
         });
     }
@@ -133,15 +134,15 @@ pub fn decode_core(
         let pattern_id = items[idx].pattern_id;
         let vin_schema_id = items[idx].vin_schema_id;
         if let Some(em) = db.enginemodel_by_norm(&em_name) {
-            for child in db.enginemodelpatterns_for(em.id) {
+            for child in db.enginemodelpatterns_for(em.id.to_native()) {
                 items.push(DecodingItem {
-                    created_on: child.createdon_key,
+                    created_on: child.createdon_key.to_native(),
                     pattern_id,
                     keys: keys.clone(),
                     vin_schema_id,
                     wmi_id: wmiid,
-                    element_id: child.elementid,
-                    attribute_id: db.s(child.attributeid).to_string(),
+                    element_id: child.elementid.to_native(),
+                    attribute_id: db.s(child.attributeid.to_native()).to_string(),
                     value: "XXX".to_string(),
                     source: "EngineModelPattern".to_string(),
                     priority: 50,
@@ -154,17 +155,18 @@ pub fn decode_core(
     let wmi_upper = var_wmi.to_ascii_uppercase();
 
     // --- (b) VehType 39 (priority 100).
-    if wmi.vehicletypeid != NULL_I32 {
+    let veh_type_id = wmi.vehicletypeid.to_native();
+    if veh_type_id != NULL_I32 {
         if let Some(tag) = element_lookup_tag(39) {
-            if let Some(name) = db.lookup(tag, wmi.vehicletypeid) {
+            if let Some(name) = db.lookup(tag, veh_type_id) {
                 items.push(DecodingItem {
-                    created_on: wmi.createdon_key,
+                    created_on: wmi.createdon_key.to_native(),
                     pattern_id: NULL_I32,
                     keys: wmi_upper.clone(),
                     vin_schema_id: NULL_I32,
                     wmi_id: wmiid,
                     element_id: 39,
-                    attribute_id: wmi.vehicletypeid.to_string(),
+                    attribute_id: veh_type_id.to_string(),
                     value: name.to_ascii_uppercase(),
                     source: "VehType".to_string(),
                     priority: 100,
@@ -175,7 +177,7 @@ pub fn decode_core(
     }
 
     // --- (c)/(d) Manufacturer Name 27 and Id 157 (priority 100).
-    let mfr_id = wmi.manufacturerid;
+    let mfr_id = wmi.manufacturerid.to_native();
     if mfr_id != NULL_I32 {
         let mfr_name = element_lookup_tag(27)
             .and_then(|t| db.lookup(t, mfr_id))
@@ -236,7 +238,7 @@ pub fn decode_core(
         wmiid,
         &wmi_upper,
         var_wmi,
-        wmi.createdon_key,
+        wmi.createdon_key.to_native(),
     );
 
     // --- Conversion (priority 100): derive sibling elements via vpic.conversion.
@@ -259,20 +261,20 @@ pub fn decode_core(
 /// for `(wmiid, vinschemaid)` matching the model year window.
 fn schema_year_from(db: &Db, wmiid: i32, vinschemaid: i32, model_year: Option<i32>) -> i32 {
     for wvs in db.wmi_vinschema_for(wmiid) {
-        if wvs.vinschemaid != vinschemaid {
+        if wvs.vinschemaid.to_native() != vinschemaid {
             continue;
         }
         if let Some(my) = model_year {
-            let to = if wvs.yearto == NULL_I32 {
+            let to = if wvs.yearto.to_native() == NULL_I32 {
                 2999
             } else {
-                wvs.yearto
+                wvs.yearto.to_native()
             };
-            if my < wvs.yearfrom || my > to {
+            if my < wvs.yearfrom.to_native() || my > to {
                 continue;
             }
         }
-        return wvs.yearfrom;
+        return wvs.yearfrom.to_native();
     }
     0
 }
@@ -316,8 +318,23 @@ fn len_no_star(keys: &str) -> usize {
     keys.chars().filter(|c| *c != '*').count()
 }
 
-fn keys_no_brackets(keys: &str) -> String {
-    keys.replace(['[', ']'], "")
+/// Compare two keys as if their `[`/`]` were stripped, without allocating.
+/// Keys are ASCII, so byte order matches `str`'s lexicographic ordering — this
+/// is equivalent to `keys_no_brackets(a).cmp(&keys_no_brackets(b))`.
+fn cmp_keys_no_brackets(a: &str, b: &str) -> Ordering {
+    let mut ai = a.bytes().filter(|&c| c != b'[' && c != b']');
+    let mut bi = b.bytes().filter(|&c| c != b'[' && c != b']');
+    loop {
+        match (ai.next(), bi.next()) {
+            (Some(x), Some(y)) => match x.cmp(&y) {
+                Ordering::Equal => continue,
+                other => return other,
+            },
+            (None, None) => return Ordering::Equal,
+            (None, Some(_)) => return Ordering::Less,
+            (Some(_), None) => return Ordering::Greater,
+        }
+    }
 }
 
 /// RANK dedup: keep the best item per non-exempt element id.
@@ -364,7 +381,7 @@ fn dedup_cmp(a: &DecodingItem, ai: usize, b: &DecodingItem, bi: usize) -> Orderi
         .cmp(&a.priority)
         .then_with(|| created_desc_nulls_first(a.created_on, b.created_on))
         .then_with(|| len_no_star(&a.keys).cmp(&len_no_star(&b.keys)))
-        .then_with(|| keys_no_brackets(&a.keys).cmp(&keys_no_brackets(&b.keys)))
+        .then_with(|| cmp_keys_no_brackets(&a.keys, &b.keys))
         .then_with(|| ai.cmp(&bi))
 }
 
@@ -390,8 +407,9 @@ fn append_make(
         let _ = wmi_upper;
         if let Ok(modelid) = model_attr.parse::<i32>() {
             for mm in db.makes_for_model(modelid) {
+                let makeid = mm.makeid.to_native();
                 let name = element_lookup_tag(26)
-                    .and_then(|t| db.lookup(t, mm.makeid))
+                    .and_then(|t| db.lookup(t, makeid))
                     .map(|n| n.to_ascii_uppercase())
                     .unwrap_or_default();
                 items.push(DecodingItem {
@@ -401,7 +419,7 @@ fn append_make(
                     vin_schema_id,
                     wmi_id: NULL_I32,
                     element_id: 26,
-                    attribute_id: mm.makeid.to_string(),
+                    attribute_id: makeid.to_string(),
                     value: name,
                     source: "pattern - model".to_string(),
                     priority: 1000,
@@ -412,7 +430,7 @@ fn append_make(
     } else {
         // single distinct public make via wmi_make
         let makes = db.wmi_makes_for(wmiid);
-        let mut distinct: Vec<i32> = makes.iter().map(|m| m.makeid).collect();
+        let mut distinct: Vec<i32> = makes.iter().map(|m| m.makeid.to_native()).collect();
         distinct.sort_unstable();
         distinct.dedup();
         if distinct.len() == 1 {
@@ -466,9 +484,9 @@ fn append_conversions(db: &Db, items: &mut Vec<DecodingItem>) {
             rows.push(Row {
                 priority: it.priority,
                 created_on: it.created_on,
-                conv_id: c.id,
-                to_elem: c.toelementid,
-                formula: db.s(c.formula),
+                conv_id: c.id.to_native(),
+                to_elem: c.toelementid.to_native(),
+                formula: db.s(c.formula.to_native()),
                 value: it.attribute_id.clone(),
                 keys: it.keys.clone(),
                 pattern_id: it.pattern_id,
@@ -564,30 +582,35 @@ fn append_vehicle_specs(
     let mut candidates: Vec<Candidate> = Vec::new();
     for &makeid in &makeids {
         for s in db.vspecschemas_for_make(makeid) {
-            if s.vehicletypeid != veh_type || s.tobeqced {
+            let schema_id = s.id.to_native();
+            if s.vehicletypeid.to_native() != veh_type || s.tobeqced {
                 continue;
             }
             if !db
-                .vspecschema_models_for(s.id)
+                .vspecschema_models_for(schema_id)
                 .iter()
-                .any(|m| m.modelid == model_id)
+                .any(|m| m.modelid.to_native() == model_id)
             {
                 continue;
             }
-            let years = db.vspecschema_years_for(s.id);
+            let years = db.vspecschema_years_for(schema_id);
             let year_ok = match (years.is_empty(), model_year) {
                 (true, _) => true,
-                (false, Some(my)) => years.iter().any(|y| y.year == my),
+                (false, Some(my)) => years.iter().any(|y| y.year.to_native() == my),
                 (false, None) => false,
             };
             if !year_ok {
                 continue;
             }
-            for sp in db.vspecschemapatterns_for(s.id) {
-                if db.vspecpatterns_for(sp.id).iter().any(|p| p.iskey) {
+            for sp in db.vspecschemapatterns_for(schema_id) {
+                if db
+                    .vspecpatterns_for(sp.id.to_native())
+                    .iter()
+                    .any(|p| p.iskey)
+                {
                     candidates.push(Candidate {
-                        sp_id: sp.id,
-                        schema_id: s.id,
+                        sp_id: sp.id.to_native(),
+                        schema_id,
                         tobeqced: s.tobeqced,
                     });
                 }
@@ -605,10 +628,12 @@ fn append_vehicle_specs(
             if !p.iskey {
                 continue;
             }
-            let attr = db.s(p.attributeid).to_ascii_lowercase();
+            let attr = db.s(p.attributeid.to_native()).to_ascii_lowercase();
             let mut n = 0usize;
             for (i, it) in items.iter().enumerate() {
-                if it.element_id == p.elementid && it.attribute_id.to_ascii_lowercase() == attr {
+                if it.element_id == p.elementid.to_native()
+                    && it.attribute_id.to_ascii_lowercase() == attr
+                {
                     matched.insert(i);
                     n += 1;
                 }
@@ -636,15 +661,15 @@ fn append_vehicle_specs(
     let mut tbl1: Vec<Tbl1> = Vec::new();
     for c in &candidates {
         for p in db.vspecpatterns_for(c.sp_id) {
-            if p.iskey || decoded_nonexempt.contains(&p.elementid) {
+            if p.iskey || decoded_nonexempt.contains(&p.elementid.to_native()) {
                 continue;
             }
             tbl1.push(Tbl1 {
                 schema_id: c.schema_id,
                 sp_id: c.sp_id,
-                element_id: p.elementid,
-                attribute_id: db.s(p.attributeid).to_string(),
-                changed_on: p.changedon_key,
+                element_id: p.elementid.to_native(),
+                attribute_id: db.s(p.attributeid.to_native()).to_string(),
+                changed_on: p.changedon_key.to_native(),
                 tobeqced: c.tobeqced,
             });
         }
@@ -702,13 +727,14 @@ fn append_default_values(db: &Db, items: &mut Vec<DecodingItem>) {
     let present: std::collections::HashSet<i32> = items.iter().map(|it| it.element_id).collect();
     let mut to_add: Vec<DecodingItem> = Vec::new();
     for dv in db.defaultvalues_for(veh) {
-        if !dv.defaultvalue_present || present.contains(&dv.elementid) {
+        let element_id = dv.elementid.to_native();
+        if !dv.defaultvalue_present || present.contains(&element_id) {
             continue;
         }
-        let default_str = db.s(dv.defaultvalue);
+        let default_str = db.s(dv.defaultvalue.to_native());
         let is_lookup = db
-            .element_by_id(dv.elementid)
-            .map(|e| db.s(e.datatype).eq_ignore_ascii_case("lookup"))
+            .element_by_id(element_id)
+            .map(|e| db.s(e.datatype.to_native()).eq_ignore_ascii_case("lookup"))
             .unwrap_or(false);
         let value = if is_lookup && default_str == "0" {
             "Not Applicable".to_string()
@@ -716,12 +742,12 @@ fn append_default_values(db: &Db, items: &mut Vec<DecodingItem>) {
             "XXX".to_string()
         };
         to_add.push(DecodingItem {
-            created_on: dv.createdon_key,
+            created_on: dv.createdon_key.to_native(),
             pattern_id: NULL_I32,
             keys: String::new(),
             vin_schema_id: NULL_I32,
             wmi_id: NULL_I32,
-            element_id: dv.elementid,
+            element_id,
             attribute_id: default_str.to_string(),
             value,
             source: "Default".to_string(),

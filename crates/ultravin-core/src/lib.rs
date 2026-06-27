@@ -106,6 +106,27 @@ pub fn decode_with(db: &Db, input: &str, now_micros: i64, current_year: i32) -> 
     decode_full(db, input, now_micros, current_year, None)
 }
 
+/// Decode many VINs in parallel over the shared (immutable) embedded archive.
+///
+/// The clock is read once so a batch is internally consistent; each VIN is then
+/// decoded independently via [`decode_with`] across rayon's thread pool. Output
+/// order matches `inputs`. Per-VIN output is identical to calling [`decode`].
+pub fn decode_batch(inputs: &[String]) -> Vec<DecodeResult> {
+    use rayon::prelude::*;
+
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let now_micros = secs * 1_000_000;
+    let year = epoch_to_year(secs);
+    let db = Db::embedded();
+    inputs
+        .par_iter()
+        .map(|v| decode_with(db, v, now_micros, year))
+        .collect()
+}
+
 /// One decode pass (a single `spvindecode_core` invocation): its items (with the
 /// 142/143/144/156/191/196 corrections appended, values still pre-resolution) and
 /// the metadata the scorer and result need.
@@ -312,7 +333,7 @@ fn score(pass: &Pass, db: &Db, caller_year: Option<i32>) -> (i32, i32, i32, Opti
     let elements_weight: i32 = weighted
         .iter()
         .filter_map(|eid| db.element_by_id(*eid))
-        .map(|e| e.weight)
+        .map(|e| e.weight.to_native())
         .filter(|w| *w != tables::NULL_I32)
         .sum();
 
@@ -356,22 +377,22 @@ fn project(db: &Db, items: &[decode::DecodingItem]) -> Vec<DecodedElement> {
         let Some(e) = db.element_by_id(it.element_id) else {
             continue;
         };
-        let decode_str = db.s(e.decode);
+        let decode_str = db.s(e.decode.to_native());
         if !e.decode_present || decode_str.is_empty() || e.isprivate {
             continue;
         }
-        let group_name = db.s(e.groupname).to_string();
+        let group_name = db.s(e.groupname.to_native()).to_string();
         let rank = tables::group_rank(&group_name);
         elements.push((
             rank,
             DecodedElement {
                 group_name,
-                variable: db.s(e.name).to_string(),
+                variable: db.s(e.name.to_native()).to_string(),
                 value: scrub(&it.value),
                 element_id: it.element_id,
                 attribute_id: it.attribute_id.clone(),
-                code: db.s(e.code).to_string(),
-                data_type: db.s(e.datatype).to_string(),
+                code: db.s(e.code.to_native()).to_string(),
+                data_type: db.s(e.datatype.to_native()).to_string(),
                 decode: decode_str.to_string(),
                 source: it.source.clone(),
                 pattern_id: opt_i32(it.pattern_id),

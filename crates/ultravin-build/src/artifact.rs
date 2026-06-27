@@ -444,7 +444,15 @@ impl ArtifactBuilder {
             .iter()
             .map(|r| {
                 let keys = intern.get(&r.keys);
-                let keys_regex = intern.get(&sqlwild_to_regex(&r.keys));
+                let has_bracket = r.keys.contains('[');
+                // Only bracket-class patterns are matched via regex; plain
+                // patterns use LIKE and never read `keys_regex`. Skip interning
+                // the derived regex for them so it doesn't bloat the arena.
+                let keys_regex = if has_bracket {
+                    intern.get(&sqlwild_to_regex(&r.keys))
+                } else {
+                    0
+                };
                 let attributeid = intern.get(&r.attributeid);
                 Pattern {
                     id: r.id,
@@ -455,7 +463,7 @@ impl ArtifactBuilder {
                     attributeid,
                     createdon_key: r.createdon_key,
                     specificity: r.keys.chars().filter(|c| *c != '*').count() as u8,
-                    has_bracket: r.keys.contains('['),
+                    has_bracket,
                 }
             })
             .collect();

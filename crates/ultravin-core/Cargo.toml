@@ -20,9 +20,17 @@ workspace = true
 [dependencies]
 blake3 = "1.8.5"
 memmap2 = { version = "0.9.11", optional = true }
+rayon = "1.12.0"
 regex = "1.12.4"
 rkyv = "0.8"
 
 [build-dependencies]
 blake3 = "1.8.5"
 rkyv = "0.8"
+
+[dev-dependencies]
+criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+
+[[bench]]
+name = "decode"
+harness = false

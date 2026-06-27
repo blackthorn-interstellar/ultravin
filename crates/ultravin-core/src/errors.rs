@@ -10,7 +10,7 @@ use std::collections::{BTreeSet, HashMap, HashSet};
 use crate::checkdigit::{check_digit_v1, check_digit_with_flag};
 use crate::db::Db;
 use crate::decode::CoreResult;
-use crate::tables::{Wmi, NULL_I32};
+use crate::tables::{ArchivedWmi, NULL_I32};
 use crate::wmi::vin_wmi;
 
 /// element-5 attribute ids that flag an off-road PIN (code 10).
@@ -45,13 +45,13 @@ pub struct ErrorState {
 }
 
 /// Body-style/start-position context used by both the scan and the check digit.
-fn start_context(vin: &str, wmi: Option<&Wmi>) -> (usize, bool) {
+fn start_context(vin: &str, wmi: Option<&ArchivedWmi>) -> (usize, bool) {
     let pos3 = vin.as_bytes().get(2).copied();
     if pos3 == Some(b'9') {
         (15, false)
     } else if let Some(w) = wmi {
-        let car_lt =
-            matches!(w.vehicletypeid, 2 | 7) || (w.vehicletypeid == 3 && w.trucktypeid == 1);
+        let vt = w.vehicletypeid.to_native();
+        let car_lt = matches!(vt, 2 | 7) || (vt == 3 && w.trucktypeid.to_native() == 1);
         if car_lt {
             (13, true)
         } else {
@@ -151,16 +151,16 @@ fn valid_charset(db: &Db, wmi: &str, model_year: Option<i32>) -> HashMap<i32, BT
     let mut keys: BTreeSet<String> = BTreeSet::new();
     for wmiid in db.wmi_ids_for_str(wmi) {
         for wvs in db.wmi_vinschema_for(wmiid) {
-            let to = if wvs.yearto == NULL_I32 {
+            let to = if wvs.yearto.to_native() == NULL_I32 {
                 2999
             } else {
-                wvs.yearto
+                wvs.yearto.to_native()
             };
-            if year < wvs.yearfrom || year > to {
+            if year < wvs.yearfrom.to_native() || year > to {
                 continue;
             }
-            for p in db.patterns_for(wvs.vinschemaid) {
-                keys.insert(db.s(p.keys).to_string());
+            for p in db.patterns_for(wvs.vinschemaid.to_native()) {
+                keys.insert(db.s(p.keys.to_native()).to_string());
             }
         }
     }
