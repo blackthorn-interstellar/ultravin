@@ -127,6 +127,99 @@ def gen_fuzz(shard: int, shards: int, per_base: int, seed: int) -> Iterator[dict
 
 
 # --------------------------------------------------------------------------- #
+# Coverage-seeking fuzzer: ultravin's fast decode is the coverage feedback;
+# only VINs that EXPAND decode coverage are forwarded to the slow oracle.
+# --------------------------------------------------------------------------- #
+def ultravin_coverage(vin: str) -> set[tuple]:
+    """Decode features a VIN exercises (ultravin only, ~200us): each
+    (vin_schema, pattern) matched, each (element, source) resolved, and the
+    error-code combination. The union of these across VINs is 'coverage'."""
+    r: Any = ultravin.decode(vin)
+    edges: set[tuple] = set()
+    for e in r.get("elements", []):
+        pid = e.get("pattern_id")
+        if pid:
+            edges.add(("p", e.get("vin_schema_id"), pid))
+        edges.add(("e", e.get("element_id"), e.get("source")))
+    edges.add(("c", tuple(sorted(r.get("error_codes", []) or []))))
+    return edges
+
+
+def _seed_corpus(n_seeds: int) -> list[str]:
+    """Diverse valid seeds: one VIN per sampled WMI (first key, recent year)."""
+    seeds: list[str] = []
+    with oracle.connect() as conn:
+        cur_year = oracle.current_year(conn)
+        with conn.cursor() as cur:
+            cur.execute("select id, wmi from vpic.wmi order by id")
+            wmis = cur.fetchall()
+        step = max(1, len(wmis) // max(1, n_seeds))
+        for w in wmis[::step][:n_seeds]:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "select vinschemaid, yearfrom, yearto from vpic.wmi_vinschema where wmiid=%s limit 1",
+                    (w["id"],),
+                )
+                link = cur.fetchone()
+            if link is None:
+                continue
+            with conn.cursor() as cur:
+                cur.execute(
+                    "select keys from vpic.pattern where vinschemaid=%s order by keys limit 1",
+                    (link["vinschemaid"],),
+                )
+                pr = cur.fetchone()
+            if pr is None:
+                continue
+            y = generator.choose_year(link["yearfrom"], link["yearto"], cur_year)
+            seeds.append(generator.build_vin(w["wmi"], pr["keys"], y))
+    return seeds
+
+
+def gen_covfuzz(n_seeds: int, budget: int, seed: int) -> Iterator[dict[str, Any]]:
+    """Coverage-guided: mutate corpus VINs and yield only those that expand
+    ultravin decode coverage (those then get oracle-checked downstream). Stops
+    early once coverage saturates."""
+    rng = _random.Random(seed)
+    corpus = _seed_corpus(n_seeds)
+    if not corpus:
+        return
+    seen: set[tuple] = set()
+    vds = [3, 4, 5, 6, 7]
+    for v in corpus[:]:
+        new = ultravin_coverage(v) - seen
+        if new:
+            seen |= new
+            yield {"vin": v, "mode": "covfuzz", "note": "seed"}
+    tried = since_new = 0
+    saturate = max(50_000, budget // 10)
+    while tried < budget:
+        tried += 1
+        vin = list(rng.choice(corpus))
+        for _ in range(rng.choice([1, 1, 2])):
+            vin[rng.choice([*vds, 9])] = rng.choice(VIN_ALPHABET)
+        if rng.random() < 0.2:  # explore error paths
+            vin[rng.randrange(17)] = rng.choice(ALL_CHARS)
+        elif rng.random() < 0.5:  # keep some VINs clean (valid check digit)
+            vin[8] = "0"
+            vin[8] = generator.check_digit(vin)
+        cand = "".join(vin)
+        try:
+            new = ultravin_coverage(cand) - seen
+        except Exception:  # noqa: BLE001 — a bad candidate must not kill the loop
+            continue
+        if new:
+            seen |= new
+            corpus.append(cand)
+            since_new = 0
+            yield {"vin": cand, "mode": "covfuzz", "note": f"cov+{len(new)}"}
+        else:
+            since_new += 1
+            if since_new > saturate:
+                break  # coverage saturated
+
+
+# --------------------------------------------------------------------------- #
 # Worker: decode with both engines and diff
 # --------------------------------------------------------------------------- #
 _conn: Any = None
@@ -159,13 +252,15 @@ def _check(case: dict[str, Any]) -> dict[str, Any] | None:
 
 
 def _stream(args: argparse.Namespace) -> Iterator[dict[str, Any]]:
-    modes = args.modes.split(",") if args.modes != "all" else ["random", "systematic", "fuzz"]
+    modes = args.modes.split(",") if args.modes != "all" else ["random", "systematic", "fuzz", "covfuzz"]
     if "random" in modes:
         yield from gen_random(args.random, args.seed)
     if "systematic" in modes:
         yield from gen_systematic(args.shard_i, args.shard_n, args.years)
     if "fuzz" in modes:
         yield from gen_fuzz(args.shard_i, args.shard_n, args.fuzz_per, args.seed)
+    if "covfuzz" in modes:
+        yield from gen_covfuzz(args.covfuzz_seeds, args.covfuzz_budget, args.seed)
 
 
 def cmd_run(args: argparse.Namespace) -> int:
@@ -239,8 +334,14 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     r = sub.add_parser("run", help="generate + diff vs oracle + log failures")
-    r.add_argument("--modes", default="all", help="comma list of random,systematic,fuzz (or 'all')")
+    r.add_argument("--modes", default="all", help="comma list of random,systematic,fuzz,covfuzz (or 'all')")
     r.add_argument("--random", type=int, default=100_000, help="number of random VINs")
+    r.add_argument(
+        "--covfuzz-budget", type=int, default=500_000, dest="covfuzz_budget", help="covfuzz candidate VINs to try"
+    )
+    r.add_argument(
+        "--covfuzz-seeds", type=int, default=800, dest="covfuzz_seeds", help="covfuzz seed VINs (1 per sampled WMI)"
+    )
     r.add_argument("--fuzz-per", type=int, default=3, dest="fuzz_per", help="mutations per systematic base")
     r.add_argument("--years", type=int, default=3, help="model years sampled per schema (systematic)")
     r.add_argument("--shard", default="0/1", help="i/n WMI shard for systematic/fuzz")
