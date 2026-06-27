@@ -60,6 +60,23 @@ oracle-decode:  ## Decode a VIN via the oracle (usage: make oracle-decode VIN=..
 oracle-down:  ## Stop and remove the oracle.
 	@bash scripts/oracle.sh down
 
+oracle-pool-up:  ## Start the 5-oracle parity pool (Docker).
+	@bash scripts/oracle.sh pool-up
+
+oracle-pool-load:  ## Load a dump into all 5 oracles (usage: make oracle-pool-load DUMP=path.zip).
+	@bash scripts/oracle.sh pool-load "$(DUMP)"
+
+campaign-start:  ## Launch the detached comprehensive campaign (survives this session; needs the loaded 5-oracle pool).
+	@uv run -- python scripts/spawn_campaign.py && sleep 2 && echo "campaign launched (detached). progress: make campaign-status"
+
+campaign-status:  ## Show campaign progress.
+	@echo "supervisor pid: $$(cat campaign/supervisor.pid 2>/dev/null || echo 'not running')"; \
+	for e in systematic covfuzz; do [ -f campaign/status-$$e.json ] && echo "  $$(cat campaign/status-$$e.json)"; [ -f campaign/DONE-$$e ] && echo "  $$e: DONE"; done; \
+	echo "  fails: systematic=$$(wc -l < campaign/fails-systematic.jsonl 2>/dev/null || echo 0) covfuzz=$$(wc -l < campaign/fails-covfuzz.jsonl 2>/dev/null || echo 0)"
+
+campaign-stop:  ## Stop the campaign (supervisor + engines).
+	@pkill -f campaign-supervisor.sh 2>/dev/null || true; pkill -f "scripts.parity.campaign" 2>/dev/null || true; rm -f campaign/supervisor.pid; echo "campaign stopped"
+
 install-uv:  # Install uv if not already installed
 	@if ! uv --help >/dev/null 2>&1; then \
 		echo "Installing uv..."; \

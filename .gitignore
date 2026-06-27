@@ -115,3 +115,6 @@ ENV/
 /target
 # gitignored build artifact (rebuilt deterministically from the pinned dump)
 /crates/ultravin-core/data/
+
+# Detached campaign runtime (state, logs, fail-logs, coverage)
+/campaign/

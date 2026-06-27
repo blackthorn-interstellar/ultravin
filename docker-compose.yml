@@ -1,17 +1,31 @@
-# Postgres "oracle" for parity testing: load the pinned vPIC .plain dump and run
-# the unmodified vpic.spvindecode against it. Used by `scripts/oracle.sh` and CI.
+# Parity oracle pool: 5 disk-backed Postgres instances, each the unmodified
+# vpic.spvindecode over the pinned dump. Disk-backed (not tmpfs) so 5 fit the
+# Docker VM. `oracle` (55432) is the primary used by the single-engine make
+# targets; the comprehensive campaign fans out across all five (55432-55436).
+x-oracle: &oracle
+  image: postgres:16-alpine
+  environment:
+    POSTGRES_PASSWORD: postgres
+    POSTGRES_DB: vpic
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U postgres -d vpic"]
+    interval: 2s
+    timeout: 3s
+    retries: 60
+
 services:
   oracle:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: vpic
-    ports:
-      - "55432:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d vpic"]
-      interval: 2s
-      timeout: 3s
-      retries: 40
-    # Data lives on the container's normal (disk-backed) storage, not RAM. The
-    # oracle is disposable; recreate + `make oracle-load` to rebuild it.
+    <<: *oracle
+    ports: ["55432:5432"]
+  oracle2:
+    <<: *oracle
+    ports: ["55433:5432"]
+  oracle3:
+    <<: *oracle
+    ports: ["55434:5432"]
+  oracle4:
+    <<: *oracle
+    ports: ["55435:5432"]
+  oracle5:
+    <<: *oracle
+    ports: ["55436:5432"]

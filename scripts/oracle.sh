@@ -6,9 +6,10 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 SVC=oracle
+POOL="oracle oracle2 oracle3 oracle4 oracle5"
 
 usage() {
-  echo "usage: scripts/oracle.sh {up|load <dump.zip|.sql>|decode <VIN>|psql [args]|down}" >&2
+  echo "usage: scripts/oracle.sh {up|load <dump>|decode <VIN>|psql [args]|down|pool-up|pool-load <dump>|pool-down}" >&2
   exit 1
 }
 
@@ -38,6 +39,32 @@ case "$cmd" in
     docker compose exec -T "$SVC" psql -U postgres -d vpic "$@"
     ;;
   down)
+    docker compose down -v
+    ;;
+  pool-up)
+    docker compose up -d --wait $POOL
+    echo "oracle pool ready on localhost:55432-55436 (db=vpic, user=postgres)"
+    ;;
+  pool-load)
+    dump="${1:?$(usage)}"
+    tmp="$(mktemp -t vpic-dump-XXXXXX.sql)"
+    echo "extracting $dump -> $tmp ..."
+    case "$dump" in
+      *.zip) unzip -p "$dump" > "$tmp" ;;
+      *)     cp "$dump" "$tmp" ;;
+    esac
+    echo "loading all 5 oracles in parallel ..."
+    for svc in $POOL; do
+      ( docker compose exec -T "$svc" psql -q -U postgres -d vpic < "$tmp" >/dev/null 2>&1 && echo "  loaded $svc" ) &
+    done
+    wait
+    rm -f "$tmp"
+    for svc in $POOL; do
+      n="$(docker compose exec -T "$svc" psql -tA -U postgres -d vpic -c 'select count(*) from vpic.pattern;' 2>/dev/null | tr -d '[:space:]')"
+      echo "  $svc: $n patterns"
+    done
+    ;;
+  pool-down)
     docker compose down -v
     ;;
   *)
