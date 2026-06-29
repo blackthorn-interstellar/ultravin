@@ -79,6 +79,10 @@ pub fn decode_core(
     // --- Pattern pass: collect matches, then order globally by Pattern.Id ASC.
     let vkb = var_keys.as_bytes();
     let mut matched: Vec<&crate::tables::ArchivedPattern> = Vec::with_capacity(32);
+    // Capture each year-eligible schema's `YearFrom` here (in slice order, first
+    // wins) so the Pattern-source priority is one map lookup per matched pattern
+    // instead of `schema_year_from` rescanning `wmi_vinschema` per pattern.
+    let mut schema_yearfrom: IntMap<i32, i32> = IntMap::default();
     for wvs in db.wmi_vinschema_for(wmiid) {
         if let Some(my) = model_year {
             let to = if wvs.yearto.to_native() == NULL_I32 {
@@ -90,6 +94,9 @@ pub fn decode_core(
                 continue;
             }
         }
+        schema_yearfrom
+            .entry(wvs.vinschemaid.to_native())
+            .or_insert(wvs.yearfrom.to_native());
         let Some(vs) = db.vinschema_by_id(wvs.vinschemaid.to_native()) else {
             continue;
         };
@@ -131,7 +138,9 @@ pub fn decode_core(
             attribute_id: db.s(p.attributeid.to_native()).to_string(),
             value: Cow::Borrowed("XXX"),
             source: Cow::Borrowed("Pattern"),
-            priority: schema_year_from(db, wmiid, p.vinschemaid.to_native(), model_year),
+            priority: *schema_yearfrom
+                .get(&p.vinschemaid.to_native())
+                .unwrap_or(&0),
             to_be_qced: false,
         });
     }
@@ -353,28 +362,6 @@ fn formula_value(var_keys: &str, keys: &str) -> String {
     }
     let end = (last + 1).min(vb.len());
     String::from_utf8_lossy(&vb[first..end]).into_owned()
-}
-
-/// The Pattern source priority is `Wmi_VinSchema.YearFrom`. Find the YearFrom
-/// for `(wmiid, vinschemaid)` matching the model year window.
-fn schema_year_from(db: &Db, wmiid: i32, vinschemaid: i32, model_year: Option<i32>) -> i32 {
-    for wvs in db.wmi_vinschema_for(wmiid) {
-        if wvs.vinschemaid.to_native() != vinschemaid {
-            continue;
-        }
-        if let Some(my) = model_year {
-            let to = if wvs.yearto.to_native() == NULL_I32 {
-                2999
-            } else {
-                wvs.yearto.to_native()
-            };
-            if my < wvs.yearfrom.to_native() || my > to {
-                continue;
-            }
-        }
-        return wvs.yearfrom.to_native();
-    }
-    0
 }
 
 /// Pick the element-18 item by (Priority DESC, CreatedOn DESC, id DESC).
@@ -716,11 +703,13 @@ fn append_vehicle_specs(
             if !p.iskey {
                 continue;
             }
-            let attr = db.s(p.attributeid.to_native()).to_ascii_lowercase();
+            // Case-insensitive compare against the raw arena attribute id — no
+            // lowercased copy of it (or of each candidate item) per comparison.
+            let attr = db.s(p.attributeid.to_native());
             let mut n = 0usize;
             for (i, it) in items.iter().enumerate() {
                 if it.element_id == p.elementid.to_native()
-                    && it.attribute_id.to_ascii_lowercase() == attr
+                    && it.attribute_id.eq_ignore_ascii_case(attr)
                 {
                     matched.insert(i);
                     n += 1;

@@ -9,6 +9,13 @@
 
 use std::time::{Duration, Instant};
 
+// Match the shipped wheel: a sharded allocator so the parallel batch path doesn't
+// serialize on the global heap lock (see crates/ultravin-py/src/lib.rs). Gated to
+// the same arches that carry the dep.
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 fn main() {
     let mut args = std::env::args().skip(1);
     let path = args

@@ -231,7 +231,7 @@ fn errorcode(
     vin: &str,
     var_wmi: &str,
     model_year: Option<i32>,
-    matched_keys: &[String],
+    matched_keys: &[&str],
 ) -> ErrorCodeOut {
     let vb: Vec<char> = vin.chars().collect();
     let vlen = vb.len() as i32;
@@ -336,7 +336,7 @@ fn errorcode(
 
     // E6: unused positions from the matched-pattern keys.
     let mut ty: IntSet<(i32, char)> = IntSet::default();
-    for key in matched_keys {
+    for &key in matched_keys {
         for (kpos, c) in valid_chars_in_key(key) {
             if c != '|' {
                 ty.insert((kpos, c));
@@ -375,6 +375,20 @@ fn trunc500(s: &str) -> String {
     s.chars().take(500).collect()
 }
 
+/// ASCII case-insensitive substring test without allocating — the proc's
+/// `Source ILIKE '%pattern%'` gate. `needle` must already be lowercase ASCII.
+fn contains_ci(haystack: &str, needle: &[u8]) -> bool {
+    let h = haystack.as_bytes();
+    if needle.is_empty() {
+        return true;
+    }
+    if h.len() < needle.len() {
+        return false;
+    }
+    h.windows(needle.len())
+        .any(|w| w.iter().zip(needle).all(|(a, b)| a.eq_ignore_ascii_case(b)))
+}
+
 /// Compute the full error state for a decode pass (the `spvindecode_core` error
 /// assembly C1-C11). `var_wmi`/`model_year`/`error12`/`conclusive` are the
 /// pass's inputs.
@@ -403,10 +417,10 @@ pub fn compute_errors(
     } else if items.iter().filter(|it| it.pattern_id != NULL_I32).count() == 0 {
         raw.insert(8);
     } else {
-        let matched_keys: Vec<String> = items
+        let matched_keys: Vec<&str> = items
             .iter()
-            .filter(|it| it.source.to_ascii_lowercase().contains("pattern") && !it.keys.is_empty())
-            .map(|it| it.keys.clone())
+            .filter(|it| contains_ci(it.source.as_ref(), b"pattern") && !it.keys.is_empty())
+            .map(|it| it.keys.as_str())
             .collect();
         let ec = errorcode(db, vin, var_wmi, model_year, &matched_keys);
         for c in ec.codes {
@@ -434,10 +448,10 @@ pub fn compute_errors(
         raw.insert(11);
     }
 
-    let vehicle_type: Option<String> = items
+    let vehicle_type: Option<&str> = items
         .iter()
         .find(|it| it.element_id == 39)
-        .map(|it| it.attribute_id.clone());
+        .map(|it| it.attribute_id.as_str());
     let is_vin_exception = db.vinexception_checkdigit(vin);
     let (start_pos, is_car_mpv_lt) = start_context(vin, db.wmi_any(var_wmi));
 
@@ -496,13 +510,19 @@ pub fn compute_errors(
         }
     }
 
-    // C8: code 0 (clean), then code 14 (clean but no Model element).
-    let remaining: BTreeSet<i32> = raw
-        .iter()
-        .copied()
-        .filter(|c| !matches!(c, 9 | 10 | 12))
-        .collect();
-    if remaining.is_empty() || (remaining.len() == 1 && remaining.contains(&14)) {
+    // C8: code 0 (clean), then code 14 (clean but no Model element). `raw` is a
+    // unique set, so one scan replaces the throwaway `remaining` BTreeSet: clean
+    // means no codes outside {9,10,12}, or exactly {14} among them.
+    let mut non_special = 0usize;
+    let mut has_14 = false;
+    for &c in raw.iter() {
+        if matches!(c, 9 | 10 | 12) {
+            continue;
+        }
+        non_special += 1;
+        has_14 |= c == 14;
+    }
+    if non_special == 0 || (non_special == 1 && has_14) {
         raw.insert(0);
     }
     let has_model = items.iter().any(|it| it.element_id == 28);
@@ -540,7 +560,7 @@ pub fn compute_errors(
             .trim(),
         ));
     }
-    let incomplete = vehicle_type.as_deref() == Some("10")
+    let incomplete = vehicle_type == Some("10")
         || items
             .iter()
             .any(|it| it.element_id == 5 && INCOMPLETE.contains(&it.attribute_id.as_str()));

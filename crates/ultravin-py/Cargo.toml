@@ -17,5 +17,21 @@ ultravin-core = { path = "../ultravin-core" }
 # Python present (it synthesizes the python3.dll import lib); inert off Windows.
 pyo3 = { version = "0.23", features = ["abi3-py310", "extension-module", "generate-import-lib"] }
 
+# Sharded allocator for the decode hot path. The engine is allocation-bound, and
+# the system allocator's global lock serializes the parallel `decode_batch` across
+# rayon workers; mimalloc's per-thread heaps remove that contention (and cut
+# single-stream malloc cost too). default-features off drops the `secure` guards
+# we don't need. Only the Rust extension's allocations route through it; Python's
+# own objects keep using Python's allocator.
+#
+# Gated to the mainstream 64-bit arches (covers macOS x86_64/aarch64, Linux
+# gnu+musl x86_64/aarch64, Windows x64/aarch64): mimalloc compiles a vendored C
+# blob via `cc`, and the release matrix cross-builds the exotic targets (x86,
+# armv7, s390x, ppc64le, riscv64) with a plain cross-gcc and no extra C toolchain
+# wiring — keeping the crate pure-Rust there (see .github/workflows/release.yaml).
+# Those targets fall back to the system allocator; perf there is not a goal.
+[target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
+mimalloc = { version = "0.1", default-features = false }
+
 [lints]
 workspace = true

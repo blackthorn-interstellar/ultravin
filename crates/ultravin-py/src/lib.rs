@@ -7,20 +7,29 @@ use pyo3::types::{PyDict, PyList};
 
 use ultravin_core::{DecodeResult, DecodedElement};
 
-fn elem_to_dict<'py>(py: Python<'py>, e: &DecodedElement) -> PyResult<Bound<'py, PyDict>> {
+// The decode engine is allocation-bound; a sharded allocator both speeds the
+// single-stream malloc path and removes the global-heap-lock contention that was
+// capping `decode_batch` scaling across rayon workers. Gated to the arches that
+// carry the mimalloc dep (mainstream 64-bit); the exotic cross targets keep the
+// system allocator and stay pure-Rust. See Cargo.toml.
+#[cfg(any(target_arch = "x86_64", target_arch = "aarch64"))]
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
+fn elem_to_dict<'py>(py: Python<'py>, e: &DecodedElement<'_>) -> PyResult<Bound<'py, PyDict>> {
     // `intern!` reuses one cached `PyString` per key per interpreter instead of
     // allocating a fresh key string on every `set_item` — these 15 keys recur for
     // every element of every decode, so this is the bulk of the marshalling cost.
     let d = PyDict::new(py);
-    d.set_item(intern!(py, "group_name"), &e.group_name)?;
-    d.set_item(intern!(py, "variable"), &e.variable)?;
+    d.set_item(intern!(py, "group_name"), e.group_name)?;
+    d.set_item(intern!(py, "variable"), e.variable)?;
     d.set_item(intern!(py, "value"), &e.value)?;
     d.set_item(intern!(py, "element_id"), e.element_id)?;
     d.set_item(intern!(py, "attribute_id"), &e.attribute_id)?;
-    d.set_item(intern!(py, "code"), &e.code)?;
-    d.set_item(intern!(py, "data_type"), &e.data_type)?;
-    d.set_item(intern!(py, "decode"), &e.decode)?;
-    d.set_item(intern!(py, "source"), &e.source)?;
+    d.set_item(intern!(py, "code"), e.code)?;
+    d.set_item(intern!(py, "data_type"), e.data_type)?;
+    d.set_item(intern!(py, "decode"), e.decode)?;
+    d.set_item(intern!(py, "source"), e.source.as_ref())?;
     d.set_item(intern!(py, "pattern_id"), e.pattern_id)?;
     d.set_item(intern!(py, "vin_schema_id"), e.vin_schema_id)?;
     d.set_item(intern!(py, "keys"), &e.keys)?;
@@ -30,7 +39,7 @@ fn elem_to_dict<'py>(py: Python<'py>, e: &DecodedElement) -> PyResult<Bound<'py,
     Ok(d)
 }
 
-fn result_to_dict<'py>(py: Python<'py>, r: &DecodeResult) -> PyResult<Bound<'py, PyDict>> {
+fn result_to_dict<'py>(py: Python<'py>, r: &DecodeResult<'_>) -> PyResult<Bound<'py, PyDict>> {
     let d = PyDict::new(py);
     d.set_item(intern!(py, "vin"), &r.vin)?;
     d.set_item(intern!(py, "wmi"), &r.wmi)?;

@@ -18,6 +18,7 @@ pub mod tables;
 mod wmi;
 mod year;
 
+use std::fmt::Write as _;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use checkdigit::check_digit;
@@ -26,17 +27,25 @@ pub use matcher::sqlwild_to_regex;
 pub use wmi::{vin_descriptor, vin_wmi};
 
 /// One resolved output element (the 15-column `spvindecode` row).
+///
+/// The five element-metadata columns (`group_name`/`variable`/`code`/`data_type`/
+/// `decode`) borrow the immutable `Db` arena directly (`&'a str`) instead of
+/// allocating an owned copy per element per decode — they were the single largest
+/// allocation block on the decode path. The item-derived columns
+/// (`value`/`attribute_id`/`keys`/`source`) are *moved* out of the decode items in
+/// [`project`], not cloned. `source` stays a `Cow` so its overwhelmingly common
+/// borrowed-literal form (`"Pattern"`, `"Make"`, …) costs nothing.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DecodedElement {
-    pub group_name: String,
-    pub variable: String,
+pub struct DecodedElement<'a> {
+    pub group_name: &'a str,
+    pub variable: &'a str,
     pub value: String,
     pub element_id: i32,
     pub attribute_id: String,
-    pub code: String,
-    pub data_type: String,
-    pub decode: String,
-    pub source: String,
+    pub code: &'a str,
+    pub data_type: &'a str,
+    pub decode: &'a str,
+    pub source: std::borrow::Cow<'a, str>,
     pub pattern_id: Option<i32>,
     pub vin_schema_id: Option<i32>,
     pub keys: String,
@@ -45,9 +54,11 @@ pub struct DecodedElement {
     pub to_be_qced: bool,
 }
 
-/// A decoded VIN result.
+/// A decoded VIN result. `'a` is the lifetime of the backing [`Db`] whose arena
+/// the element-metadata columns borrow; [`decode`]/[`decode_batch`] use the
+/// process-static embedded db, so they yield `DecodeResult<'static>`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct DecodeResult {
+pub struct DecodeResult<'a> {
     pub vin: String,
     pub wmi: String,
     pub descriptor: String,
@@ -55,7 +66,7 @@ pub struct DecodeResult {
     pub error_codes: Vec<i32>,
     pub check_digit_valid: bool,
     pub corrected_vin: String,
-    pub elements: Vec<DecodedElement>,
+    pub elements: Vec<DecodedElement<'a>>,
 }
 
 fn opt_i32(v: i32) -> Option<i32> {
@@ -74,8 +85,16 @@ fn opt_i64(v: i64) -> Option<i64> {
     }
 }
 
-fn scrub(s: &str) -> String {
-    s.replace(['\t', '\r', '\n'], " ")
+/// `replace(value, [\t\r\n], ' ')` — but only allocate when a control char is
+/// actually present. The clean case (the overwhelming majority) moves the value's
+/// existing owned `String` straight through; a borrowed literal still pays one
+/// (rare, short) copy via `into_owned`.
+fn scrub(v: std::borrow::Cow<'_, str>) -> String {
+    if v.bytes().any(|b| matches!(b, b'\t' | b'\r' | b'\n')) {
+        v.replace(['\t', '\r', '\n'], " ")
+    } else {
+        v.into_owned()
+    }
 }
 
 /// Convert Unix epoch seconds to the calendar year (Hinnant's civil algorithm).
@@ -93,7 +112,7 @@ fn epoch_to_year(secs: i64) -> i32 {
 }
 
 /// Decode a VIN using the embedded database and the system clock.
-pub fn decode(input: &str) -> DecodeResult {
+pub fn decode(input: &str) -> DecodeResult<'static> {
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
@@ -103,7 +122,12 @@ pub fn decode(input: &str) -> DecodeResult {
 
 /// Decode a VIN against an explicit database and clock (injectable for tests),
 /// with no caller-supplied model year.
-pub fn decode_with(db: &Db, input: &str, now_micros: i64, current_year: i32) -> DecodeResult {
+pub fn decode_with<'a>(
+    db: &'a Db,
+    input: &str,
+    now_micros: i64,
+    current_year: i32,
+) -> DecodeResult<'a> {
     decode_full(db, input, now_micros, current_year, None)
 }
 
@@ -112,7 +136,7 @@ pub fn decode_with(db: &Db, input: &str, now_micros: i64, current_year: i32) -> 
 /// The clock is read once so a batch is internally consistent; each VIN is then
 /// decoded independently via [`decode_with`] across rayon's thread pool. Output
 /// order matches `inputs`. Per-VIN output is identical to calling [`decode`].
-pub fn decode_batch(inputs: &[String]) -> Vec<DecodeResult> {
+pub fn decode_batch(inputs: &[String]) -> Vec<DecodeResult<'static>> {
     use rayon::prelude::*;
 
     let secs = SystemTime::now()
@@ -142,13 +166,13 @@ struct Pass {
 
 /// The full wrapper (`vpic.spvindecode`): up to 4 best-of passes, scoring, and
 /// the GroupName-ordered projection. `caller_year` is the optional caller MY.
-pub fn decode_full(
-    db: &Db,
+pub fn decode_full<'a>(
+    db: &'a Db,
     input: &str,
     now_micros: i64,
     current_year: i32,
     caller_year: Option<i32>,
-) -> DecodeResult {
+) -> DecodeResult<'a> {
     let vin = input.trim().to_ascii_uppercase();
     let var_wmi = vin_wmi(&vin);
     let descriptor = vin_descriptor(&vin);
@@ -234,7 +258,7 @@ pub fn decode_full(
     items.retain(|it| !it.to_be_qced);
     resolve::resolve_xxx(db, &mut items);
 
-    let elements = project(db, &items);
+    let elements = project(db, items);
 
     DecodeResult {
         vin,
@@ -274,12 +298,13 @@ fn run_pass(
     let err = errors::compute_errors(db, vin, var_wmi, &core, model_year, error12, conclusive);
 
     let mut items = core.items;
-    let codes_csv = err
-        .codes
-        .iter()
-        .map(|c| c.to_string())
-        .collect::<Vec<_>>()
-        .join(",");
+    let mut codes_csv = String::new();
+    for (i, c) in err.codes.iter().enumerate() {
+        if i > 0 {
+            codes_csv.push(',');
+        }
+        let _ = write!(codes_csv, "{c}");
+    }
     let error_text = error_messages(db, &err);
     append_correction(&mut items, 142, &err.corrected_vin);
     append_correction(&mut items, 143, &codes_csv);
@@ -301,24 +326,30 @@ fn run_pass(
 /// Pick the best pass by the `x` scoring table: ErrorValue desc, ElementsWeight
 /// desc, Patterns desc, ModelYear desc (NULLs last), then lowest pass id.
 fn best_pass(passes: &[Pass], db: &Db, caller_year: Option<i32>) -> i32 {
-    passes
+    // Score each pass once (max_by would otherwise recompute score — and its
+    // per-call IntSet — 2·(n−1) times).
+    let scored: Vec<(i32, Score)> = passes
         .iter()
-        .max_by(|a, b| {
-            let sa = score(a, db, caller_year);
-            let sb = score(b, db, caller_year);
+        .map(|p| (p.id, score(p, db, caller_year)))
+        .collect();
+    scored
+        .iter()
+        .max_by(|(ida, sa), (idb, sb)| {
             // a is "greater" (preferred) when its tuple ranks higher.
             sa.0.cmp(&sb.0)
                 .then(sa.1.cmp(&sb.1))
                 .then(sa.2.cmp(&sb.2))
                 .then(cmp_year_nulls_last(sa.3, sb.3))
-                .then(b.id.cmp(&a.id)) // lower id wins ties
+                .then(idb.cmp(ida)) // lower id wins ties
         })
-        .map(|p| p.id)
+        .map(|(id, _)| *id)
         .unwrap_or(0)
 }
 
 /// (ErrorValue, ElementsWeight, Patterns, ModelYear+bonus) for a pass.
-fn score(pass: &Pass, db: &Db, caller_year: Option<i32>) -> (i32, i32, i32, Option<i32>) {
+type Score = (i32, i32, i32, Option<i32>);
+
+fn score(pass: &Pass, db: &Db, caller_year: Option<i32>) -> Score {
     let error_value: i32 = pass
         .codes
         .iter()
@@ -372,7 +403,7 @@ fn cmp_year_nulls_last(a: Option<i32>, b: Option<i32>) -> std::cmp::Ordering {
 
 /// Project the surviving items into output elements (non-empty Decode, public),
 /// ordered by the GroupName CASE rank then element id.
-fn project(db: &Db, items: &[decode::DecodingItem]) -> Vec<DecodedElement> {
+fn project(db: &Db, items: Vec<decode::DecodingItem>) -> Vec<DecodedElement<'_>> {
     let mut elements: Vec<DecodedElement> = Vec::with_capacity(items.len());
     for it in items {
         let Some(e) = db.element_by_id(it.element_id) else {
@@ -383,18 +414,18 @@ fn project(db: &Db, items: &[decode::DecodingItem]) -> Vec<DecodedElement> {
             continue;
         }
         elements.push(DecodedElement {
-            group_name: db.s(e.groupname.to_native()).to_string(),
-            variable: db.s(e.name.to_native()).to_string(),
-            value: scrub(&it.value),
+            group_name: db.s(e.groupname.to_native()),
+            variable: db.s(e.name.to_native()),
+            value: scrub(it.value),
             element_id: it.element_id,
-            attribute_id: it.attribute_id.clone(),
-            code: db.s(e.code.to_native()).to_string(),
-            data_type: db.s(e.datatype.to_native()).to_string(),
-            decode: decode_str.to_string(),
-            source: it.source.to_string(),
+            attribute_id: it.attribute_id,
+            code: db.s(e.code.to_native()),
+            data_type: db.s(e.datatype.to_native()),
+            decode: decode_str,
+            source: it.source,
             pattern_id: opt_i32(it.pattern_id),
             vin_schema_id: opt_i32(it.vin_schema_id),
-            keys: it.keys.clone(),
+            keys: it.keys,
             created_on: opt_i64(it.created_on),
             wmi_id: opt_i32(it.wmi_id),
             to_be_qced: it.to_be_qced,
@@ -405,35 +436,43 @@ fn project(db: &Db, items: &[decode::DecodingItem]) -> Vec<DecodedElement> {
     // key keeps `group_rank` to one call per element and sorts in place — no tuple
     // Vec and no second pass to strip the rank. `sort_by_cached_key` is stable, so
     // the few duplicate exempt elements keep insertion order, exactly as before.
-    elements.sort_by_cached_key(|e| (tables::group_rank(&e.group_name), e.element_id));
+    elements.sort_by_cached_key(|e| (tables::group_rank(e.group_name), e.element_id));
     elements
 }
 
 /// Build the element-191 error text: error-code names joined by `; `.
 fn error_messages(db: &Db, err: &errors::ErrorState) -> String {
     let tag = tables::element_lookup_tag(143);
-    let mut parts: Vec<String> = Vec::new();
+    // Push straight into one buffer (`; ` separators) instead of a Vec<String> +
+    // per-name owned copies + join — same bytes, far fewer allocations.
+    let mut out = String::new();
+    let mut first = true;
     for &code in &err.codes {
         let Some(t) = tag else { break };
         let Some(name) = db.lookup(t, code) else {
             continue;
         };
-        let mut name = name.trim().to_string();
+        // `; ` before every emitted part but the first — exactly `parts.join("; ")`
+        // even when a part trims to empty (so it never collapses a separator).
+        if !first {
+            out.push_str("; ");
+        }
+        first = false;
+        out.push_str(name.trim());
         if err.is_off_road && code == 1 {
-            name.push_str(
+            out.push_str(
                 " NOTE: Disregard if this is an off-road vehicle PIN, as check digit calculation may not be accurate.",
             );
         }
         if err.is_vin_exception && code == 0 {
-            name.push_str(
+            out.push_str(
                 " NOTE: Check Digit Exception - The check digit was given an exception based on data from the OEM indicating an error on production.",
             );
         }
-        parts.push(name);
     }
     // `left(errorMessages, 500)` counts CHARACTERS, not bytes; multi-byte chars
     // (e.g. the en-dash in the code-10 message) must not be split mid-codepoint.
-    parts.join("; ").chars().take(500).collect()
+    out.chars().take(500).collect()
 }
 
 fn append_correction(items: &mut Vec<decode::DecodingItem>, element_id: i32, value: &str) {

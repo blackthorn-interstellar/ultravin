@@ -14,7 +14,10 @@ pub fn vin_wmi(vin: &str) -> String {
     if wmi.get(2) == Some(&b'9') && b.len() >= 14 {
         wmi.extend_from_slice(&b[11..14]); // substring(vin, 12, 3)
     }
-    String::from_utf8_lossy(&wmi).into_owned()
+    // Reuse the buffer when it's valid UTF-8 (the ASCII norm); fall back to the
+    // lossy replacement only for adversarial non-UTF-8 input, byte-for-byte as
+    // the old `from_utf8_lossy(..).into_owned()`.
+    String::from_utf8(wmi).unwrap_or_else(|e| String::from_utf8_lossy(&e.into_bytes()).into_owned())
 }
 
 /// `fVinDescriptor`: pad to 17 with `*`, mask position 9, then take the first 11

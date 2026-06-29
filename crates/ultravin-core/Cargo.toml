@@ -36,6 +36,13 @@ rkyv = "0.8"
 [dev-dependencies]
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
 
+# Bench/example only: the throughput probe uses the same sharded allocator as the
+# shipped wheel so its measured ceiling matches production. Gated to mainstream
+# 64-bit arches for the same pure-Rust-cross reason as ultravin-py (see its
+# Cargo.toml); examples fall back to the system allocator elsewhere.
+[target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dev-dependencies]
+mimalloc = { version = "0.1", default-features = false }
+
 [[bench]]
 name = "decode"
 harness = false

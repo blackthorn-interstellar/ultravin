@@ -117,11 +117,11 @@ fn embedded_loader_is_consistent() {
         2026,
     );
     let b = decode("1HGCM82633A004352");
-    let map = |r: &ultravin_core::DecodeResult| {
+    let map = |r: &ultravin_core::DecodeResult<'_>| {
         let mut v: Vec<_> = r
             .elements
             .iter()
-            .map(|e| (e.element_id, e.value.clone(), e.source.clone()))
+            .map(|e| (e.element_id, e.value.clone(), e.source.to_string()))
             .collect();
         v.sort();
         v

@@ -71,6 +71,12 @@ pub struct Db {
     /// hundreds to thousands of times per decode — so an O(1) index beats the
     /// `binary_search` over the (small but repeatedly scanned) element table.
     element_index: OnceLock<Box<[i32]>>,
+    /// Dense `tag -> [start, end)` band into the `lookups` table (built once). The
+    /// table is sorted by `(tag, id)`, so a lookup can binary-search `id` inside
+    /// its tag's band — `log(rows_in_tag)` single-i32 compares instead of
+    /// `log(all_rows)` tuple compares over the whole concatenated table. The
+    /// winning-pass `resolve_xxx` runs dozens of lookups per VIN.
+    lookup_index: OnceLock<Box<[(u32, u32)]>>,
 }
 
 // SAFETY: the archive is immutable, validated bytes; sharing `&Db` across threads
@@ -113,6 +119,7 @@ impl Db {
             _backing: backing,
             archive,
             element_index: OnceLock::new(),
+            lookup_index: OnceLock::new(),
         })
     }
 
@@ -132,6 +139,7 @@ impl Db {
             _backing: backing,
             archive,
             element_index: OnceLock::new(),
+            lookup_index: OnceLock::new(),
         }
     }
 
@@ -387,11 +395,33 @@ impl Db {
 
     /// Resolve a lookup (`tag`, numeric id) to its name.
     pub fn lookup(&self, tag: u16, id: i32) -> Option<&str> {
-        let v = self.a().lookups.as_slice();
-        let lo = v.partition_point(|r| (r.tag.to_native(), r.id.to_native()) < (tag, id));
-        v.get(lo)
-            .filter(|r| r.tag.to_native() == tag && r.id.to_native() == id)
+        let (start, end) = *self.lookup_index().get(tag as usize)?;
+        let band = &self.a().lookups.as_slice()[start as usize..end as usize];
+        // Within a tag the rows are sorted by id, so search just the band.
+        let lo = band.partition_point(|r| r.id.to_native() < id);
+        band.get(lo)
+            .filter(|r| r.id.to_native() == id)
             .map(|r| self.s(r.name.to_native()))
+    }
+
+    /// Lazily-built dense `tag -> [start, end)` band table (see field docs).
+    fn lookup_index(&self) -> &[(u32, u32)] {
+        self.lookup_index.get_or_init(|| {
+            let v = self.a().lookups.as_slice();
+            let max_tag = v.iter().map(|r| r.tag.to_native()).max().unwrap_or(0);
+            let mut idx = vec![(0u32, 0u32); max_tag as usize + 1];
+            // Rows are sorted by (tag, id); record each tag's contiguous band.
+            let mut i = 0usize;
+            while i < v.len() {
+                let tag = v[i].tag.to_native() as usize;
+                let start = i;
+                while i < v.len() && v[i].tag.to_native() as usize == tag {
+                    i += 1;
+                }
+                idx[tag] = (start as u32, i as u32);
+            }
+            idx.into_boxed_slice()
+        })
     }
 }
 
@@ -422,6 +452,8 @@ fn validate_arena(a: &ArchivedVpicData) -> Result<(), String> {
 /// Contiguous sub-slice of `v` (sorted by `key`) whose key equals `target`.
 fn slice_eq<T, F: Fn(&T) -> i32>(v: &[T], target: i32, key: F) -> &[T] {
     let lo = v.partition_point(|r| key(r) < target);
-    let hi = v.partition_point(|r| key(r) <= target);
+    // The upper bound can only lie in the suffix; searching `v[lo..]` halves the
+    // comparison count of the second binary search on the large tables.
+    let hi = lo + v[lo..].partition_point(|r| key(r) <= target);
     &v[lo..hi]
 }

@@ -53,11 +53,10 @@ pub fn like_match(var_keys: &[u8], keys: &[u8]) -> bool {
     if var_keys.len() < keys.len() {
         return false;
     }
-    for (i, &k) in keys.iter().enumerate() {
-        if k == b'*' || k == b'_' {
-            continue;
-        }
-        if var_keys[i] != k {
+    // `var_keys` is the longer/equal slice, so `zip` yields exactly `keys.len()`
+    // pairs and the indexing bounds checks fall away.
+    for (&v, &k) in var_keys.iter().zip(keys) {
+        if k != b'*' && k != b'_' && v != k {
             return false;
         }
     }
