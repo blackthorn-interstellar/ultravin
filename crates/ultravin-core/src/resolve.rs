@@ -6,16 +6,21 @@ use crate::db::Db;
 use crate::decode::DecodingItem;
 use crate::tables::element_lookup_tag;
 
-/// Resolve one (element, attribute) pair to a display value.
+/// Resolve one (element, attribute) pair to a display value, mirroring
+/// `fElementAttributeValue`: a known lookup element does `select name into v`, so
+/// it yields the looked-up name on a hit and NULL (-> empty) on a miss — never
+/// the raw id. Only the proc's ELSE branch (an element with no lookup table)
+/// returns the raw attribute id.
 pub fn felement_attribute_value(db: &Db, element_id: i32, attribute_id: &str) -> String {
-    if let Some(tag) = element_lookup_tag(element_id) {
-        if let Ok(id) = attribute_id.parse::<i32>() {
-            if let Some(name) = db.lookup(tag, id) {
-                return name.to_string();
-            }
-        }
+    match element_lookup_tag(element_id) {
+        Some(tag) => attribute_id
+            .parse::<i32>()
+            .ok()
+            .and_then(|id| db.lookup(tag, id))
+            .map(str::to_string)
+            .unwrap_or_default(),
+        None => attribute_id.to_string(),
     }
-    attribute_id.to_string()
 }
 
 /// Rewrite every `XXX` item value in place.

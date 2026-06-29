@@ -3762,6 +3762,230 @@
       ],
       "extra": [],
       "hit_count": 2
+    },
+    {
+      "vin": "L5XU1AAA0VA111111",
+      "engine": "systematic",
+      "field_diffs": [
+        {
+          "element_id": 28,
+          "field": "value",
+          "oracle": "",
+          "ultravin": "28450",
+          "feature": "pattern"
+        }
+      ],
+      "missing": [],
+      "extra": [],
+      "hit_count": 1
+    },
+    {
+      "vin": "L5XU1AAA4TA111111",
+      "engine": "systematic",
+      "field_diffs": [
+        {
+          "element_id": 28,
+          "field": "value",
+          "oracle": "",
+          "ultravin": "28450",
+          "feature": "pattern"
+        }
+      ],
+      "missing": [],
+      "extra": [],
+      "hit_count": 1
+    },
+    {
+      "vin": "L5XU1AAA6SA111111",
+      "engine": "systematic",
+      "field_diffs": [
+        {
+          "element_id": 28,
+          "field": "value",
+          "oracle": "",
+          "ultravin": "28450",
+          "feature": "pattern"
+        }
+      ],
+      "missing": [],
+      "extra": [],
+      "hit_count": 1
+    },
+    {
+      "vin": "LR4U1AAAXVA111111",
+      "engine": "systematic",
+      "field_diffs": [
+        {
+          "element_id": 28,
+          "field": "value",
+          "oracle": "",
+          "ultravin": "28450",
+          "feature": "pattern"
+        }
+      ],
+      "missing": [],
+      "extra": [],
+      "hit_count": 1
+    },
+    {
+      "vin": "LR4U1AAA3TA111111",
+      "engine": "systematic",
+      "field_diffs": [
+        {
+          "element_id": 28,
+          "field": "value",
+          "oracle": "",
+          "ultravin": "28450",
+          "feature": "pattern"
+        }
+      ],
+      "missing": [],
+      "extra": [],
+      "hit_count": 1
+    },
+    {
+      "vin": "LR4U1AAA5SA111111",
+      "engine": "systematic",
+      "field_diffs": [
+        {
+          "element_id": 28,
+          "field": "value",
+          "oracle": "",
+          "ultravin": "28450",
+          "feature": "pattern"
+        }
+      ],
+      "missing": [],
+      "extra": [],
+      "hit_count": 1
+    },
+    {
+      "vin": "L5XU1AAA3RA111111",
+      "engine": "systematic",
+      "field_diffs": [
+        {
+          "element_id": 28,
+          "field": "value",
+          "oracle": "",
+          "ultravin": "28450",
+          "feature": "pattern"
+        }
+      ],
+      "missing": [],
+      "extra": [],
+      "hit_count": 1
+    },
+    {
+      "vin": "L5XU1AAA7PA111111",
+      "engine": "systematic",
+      "field_diffs": [
+        {
+          "element_id": 28,
+          "field": "value",
+          "oracle": "",
+          "ultravin": "28450",
+          "feature": "pattern"
+        }
+      ],
+      "missing": [],
+      "extra": [],
+      "hit_count": 1
+    },
+    {
+      "vin": "L5XU1AAA0NA111111",
+      "engine": "systematic",
+      "field_diffs": [
+        {
+          "element_id": 28,
+          "field": "value",
+          "oracle": "",
+          "ultravin": "28450",
+          "feature": "pattern"
+        }
+      ],
+      "missing": [],
+      "extra": [],
+      "hit_count": 1
+    },
+    {
+      "vin": "LR4U1AAA2RA111111",
+      "engine": "systematic",
+      "field_diffs": [
+        {
+          "element_id": 28,
+          "field": "value",
+          "oracle": "",
+          "ultravin": "28450",
+          "feature": "pattern"
+        }
+      ],
+      "missing": [],
+      "extra": [],
+      "hit_count": 1
+    },
+    {
+      "vin": "LR4U1AAA6PA111111",
+      "engine": "systematic",
+      "field_diffs": [
+        {
+          "element_id": 28,
+          "field": "value",
+          "oracle": "",
+          "ultravin": "28450",
+          "feature": "pattern"
+        }
+      ],
+      "missing": [],
+      "extra": [],
+      "hit_count": 1
+    },
+    {
+      "vin": "LR4U1AAAXNA111111",
+      "engine": "systematic",
+      "field_diffs": [
+        {
+          "element_id": 28,
+          "field": "value",
+          "oracle": "",
+          "ultravin": "28450",
+          "feature": "pattern"
+        }
+      ],
+      "missing": [],
+      "extra": [],
+      "hit_count": 1
+    },
+    {
+      "vin": "L5XU1AAA2MA111111",
+      "engine": "systematic",
+      "field_diffs": [
+        {
+          "element_id": 28,
+          "field": "value",
+          "oracle": "",
+          "ultravin": "28450",
+          "feature": "pattern"
+        }
+      ],
+      "missing": [],
+      "extra": [],
+      "hit_count": 1
+    },
+    {
+      "vin": "LR4U1AAA1MA111111",
+      "engine": "systematic",
+      "field_diffs": [
+        {
+          "element_id": 28,
+          "field": "value",
+          "oracle": "",
+          "ultravin": "28450",
+          "feature": "pattern"
+        }
+      ],
+      "missing": [],
+      "extra": [],
+      "hit_count": 1
     }
   ]
 }
