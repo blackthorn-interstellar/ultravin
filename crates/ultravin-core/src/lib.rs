@@ -35,7 +35,7 @@ pub use wmi::{vin_descriptor, vin_wmi};
 /// (`value`/`attribute_id`/`keys`/`source`) are *moved* out of the decode items in
 /// [`project`], not cloned. `source` stays a `Cow` so its overwhelmingly common
 /// borrowed-literal form (`"Pattern"`, `"Make"`, …) costs nothing.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct DecodedElement<'a> {
     pub group_name: &'a str,
     pub variable: &'a str,
@@ -57,7 +57,7 @@ pub struct DecodedElement<'a> {
 /// A decoded VIN result. `'a` is the lifetime of the backing [`Db`] whose arena
 /// the element-metadata columns borrow; [`decode`]/[`decode_batch`] use the
 /// process-static embedded db, so they yield `DecodeResult<'static>`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct DecodeResult<'a> {
     pub vin: String,
     pub wmi: String,
@@ -150,6 +150,54 @@ pub fn decode_batch(inputs: &[String]) -> Vec<DecodeResult<'static>> {
         .par_iter()
         .map(|v| decode_with(db, v, now_micros, year))
         .collect()
+}
+
+/// Decode one VIN to a compact JSON object string (same shape as the [`decode`]
+/// dict). Serializing in Rust avoids the per-field Python dict construction.
+pub fn decode_json(input: &str) -> String {
+    serde_json::to_string(&decode(input)).expect("DecodeResult is infallibly serializable")
+}
+
+/// Decode many VINs to a single compact JSON array string, in parallel.
+///
+/// Decode **and** serialization run with the GIL released across rayon's pool;
+/// only the final array assembly is serial. This is the high-throughput batch
+/// path: the caller receives one string (one Python allocation) instead of a
+/// list of ~60-key dicts per VIN, sidestepping the GIL-serial marshalling that
+/// otherwise caps `decode_batch`. `json.loads` of the output equals
+/// `decode_batch` element-for-element.
+pub fn decode_batch_json(inputs: &[String]) -> String {
+    use rayon::prelude::*;
+
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    let now_micros = secs * 1_000_000;
+    let year = epoch_to_year(secs);
+    let db = Db::embedded();
+    // Fuse decode + serialize so both happen in parallel; each task yields its
+    // object's JSON text.
+    let parts: Vec<String> = inputs
+        .par_iter()
+        .map(|v| {
+            serde_json::to_string(&decode_with(db, v, now_micros, year))
+                .expect("DecodeResult is infallibly serializable")
+        })
+        .collect();
+    // Stitch the array serially (one pass, pre-sized) — cheap memcpy vs. the
+    // parallel decode/serialize above.
+    let cap = parts.iter().map(|p| p.len() + 1).sum::<usize>() + 2;
+    let mut out = String::with_capacity(cap);
+    out.push('[');
+    for (i, p) in parts.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        out.push_str(p);
+    }
+    out.push(']');
+    out
 }
 
 /// One decode pass (a single `spvindecode_core` invocation): its items (with the
@@ -519,5 +567,43 @@ mod tests {
         assert_eq!(get(18).map(|e| e.value.as_str()), Some("J30A4"));
         assert_eq!(get(39).map(|e| e.value.as_str()), Some("PASSENGER CAR"));
         assert_eq!(r.error_codes, vec![0]);
+    }
+
+    #[test]
+    fn decode_json_is_valid_and_matches() {
+        if !db().is_loaded() {
+            eprintln!("skipping: artifact not built");
+            return;
+        }
+        let json = decode_json("1HGCM82633A004352");
+        // Round-trips as valid JSON with the same shape/values as the struct.
+        let v: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+        assert_eq!(v["wmi"], "1HG");
+        assert_eq!(v["model_year"], 2003);
+        assert_eq!(v["check_digit_valid"], true);
+        assert_eq!(v["error_codes"], serde_json::json!([0]));
+        let make = v["elements"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|e| e["element_id"] == 26)
+            .expect("make element");
+        assert_eq!(make["value"], "HONDA");
+        assert_eq!(make["source"], "pattern - model");
+    }
+
+    #[test]
+    fn decode_batch_json_is_an_array() {
+        if !db().is_loaded() {
+            return;
+        }
+        let json = decode_batch_json(&[
+            "1HGCM82633A004352".to_string(),
+            "SAL00000000000000".to_string(),
+        ]);
+        let v: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
+        let arr = v.as_array().expect("array");
+        assert_eq!(arr.len(), 2);
+        assert_eq!(arr[0]["wmi"], "1HG");
     }
 }

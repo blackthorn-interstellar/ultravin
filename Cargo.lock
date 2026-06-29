@@ -1069,6 +1069,8 @@ dependencies = [
  "rayon",
  "regex",
  "rkyv",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

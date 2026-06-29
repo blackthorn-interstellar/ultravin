@@ -126,10 +126,29 @@ fn decode_batch<'py>(py: Python<'py>, vins: Vec<String>) -> PyResult<Vec<Bound<'
     results.iter().map(|r| result_to_dict(py, r)).collect()
 }
 
+/// Decode a single VIN to a JSON object string (same shape as `decode`).
+#[pyfunction]
+fn decode_json(vin: &str) -> String {
+    ultravin_core::decode_json(vin)
+}
+
+/// Decode a batch of VINs to a single JSON array string.
+///
+/// Decode *and* JSON serialization run in parallel with the GIL released; the
+/// caller gets back one string (`json.loads` it for a list equal to
+/// `decode_batch`). For large batches this is several times faster than
+/// `decode_batch`, which must build a ~15-key dict per element under the GIL.
+#[pyfunction]
+fn decode_batch_json(py: Python<'_>, vins: Vec<String>) -> String {
+    py.allow_threads(|| ultravin_core::decode_batch_json(&vins))
+}
+
 #[pymodule]
 fn _ultravin(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(decode, m)?)?;
     m.add_function(wrap_pyfunction!(decode_batch, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_json, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_batch_json, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

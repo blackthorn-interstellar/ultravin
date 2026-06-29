@@ -15,3 +15,17 @@ def decode(vin: str) -> dict[str, object]:
     """
 
 def decode_batch(vins: list[str]) -> list[dict[str, object]]: ...
+def decode_json(vin: str) -> str:
+    """Decode a VIN to a JSON object string (same shape as :func:`decode`).
+
+    Serialized in Rust; ``json.loads(decode_json(vin)) == decode(vin)``.
+    """
+
+def decode_batch_json(vins: list[str]) -> str:
+    """Decode many VINs to a single JSON array string, serialized in Rust.
+
+    The high-throughput batch path: ``json.loads(decode_batch_json(vins)) ==
+    decode_batch(vins)``, but the result is built without per-element Python
+    dicts. Best when the consumer wants JSON bytes (files, DB, streams) rather
+    than Python objects.
+    """
