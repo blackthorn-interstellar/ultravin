@@ -62,3 +62,24 @@ ultravin decode 1HGCM82633A004352 --json   # full JSON
 ultravin decode-batch vins.txt --json      # one VIN per line
 ultravin version
 ```
+
+## Benchmarks
+
+Decoding the same VIN (`1HGCM82633A004352`), warm, on Apple Silicon. ultravin
+runs in-process with the database embedded; the others are listed for reference.
+
+| engine | warm decode | vs ultravin | notes |
+|---|---|---|---|
+| **ultravin** (Rust, in-process) | **~0.20 ms** (203 µs) | **1×** | data embedded; ~1.3 ms cold start; ~31k VIN/s batched on 10 cores |
+| corgi v3 — `@cardog/corgi` (binary index) | ~12 ms | ~59× slower | project's published figure |
+| corgi v2 — `@cardog/corgi` 2.0.1 (SQLite) | ~30 ms | ~148× slower | project's published figure |
+| NHTSA `spVinDecode` (Postgres) | ~62 ms | ~300× slower | full SQL round-trip over localhost |
+
+ultravin decodes a VIN **~60× faster than corgi v3, ~150× faster than corgi v2,
+and ~300× faster than the reference Postgres procedure** — with the whole vehicle
+database embedded (≈19 MB compressed in the wheel) and no DB or network at
+runtime.
+
+The corgi figures are its project's own published numbers (not re-measured here);
+ultravin and Postgres were measured locally. Full methodology, baselines, and
+reproduction steps are in [BENCHMARKS.md](BENCHMARKS.md).
