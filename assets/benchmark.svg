@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 200" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+  <style>
+    .label  { fill: #57606a; font-size: 14px; }
+    .value  { fill: #57606a; font-size: 14px; }
+    .strong { fill: #1f2328; font-weight: 700; }
+    .axis   { fill: #8c8c98; font-size: 12px; }
+    .grid   { stroke: #d8dee4; stroke-width: 1; }
+    .bar    { fill: #c3aef5; }
+    .bar-hi { fill: #7c4dff; }
+    @media (prefers-color-scheme: dark) {
+      .label, .value { fill: #9198a1; }
+      .strong { fill: #f0f6fc; }
+      .axis   { fill: #7d8590; }
+      .grid   { stroke: #30363d; }
+      .bar    { fill: #6b5bb0; }
+      .bar-hi { fill: #a786ff; }
+    }
+  </style>
+
+  <!-- gridlines -->
+  <line class="grid" x1="120" y1="14" x2="120" y2="138"/>
+  <line class="grid" x1="267" y1="14" x2="267" y2="138"/>
+  <line class="grid" x1="414" y1="14" x2="414" y2="138"/>
+  <line class="grid" x1="561" y1="14" x2="561" y2="138"/>
+
+  <!-- ultravin: 0.20 ms -->
+  <text class="label strong" x="108" y="33" text-anchor="end">ultravin</text>
+  <rect class="bar-hi" x="120" y="20" width="3" height="18" rx="2"/>
+  <text class="value strong" x="129" y="33">0.20 ms</text>
+
+  <!-- corgi v3: 12 ms -->
+  <text class="label" x="108" y="63" text-anchor="end">corgi v3</text>
+  <rect class="bar" x="120" y="50" width="88" height="18" rx="2"/>
+  <text class="value" x="214" y="63">12 ms</text>
+
+  <!-- corgi v2: 30 ms -->
+  <text class="label" x="108" y="93" text-anchor="end">corgi v2</text>
+  <rect class="bar" x="120" y="80" width="221" height="18" rx="2"/>
+  <text class="value" x="347" y="93">30 ms</text>
+
+  <!-- Postgres oracle: 62 ms -->
+  <text class="label" x="108" y="123" text-anchor="end">Postgres</text>
+  <rect class="bar" x="120" y="110" width="456" height="18" rx="2"/>
+  <text class="value" x="582" y="123">62 ms</text>
+
+  <!-- axis -->
+  <line class="grid" x1="120" y1="138" x2="620" y2="138"/>
+  <text class="axis" x="120" y="154" text-anchor="middle">0 ms</text>
+  <text class="axis" x="267" y="154" text-anchor="middle">20</text>
+  <text class="axis" x="414" y="154" text-anchor="middle">40</text>
+  <text class="axis" x="561" y="154" text-anchor="middle">60</text>
+</svg>

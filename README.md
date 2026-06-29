@@ -65,8 +65,14 @@ ultravin version
 
 ## Benchmarks
 
-Decoding the same VIN (`1HGCM82633A004352`), warm, on Apple Silicon. ultravin
-runs in-process with the database embedded; the others are listed for reference.
+Warm decode of the same VIN (`1HGCM82633A004352`), lower is faster:
+
+<p align="center">
+  <img src="assets/benchmark.svg" alt="Warm decode latency: ultravin 0.20 ms vs corgi v3 12 ms, corgi v2 30 ms, Postgres 62 ms" width="640">
+</p>
+
+Decoding on Apple Silicon. ultravin runs in-process with the database embedded;
+the others are listed for reference.
 
 | engine | warm decode | VIN/s (single stream) | vs ultravin | notes |
 |---|---|---|---|---|
