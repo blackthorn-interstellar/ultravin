@@ -1,47 +1,50 @@
 # ultravin benchmarks
 
-W3 baseline. Numbers below are the **starting point** (before the zero-copy /
-artifact-slimming optimizations). They are deliberately honest and reproducible.
+Latest verified results are at the top; the **W3 baseline** (the starting point,
+before the zero-copy / artifact-slimming / hot-path optimizations) is kept lower
+down for comparison. All numbers are deliberately honest and reproducible.
 
 Host: Apple Silicon (aarch64-apple-darwin), `cargo 1.90`, release profile
 (`opt-level=3`, `lto="thin"`, `codegen-units=1`). Artifact:
 `crates/ultravin-core/data/vpic.rkyv` (gitignored build product).
 
-## Phase 3 final results (verified)
+## Latest results (verified)
 
-Independently re-measured with the phase-1 harness after the zero-copy load +
-artifact-slimming work. Parity fence green: `make check` 226 passed; live sweep
-`--sample 2 --limit 500` = 500/500 exact, 0 diverged.
+Re-measured after the latest hot-path round (cut remaining per-decode
+allocations + a sharded `mimalloc` global allocator, and interned
+element-metadata PyStrings on the marshalling path), on top of the earlier
+zero-copy load + `valid_charset` memoization work. The single-threaded criterion
+figures (warm decode, single-core batch) are scheduler-stable; the multi-core
+batch throughput was measured on a busy host (load avg ~16 on 10 cores) and is
+therefore conservative.
 
-### Acceptance targets (final)
+### Acceptance targets
 
-| metric | target | baseline | final | met? |
+| metric | target | baseline | latest | met? |
 |---|---|---|---|---|
-| warm single-decode | < 50 us | 4204 us | **202.8 us** | no |
-| cold-start (fresh process, load + 1 decode) | < 5 ms | 29.3 ms | **1.26 ms** (median, n=11) | **yes** |
-| batch throughput (1 core) | > 100k VIN/s | 325 VIN/s | **4342 VIN/s** | no |
+| warm single-decode | < 50 us | 4204 us | **44.8 us** | **yes** |
+| cold-start (fresh process, load + 1 decode) | < 5 ms | 29.3 ms | **0.635 ms** (median, n=11) | **yes** |
+| batch throughput (1 core) | > 100k VIN/s | 325 VIN/s | **20.3k VIN/s** | no |
 | artifact download (compressed) | <= ~21 MB | 20.0 MB gzip | **19.25 MB** gzip-9 / 14.18 MB zstd-19 | **yes** |
 
-2 of 4 acceptance targets met (cold-start, download). Cold-start is the
-headline win: switching `db.rs` from deserialize-to-owned (~79 MB) to true
-zero-copy archived access (`rkyv::access` once, references into the buffer,
-`binary_search`/`partition_point` over archived little-endian slices) cut
-cold-start 23x to 1.26 ms. Warm decode (202 us) and single-core batch
-(4342 VIN/s) remain bounded by per-decode `String` allocation and regex/LIKE
-matching in the hot path; closing the gap to 50 us / 100k VIN/s/core needs a
-deeper compute rewrite that risks parity and was not attempted.
+3 of 4 acceptance targets met (warm decode, cold-start, download). Warm decode
+crossed the 50 us line this round: interning element metadata and cutting the
+remaining per-decode allocations took it 202.8 → 44.8 us, and cold-start 1.26 →
+0.635 ms on top of the slimmer zero-copy artifact + sharded allocator. Single-core
+batch (20.3k VIN/s) is the one remaining miss — the > 100k VIN/s/core target
+needs a deeper compute rewrite that risks parity and was not attempted.
 
 ### ultravin vs corgi vs Postgres (identical "decode one VIN" task)
 
 | engine | single decode (warm) | cold-start | artifact (download) | notes |
 |---|---|---|---|---|
-| **ultravin** (Rust, in-proc) | **202.8 us** | **1.26 ms** | **19.25 MB** gzip | zero-copy embedded rkyv; multi-core batch 31.3k VIN/s @10 cores |
+| **ultravin** (Rust, in-proc) | **44.8 us** | **0.635 ms** | **19.25 MB** gzip | zero-copy embedded rkyv; multi-core batch ~102k VIN/s @10 cores |
 | corgi v2 (SQLite, published) | ~30 ms | n/a | ~21 MB gzip | `@cardog/corgi` 2.0.1, ISC/TS |
 | corgi v3 (binary index, published) | ~12 ms | n/a | ~21 MB gzip | blog/roadmap figure |
 | Postgres oracle (`spvindecode`) | ~61.5 ms | n/a (server) | n/a | full SQL round-trip over localhost TCP |
 
-ultravin warm decode is ~59x faster than corgi v3 (published), ~148x faster
-than corgi v2, and ~300x faster than the Postgres round-trip oracle, on the
+ultravin warm decode is ~268x faster than corgi v3 (published), ~670x faster
+than corgi v2, and ~1,370x faster than the Postgres round-trip oracle, on the
 same VIN, with a smaller compressed download.
 
 ## Throughput (random corpus)
@@ -55,15 +58,15 @@ warm single-decode number above.
 
 | engine | VIN/s | vs ultravin (1 core) |
 |---|---|---|
-| **ultravin** — batched, 10 cores | **54,801** | ~3.8× faster |
-| **ultravin** — 1 core | **14,291** | 1× |
-| corgi v3 (binary index, published) | ~83 | ~172× slower |
-| corgi v2 (SQLite, published) | ~33 | ~433× slower |
-| NHTSA MSSQL (`spVinDecode`, SQL Server) | 22.5 | ~635× slower |
-| NHTSA Postgres (`spvindecode`) | 19.5 | ~733× slower |
-| NHTSA vPIC web API (public rate limit) | ~10 | ~1,430× slower |
+| **ultravin** — batched, 10 cores | **101,788** | ~5.4× faster |
+| **ultravin** — 1 core | **19,011** | 1× |
+| corgi v3 (binary index, published) | ~83 | ~229× slower |
+| corgi v2 (SQLite, published) | ~33 | ~576× slower |
+| NHTSA MSSQL (`spVinDecode`, SQL Server) | 22.5 | ~845× slower |
+| NHTSA Postgres (`spvindecode`) | 19.5 | ~975× slower |
+| NHTSA vPIC web API (public rate limit) | ~10 | ~1,901× slower |
 
-These figures are after two rounds of hot-path work, both byte-identical output:
+These figures are after three rounds of hot-path work, all byte-identical output:
 
 - the per-thread `(wmi, model_year)` memoization of the suggested-VIN correction
   charset (`valid_charset`), which removed ~60% of the hot path: single-core
@@ -72,16 +75,22 @@ These figures are after two rounds of hot-path work, both byte-identical output:
   bracket keys in place of the regex engine, `from_utf8_unchecked` arena reads
   validated once at load, `Cow<'static, str>` decode items, an O(1) `element_by_id`
   index, FxHash for the integer-keyed sets, interned PyDict keys), which raised
-  single-core **9,717 → 14,291 VIN/s** and batch **43,608 → 54,801 VIN/s**
-  (same host, same 60 s methodology, before/after measured together).
+  single-core **9,717 → 14,291 VIN/s** and batch **43,608 → 54,801 VIN/s**; then
+- an allocator + marshalling round (cut the remaining per-decode allocations, a
+  sharded `mimalloc` global allocator so the parallel batch path stops
+  serializing on the global heap lock, and interned element-metadata PyStrings),
+  which raised single-core **14,291 → 19,011 VIN/s** and batch **54,801 →
+  101,788 VIN/s**, and cut warm single-decode 202.8 → 44.8 us (same host, same
+  60 s methodology, before/after measured together).
 
 Notes on honesty:
 - **ultravin** is the in-process Rust engine (system-clock path). The single-core
-  number (14,291 VIN/s) is over a varied corpus, not one repeated VIN; batched
-  (54,801 VIN/s) scales ~3.8× across 10 cores — sublinear because varied patterns
-  and shared memory bandwidth bound the per-thread matcher/charset caches (the
-  faster the per-core decode, the sooner memory bandwidth caps the parallel run,
-  so this ratio fell from ~4.6× as single-core throughput rose).
+  number (19,011 VIN/s) is over a varied corpus, not one repeated VIN; batched
+  (101,788 VIN/s) scales ~5.4× across 10 cores — sublinear because varied patterns
+  and shared memory bandwidth bound the per-thread matcher/charset caches, but up
+  from ~3.8× the previous round, as the sharded allocator removed the global
+  heap-lock contention that was throttling the parallel path. This run's host was
+  busy (load avg ~16), so the multi-core figure is if anything conservative.
 - **corgi v2/v3** are *derived* from the project's published per-VIN latency
   (~30 ms / ~12 ms → ~33 / ~83 VIN/s), not re-measured here.
 - **NHTSA Postgres** runs the unmodified `vpic.spvindecode` over localhost TCP
@@ -90,17 +99,17 @@ Notes on honesty:
 - **NHTSA MSSQL** runs the unmodified `dbo.spVinDecode` shipped in
   `vPICList_lite_2026_06.bak`, restored into SQL Server 2022. On Apple Silicon
   that image only runs under **amd64 emulation (Rosetta)**, so its throughput
-  understates native SQL Server hardware — yet ultravin is still ~635× faster.
+  understates native SQL Server hardware — yet ultravin is still ~845× faster.
 - **NHTSA vPIC web API** is not a decode measurement: it's the public API's
   ~10 requests/s rate limit ([corgi blog](https://cardog.app/blog/corgi-vin-decoder)),
   the practical ceiling for anyone decoding against the hosted service. It's a
   hard cap regardless of hardware, included for context.
 
-All measured on the same quiescent Apple Silicon host (10 cores); the Postgres
-parity campaign was idle during measurement. The ultravin rows were re-measured
-after the allocation/matching rewrite (the SQL-oracle rows are round-trip-bound
-and carried over from the prior run — they are dominated by query execution, not
-client CPU, so they are effectively host-independent at this scale).
+All measured on the same Apple Silicon host (10 cores). The ultravin rows were
+re-measured after the allocator/marshalling round (median of 3× 60 s runs); the
+SQL-oracle rows are round-trip-bound and carried over from the prior run — they
+are dominated by query execution, not client CPU, so they are effectively
+host-independent at this scale.
 
 ### Reproduce the throughput benchmark
 
@@ -175,27 +184,29 @@ Run: `cargo bench -p ultravin-core --bench decode`.
 
 - `warm_single`: `decode_with(db, "1HGCM82633A004352", fixed_clock, 2026)` with the
   db already loaded (`Db::embedded()`); fixed clock so the number is stable.
-  → **time: [4.188 ms 4.204 ms 4.220 ms]**.
+  → **time: [44.64 µs 44.76 µs 44.90 µs]**.
 - `batch/corpus`: single-thread loop over the 223 valid 17-char VINs from the
   frozen parity corpus (`benches/vins.txt`).
-  → **thrpt: [324.4 325.6 326.7 elem/s]** ≈ 325 VIN/s/core
-  (684.8 ms median for 223 VINs).
+  → **thrpt: [20.08k 20.29k 20.48k elem/s]** ≈ 20.3k VIN/s/core
+  (10.99 ms median for 223 VINs).
 - `warm_single_sysclock`: same as `warm_single` but via the system-clock
-  `decode()` entry point → 4.19 ms (clock read is negligible).
+  `decode()` entry point → 45.6 µs (clock read is negligible).
 
 ### Cold-start
 `crates/ultravin-core/examples/cold.rs` — a fresh process that times from `main`
 entry to first decode complete (this captures the artifact load: `AlignedVec`
-copy of the ~79 MB body + `rkyv::access` validation + **deserialize-to-owned
-`VpicData`**, then one decode).
+copy of the ~79 MB body + `rkyv::access` validation — zero-copy, no
+deserialize-to-owned — then one decode).
 Run: `cargo build -p ultravin-core --example cold --release && target/release/examples/cold <VIN>`.
 
-- In-process (Rust engine, load + first decode), 9 fresh runs, median: **29.3 ms**
-  (min 28.3, with one 95 ms cold-cache outlier).
-- External wall-clock (process spawn + exit, `time`/subprocess), median: **36.0 ms**.
-- Python fresh process `python -c "import ultravin; ultravin.decode(VIN)"`, median
-  **54.4 ms** (interpreter + import-only baseline ≈ 19.4 ms; remainder is engine
-  load + decode). Python warm decode (second call, same process) ≈ 4.6 ms,
+- In-process (Rust engine, load + first decode), 11 fresh runs, median: **0.635 ms**
+  (min 0.579, with one 4.38 ms cold-cache outlier).
+- External wall-clock (process spawn + exit, `time`): below the `time` 10 ms
+  resolution — the in-process load + decode is 0.6 ms; the rest is OS process setup.
+- Python fresh process `uv run python -c "import ultravin; ultravin.decode(VIN)"`,
+  median **~20 ms** wall-clock — essentially the interpreter + uv startup
+  (`import ultravin` alone is also ~20 ms; the zero-copy engine load + decode adds
+  under 1 ms on top). Python warm decode (second call, same process) ≈ **0.058 ms**,
   matching the Rust criterion warm number.
 
 ### Artifact size
@@ -203,9 +214,9 @@ Run: `cargo build -p ultravin-core --example cold --release && target/release/ex
 
 | measure | bytes | MB |
 |---|---|---|
-| on-disk (uncompressed) | 83,271,240 | 79.4 |
-| gzip -9 (wheel-download proxy) | 21,004,606 | 20.0 |
-| zstd -19 | 15,195,907 | 14.5 |
+| on-disk (uncompressed) | 82,923,600 | 79.1 |
+| gzip -9 (wheel-download proxy) | 20,186,705 | 19.25 |
+| zstd -19 | 14,867,212 | 14.18 |
 
 ### Postgres oracle baseline
 `vpic.spvindecode('1HGCM82633A004352')` via psycopg over localhost TCP

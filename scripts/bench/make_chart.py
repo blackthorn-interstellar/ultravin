@@ -28,16 +28,16 @@ ROWS = [
     ("NHTSA vPIC API (rate limit)", "nhtsa-api", False),
 ]
 
-# Linear axis: 0 .. 60,000 VIN/s.
-AXIS_MAX = 60_000
+# Linear axis: 0 .. 120,000 VIN/s.
+AXIS_MAX = 120_000
 TICKS = [
     (0, "0"),
-    (10_000, "10k"),
     (20_000, "20k"),
-    (30_000, "30k"),
     (40_000, "40k"),
-    (50_000, "50k"),
     (60_000, "60k"),
+    (80_000, "80k"),
+    (100_000, "100k"),
+    (120_000, "120k"),
 ]
 
 X0, X1 = 220, 690  # plot area (px); X0 leaves room for the longest label
