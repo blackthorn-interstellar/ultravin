@@ -17,6 +17,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  # Retry crates.io fetches: the registry occasionally drops a download mid-build.
+  CARGO_NET_RETRY: "10"
 
 permissions:
   contents: read
@@ -87,9 +89,12 @@ jobs:
           - { kind: musllinux, runner: ubuntu-22.04,   target: x86,     manylinux: musllinux_1_2 }
           - { kind: musllinux, runner: ubuntu-22.04,   target: aarch64, manylinux: musllinux_1_2 }
           - { kind: musllinux, runner: ubuntu-22.04,   target: armv7,   manylinux: musllinux_1_2 }
-          - { kind: windows,   runner: windows-latest, target: x64 }
-          - { kind: windows,   runner: windows-latest, target: x86 }
-          - { kind: windows,   runner: windows-latest, target: aarch64 }
+          # pyarch picks the real interpreter setup-python installs (below): a
+          # 32-bit Python for the x86 wheel, the x64 host Python for x64 and the
+          # aarch64 cross (abi3 + pyo3's generated import lib need no arm Python).
+          - { kind: windows,   runner: windows-latest, target: x64,     pyarch: x64 }
+          - { kind: windows,   runner: windows-latest, target: x86,     pyarch: x86 }
+          - { kind: windows,   runner: windows-latest, target: aarch64, pyarch: x64 }
           # GitHub retired macos-13 (Intel) on 2025-12-04; macos-15-intel is the
           # standard x86_64 replacement. macos-14 is Apple silicon.
           - { kind: macos,     runner: macos-15-intel, target: x86_64 }
@@ -108,6 +113,16 @@ jobs:
         with:
           name: vpic-data
           path: crates/ultravin-core/data
+      # Without this, maturin on Windows finds only the WindowsApps python.exe
+      # alias stub, can't read its version, and fails — give it a real, arch-
+      # matched interpreter instead. (Linux builds in a container; macOS uses the
+      # host Python — both already have a usable interpreter.)
+      - name: Set up Python (Windows)
+        if: matrix.kind == 'windows'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: ${{ matrix.pyarch }}
       - name: Build wheel
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
