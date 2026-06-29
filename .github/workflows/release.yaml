@@ -80,7 +80,11 @@ jobs:
         include:
           - { kind: linux,     runner: ubuntu-22.04,   target: x86_64 }
           - { kind: linux,     runner: ubuntu-22.04,   target: x86 }
-          - { kind: linux,     runner: ubuntu-22.04,   target: aarch64 }
+          # manylinux_2_28: this is the one mimalloc-carrying cross target, and the
+          # default (manylinux2014) cross-gcc predates -Wdate-time, so mimalloc's C
+          # build fails on it. The 2.28 cross image ships a modern gcc. (x86_64 is
+          # native devtoolset gcc; musl/other arches are unaffected.)
+          - { kind: linux,     runner: ubuntu-22.04,   target: aarch64, manylinux: manylinux_2_28 }
           - { kind: linux,     runner: ubuntu-22.04,   target: armv7 }
           - { kind: linux,     runner: ubuntu-22.04,   target: s390x }
           - { kind: linux,     runner: ubuntu-22.04,   target: ppc64le }
