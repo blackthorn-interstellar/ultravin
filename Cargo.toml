@@ -9,7 +9,7 @@ version = "0.0.0"
 edition = "2021"
 license = "MIT"
 authors = ["Bryce Drennan"]
-repository = "https://github.com/brycedrennan/ultravin"
+repository = "https://github.com/blackthorn-interstellar/ultravin"
 
 [workspace.lints.clippy]
 # Keep the bar high; deny on warnings is enforced in `make check`.

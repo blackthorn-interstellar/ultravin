@@ -29,8 +29,8 @@ dev = [
 ]
 
 [project.urls]
-Documentation = "https://github.com/brycedrennan/ultravin"
-Source = "https://github.com/brycedrennan/ultravin"
+Documentation = "https://github.com/blackthorn-interstellar/ultravin"
+Source = "https://github.com/blackthorn-interstellar/ultravin"
 
 [build-system]
 requires = ["maturin>=1.7,<2"]

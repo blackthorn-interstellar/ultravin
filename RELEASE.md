@@ -59,7 +59,7 @@ Local builds report version `0.0.0`; only tagged CI builds carry a real version.
 The release job authenticates with OIDC; no API token is stored anywhere.
 Configure once at https://pypi.org/manage/project/ultravin/settings/publishing/:
 
-- Owner: `brycedrennan`
+- Owner: `blackthorn-interstellar`
 - Repository: `ultravin`
 - Workflow: `release.yaml`
 - Environment: (leave blank)
