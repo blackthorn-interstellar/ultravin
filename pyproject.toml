@@ -45,7 +45,14 @@ features = ["pyo3/extension-module"]
 # product (deterministically rebuilt from the pinned dump), so ship it inside the
 # sdist — otherwise a `pip install` that falls back to source compiles an empty
 # artifact (build.rs's stub) and decodes nothing. CI materializes it first.
-include = [{ path = "crates/ultravin-core/data/vpic.rkyv", format = "sdist" }]
+# vpic.rkyv: see above. LICENSE: maturin records `License-File: LICENSE` in the
+# metadata and embeds it in wheels, but doesn't pack the root LICENSE into the
+# sdist (it's outside the ultravin-py manifest dir) — PyPI then rejects the sdist
+# for a declared-but-absent license file. Include it explicitly so they agree.
+include = [
+    { path = "crates/ultravin-core/data/vpic.rkyv", format = "sdist" },
+    { path = "LICENSE", format = "sdist" },
+]
 
 [tool.ruff]
 extend-exclude = []
