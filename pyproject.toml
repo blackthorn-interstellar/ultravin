@@ -95,3 +95,10 @@ output-format = "concise"
 missing-argument = "ignore"
 # buggy with nonlocal
 unresolved-reference = "ignore"
+
+# Bench scripts use pymssql, an optional dep kept out of the lockfile on purpose.
+[[tool.ty.overrides]]
+include = ["scripts/bench/**"]
+
+[tool.ty.overrides.rules]
+unresolved-import = "ignore"

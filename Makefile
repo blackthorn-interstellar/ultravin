@@ -52,6 +52,12 @@ download:  ## Download a pinned vPIC dump into downloads/ (usage: make download 
 	@curl -fSL "https://vpic.nhtsa.dot.gov/Downloads/vPICList_lite_$(MONTH).plain.zip" -o "downloads/vPICList_lite_$(MONTH).plain.zip"
 	@echo "downloaded downloads/vPICList_lite_$(MONTH).plain.zip"
 
+download-bak:  ## Download the pinned vPIC MS SQL .bak (zip) into downloads/ (usage: make download-bak MONTH=YYYY_MM).
+	@mkdir -p downloads
+	@curl -fSL "https://vpic.nhtsa.dot.gov/Downloads/vPICList_lite_$(MONTH).bak.zip" -o "downloads/vPICList_lite_$(MONTH).bak.zip"
+	@cd downloads && unzip -o "vPICList_lite_$(MONTH).bak.zip"
+	@echo "downloaded + extracted downloads/VPICList_lite_$(MONTH).bak"
+
 oracle-up:  ## Start the Postgres parity oracle (Docker).
 	@bash scripts/oracle.sh up
 

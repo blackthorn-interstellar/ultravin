@@ -4,12 +4,13 @@
 
 use crate::db::Db;
 use crate::tables::NULL_I32;
-use crate::wmi::vin_wmi;
 
 /// Raw `fVinModelYear2`: `None` when position 10 is unmapped, a negative value
 /// when the year is inconclusive, otherwise the positive model year. `carLT`
 /// (passenger car / MPV / light truck) triggers the position-7 −30 adjustment.
-pub fn vin_model_year_raw(vin: &str, db: &Db, current_year: i32) -> Option<i32> {
+/// `var_wmi` is the precomputed `fVinWMI(vin)` (threaded in to avoid recomputing
+/// it on the hot path).
+pub fn vin_model_year_raw(vin: &str, var_wmi: &str, db: &Db, current_year: i32) -> Option<i32> {
     let b = vin.as_bytes();
     if b.len() < 10 {
         return None;
@@ -30,9 +31,8 @@ pub fn vin_model_year_raw(vin: &str, db: &Db, current_year: i32) -> Option<i32> 
     // `if var_wmi is not null` guard is always taken. The `Wmi` row lookup only
     // gates the carLT (position-7) branches; the future-year correction below runs
     // even when the WMI is absent from the table (e.g. an unknown WMI like `ZKU`).
-    let wmi = vin_wmi(vin);
     let car_lt = db
-        .wmi_any(&wmi)
+        .wmi_any(var_wmi)
         .map(|w| {
             let vt = w.vehicletypeid.to_native();
             matches!(vt, 2 | 7) || (vt == 3 && w.trucktypeid.to_native() == 1)
@@ -66,10 +66,10 @@ pub struct YearPlan {
 
 /// Port of the wrapper's year computation: `rmy`/`omy`/`conclusive`, including
 /// the `altMY` ±30 schema-count swap (only when conclusive). The dead descriptor
-/// pass is skipped (it never runs in the proc — see PLAN.md).
-pub fn resolve_years(vin: &str, db: &Db, current_year: i32) -> YearPlan {
+/// pass is skipped (it never runs in the proc — see docs/PLAN.md).
+pub fn resolve_years(vin: &str, var_wmi: &str, db: &Db, current_year: i32) -> YearPlan {
     let v_limit = current_year + 2;
-    match vin_model_year_raw(vin, db, current_year) {
+    match vin_model_year_raw(vin, var_wmi, db, current_year) {
         None => YearPlan {
             rmy: None,
             omy: None,
@@ -88,7 +88,10 @@ pub fn resolve_years(vin: &str, db: &Db, current_year: i32) -> YearPlan {
                     None
                 };
                 if let Some(a) = alt {
-                    if a != rmy && schema_count(vin, db, rmy) == 0 && schema_count(vin, db, a) > 0 {
+                    if a != rmy
+                        && schema_count(var_wmi, db, rmy) == 0
+                        && schema_count(var_wmi, db, a) > 0
+                    {
                         rmy = a;
                     }
                 }
@@ -103,9 +106,8 @@ pub fn resolve_years(vin: &str, db: &Db, current_year: i32) -> YearPlan {
 }
 
 /// Count of WMI schemas covering `year` for this VIN's WMI.
-fn schema_count(vin: &str, db: &Db, year: i32) -> i32 {
-    let wmi = vin_wmi(vin);
-    let Some(w) = db.wmi_any(&wmi) else {
+fn schema_count(var_wmi: &str, db: &Db, year: i32) -> i32 {
+    let Some(w) = db.wmi_any(var_wmi) else {
         return 0;
     };
     db.wmi_vinschema_for(w.id.to_native())

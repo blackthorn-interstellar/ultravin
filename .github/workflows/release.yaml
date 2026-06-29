@@ -7,7 +7,7 @@ name: Release
 #
 # Versions come solely from git tags: the repo carries 0.0.0 and CI stamps the
 # tag's vX.Y.Z before building. workflow_dispatch dry-runs the full matrix
-# (artifacts only, version stays 0.0.0); only tags publish. See RELEASE.md.
+# (artifacts only, version stays 0.0.0); only tags publish. See docs/RELEASE.md.
 
 on:
   push:

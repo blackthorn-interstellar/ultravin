@@ -66,6 +66,11 @@ impl Backing {
 pub struct Db {
     _backing: Backing,
     archive: *const ArchivedVpicData,
+    /// Dense `element_id -> slice index` table (`-1` = absent), built once on first
+    /// use. `element_by_id` is called once per pattern in the matching loop —
+    /// hundreds to thousands of times per decode — so an O(1) index beats the
+    /// `binary_search` over the (small but repeatedly scanned) element table.
+    element_index: OnceLock<Box<[i32]>>,
 }
 
 // SAFETY: the archive is immutable, validated bytes; sharing `&Db` across threads
@@ -91,9 +96,14 @@ fn check_header(bytes: &[u8]) -> Result<(), String> {
 impl Db {
     /// Fully validate the archived body (untrusted input), then hold it.
     fn build(backing: Backing) -> Result<Db, String> {
-        // Checked access validates layout + alignment; we discard the borrow.
-        rkyv::access::<ArchivedVpicData, rancor::Error>(backing.body())
+        // Checked access validates layout + alignment.
+        let archived = rkyv::access::<ArchivedVpicData, rancor::Error>(backing.body())
             .map_err(|e| format!("artifact validation failed: {e}"))?;
+        // The hot-path `s()` reads arena strings with `from_utf8_unchecked`, so an
+        // untrusted artifact must have its arena proven valid UTF-8 here, once, at
+        // the boundary — every interned slice at its declared offsets. (The trusted
+        // embedded blob skips this; it is built from `&str` by our importer.)
+        validate_arena(archived)?;
         // SAFETY: just validated above; the borrow is converted to a raw pointer
         // into the buffer owned by `backing` (stable across the move below).
         let archive = unsafe {
@@ -102,6 +112,7 @@ impl Db {
         Ok(Db {
             _backing: backing,
             archive,
+            element_index: OnceLock::new(),
         })
     }
 
@@ -120,6 +131,7 @@ impl Db {
         Db {
             _backing: backing,
             archive,
+            element_index: OnceLock::new(),
         }
     }
 
@@ -165,13 +177,17 @@ impl Db {
     }
 
     /// Resolve an arena string id.
+    #[inline]
     pub fn s(&self, id: u32) -> &str {
         let a = self.a();
         let i = id as usize;
         let start = a.arena_offsets[i].to_native() as usize;
         let end = a.arena_offsets[i + 1].to_native() as usize;
-        // Arena bytes are valid UTF-8 by construction (interned from &str).
-        std::str::from_utf8(&a.arena_bytes[start..end]).unwrap_or("")
+        // SAFETY: the arena is valid UTF-8 at every declared offset — guaranteed by
+        // the importer for the embedded blob and proven once by `validate_arena`
+        // for untrusted artifacts. `s()` is the single hottest call in a decode;
+        // re-validating UTF-8 here (per call) was ~13% of decode self-time.
+        unsafe { std::str::from_utf8_unchecked(&a.arena_bytes[start..end]) }
     }
 
     /// Find a public WMI by its string (binary search, public availability gated).
@@ -218,10 +234,32 @@ impl Db {
     }
 
     pub fn element_by_id(&self, id: i32) -> Option<&ArchivedElement> {
-        let v = self.a().element.as_slice();
-        v.binary_search_by(|r| r.id.to_native().cmp(&id))
-            .ok()
-            .map(|i| &v[i])
+        if id < 0 {
+            return None;
+        }
+        let idx = self.element_index();
+        let slot = *idx.get(id as usize)?;
+        if slot < 0 {
+            None
+        } else {
+            Some(&self.a().element.as_slice()[slot as usize])
+        }
+    }
+
+    /// Lazily-built dense `element_id -> slice index` table (see field docs).
+    fn element_index(&self) -> &[i32] {
+        self.element_index.get_or_init(|| {
+            let v = self.a().element.as_slice();
+            let max = v.iter().map(|e| e.id.to_native()).max().unwrap_or(-1);
+            let mut idx = vec![-1i32; (max + 1).max(0) as usize];
+            for (i, e) in v.iter().enumerate() {
+                let id = e.id.to_native();
+                if id >= 0 {
+                    idx[id as usize] = i as i32;
+                }
+            }
+            idx.into_boxed_slice()
+        })
     }
 
     /// All elements with a non-empty Decode and not private — the output set.
@@ -239,12 +277,15 @@ impl Db {
         slice_eq(self.a().wmi_make.as_slice(), wmiid, |r| r.wmiid.to_native())
     }
 
-    /// Engine model whose `lower(trim(name))` equals `norm`.
+    /// Engine model whose `lower(trim(name))` equals `norm` (already lowercased by
+    /// the caller). Case-insensitive compare avoids allocating a lowercased copy of
+    /// every row's name during the linear scan.
     pub fn enginemodel_by_norm(&self, norm: &str) -> Option<&ArchivedEngineModel> {
-        self.a()
-            .enginemodel
-            .iter()
-            .find(|em| self.s(em.name.to_native()).trim().to_ascii_lowercase() == norm)
+        self.a().enginemodel.iter().find(|em| {
+            self.s(em.name.to_native())
+                .trim()
+                .eq_ignore_ascii_case(norm)
+        })
     }
 
     pub fn enginemodelpatterns_for(&self, emid: i32) -> &[ArchivedEngineModelPattern] {
@@ -352,6 +393,30 @@ impl Db {
             .filter(|r| r.tag.to_native() == tag && r.id.to_native() == id)
             .map(|r| self.s(r.name.to_native()))
     }
+}
+
+/// Prove an untrusted artifact's arena is valid UTF-8 at every declared offset,
+/// so the hot-path `Db::s` can decode it with `from_utf8_unchecked`. Offsets must
+/// be monotonic and in-bounds, and each interned slice must be valid UTF-8.
+fn validate_arena(a: &ArchivedVpicData) -> Result<(), String> {
+    let bytes = a.arena_bytes.as_slice();
+    let offsets = a.arena_offsets.as_slice();
+    if offsets.is_empty() {
+        return Err("arena offsets empty".into());
+    }
+    let mut prev = 0usize;
+    for (i, off) in offsets.iter().enumerate() {
+        let cur = off.to_native() as usize;
+        if cur > bytes.len() || cur < prev {
+            return Err(format!("arena offset {i} out of range"));
+        }
+        if i > 0 {
+            std::str::from_utf8(&bytes[prev..cur])
+                .map_err(|_| format!("arena string {} is not valid UTF-8", i - 1))?;
+        }
+        prev = cur;
+    }
+    Ok(())
 }
 
 /// Contiguous sub-slice of `v` (sorted by `key`) whose key equals `target`.

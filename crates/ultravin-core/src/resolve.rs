@@ -27,7 +27,11 @@ pub fn felement_attribute_value(db: &Db, element_id: i32, attribute_id: &str) ->
 pub fn resolve_xxx(db: &Db, items: &mut [DecodingItem]) {
     for it in items.iter_mut() {
         if it.value == "XXX" {
-            it.value = felement_attribute_value(db, it.element_id, &it.attribute_id);
+            it.value = std::borrow::Cow::Owned(felement_attribute_value(
+                db,
+                it.element_id,
+                &it.attribute_id,
+            ));
         }
     }
 }

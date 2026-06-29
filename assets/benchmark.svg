@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 740 268" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+<style>.label{fill:#57606a;font-size:13px}.value{fill:#57606a;font-size:13px}.strong{fill:#1f2328;font-weight:700}.axis{fill:#8c8c98;font-size:11px}.grid{stroke:#d8dee4;stroke-width:1}.bar{fill:#c3aef5}.bar-hi{fill:#7c4dff}@media(prefers-color-scheme:dark){.label,.value{fill:#9198a1}.strong{fill:#f0f6fc}.axis{fill:#7d8590}.grid{stroke:#30363d}.bar{fill:#6b5bb0}.bar-hi{fill:#a786ff}}</style>
+<line class="grid" x1="220.0" y1="14" x2="220.0" y2="226"/>
+<line class="grid" x1="298.3" y1="14" x2="298.3" y2="226"/>
+<line class="grid" x1="376.7" y1="14" x2="376.7" y2="226"/>
+<line class="grid" x1="455.0" y1="14" x2="455.0" y2="226"/>
+<line class="grid" x1="533.3" y1="14" x2="533.3" y2="226"/>
+<line class="grid" x1="611.7" y1="14" x2="611.7" y2="226"/>
+<line class="grid" x1="690.0" y1="14" x2="690.0" y2="226"/>
+<text class="label strong" x="210" y="35.0" text-anchor="end">ultravin — batched (10 cores)</text>
+<rect class="bar-hi" x="220" y="22.0" width="429.3" height="18" rx="2"/>
+<text class="value strong" x="655.3" y="35.0">54,801</text>
+<text class="label strong" x="210" y="65.0" text-anchor="end">ultravin — 1 core</text>
+<rect class="bar-hi" x="220" y="52.0" width="111.9" height="18" rx="2"/>
+<text class="value strong" x="337.9" y="65.0">14,291</text>
+<text class="label" x="210" y="95.0" text-anchor="end">corgi v3</text>
+<rect class="bar" x="220" y="82.0" width="2.0" height="18" rx="2"/>
+<text class="value" x="226.7" y="95.0">83</text>
+<text class="label" x="210" y="125.0" text-anchor="end">corgi v2</text>
+<rect class="bar" x="220" y="112.0" width="2.0" height="18" rx="2"/>
+<text class="value" x="226.3" y="125.0">33</text>
+<text class="label" x="210" y="155.0" text-anchor="end">NHTSA MSSQL</text>
+<rect class="bar" x="220" y="142.0" width="2.0" height="18" rx="2"/>
+<text class="value" x="226.2" y="155.0">22.5</text>
+<text class="label" x="210" y="185.0" text-anchor="end">NHTSA Postgres</text>
+<rect class="bar" x="220" y="172.0" width="2.0" height="18" rx="2"/>
+<text class="value" x="226.2" y="185.0">19.5</text>
+<text class="label" x="210" y="215.0" text-anchor="end">NHTSA vPIC API (rate limit)</text>
+<rect class="bar" x="220" y="202.0" width="2.0" height="18" rx="2"/>
+<text class="value" x="226.1" y="215.0">10</text>
+<line class="grid" x1="220" y1="226" x2="690" y2="226"/>
+<text class="axis" x="220.0" y="242" text-anchor="middle">0</text>
+<text class="axis" x="298.3" y="242" text-anchor="middle">10k</text>
+<text class="axis" x="376.7" y="242" text-anchor="middle">20k</text>
+<text class="axis" x="455.0" y="242" text-anchor="middle">30k</text>
+<text class="axis" x="533.3" y="242" text-anchor="middle">40k</text>
+<text class="axis" x="611.7" y="242" text-anchor="middle">50k</text>
+<text class="axis" x="690.0" y="242" text-anchor="middle">60k</text>
+<text class="axis" x="455.0" y="258" text-anchor="middle">VINs decoded per second — higher is better</text>
+</svg>

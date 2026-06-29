@@ -2,13 +2,21 @@
 //! layered sources, Formula Pattern, dedup, make, conversion, vehicle specs,
 //! and defaults.
 
+use std::borrow::Cow;
 use std::cmp::Ordering;
 
 use crate::db::Db;
+use crate::hash::{IntMap, IntSet};
 use crate::matcher::{like_match, regex_match_cached};
 use crate::tables::{element_lookup_tag, is_exempt, NULL_I32, NULL_I64};
 
 /// A single decoding item (the `tblDecodingItem` ROW), pre-resolution.
+///
+/// `source` is a static literal for every source but Conversion, and `value` is
+/// the `"XXX"` sentinel for every pattern/spec/default item (resolved lazily, and
+/// only on the winning pass). Both are `Cow<'static, str>` so those overwhelmingly
+/// common cases borrow instead of allocating — the per-item, per-pass `String`
+/// churn was the single largest allocation source on the decode hot path.
 #[derive(Debug, Clone)]
 pub struct DecodingItem {
     pub created_on: i64, // NULL_I64 = none
@@ -18,8 +26,8 @@ pub struct DecodingItem {
     pub wmi_id: i32,        // NULL_I32 = none
     pub element_id: i32,
     pub attribute_id: String,
-    pub value: String,
-    pub source: String,
+    pub value: Cow<'static, str>,
+    pub source: Cow<'static, str>,
     pub priority: i32,
     pub to_be_qced: bool,
 }
@@ -56,19 +64,21 @@ pub fn decode_core(
     model_year_source: &str,
     now_micros: i64,
 ) -> CoreResult {
-    let mut items: Vec<DecodingItem> = Vec::new();
-
     let Some(wmi) = db.wmi_by_str(var_wmi, now_micros) else {
         return CoreResult {
-            items,
+            items: Vec::new(),
             wmi_found: false,
         };
     };
     let wmiid = wmi.id.to_native();
 
+    // Pre-size for a typical decode (pattern matches + layered sources + specs +
+    // defaults + the 6 corrections) so the hot push loops don't repeatedly realloc.
+    let mut items: Vec<DecodingItem> = Vec::with_capacity(64);
+
     // --- Pattern pass: collect matches, then order globally by Pattern.Id ASC.
     let vkb = var_keys.as_bytes();
-    let mut matched: Vec<&crate::tables::ArchivedPattern> = Vec::new();
+    let mut matched: Vec<&crate::tables::ArchivedPattern> = Vec::with_capacity(32);
     for wvs in db.wmi_vinschema_for(wmiid) {
         if let Some(my) = model_year {
             let to = if wvs.yearto.to_native() == NULL_I32 {
@@ -107,7 +117,9 @@ pub fn decode_core(
             }
         }
     }
-    matched.sort_by_key(|p| p.id.to_native());
+    // Pattern ids are unique, so the order is total — no need for a stable sort
+    // (which allocates a scratch buffer).
+    matched.sort_unstable_by_key(|p| p.id.to_native());
     for p in matched {
         items.push(DecodingItem {
             created_on: p.createdon_key.to_native(),
@@ -117,8 +129,8 @@ pub fn decode_core(
             wmi_id: wmiid,
             element_id: p.elementid.to_native(),
             attribute_id: db.s(p.attributeid.to_native()).to_string(),
-            value: "XXX".to_string(),
-            source: "Pattern".to_string(),
+            value: Cow::Borrowed("XXX"),
+            source: Cow::Borrowed("Pattern"),
             priority: schema_year_from(db, wmiid, p.vinschemaid.to_native(), model_year),
             to_be_qced: false,
         });
@@ -140,8 +152,8 @@ pub fn decode_core(
                     wmi_id: wmiid,
                     element_id: child.elementid.to_native(),
                     attribute_id: db.s(child.attributeid.to_native()).to_string(),
-                    value: "XXX".to_string(),
-                    source: "EngineModelPattern".to_string(),
+                    value: Cow::Borrowed("XXX"),
+                    source: Cow::Borrowed("EngineModelPattern"),
                     priority: 50,
                     to_be_qced: false,
                 });
@@ -164,8 +176,8 @@ pub fn decode_core(
                     wmi_id: wmiid,
                     element_id: 39,
                     attribute_id: veh_type_id.to_string(),
-                    value: name.to_uppercase(),
-                    source: "VehType".to_string(),
+                    value: Cow::Owned(name.to_uppercase()),
+                    source: Cow::Borrowed("VehType"),
                     priority: 100,
                     to_be_qced: false,
                 });
@@ -188,8 +200,8 @@ pub fn decode_core(
             wmi_id: wmiid,
             element_id: 27,
             attribute_id: mfr_id.to_string(),
-            value: mfr_name,
-            source: "Manuf. Name".to_string(),
+            value: Cow::Owned(mfr_name),
+            source: Cow::Borrowed("Manuf. Name"),
             priority: 100,
             to_be_qced: false,
         });
@@ -201,8 +213,8 @@ pub fn decode_core(
             wmi_id: wmiid,
             element_id: 157,
             attribute_id: mfr_id.to_string(),
-            value: mfr_id.to_string(),
-            source: "Manuf. Id".to_string(),
+            value: Cow::Owned(mfr_id.to_string()),
+            source: Cow::Borrowed("Manuf. Id"),
             priority: 100,
             to_be_qced: false,
         });
@@ -218,8 +230,8 @@ pub fn decode_core(
             wmi_id: NULL_I32,
             element_id: 29,
             attribute_id: my.to_string(),
-            value: my.to_string(),
-            source: "ModelYear".to_string(),
+            value: Cow::Owned(my.to_string()),
+            source: Cow::Borrowed("ModelYear"),
             priority: 100,
             to_be_qced: false,
         });
@@ -275,7 +287,7 @@ fn append_formula_patterns(
         .map(|c| if c.is_ascii_digit() { '#' } else { c })
         .collect();
     let fk = formula_keys.as_bytes();
-    let mut seen_vs: std::collections::HashSet<i32> = std::collections::HashSet::new();
+    let mut seen_vs: IntSet<i32> = IntSet::default();
     let mut new_items: Vec<DecodingItem> = Vec::new();
     for wvs in db.wmi_vinschema_for(wmiid) {
         if let Some(my) = model_year {
@@ -314,8 +326,8 @@ fn append_formula_patterns(
                 wmi_id: NULL_I32,
                 element_id: p.elementid.to_native(),
                 attribute_id: db.s(p.attributeid.to_native()).to_string(),
-                value: formula_value(var_keys, keys),
-                source: "Formula Pattern".to_string(),
+                value: Cow::Owned(formula_value(var_keys, keys)),
+                source: Cow::Borrowed("Formula Pattern"),
                 priority: 100,
                 to_be_qced: false,
             });
@@ -425,9 +437,8 @@ fn cmp_keys_no_brackets(a: &str, b: &str) -> Ordering {
 
 /// RANK dedup: keep the best item per non-exempt element id.
 fn dedup_per_element(items: &mut Vec<DecodingItem>) {
-    use std::collections::HashMap;
     // best index per element id (lowest under the comparator).
-    let mut best: HashMap<i32, usize> = HashMap::new();
+    let mut best: IntMap<i32, usize> = IntMap::default();
     for (i, it) in items.iter().enumerate() {
         if is_exempt(it.element_id) {
             continue;
@@ -443,20 +454,14 @@ fn dedup_per_element(items: &mut Vec<DecodingItem>) {
             }
         }
     }
-    let mut keep = vec![true; items.len()];
-    for (i, it) in items.iter().enumerate() {
-        if is_exempt(it.element_id) {
-            continue;
-        }
-        if best.get(&it.element_id) != Some(&i) {
-            keep[i] = false;
-        }
-    }
+    // Keep an item iff it is exempt or the chosen best for its element. `best`
+    // stores original indices, so comparing the running original index needs no
+    // separate keep-bitmap.
     let mut idx = 0;
-    items.retain(|_| {
-        let k = keep[idx];
+    items.retain(|it| {
+        let i = idx;
         idx += 1;
-        k
+        is_exempt(it.element_id) || best.get(&it.element_id) == Some(&i)
     });
 }
 
@@ -506,8 +511,8 @@ fn append_make(
                     wmi_id: NULL_I32,
                     element_id: 26,
                     attribute_id: makeid.to_string(),
-                    value: name,
-                    source: "pattern - model".to_string(),
+                    value: Cow::Owned(name),
+                    source: Cow::Borrowed("pattern - model"),
                     priority: 1000,
                     to_be_qced: false,
                 });
@@ -533,8 +538,8 @@ fn append_make(
                 wmi_id: wmiid,
                 element_id: 26,
                 attribute_id: makeid.to_string(),
-                value: name,
-                source: "Make".to_string(),
+                value: Cow::Owned(name),
+                source: Cow::Borrowed("Make"),
                 priority: -100,
                 to_be_qced: false,
             });
@@ -588,8 +593,7 @@ fn append_conversions(db: &Db, items: &mut Vec<DecodingItem>) {
             .then(a.conv_id.cmp(&b.conv_id))
     });
 
-    let mut present: std::collections::HashSet<i32> =
-        items.iter().map(|it| it.element_id).collect();
+    let mut present: IntSet<i32> = items.iter().map(|it| it.element_id).collect();
     for r in rows {
         if !present.insert(r.to_elem) {
             continue;
@@ -604,8 +608,8 @@ fn append_conversions(db: &Db, items: &mut Vec<DecodingItem>) {
             wmi_id: r.wmi_id,
             element_id: r.to_elem,
             attribute_id: result.clone(),
-            value: result,
-            source,
+            value: Cow::Owned(result),
+            source: Cow::Owned(source),
             priority: 100,
             to_be_qced: false,
         });
@@ -636,8 +640,6 @@ fn append_vehicle_specs(
     var_wmi: &str,
     model_year: Option<i32>,
 ) {
-    use std::collections::{HashMap, HashSet};
-
     // STEP 0: tVehicleType (element 39) and var_modelId (element 28). Either NULL
     // => the candidate join matches nothing, so no specs are produced.
     let Some(veh_type) = items
@@ -709,7 +711,7 @@ fn append_vehicle_specs(
     // and cntMatch is the count of distinct decoded items any key pattern matched.
     candidates.retain(|c| {
         let mut cnt_total = 0usize;
-        let mut matched: HashSet<usize> = HashSet::new();
+        let mut matched: IntSet<usize> = IntSet::default();
         for p in db.vspecpatterns_for(c.sp_id) {
             if !p.iskey {
                 continue;
@@ -731,7 +733,7 @@ fn append_vehicle_specs(
 
     // STEP 3: non-key attributes for elements not already decoded (exempt set
     // never blocks). Emit one tbl1 row per surviving non-key pattern.
-    let decoded_nonexempt: HashSet<i32> = items
+    let decoded_nonexempt: IntSet<i32> = items
         .iter()
         .map(|it| it.element_id)
         .filter(|e| !SPEC_EXEMPT.contains(e))
@@ -763,7 +765,7 @@ fn append_vehicle_specs(
 
     // STEP 4: dedup to one per element by latest ChangedOn. Ties (rare) break by
     // highest VSpecSchemaPattern id then highest schema id — deterministic.
-    let mut best: HashMap<i32, usize> = HashMap::new();
+    let mut best: IntMap<i32, usize> = IntMap::default();
     for (i, t) in tbl1.iter().enumerate() {
         match best.get(&t.element_id) {
             None => {
@@ -793,8 +795,8 @@ fn append_vehicle_specs(
             wmi_id: NULL_I32,
             element_id: t.element_id,
             attribute_id: t.attribute_id.clone(),
-            value: "XXX".to_string(),
-            source: "Vehicle Specs".to_string(),
+            value: Cow::Borrowed("XXX"),
+            source: Cow::Borrowed("Vehicle Specs"),
             priority: -100,
             to_be_qced: t.tobeqced,
         });
@@ -810,7 +812,7 @@ fn append_default_values(db: &Db, items: &mut Vec<DecodingItem>) {
     else {
         return;
     };
-    let present: std::collections::HashSet<i32> = items.iter().map(|it| it.element_id).collect();
+    let present: IntSet<i32> = items.iter().map(|it| it.element_id).collect();
     let mut to_add: Vec<DecodingItem> = Vec::new();
     for dv in db.defaultvalues_for(veh) {
         let element_id = dv.elementid.to_native();
@@ -822,10 +824,10 @@ fn append_default_values(db: &Db, items: &mut Vec<DecodingItem>) {
             .element_by_id(element_id)
             .map(|e| db.s(e.datatype.to_native()).eq_ignore_ascii_case("lookup"))
             .unwrap_or(false);
-        let value = if is_lookup && default_str == "0" {
-            "Not Applicable".to_string()
+        let value: Cow<'static, str> = if is_lookup && default_str == "0" {
+            Cow::Borrowed("Not Applicable")
         } else {
-            "XXX".to_string()
+            Cow::Borrowed("XXX")
         };
         to_add.push(DecodingItem {
             created_on: dv.createdon_key.to_native(),
@@ -836,7 +838,7 @@ fn append_default_values(db: &Db, items: &mut Vec<DecodingItem>) {
             element_id,
             attribute_id: default_str.to_string(),
             value,
-            source: "Default".to_string(),
+            source: Cow::Borrowed("Default"),
             priority: 10,
             to_be_qced: false,
         });

@@ -11,6 +11,7 @@ mod conversion;
 pub mod db;
 mod decode;
 mod errors;
+mod hash;
 mod matcher;
 mod resolve;
 pub mod tables;
@@ -154,7 +155,7 @@ pub fn decode_full(
     let var_keys = decode::build_var_keys(&vin);
 
     let v_limit = current_year + 2;
-    let plan = year::resolve_years(&vin, db, current_year);
+    let plan = year::resolve_years(&vin, &var_wmi, db, current_year);
 
     // Pass 1 (descriptor/dmy) is permanently dead in the proc — skipped here.
     let mut passes: Vec<Pass> = Vec::new();
@@ -324,7 +325,7 @@ fn score(pass: &Pass, db: &Db, caller_year: Option<i32>) -> (i32, i32, i32, Opti
         .map(|c| tables::errorcode_weight(*c))
         .sum();
 
-    let mut weighted: std::collections::HashSet<i32> = std::collections::HashSet::new();
+    let mut weighted: hash::IntSet<i32> = hash::IntSet::default();
     for it in &pass.items {
         if !it.value.is_empty() {
             weighted.insert(it.element_id);
@@ -342,7 +343,7 @@ fn score(pass: &Pass, db: &Db, caller_year: Option<i32>) -> (i32, i32, i32, Opti
         .iter()
         .filter(|it| {
             matches!(
-                it.source.as_str(),
+                it.source.as_ref(),
                 "Pattern" | "EngineModelPattern" | "Formula Pattern"
             ) && !it.value.is_empty()
                 && it.value != "Not Applicable"
@@ -372,7 +373,7 @@ fn cmp_year_nulls_last(a: Option<i32>, b: Option<i32>) -> std::cmp::Ordering {
 /// Project the surviving items into output elements (non-empty Decode, public),
 /// ordered by the GroupName CASE rank then element id.
 fn project(db: &Db, items: &[decode::DecodingItem]) -> Vec<DecodedElement> {
-    let mut elements: Vec<(i32, DecodedElement)> = Vec::new();
+    let mut elements: Vec<DecodedElement> = Vec::with_capacity(items.len());
     for it in items {
         let Some(e) = db.element_by_id(it.element_id) else {
             continue;
@@ -381,33 +382,31 @@ fn project(db: &Db, items: &[decode::DecodingItem]) -> Vec<DecodedElement> {
         if !e.decode_present || decode_str.is_empty() || e.isprivate {
             continue;
         }
-        let group_name = db.s(e.groupname.to_native()).to_string();
-        let rank = tables::group_rank(&group_name);
-        elements.push((
-            rank,
-            DecodedElement {
-                group_name,
-                variable: db.s(e.name.to_native()).to_string(),
-                value: scrub(&it.value),
-                element_id: it.element_id,
-                attribute_id: it.attribute_id.clone(),
-                code: db.s(e.code.to_native()).to_string(),
-                data_type: db.s(e.datatype.to_native()).to_string(),
-                decode: decode_str.to_string(),
-                source: it.source.clone(),
-                pattern_id: opt_i32(it.pattern_id),
-                vin_schema_id: opt_i32(it.vin_schema_id),
-                keys: it.keys.clone(),
-                created_on: opt_i64(it.created_on),
-                wmi_id: opt_i32(it.wmi_id),
-                to_be_qced: it.to_be_qced,
-            },
-        ));
+        elements.push(DecodedElement {
+            group_name: db.s(e.groupname.to_native()).to_string(),
+            variable: db.s(e.name.to_native()).to_string(),
+            value: scrub(&it.value),
+            element_id: it.element_id,
+            attribute_id: it.attribute_id.clone(),
+            code: db.s(e.code.to_native()).to_string(),
+            data_type: db.s(e.datatype.to_native()).to_string(),
+            decode: decode_str.to_string(),
+            source: it.source.to_string(),
+            pattern_id: opt_i32(it.pattern_id),
+            vin_schema_id: opt_i32(it.vin_schema_id),
+            keys: it.keys.clone(),
+            created_on: opt_i64(it.created_on),
+            wmi_id: opt_i32(it.wmi_id),
+            to_be_qced: it.to_be_qced,
+        });
     }
     // GroupName CASE rank, then element id (the proc leaves intra-group order to
-    // the scan; element id is the deterministic, stable secondary key).
-    elements.sort_by_key(|(rank, e)| (*rank, e.element_id));
-    elements.into_iter().map(|(_, e)| e).collect()
+    // the scan; element id is the deterministic, stable secondary key). A cached
+    // key keeps `group_rank` to one call per element and sorts in place — no tuple
+    // Vec and no second pass to strip the rank. `sort_by_cached_key` is stable, so
+    // the few duplicate exempt elements keep insertion order, exactly as before.
+    elements.sort_by_cached_key(|e| (tables::group_rank(&e.group_name), e.element_id));
+    elements
 }
 
 /// Build the element-191 error text: error-code names joined by `; `.
@@ -446,8 +445,8 @@ fn append_correction(items: &mut Vec<decode::DecodingItem>, element_id: i32, val
         wmi_id: tables::NULL_I32,
         element_id,
         attribute_id: value.to_string(),
-        value: value.to_string(),
-        source: "Corrections".to_string(),
+        value: std::borrow::Cow::Owned(value.to_string()),
+        source: std::borrow::Cow::Borrowed("Corrections"),
         priority: 999,
         to_be_qced: false,
     });

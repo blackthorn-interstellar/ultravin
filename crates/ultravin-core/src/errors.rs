@@ -5,13 +5,15 @@
 //! layers on codes 0/1/6/7/8/9/10/11/12/400 and builds AdditionalDecodingInfo
 //! (element 156). Every intentional bug is preserved (see comments).
 
-use std::collections::{BTreeSet, HashMap, HashSet};
+use std::cell::RefCell;
+use std::collections::{BTreeSet, HashMap};
+use std::rc::Rc;
 
 use crate::checkdigit::{check_digit_v1, check_digit_with_flag};
 use crate::db::Db;
 use crate::decode::CoreResult;
+use crate::hash::IntSet;
 use crate::tables::{ArchivedWmi, NULL_I32};
-use crate::wmi::vin_wmi;
 
 /// element-5 attribute ids that flag an off-road PIN (code 10).
 const OFF_ROAD: [&str; 10] = [
@@ -140,14 +142,33 @@ pub fn valid_chars_in_key(key: &str) -> Vec<(i32, char)> {
     out
 }
 
+type Charset = Rc<HashMap<i32, BTreeSet<char>>>;
+
+thread_local! {
+    /// Per-thread memo of [`valid_charset`], keyed by wmi then `model_year`. The
+    /// charset is a pure function of those two inputs and the immutable archive,
+    /// yet the SQL recomputes it on every decode (and once per best-of pass) —
+    /// the same WMIYearValidChars cache the stored proc materialises server-side.
+    /// Mirrors the `REGEX_CACHE` in `matcher.rs`; `Rc` keeps a hit clone-free. The
+    /// outer key is a `String` but lookups borrow it as `&str`, so a cache hit
+    /// allocates nothing (the old `(String, i32)` key allocated on every call).
+    static CHARSET_CACHE: RefCell<HashMap<String, HashMap<i32, Charset>>> =
+        RefCell::new(HashMap::new());
+}
+
 /// Port of `vpic.fExtractValidCharsPerWmiYear` (== the `WMIYearValidChars`
 /// cache, verified byte-equal): VIN-position -> allowed chars, where the VIN
 /// position is the key index + 3. Empty when `model_year` is `None`.
-fn valid_charset(db: &Db, wmi: &str, model_year: Option<i32>) -> HashMap<i32, BTreeSet<char>> {
-    let mut map: HashMap<i32, BTreeSet<char>> = HashMap::new();
+fn valid_charset(db: &Db, wmi: &str, model_year: Option<i32>) -> Charset {
     let Some(year) = model_year else {
-        return map;
+        return Rc::new(HashMap::new());
     };
+    if let Some(hit) =
+        CHARSET_CACHE.with(|c| c.borrow().get(wmi).and_then(|m| m.get(&year)).cloned())
+    {
+        return hit;
+    }
+    let mut map: HashMap<i32, BTreeSet<char>> = HashMap::new();
     let mut keys: BTreeSet<String> = BTreeSet::new();
     for wmiid in db.wmi_ids_for_str(wmi) {
         for wvs in db.wmi_vinschema_for(wmiid) {
@@ -169,7 +190,20 @@ fn valid_charset(db: &Db, wmi: &str, model_year: Option<i32>) -> HashMap<i32, BT
             map.entry(kpos + 3).or_default().insert(c);
         }
     }
-    map
+    let charset = Rc::new(map);
+    // Only memoize WMIs that actually have schemas (a non-empty charset). Unknown
+    // or garbage WMIs from adversarial input yield an empty map that is cheap to
+    // recompute; caching them would let the (input-derived) WMI keyspace grow the
+    // cache without bound. Caching is transparent, so this never changes output.
+    if !charset.is_empty() {
+        CHARSET_CACHE.with(|c| {
+            c.borrow_mut()
+                .entry(wmi.to_string())
+                .or_default()
+                .insert(year, charset.clone())
+        });
+    }
+    charset
 }
 
 /// `substring(vin,1,pos-1) || rep || substring(vin, pos+1, 17-pos)`.
@@ -192,8 +226,13 @@ struct ErrorCodeOut {
 
 /// Port of `vpic.spvindecode_errorcode` (E0-E6). `matched_keys` are the
 /// non-empty `Keys` of the pass's pattern rows (Source ILIKE '%pattern%').
-fn errorcode(db: &Db, vin: &str, model_year: Option<i32>, matched_keys: &[String]) -> ErrorCodeOut {
-    let var_wmi = vin_wmi(vin);
+fn errorcode(
+    db: &Db,
+    vin: &str,
+    var_wmi: &str,
+    model_year: Option<i32>,
+    matched_keys: &[String],
+) -> ErrorCodeOut {
     let vb: Vec<char> = vin.chars().collect();
     let vlen = vb.len() as i32;
     let mut codes: Vec<i32> = Vec::new();
@@ -206,7 +245,7 @@ fn errorcode(db: &Db, vin: &str, model_year: Option<i32>, matched_keys: &[String
     }
 
     // E1/E2: scan positions 4..min(n,len) against the correction charset.
-    let charset = valid_charset(db, &var_wmi, model_year);
+    let charset = valid_charset(db, var_wmi, model_year);
     let n: i32 = if var_wmi.chars().count() == 6 { 11 } else { 14 };
     let mut corrected = String::new();
     let mut replacements = String::new();
@@ -296,7 +335,7 @@ fn errorcode(db: &Db, vin: &str, model_year: Option<i32>, matched_keys: &[String
     }
 
     // E6: unused positions from the matched-pattern keys.
-    let mut ty: HashSet<(i32, char)> = HashSet::new();
+    let mut ty: IntSet<(i32, char)> = IntSet::default();
     for key in matched_keys {
         for (kpos, c) in valid_chars_in_key(key) {
             if c != '|' {
@@ -369,7 +408,7 @@ pub fn compute_errors(
             .filter(|it| it.source.to_ascii_lowercase().contains("pattern") && !it.keys.is_empty())
             .map(|it| it.keys.clone())
             .collect();
-        let ec = errorcode(db, vin, model_year, &matched_keys);
+        let ec = errorcode(db, vin, var_wmi, model_year, &matched_keys);
         for c in ec.codes {
             raw.insert(c);
         }
