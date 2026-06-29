@@ -130,17 +130,28 @@ def gen_fuzz(shard: int, shards: int, per_base: int, seed: int) -> Iterator[dict
 # Coverage-seeking fuzzer: ultravin's fast decode is the coverage feedback;
 # only VINs that EXPAND decode coverage are forwarded to the slow oracle.
 # --------------------------------------------------------------------------- #
+def _norm_source(source: str | None) -> str | None:
+    """Structural identity of an element's source. Conversion sources embed the
+    per-VIN computed value in the formula ("Conversion 12: 401 / 16.387064"), so
+    naive use makes every distinct input value look like new coverage (the signal
+    never saturates). Keep only "Conversion <id>" — the id fixes the formula, so
+    no structural detail is lost. All other sources are constant and kept as-is."""
+    if source and source.startswith("Conversion "):
+        return source.split(":", 1)[0]
+    return source
+
+
 def ultravin_coverage(vin: str) -> set[tuple]:
     """Decode features a VIN exercises (ultravin only, ~200us): each
-    (vin_schema, pattern) matched, each (element, source) resolved, and the
-    error-code combination. The union of these across VINs is 'coverage'."""
+    (vin_schema, pattern) matched, each (element, normalized source) resolved, and
+    the error-code combination. The union of these across VINs is 'coverage'."""
     r: Any = ultravin.decode(vin)
     edges: set[tuple] = set()
     for e in r.get("elements", []):
         pid = e.get("pattern_id")
         if pid:
             edges.add(("p", e.get("vin_schema_id"), pid))
-        edges.add(("e", e.get("element_id"), e.get("source")))
+        edges.add(("e", e.get("element_id"), _norm_source(e.get("source"))))
     edges.add(("c", tuple(sorted(r.get("error_codes", []) or []))))
     return edges
 

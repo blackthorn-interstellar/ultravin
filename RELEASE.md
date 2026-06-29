@@ -47,7 +47,7 @@ artifact. Commit the `vpic/` changes; CI rebuilds the artifact from the new pins
 
 ## Wheels
 
-abi3 (`pyo3/abi3-py312`): one wheel per platform serves Python 3.12+, so there is
+abi3 (`pyo3/abi3-py310`): one wheel per platform serves Python 3.10+, so there is
 no per-Python matrix. The crate is pure Rust (blake3 uses its `pure` feature), so
 every cross target — aarch64/armv7/s390x/ppc64le/riscv64, gnu and musl — builds
 with the default cross-gcc; no zig or per-arch C toolchain wrangling.

@@ -29,8 +29,10 @@ engine_loop() {
 
 echo "$(date '+%F %T') supervisor start (pid $$)" >> "$DIR/supervisor.log"
 echo $$ > "$DIR/supervisor.pid"
+# systematic no-ops once DONE-systematic exists (hard-complete), so covfuzz can
+# take the whole 5-oracle pool when it is the only engine still running.
 engine_loop systematic "55432,55433,55434" 6 &
-engine_loop covfuzz    "55435,55436"       4 &
+engine_loop covfuzz    "55432,55433,55434,55435,55436" 10 &
 wait
 echo "$(date '+%F %T') all engines DONE" >> "$DIR/supervisor.log"
 rm -f "$DIR/supervisor.pid"

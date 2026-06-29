@@ -18,7 +18,7 @@ no data files.
 pip install ultravin
 ```
 
-Prebuilt wheels require **Python 3.12+**; nothing else (the data ships inside the
+Prebuilt wheels require **Python 3.10+**; nothing else (the data ships inside the
 wheel). From source you'll also need a Rust toolchain:
 
 ```bash
