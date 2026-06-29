@@ -1,0 +1,54 @@
+name: Build vPIC data artifact
+description: >
+  Materialize and verify the embedded crates/ultravin-core/data/vpic.rkyv from the
+  dump pinned in vpic/manifest.json. Self-verifying (dump sha256 + artifact blake3)
+  and cached by the artifact's blake3, so an unchanged pin skips the download and
+  import entirely. Requires a Rust toolchain and jq (preinstalled on GH runners).
+
+runs:
+  using: composite
+  steps:
+    - name: Read pinned dump metadata
+      id: meta
+      shell: bash
+      run: |
+        {
+          echo "month=$(jq -r .month vpic/manifest.json)"
+          echo "url=$(jq -r .source_url vpic/manifest.json)"
+          echo "dump_sha256=$(jq -r .dump_sha256 vpic/manifest.json)"
+          echo "artifact_blake3=$(jq -r .artifact_blake3 vpic/manifest.json)"
+        } >> "$GITHUB_OUTPUT"
+    # The artifact is a pure function of the pinned dump, so its blake3 is a sound
+    # cache key: it changes only when the dump (or importer output) changes.
+    - name: Cache built artifact
+      id: cache
+      uses: actions/cache@v4
+      with:
+        path: crates/ultravin-core/data/vpic.rkyv
+        key: vpic-artifact-${{ steps.meta.outputs.artifact_blake3 }}
+    - name: Download pinned vPIC dump
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: curl -fSL --retry 3 "${{ steps.meta.outputs.url }}" -o "$RUNNER_TEMP/dump.zip"
+    - name: Verify dump sha256
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: echo "${{ steps.meta.outputs.dump_sha256 }}  $RUNNER_TEMP/dump.zip" | sha256sum -c -
+    - name: Build artifact (deterministic; emits crates/ultravin-core/data/vpic.rkyv)
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: cargo run -p ultravin-build --release --locked -- --dump "$RUNNER_TEMP/dump.zip" --month "${{ steps.meta.outputs.month }}" --out "$RUNNER_TEMP/vpic-verify"
+    - name: Verify emitted artifact blake3 matches manifest
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        got=$(jq -r .artifact_blake3 "$RUNNER_TEMP/vpic-verify/manifest.json")
+        want="${{ steps.meta.outputs.artifact_blake3 }}"
+        if [ "$got" != "$want" ]; then
+          echo "artifact blake3 mismatch: got $got, want $want" >&2
+          exit 1
+        fi
+        echo "artifact verified: $got"
+    - name: Confirm artifact present
+      shell: bash
+      run: test -s crates/ultravin-core/data/vpic.rkyv

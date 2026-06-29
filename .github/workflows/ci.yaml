@@ -48,7 +48,24 @@ jobs:
     - run: uv pip install ty
     - name: Typecheck
       run: uv run --frozen -- ty check
+  # The embedded vpic.rkyv is gitignored, so the extension only decodes real VINs
+  # if the artifact is materialized first. Build it once (deterministically from
+  # the pinned dump) and hand it to the test jobs — otherwise build.rs bakes in an
+  # empty stub and the parity corpus fails wholesale.
+  data:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@stable
+    - uses: Swatinem/rust-cache@v2
+    - uses: ./.github/actions/build-data
+    - uses: actions/upload-artifact@v4
+      with:
+        name: vpic-data
+        path: crates/ultravin-core/data/vpic.rkyv
+        if-no-files-found: error
   test:
+    needs: data
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -61,6 +78,12 @@ jobs:
     - uses: astral-sh/setup-uv@v6
       with:
         enable-cache: false
+    # Place the artifact where include_bytes! expects it, before uv sync builds
+    # the extension (build.rs leaves an existing file untouched).
+    - uses: actions/download-artifact@v4
+      with:
+        name: vpic-data
+        path: crates/ultravin-core/data
     - run: echo "UV_PYTHON=$pythonLocation" >> $GITHUB_ENV
     - run: uv sync --frozen --all-extras
     - name: Test with python ${{ matrix.python-version }}
