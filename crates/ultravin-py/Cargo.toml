@@ -13,7 +13,9 @@ crate-type = ["cdylib"]
 
 [dependencies]
 ultravin-core = { path = "../ultravin-core" }
-pyo3 = { version = "0.23", features = ["abi3-py312", "extension-module"] }
+# generate-import-lib lets the Windows aarch64 wheel cross-compile with no arm
+# Python present (it synthesizes the python3.dll import lib); inert off Windows.
+pyo3 = { version = "0.23", features = ["abi3-py312", "extension-module", "generate-import-lib"] }
 
 [lints]
 workspace = true
