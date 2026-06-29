@@ -1,0 +1,202 @@
+name: Release
+
+# Cross-platform wheel + sdist build and PyPI publish. Mirrors the pypiron
+# pipeline, adapted for a PyO3 abi3 extension module (one wheel per platform
+# covers Python 3.12+) whose 82MB vpic.rkyv data artifact is gitignored and
+# rebuilt deterministically from the pinned dump before any wheel compiles.
+#
+# Versions come solely from git tags: the repo carries 0.0.0 and CI stamps the
+# tag's vX.Y.Z before building. workflow_dispatch dry-runs the full matrix
+# (artifacts only, version stays 0.0.0); only tags publish. See RELEASE.md.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Nothing publishes unless the Rust side is clean. Data-dependent tests skip
+  # gracefully without the artifact (see tests/decode.rs), so this needs no data.
+  gate:
+    name: rust gate (fmt, clippy, test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace --exclude ultravin-py --locked
+
+  # Materialize the embedded data artifact ONCE, deterministically, from the
+  # pinned dump — every wheel/sdist job below downloads and reuses it. The job is
+  # self-verifying: the downloaded dump's sha256 and the emitted artifact's blake3
+  # must both match what vpic/manifest.json pins. The importer is a pure function
+  # of the dump bytes, so a matching input guarantees a byte-identical output.
+  build-data:
+    name: build data artifact
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+      - name: Read pinned dump metadata
+        id: meta
+        run: |
+          {
+            echo "month=$(jq -r .month vpic/manifest.json)"
+            echo "url=$(jq -r .source_url vpic/manifest.json)"
+            echo "dump_sha256=$(jq -r .dump_sha256 vpic/manifest.json)"
+            echo "artifact_blake3=$(jq -r .artifact_blake3 vpic/manifest.json)"
+          } >> "$GITHUB_OUTPUT"
+      - name: Download pinned vPIC dump
+        run: curl -fSL --retry 3 "${{ steps.meta.outputs.url }}" -o dump.zip
+      - name: Verify dump sha256
+        run: echo "${{ steps.meta.outputs.dump_sha256 }}  dump.zip" | sha256sum -c -
+      - name: Build artifact (deterministic; emits crates/ultravin-core/data/vpic.rkyv)
+        run: cargo run -p ultravin-build --release --locked -- --dump dump.zip --month "${{ steps.meta.outputs.month }}" --out "$RUNNER_TEMP/vpic-verify"
+      - name: Verify emitted artifact blake3 matches manifest
+        run: |
+          got=$(jq -r .artifact_blake3 "$RUNNER_TEMP/vpic-verify/manifest.json")
+          want="${{ steps.meta.outputs.artifact_blake3 }}"
+          if [ "$got" != "$want" ]; then
+            echo "artifact blake3 mismatch: got $got, want $want" >&2
+            exit 1
+          fi
+          echo "artifact verified: $got"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: vpic-data
+          path: crates/ultravin-core/data/vpic.rkyv
+          if-no-files-found: error
+
+  # One job, one matrix over every (kind, runner, target). abi3 means a single
+  # wheel per platform serves Python 3.12+. No zig/CFLAGS: the crate is pure Rust
+  # (blake3 uses its `pure` feature), so every cross target builds with the
+  # default cross-gcc. fail-fast is off so one platform's failure spares the rest.
+  wheels:
+    name: wheels (${{ matrix.kind }}, ${{ matrix.target }})
+    needs: build-data
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { kind: linux,     runner: ubuntu-22.04,   target: x86_64 }
+          - { kind: linux,     runner: ubuntu-22.04,   target: x86 }
+          - { kind: linux,     runner: ubuntu-22.04,   target: aarch64 }
+          - { kind: linux,     runner: ubuntu-22.04,   target: armv7 }
+          - { kind: linux,     runner: ubuntu-22.04,   target: s390x }
+          - { kind: linux,     runner: ubuntu-22.04,   target: ppc64le }
+          - { kind: linux,     runner: ubuntu-22.04,   target: riscv64 }
+          - { kind: musllinux, runner: ubuntu-22.04,   target: x86_64,  manylinux: musllinux_1_2 }
+          - { kind: musllinux, runner: ubuntu-22.04,   target: x86,     manylinux: musllinux_1_2 }
+          - { kind: musllinux, runner: ubuntu-22.04,   target: aarch64, manylinux: musllinux_1_2 }
+          - { kind: musllinux, runner: ubuntu-22.04,   target: armv7,   manylinux: musllinux_1_2 }
+          - { kind: windows,   runner: windows-latest, target: x64 }
+          - { kind: windows,   runner: windows-latest, target: x86 }
+          - { kind: windows,   runner: windows-latest, target: aarch64 }
+          # GitHub retired macos-13 (Intel) on 2025-12-04; macos-15-intel is the
+          # standard x86_64 replacement. macos-14 is Apple silicon.
+          - { kind: macos,     runner: macos-15-intel, target: x86_64 }
+          - { kind: macos,     runner: macos-14,       target: aarch64 }
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Stamp version from tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: ./.github/stamp-version.sh "$GITHUB_REF_NAME"
+      # Drop the prebuilt artifact where include_bytes! expects it. build.rs only
+      # writes its empty stub when the file is absent, so this real data is used.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: vpic-data
+          path: crates/ultravin-core/data
+      - name: Build wheel
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          target: ${{ matrix.target }}
+          args: --release --locked --out dist
+          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          manylinux: ${{ matrix.manylinux || 'auto' }}
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: wheels-${{ matrix.kind }}-${{ matrix.target }}
+          path: dist
+          if-no-files-found: error
+
+  sdist:
+    name: sdist
+    needs: build-data
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+      - name: Stamp version from tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: ./.github/stamp-version.sh "$GITHUB_REF_NAME"
+      # The sdist embeds the artifact (pyproject [tool.maturin] include) so a
+      # source install works offline — without it, build.rs would stub an empty
+      # one and the decoder would return nothing.
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: vpic-data
+          path: crates/ultravin-core/data
+      - name: Build sdist
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
+        with:
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: wheels-sdist
+          path: dist
+          if-no-files-found: error
+
+  release:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [gate, wheels, sdist]
+    permissions:
+      id-token: write       # PyPI trusted publishing (OIDC) + provenance
+      attestations: write   # build-provenance attestation
+      contents: read
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: wheels-*
+          merge-multiple: true
+          path: dist
+      # Build-provenance attestation is a public-repo-only feature; it skips on a
+      # private repo and reactivates automatically once the repo is public.
+      - name: Generate artifact attestation
+        if: ${{ !github.event.repository.private }}
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: 'dist/*'
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
+        with:
+          skip-existing: true

@@ -32,6 +32,10 @@ rust:  ## Run Rust fmt-check, clippy, and tests.
 build-dev:  ## Build the native extension into the dev venv.
 	@uv run -- maturin develop --uv
 
+build-wheel:  ## Build a release wheel into target/wheels/ (local dry-run of the release pipeline).
+	@uv run -- maturin build --release --locked --out target/wheels
+	@echo -e "✅ wheel(s) in target/wheels/ ✨ 🍰 ✨"
+
 test: build-dev ## Run the Python tests (builds the extension first).
 	@uv run -- pytest
 	@echo -e "✅ The tests pass! ✨ 🍰 ✨"

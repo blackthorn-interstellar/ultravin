@@ -17,15 +17,20 @@ external-data = ["dep:memmap2"]
 [lints]
 workspace = true
 
+# blake3's `pure` feature forces the portable-Rust impl, skipping its C/asm SIMD
+# build. blake3 only hashes the artifact at build time (never on the decode path),
+# so the speed is irrelevant — and dropping the C build is what lets every cross
+# target (aarch64/armv7/s390x/ppc64le/riscv64/musl) compile with a plain
+# cross-gcc, no zig. See .github/workflows/release.yaml.
 [dependencies]
-blake3 = "1.8.5"
+blake3 = { version = "1.8.5", features = ["pure"] }
 memmap2 = { version = "0.9.11", optional = true }
 rayon = "1.12.0"
 regex = "1.12.4"
 rkyv = "0.8"
 
 [build-dependencies]
-blake3 = "1.8.5"
+blake3 = { version = "1.8.5", features = ["pure"] }
 rkyv = "0.8"
 
 [dev-dependencies]

@@ -41,6 +41,11 @@ python-source = "python"
 module-name = "ultravin._ultravin"
 manifest-path = "crates/ultravin-py/Cargo.toml"
 features = ["pyo3/extension-module"]
+# The decoder embeds vpic.rkyv via include_bytes!. It's a gitignored build
+# product (deterministically rebuilt from the pinned dump), so ship it inside the
+# sdist — otherwise a `pip install` that falls back to source compiles an empty
+# artifact (build.rs's stub) and decodes nothing. CI materializes it first.
+include = [{ path = "crates/ultravin-core/data/vpic.rkyv", format = "sdist" }]
 
 [tool.ruff]
 extend-exclude = []
