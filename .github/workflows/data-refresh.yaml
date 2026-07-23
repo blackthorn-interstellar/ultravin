@@ -211,12 +211,18 @@ jobs:
           name: data-refresh-report
           path: target/refresh/
       - name: Claude fixes the integration
+        id: claude
         uses: anthropics/claude-code-action@v1
         env:
           GH_TOKEN: ${{ steps.tok.outputs.token }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ steps.tok.outputs.token }}
+          # The refresh pipeline runs 10+ minute commands (oracle load, freeze,
+          # make check); without these the Bash tool's 2-minute default timeout
+          # kills them and the agent concludes it cannot do the job.
+          settings: |
+            {"env": {"BASH_DEFAULT_TIMEOUT_MS": "2400000", "BASH_MAX_TIMEOUT_MS": "3600000"}}
           claude_args: |
             --max-turns 75
             --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
@@ -234,6 +240,11 @@ jobs:
               Postgres oracle, re-freeze tests/parity_corpus.json, run a 500-VIN live
               sweep, pytest, cargo test. Its report from the failed attempt, if it got
               that far, is in ./target/refresh/.
+            - Start by running that command yourself: it reproduces the failure AND
+              materializes the vpic/ diff (git diff vpic/) that shows what NHTSA
+              changed. It takes ~10 minutes; the commands you run here routinely take
+              10-30 minutes — set generous Bash timeouts and wait for them. Never
+              conclude from a timeout that the work is impossible.
             - Read the failed job's log: `gh run view ${{ github.run_id }} --log`.
             - docs/DATA_REFRESH.md is the runbook; docs/ACCEPTANCE.md and
               docs/KNOWN_DEVIATIONS.md define parity policy. The Postgres oracle (the
@@ -264,4 +275,25 @@ jobs:
 
             If you cannot get it green honestly, push what you have, open the PR as a
             draft labeled needs-human, and comment your diagnosis with the exact failing
-            command output.
+            command output. A run that ends with only analysis — no pushed branch, no
+            PR — is a FAILED run, whatever else you accomplished.
+      - name: Verify the agent delivered
+        env:
+          GH_TOKEN: ${{ steps.tok.outputs.token }}
+        run: |
+          if [ -z "$(git ls-remote --heads origin "data/$MONTH")" ]; then
+            echo "::error::agent finished without pushing data/$MONTH — treating as failure"
+            exit 1
+          fi
+          if [ "$(gh pr list --head "data/$MONTH" --state open --json number --jq length)" = "0" ]; then
+            echo "::error::branch data/$MONTH exists but no open PR — treating as failure"
+            exit 1
+          fi
+          echo "agent delivered: branch + PR for data/$MONTH"
+      - name: Claude transcript artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-fix-transcript
+          path: ${{ steps.claude.outputs.execution_file }}
+          if-no-files-found: ignore
