@@ -210,7 +210,7 @@ pub fn decode_core(
             element_id: 27,
             attribute_id: mfr_id.to_string(),
             value: Cow::Owned(mfr_name),
-            source: Cow::Borrowed("Manuf. Name"),
+            source: Cow::Borrowed("Manu. Name"),
             priority: 100,
             to_be_qced: false,
         });
@@ -223,7 +223,7 @@ pub fn decode_core(
             element_id: 157,
             attribute_id: mfr_id.to_string(),
             value: Cow::Owned(mfr_id.to_string()),
-            source: Cow::Borrowed("Manuf. Id"),
+            source: Cow::Borrowed("Manu. Id"),
             priority: 100,
             to_be_qced: false,
         });

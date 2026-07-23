@@ -1,9 +1,7 @@
 -- PostgreSQL database dump
 
-\restrict dO69fbNW2dCkiN9wsDnBgbOQJIqxvSuStqxejkwQIanBEMdLpgWKfnYrXjDFpiZ
 
 
--- Started on 2026-06-11 09:38:45
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
