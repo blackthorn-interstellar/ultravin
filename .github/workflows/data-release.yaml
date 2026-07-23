@@ -1,0 +1,66 @@
+# When a data-refresh PR merges: tag the month (data-YYYY_MM, the PLAN.md
+# convention), and — only if vars.DATA_REFRESH_AUTORELEASE is "true" — push the
+# next patch v-tag so release.yaml ships the new data to PyPI unattended.
+# The v-tag needs the GitHub App token: tags pushed with GITHUB_TOKEN never
+# trigger workflows, so release.yaml would not run.
+name: Data Release
+on:
+  pull_request:
+    types: [closed]
+
+permissions: {}
+
+jobs:
+  tag:
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'data-refresh')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      HAS_APP: ${{ secrets.DATA_REFRESH_APP_ID != '' && secrets.DATA_REFRESH_APP_PRIVATE_KEY != '' }}
+      HEAD_REF: ${{ github.event.pull_request.head.ref }}
+      MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+    steps:
+      - name: Mint GitHub App token
+        id: app
+        if: env.HAS_APP == 'true'
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.DATA_REFRESH_APP_ID }}
+          private-key: ${{ secrets.DATA_REFRESH_APP_PRIVATE_KEY }}
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 0
+          fetch-tags: true
+          token: ${{ steps.app.outputs.token || github.token }}
+      - name: Tag the data month
+        id: month
+        run: |
+          month="${HEAD_REF#data/}"
+          if ! printf '%s' "$month" | grep -Eq '^[0-9]{4}_(0[1-9]|1[0-2])$'; then
+            echo "::notice::head ref '$HEAD_REF' is not data/YYYY_MM — skipping tags"
+            echo "month=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "month=$month" >> "$GITHUB_OUTPUT"
+          if git rev-parse -q --verify "refs/tags/data-$month" >/dev/null; then
+            echo "tag data-$month already exists"
+          else
+            git tag "data-$month" "$MERGE_SHA"
+            git push origin "data-$month"
+          fi
+      - name: Patch release to PyPI (opt-in)
+        if: vars.DATA_REFRESH_AUTORELEASE == 'true' && steps.month.outputs.month != ''
+        run: |
+          if [ "$HAS_APP" != "true" ]; then
+            echo "::warning::DATA_REFRESH_AUTORELEASE is set but no GitHub App creds — a v-tag pushed with GITHUB_TOKEN cannot trigger release.yaml. Tag manually: git tag vX.Y.Z && git push origin vX.Y.Z" >> /dev/stderr
+            echo "auto-release skipped: configure DATA_REFRESH_APP_ID / DATA_REFRESH_APP_PRIVATE_KEY" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          latest=$(git tag -l 'v*' --sort=-v:refname | head -1)
+          next=$(printf '%s' "${latest#v}" | awk -F. '{printf "v%d.%d.%d", $1, $2, $3 + 1}')
+          git tag "$next" "$MERGE_SHA"
+          git push origin "$next"
+          echo "released $next (data ${HEAD_REF#data/})" >> "$GITHUB_STEP_SUMMARY"

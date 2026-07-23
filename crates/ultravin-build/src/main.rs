@@ -46,6 +46,9 @@ struct Manifest {
     source_url: String,
     dump_file: String,
     dump_sha256: String,
+    /// Size of the source zip. Lets a refresh probe spot a re-issued dump from
+    /// a HEAD request's Content-Length, with no download and no stored state.
+    dump_bytes: u64,
     builder_version: String,
     table_count: usize,
     function_count: usize,
@@ -72,6 +75,10 @@ fn is_noise(line: &str) -> bool {
         || line.starts_with("-- TOC entry")
         || line.starts_with("-- Dependencies")
         || line.starts_with("-- Dumped ")
+        || line.starts_with("-- Started on")
+        || line.starts_with("-- Completed on")
+        || line.starts_with("\\restrict ")
+        || line.starts_with("\\unrestrict ")
 }
 
 /// Object name -> filesystem-safe basename (strip function args, quotes, case).
@@ -301,6 +308,7 @@ fn run(cli: &Cli) -> Result<(), Box<dyn Error>> {
         ),
         dump_file,
         dump_sha256,
+        dump_bytes: fs::metadata(&cli.dump)?.len(),
         builder_version: env!("CARGO_PKG_VERSION").to_string(),
         table_count: imp.tables.len(),
         function_count: imp.functions.len(),

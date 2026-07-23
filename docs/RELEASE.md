@@ -35,15 +35,17 @@ self-verifying: it downloads the pinned dump, checks the `sha256`, runs
 The sdist embeds the artifact too (`[tool.maturin] include`), so a source install
 (`pip install` with no matching wheel) works fully offline.
 
-To bump the data to a newer dump:
+Data bumps are automated: a daily workflow detects new NHTSA dumps, integrates
+them behind parity gates, and opens a classified PR (see
+[DATA_REFRESH.md](DATA_REFRESH.md)). The manual equivalent:
 
 ```bash
-make download MONTH=2026_07
-make data DUMP=downloads/vPICList_lite_2026_07.plain.zip MONTH=2026_07
+make refresh MONTH=2026_07   # download + import + re-freeze corpus + parity gates
 ```
 
-That rewrites `vpic/` (committed schema/procs/manifest) and the gitignored
-artifact. Commit the `vpic/` changes; CI rebuilds the artifact from the new pins.
+That rewrites `vpic/` (committed schema/procs/manifest), the gitignored
+artifact, and `tests/parity_corpus.json`. Commit those changes; CI rebuilds the
+artifact from the new pins.
 
 ## Wheels
 

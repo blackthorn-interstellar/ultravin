@@ -44,6 +44,12 @@ check: afu lint typecheck rust test ## Run all checks (format, lint, typecheck, 
 
 checku: check
 
+refresh-detect:  ## Probe NHTSA for a vPIC dump newer than the pinned month.
+	@python3 scripts/refresh.py detect
+
+refresh:  ## Integrate a new vPIC month with parity gates (usage: make refresh MONTH=YYYY_MM). Wipes + reloads the docker oracle.
+	@python3 scripts/refresh.py run --month "$(MONTH)"
+
 data:  ## Import a pinned vPIC dump into vpic/ (usage: make data DUMP=path.zip MONTH=YYYY_MM).
 	@cargo run -p ultravin-build --release -- --dump "$(DUMP)" --month "$(MONTH)" --out vpic
 
