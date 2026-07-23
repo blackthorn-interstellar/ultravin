@@ -161,12 +161,15 @@ jobs:
     if: always() && needs.detect.outputs.month != '' && needs.refresh.result == 'failure'
     runs-on: ubuntu-latest
     timeout-minutes: 150
+    # ANTHROPIC_API_KEY lives in this environment, whose deployment branch
+    # policy is master-only: no job on any other ref can ever mount it, even if
+    # a future workflow grows an unsafe trigger.
+    environment: data-refresh
     permissions:
       contents: write
       pull-requests: write
       issues: write
       actions: write # read the failed job's logs + kick CI after pushing
-      id-token: write
     env:
       HAS_APP: ${{ secrets.DATA_REFRESH_APP_ID != '' && secrets.DATA_REFRESH_APP_PRIVATE_KEY != '' }}
       HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
