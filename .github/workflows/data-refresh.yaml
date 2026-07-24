@@ -247,6 +247,11 @@ jobs:
               your working directory. Commands here routinely take 10-30 minutes —
               set generous Bash timeouts and wait for them. Never conclude from a
               timeout that the work is impossible.
+            - This is a ONE-SHOT headless session: when you end your turn, the
+              process exits and nothing ever re-invokes you. Never run a command
+              in the background, and never stop to "wait for a notification" —
+              run every long command in the FOREGROUND and block until it
+              completes. Work you haven't pushed when you stop is simply lost.
             - Read the failed job's log: `gh run view ${{ github.run_id }} --log`.
             - docs/DATA_REFRESH.md is the runbook; docs/ACCEPTANCE.md and
               docs/KNOWN_DEVIATIONS.md define parity policy. The Postgres oracle (the
