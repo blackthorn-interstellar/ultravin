@@ -69,13 +69,6 @@ and injection artifacts. It runs on `pull_request_target` so a PR can never
 edit the gate that judges it, and it never executes PR code. Uncertainty
 fails closed with findings posted as a PR comment.
 
-Review is also a loop, not just a gate. The fix agent self-reviews against
-the gate's criteria (fresh-context subagent) before it ever pushes; and when
-the gate rejects anyway, it dispatches `data-review-fix.yaml` — a remediation
-agent that takes the findings, fixes or rebuts them with evidence, re-runs
-the refresh gates, and pushes, which re-judges the new SHA. After three
-rejections the PR is labeled `needs-human` and automation stands down.
-
 ## Setup
 
 | what | why |

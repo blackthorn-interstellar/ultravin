@@ -22,7 +22,6 @@ jobs:
     permissions:
       contents: read
       pull-requests: write # findings comment on rejection
-      actions: write # dispatch the remediation workflow on rejection
     env:
       HEAD_REF: ${{ github.event.pull_request.head.ref }}
       HEAD_SHA: ${{ github.event.pull_request.head.sha }}
@@ -113,10 +112,6 @@ jobs:
           if [ "$approved" != "True" ]; then
             printf "Review gate REJECTED this PR:\n\n\`\`\`json\n%s\n\`\`\`\n" "$VERDICT" \
               | gh pr comment "${{ github.event.pull_request.number }}" --body-file -
-            # Rejection is not a dead-end: hand the findings to the remediation
-            # agent (it enforces the round cap and escalates to needs-human).
-            gh workflow run data-review-fix.yaml -f pr="${{ github.event.pull_request.number }}" \
-              || echo "::warning::could not dispatch remediation"
             exit 1
           fi
           echo "review gate: approved" >> "$GITHUB_STEP_SUMMARY"
