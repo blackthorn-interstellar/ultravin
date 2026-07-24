@@ -55,6 +55,20 @@ with `needs-human` + diagnosis if it can't get there honestly).
 
 [cca]: https://github.com/anthropics/claude-code-action
 
+## The review gate
+
+`data-review.yaml` is a **required status check** on master PRs, so auto-merge
+structurally cannot complete without it. Non-data PRs pass in seconds; data
+PRs whose diff is pure regeneration (`vpic/**` + the corpus) pass a
+deterministic allowlist for $0; any data PR carrying code or doc changes —
+i.e. agent-fixed months — must be approved by an adversarial Claude reviewer
+(read-only, verdict-only) that checks diff scope, that every decoder edit is
+justified by an upstream `vpic/` hunk, gate integrity (a new
+`KNOWN_DEVIATION_VINS` entry needs documented evidence of an upstream defect),
+and injection artifacts. It runs on `pull_request_target` so a PR can never
+edit the gate that judges it, and it never executes PR code. Uncertainty
+fails closed with findings posted as a PR comment.
+
 ## Setup
 
 | what | why |
