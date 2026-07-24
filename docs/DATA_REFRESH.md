@@ -68,6 +68,19 @@ Defaults with zero setup: PRs are opened and CI runs; merging, releasing, and
 agent fixes are off. On merge, `data-release.yaml` always tags `data-YYYY_MM`
 (the PLAN.md convention) on the merge commit.
 
+**Without the GitHub App, one GitHub setting is load-bearing:** "Allow GitHub
+Actions to create and approve pull requests" (Settings → Actions → General →
+Workflow permissions) must be enabled at **both** the org and repo level, or
+`gh pr create` from any workflow 403s regardless of job permissions — the
+July 2026 live run hit exactly this (the agent escalated via issue, as
+designed). App-minted tokens are not subject to the toggle.
+
+**Selfcheck:** `gh workflow run data-refresh-selfcheck.yaml` proves the agent's
+prerequisites in under a minute with zero API spend — `detect` runs on a bare
+runner, the environment mounts a valid `ANTHROPIC_API_KEY`, and `GITHUB_TOKEN`
+can create a PR (via a `[skip ci]` canary that is closed and deleted
+immediately). Run it after changing the settings above or rotating the key.
+
 ## Failure playbook
 
 - **build-data sha256 mismatch on an old PR/branch** — NHTSA re-touched the

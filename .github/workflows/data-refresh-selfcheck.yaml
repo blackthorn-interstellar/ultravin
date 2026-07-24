@@ -1,0 +1,64 @@
+# Preflight for the data-refresh automation: proves in under a minute, for $0
+# of API spend, that everything the fix agent needs works from a runner —
+# above all that GITHUB_TOKEN can create PRs, which is gated by an org-level
+# Actions setting ("Allow GitHub Actions to create and approve pull requests")
+# that job-level permissions cannot override. Run after changing that setting,
+# rotating the API key, or touching the data-refresh environment.
+name: Data Refresh Selfcheck
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  selfcheck:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: data-refresh # also proves the master-pinned key environment mounts
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: detect runs on a bare runner
+        run: python3 scripts/refresh.py detect
+      - name: ANTHROPIC_API_KEY present and valid
+        run: |
+          if [ "$HAS_KEY" != "true" ]; then
+            echo "::error::ANTHROPIC_API_KEY missing from the data-refresh environment"
+            exit 1
+          fi
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
+            https://api.anthropic.com/v1/models \
+            -H "x-api-key: ${{ secrets.ANTHROPIC_API_KEY }}" \
+            -H "anthropic-version: 2023-06-01")
+          if [ "$code" != "200" ]; then
+            echo "::error::API key check failed (HTTP $code)"
+            exit 1
+          fi
+          echo "key OK" >> "$GITHUB_STEP_SUMMARY"
+      - name: GITHUB_TOKEN can create a PR (canary, closed immediately)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          br="selfcheck/canary-${{ github.run_id }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$br"
+          date -u > .github/selfcheck-canary
+          git add .github/selfcheck-canary
+          git commit -m "selfcheck canary [skip ci]"
+          git push origin "$br"
+          if url=$(gh pr create --base master --head "$br" --draft \
+              --title "selfcheck canary (auto-closed)" \
+              --body "Proves Actions can create PRs — the capability the fix agent needs. Auto-closed."); then
+            echo "canary PR created: $url" >> "$GITHUB_STEP_SUMMARY"
+            gh pr close "$br" --delete-branch
+            echo "PR creation works — the fix agent can deliver PRs" >> "$GITHUB_STEP_SUMMARY"
+          else
+            git push origin --delete "$br" || true
+            echo "::error::PR creation still blocked — enable 'Allow GitHub Actions to create and approve pull requests' at BOTH org and repo level (Settings → Actions → General → Workflow permissions)"
+            exit 1
+          fi
