@@ -144,10 +144,23 @@ jobs:
           fi
           # Auto-merge needs the App token: a merge performed on behalf of
           # GITHUB_TOKEN would never trigger data-release.yaml (or anything else).
-          if [ "${{ vars.DATA_REFRESH_AUTOMERGE }}" = "true" ] && [ "$CLASSIFICATION" = "data-only" ] && [ "$HAS_APP" = "true" ]; then
+          # data-only merges on DATA_REFRESH_AUTOMERGE; schema-change months
+          # additionally require the explicit DATA_REFRESH_AUTOMERGE_SCHEMA=true.
+          if [ "${{ vars.DATA_REFRESH_AUTOMERGE }}" = "true" ] && [ "$HAS_APP" = "true" ] \
+             && { [ "$CLASSIFICATION" = "data-only" ] || [ "${{ vars.DATA_REFRESH_AUTOMERGE_SCHEMA }}" = "true" ]; }; then
             gh pr merge "data/$MONTH" --auto --squash \
               || echo "::notice::auto-merge unavailable (enable it in repo settings + branch protection)"
           fi
+      # On failure, bank the evidence the fix agent needs — above all the vpic/
+      # text diff, which IS the upstream change. Without this the agent burns
+      # ~15 min re-running the pipeline just to regenerate what we had here.
+      - name: Capture failure context
+        if: failure()
+        run: |
+          mkdir -p target/refresh
+          git diff -- vpic/schema vpic/procs > target/refresh/vpic-schema.diff || true
+          git diff --stat -- vpic > target/refresh/vpic-diff.stat || true
+          git status --porcelain > target/refresh/git-status.txt || true
       - name: Report artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -238,13 +251,26 @@ jobs:
               mechanical path: download the dump, rebuild vpic/ + the embedded artifact
               (vpic-import), rebuild the Python extension, load the dump into the docker
               Postgres oracle, re-freeze tests/parity_corpus.json, run a 500-VIN live
-              sweep, pytest, cargo test. Its report from the failed attempt, if it got
-              that far, is in ./target/refresh/.
-            - Start by running that command yourself: it reproduces the failure AND
-              materializes the vpic/ diff (git diff vpic/) that shows what NHTSA
-              changed. It takes ~10 minutes; the commands you run here routinely take
-              10-30 minutes — set generous Bash timeouts and wait for them. Never
-              conclude from a timeout that the work is impossible.
+              sweep, pytest, cargo test.
+            - ./target/refresh/ holds the failed attempt's evidence — read it FIRST,
+              before re-running anything: report.md / report.json (gate verdicts,
+              diverging VINs), sweep.json (per-VIN live-sweep diffs),
+              vpic-schema.diff (git diff of vpic/schema + vpic/procs — this IS the
+              upstream change NHTSA shipped), vpic-diff.stat, git-status.txt. Most
+              breakage is diagnosable from vpic-schema.diff alone.
+            - The decoder hand-ports constants from the procs and reference tables:
+              source labels, error-code weights, GroupName ranks, element-to-lookup
+              mappings (crates/ultravin-core/src/tables.rs and decode.rs). When the
+              proc diff or oracle output shows a changed literal or weight, the fix is
+              usually updating the ported constant to match.
+            - The pipeline is deterministic end to end (importer, artifact, corpus
+              freeze): a correct fix reproduces byte-identical vpic/ and corpus on
+              every re-run. If two of your runs disagree, something is wrong — stop
+              and find out what.
+            - The toolchain is preinstalled (rust stable, uv, docker); the repo is
+              your working directory. Commands here routinely take 10-30 minutes —
+              set generous Bash timeouts and wait for them. Never conclude from a
+              timeout that the work is impossible.
             - Read the failed job's log: `gh run view ${{ github.run_id }} --log`.
             - docs/DATA_REFRESH.md is the runbook; docs/ACCEPTANCE.md and
               docs/KNOWN_DEVIATIONS.md define parity policy. The Postgres oracle (the
@@ -290,6 +316,21 @@ jobs:
             exit 1
           fi
           echo "agent delivered: branch + PR for data/$MONTH"
+      # Merge policy is deterministic workflow logic, not agent judgment: same
+      # rules as the mechanical path, classification read from the PR labels.
+      - name: Auto-merge per policy
+        if: vars.DATA_REFRESH_AUTOMERGE == 'true' && env.HAS_APP == 'true'
+        env:
+          GH_TOKEN: ${{ steps.tok.outputs.token }}
+        run: |
+          cls=$(gh pr view "data/$MONTH" --json labels \
+            --jq 'if ([.labels[].name] | index("schema-change")) then "schema-change" else "data-only" end')
+          if [ "$cls" = "data-only" ] || [ "${{ vars.DATA_REFRESH_AUTOMERGE_SCHEMA }}" = "true" ]; then
+            gh pr merge "data/$MONTH" --auto --squash \
+              || echo "::notice::auto-merge unavailable (enable it in repo settings + branch protection)"
+          else
+            echo "::notice::schema-change PR left for human review (DATA_REFRESH_AUTOMERGE_SCHEMA=true opts these in)"
+          fi
       - name: Claude transcript artifact
         if: always()
         uses: actions/upload-artifact@v4

@@ -160,6 +160,20 @@ def test_parse_freeze_skips() -> None:
     assert refresh.parse_freeze_skips("wrote ... (272 VINs, 0 currently diverging)\n") == []
 
 
+def test_main_writes_failure_context_on_mechanical_crash(monkeypatch, tmp_path) -> None:
+    import json
+    import subprocess
+
+    def boom(args):
+        raise subprocess.CalledProcessError(7, ["cargo", "run"])
+
+    monkeypatch.setattr(refresh, "cmd_run", boom)
+    monkeypatch.setattr(refresh, "REPORT_DIR", tmp_path)
+    assert refresh.main(["run", "--month", "2026_07"]) == 1
+    ctx = json.loads((tmp_path / "failure.json").read_text())
+    assert ctx == {"failed_command": ["cargo", "run"], "returncode": 7}
+
+
 def test_render_report_mentions_gates_and_classification() -> None:
     report = refresh.Report(
         old_month="2026_06",

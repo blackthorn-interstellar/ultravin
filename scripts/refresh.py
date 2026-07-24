@@ -547,7 +547,18 @@ def main(argv: list[str] | None = None) -> int:
     r.add_argument("--month", required=True, help="YYYY_MM to integrate")
     r.set_defaults(fn=cmd_run)
     args = ap.parse_args(argv)
-    return args.fn(args)
+    try:
+        return args.fn(args)
+    except subprocess.CalledProcessError as e:
+        # Mechanical failure: leave a machine-readable trace for the fix agent
+        # (the gate-failure path writes a full report; this path otherwise
+        # leaves only the workflow log).
+        REPORT_DIR.mkdir(parents=True, exist_ok=True)
+        (REPORT_DIR / "failure.json").write_text(
+            json.dumps({"failed_command": e.cmd, "returncode": e.returncode}, indent=2) + "\n"
+        )
+        log(f"mechanical failure: {e.cmd} exited {e.returncode} (context in {REPORT_DIR / 'failure.json'})")
+        return 1
 
 
 if __name__ == "__main__":

@@ -62,6 +62,7 @@ with `needs-human` + diagnosis if it can't get there honestly).
 | secret `ANTHROPIC_API_KEY` | enables the agent fix job (without it, failures land in the job summary for a human) |
 | secrets `DATA_REFRESH_APP_ID` / `DATA_REFRESH_APP_PRIVATE_KEY` | a [GitHub App](https://github.com/settings/apps) (permissions: contents, pull requests, issues — read/write) whose token makes pushes/PRs/tags trigger CI. Without it everything still works — PRs are created with `GITHUB_TOKEN` and CI is started explicitly via `gh workflow run` — but auto-merge and auto-release are off. Prefer an App over a PAT: static tokens are an exfiltration target. |
 | var `DATA_REFRESH_AUTOMERGE=true` | auto-merge **data-only** PRs once checks pass (needs the GitHub App — a merge on behalf of `GITHUB_TOKEN` triggers nothing — plus repo auto-merge + branch protection with required checks) |
+| var `DATA_REFRESH_AUTOMERGE_SCHEMA=true` | extend auto-merge to **schema-change** PRs too, including agent-fixed ones — the full-autonomy switch; leave off to keep a human on the merge button when decoder code changed |
 | var `DATA_REFRESH_AUTORELEASE=true` | on merge of a data PR, push the next patch `v` tag so `release.yaml` ships to PyPI (needs the GitHub App) |
 
 Defaults with zero setup: PRs are opened and CI runs; merging, releasing, and
