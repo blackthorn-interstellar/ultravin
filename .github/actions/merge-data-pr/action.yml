@@ -1,0 +1,76 @@
+name: Merge data PR
+description: >
+  Synchronously complete a green data PR per policy: retry-merge until the
+  required checks allow it, tag data-<month> on the merge commit, and (opt-in)
+  push the next patch v-tag and dispatch release.yaml. No GitHub App: pushes
+  and merges by GITHUB_TOKEN emit no events, so the next step is invoked
+  explicitly via workflow_dispatch (the documented exception).
+inputs:
+  month:
+    description: "YYYY_MM of the data PR (branch data/<month>)"
+    required: true
+  automerge:
+    description: "merge data-only PRs when 'true'"
+    required: true
+  automerge-schema:
+    description: "extend merging to schema-change PRs when 'true'"
+    required: true
+  autorelease:
+    description: "tag the next patch version and dispatch release.yaml when 'true'"
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        MONTH: ${{ inputs.month }}
+      run: |
+        set -euo pipefail
+        BR="data/$MONTH"
+        if [ "${{ inputs.automerge }}" != "true" ]; then
+          echo "::notice::DATA_REFRESH_AUTOMERGE is off — PR left open for a human"
+          exit 0
+        fi
+        pr=$(gh pr view "$BR" --json number --jq .number)
+        cls=$(gh pr view "$pr" --json labels \
+          --jq 'if ([.labels[].name] | index("schema-change")) then "schema-change" else "data-only" end')
+        if [ "$cls" = "schema-change" ] && [ "${{ inputs.automerge-schema }}" != "true" ]; then
+          echo "::notice::schema-change PR left for human review (DATA_REFRESH_AUTOMERGE_SCHEMA=true opts in)"
+          exit 0
+        fi
+        # Branch protection arbitrates: merge succeeds only once every required
+        # check (CI + review-verdict) is green on the head SHA. Retry until then.
+        merged=""
+        for _ in $(seq 1 45); do
+          if gh pr merge "$pr" --squash --delete-branch 2>/tmp/merge-err; then
+            merged=1
+            break
+          fi
+          sleep 30
+        done
+        if [ -z "$merged" ]; then
+          echo "::error::PR #$pr not mergeable after ~22 min; last error + check states:"
+          cat /tmp/merge-err || true
+          gh pr checks "$pr" || true
+          exit 1
+        fi
+        sha=$(gh pr view "$pr" --json mergeCommit --jq .mergeCommit.oid)
+        echo "merged PR #$pr at $sha" >> "$GITHUB_STEP_SUMMARY"
+        git fetch origin master --tags -q
+        if git rev-parse -q --verify "refs/tags/data-$MONTH" >/dev/null; then
+          echo "tag data-$MONTH already exists"
+        else
+          git tag "data-$MONTH" "$sha"
+          git push origin "data-$MONTH"
+        fi
+        if [ "${{ inputs.autorelease }}" = "true" ]; then
+          latest=$(git tag -l 'v*' --sort=-v:refname | head -1)
+          latest=${latest:-v0.0.0}
+          next=$(printf '%s' "${latest#v}" | awk -F. '{printf "v%d.%d.%d", $1, $2, $3 + 1}')
+          git tag "$next" "$sha"
+          git push origin "$next"
+          # the tag push emits no event — run release.yaml on the tag ref directly
+          gh workflow run release.yaml --ref "$next"
+          echo "release $next dispatched" >> "$GITHUB_STEP_SUMMARY"
+        fi

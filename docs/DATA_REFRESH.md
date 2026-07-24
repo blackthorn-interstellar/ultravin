@@ -57,38 +57,46 @@ with `needs-human` + diagnosis if it can't get there honestly).
 
 ## The review gate
 
-`data-review.yaml` is a **required status check** on master PRs, so auto-merge
-structurally cannot complete without it. Non-data PRs pass in seconds; data
-PRs whose diff is pure regeneration (`vpic/**` + the corpus) pass a
-deterministic allowlist for $0; any data PR carrying code or doc changes —
-i.e. agent-fixed months — must be approved by an adversarial Claude reviewer
-(read-only, verdict-only) that checks diff scope, that every decoder edit is
-justified by an upstream `vpic/` hunk, gate integrity (a new
+`data-review.yaml` publishes a `review-verdict` check run on the PR head —
+a **required status check** on master, so nothing merges without it. Non-data
+PRs pass in seconds; data PRs whose diff is pure regeneration (`vpic/**` + the
+corpus) pass a deterministic allowlist for $0; any data PR carrying code or
+doc changes — i.e. agent-fixed months — must be approved by an adversarial
+Claude reviewer (read-only, verdict-only) that checks diff scope, that every
+decoder edit is justified by an upstream `vpic/` hunk, gate integrity (a new
 `KNOWN_DEVIATION_VINS` entry needs documented evidence of an upstream defect),
-and injection artifacts. It runs on `pull_request_target` so a PR can never
-edit the gate that judges it, and it never executes PR code. Uncertainty
-fails closed with findings posted as a PR comment.
+and injection artifacts. Human-created PRs trigger it via
+`pull_request_target` (the gate always runs master's copy of itself and never
+executes PR code); pipeline-created PRs emit no events, so the refresh/fix
+jobs dispatch it explicitly. Uncertainty fails closed with findings posted as
+a PR comment.
 
 ## Setup
 
 | what | why |
 |---|---|
-| secret `ANTHROPIC_API_KEY` | enables the agent fix job (without it, failures land in the job summary for a human) |
-| secrets `DATA_REFRESH_APP_ID` / `DATA_REFRESH_APP_PRIVATE_KEY` | a [GitHub App](https://github.com/settings/apps) (permissions: contents, pull requests, issues — read/write) whose token makes pushes/PRs/tags trigger CI. Without it everything still works — PRs are created with `GITHUB_TOKEN` and CI is started explicitly via `gh workflow run` — but auto-merge and auto-release are off. Prefer an App over a PAT: static tokens are an exfiltration target. |
-| var `DATA_REFRESH_AUTOMERGE=true` | auto-merge **data-only** PRs once checks pass (needs the GitHub App — a merge on behalf of `GITHUB_TOKEN` triggers nothing — plus repo auto-merge + branch protection with required checks) |
-| var `DATA_REFRESH_AUTOMERGE_SCHEMA=true` | extend auto-merge to **schema-change** PRs too, including agent-fixed ones — the full-autonomy switch; leave off to keep a human on the merge button when decoder code changed |
-| var `DATA_REFRESH_AUTORELEASE=true` | on merge of a data PR, push the next patch `v` tag so `release.yaml` ships to PyPI (needs the GitHub App) |
+| secret `ANTHROPIC_API_KEY` | enables the agent fix job and the model leg of the review gate (without it, failures land in the job summary for a human) |
+| var `DATA_REFRESH_AUTOMERGE=true` | merge **data-only** PRs: the workflow waits for the required checks (CI + `review-verdict`) and squash-merges synchronously, then tags `data-YYYY_MM` on the merge commit |
+| var `DATA_REFRESH_AUTOMERGE_SCHEMA=true` | extend merging to **schema-change** PRs too, including agent-fixed ones — the full-autonomy switch; leave off to keep a human on the merge button when decoder code changed |
+| var `DATA_REFRESH_AUTORELEASE=true` | after merging, also push the next patch `v` tag and dispatch `release.yaml` on it to ship PyPI |
 
-Defaults with zero setup: PRs are opened and CI runs; merging, releasing, and
-agent fixes are off. On merge, `data-release.yaml` always tags `data-YYYY_MM`
-(the PLAN.md convention) on the merge commit.
+No GitHub App and no PAT anywhere: `GITHUB_TOKEN` *events* never trigger
+workflows, but explicit `workflow_dispatch` calls are exempt — so the pipeline
+kicks `ci.yaml` and `data-review.yaml` itself after creating a PR, and the
+merge/tag/release chain runs synchronously in-job
+(`.github/actions/merge-data-pr`). One side effect: the merge commit lands on
+master without a redundant master-push CI run — the identical tree was just
+fully checked on the branch. If you merge a data PR by hand, tag the month
+yourself (`git tag data-YYYY_MM && git push origin data-YYYY_MM`).
 
-**Without the GitHub App, one GitHub setting is load-bearing:** "Allow GitHub
-Actions to create and approve pull requests" (Settings → Actions → General →
-Workflow permissions) must be enabled at **both** the org and repo level, or
-`gh pr create` from any workflow 403s regardless of job permissions — the
-July 2026 live run hit exactly this (the agent escalated via issue, as
-designed). App-minted tokens are not subject to the toggle.
+Defaults with zero setup: PRs are opened and checks run; merging, releasing,
+and agent fixes are off.
+
+**One GitHub setting is load-bearing:** "Allow GitHub Actions to create and
+approve pull requests" (Settings → Actions → General → Workflow permissions)
+must be enabled at **both** the org and repo level, or `gh pr create` from any
+workflow 403s regardless of job permissions — the July 2026 live run hit
+exactly this (the agent escalated via issue, as designed).
 
 **Selfcheck:** `gh workflow run data-refresh-selfcheck.yaml` proves the agent's
 prerequisites in under a minute with zero API spend — `detect` runs on a bare

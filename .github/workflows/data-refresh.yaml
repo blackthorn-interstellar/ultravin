@@ -7,12 +7,14 @@
 #            runner with the full toolchain and pushes an honest fix to the PR
 #
 # Secrets/variables (all optional except ANTHROPIC_API_KEY for the fix job):
-#   ANTHROPIC_API_KEY            enables the agent fix job
-#   DATA_REFRESH_APP_ID          GitHub App creds; without them pushes/PRs use
-#   DATA_REFRESH_APP_PRIVATE_KEY GITHUB_TOKEN, whose events never trigger CI,
-#                                so CI is kicked via `gh workflow run` instead
-#   vars.DATA_REFRESH_AUTOMERGE  "true" enables auto-merge for data-only PRs
-#                                (repo must have auto-merge + branch protection)
+#   ANTHROPIC_API_KEY                  enables the agent fix job
+#   vars.DATA_REFRESH_AUTOMERGE        "true" merges data-only PRs once checks pass
+#   vars.DATA_REFRESH_AUTOMERGE_SCHEMA "true" extends merging to schema-change months
+#   vars.DATA_REFRESH_AUTORELEASE      "true" also tags the next patch version and
+#                                      dispatches release.yaml after merge
+# No GitHub App and no PAT: GITHUB_TOKEN *events* never trigger workflows, but
+# explicit workflow_dispatch calls do — so the pipeline kicks ci.yaml and
+# data-review.yaml itself and merges synchronously (.github/actions/merge-data-pr).
 # See docs/DATA_REFRESH.md for the full runbook.
 name: Data Refresh
 on:
@@ -84,23 +86,11 @@ jobs:
       issues: write # `gh label create` writes labels through the Issues API
       actions: write # fallback `gh workflow run` CI kick when pushing with GITHUB_TOKEN
     env:
-      HAS_APP: ${{ secrets.DATA_REFRESH_APP_ID != '' && secrets.DATA_REFRESH_APP_PRIVATE_KEY != '' }}
       MONTH: ${{ needs.detect.outputs.month }}
     steps:
-      - name: Mint GitHub App token
-        id: app
-        if: env.HAS_APP == 'true'
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.DATA_REFRESH_APP_ID }}
-          private-key: ${{ secrets.DATA_REFRESH_APP_PRIVATE_KEY }}
-      - name: Pick push token
-        id: tok
-        run: echo "token=${{ steps.app.outputs.token || github.token }}" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ steps.tok.outputs.token }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v5
@@ -116,7 +106,7 @@ jobs:
       - name: Branch, push, pull request
         if: steps.run.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ steps.tok.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
           CLASSIFICATION: ${{ steps.run.outputs.classification }}
         run: |
           git config user.name "github-actions[bot]"
@@ -138,19 +128,17 @@ jobs:
           if [ "$CLASSIFICATION" = "schema-change" ]; then
             gh pr edit "data/$MONTH" --add-label schema-change
           fi
-          # Events from the default token don't trigger workflows — start CI by hand.
-          if [ "$HAS_APP" != "true" ]; then
-            gh workflow run ci.yaml --ref "data/$MONTH"
-          fi
-          # Auto-merge needs the App token: a merge performed on behalf of
-          # GITHUB_TOKEN would never trigger data-release.yaml (or anything else).
-          # data-only merges on DATA_REFRESH_AUTOMERGE; schema-change months
-          # additionally require the explicit DATA_REFRESH_AUTOMERGE_SCHEMA=true.
-          if [ "${{ vars.DATA_REFRESH_AUTOMERGE }}" = "true" ] && [ "$HAS_APP" = "true" ] \
-             && { [ "$CLASSIFICATION" = "data-only" ] || [ "${{ vars.DATA_REFRESH_AUTOMERGE_SCHEMA }}" = "true" ]; }; then
-            gh pr merge "data/$MONTH" --auto --squash \
-              || echo "::notice::auto-merge unavailable (enable it in repo settings + branch protection)"
-          fi
+          # GITHUB_TOKEN events don't trigger workflows; explicit dispatches do.
+          gh workflow run ci.yaml --ref "data/$MONTH"
+          gh workflow run data-review.yaml -f pr="$(gh pr view "data/$MONTH" --json number --jq .number)"
+      - name: Merge per policy, tag, release
+        if: steps.run.outputs.changed == 'true'
+        uses: ./.github/actions/merge-data-pr
+        with:
+          month: ${{ env.MONTH }}
+          automerge: ${{ vars.DATA_REFRESH_AUTOMERGE }}
+          automerge-schema: ${{ vars.DATA_REFRESH_AUTOMERGE_SCHEMA }}
+          autorelease: ${{ vars.DATA_REFRESH_AUTORELEASE }}
       # On failure, bank the evidence the fix agent needs — above all the vpic/
       # text diff, which IS the upstream change. Without this the agent burns
       # ~15 min re-running the pipeline just to regenerate what we had here.
@@ -184,7 +172,6 @@ jobs:
       issues: write
       actions: write # read the failed job's logs + kick CI after pushing
     env:
-      HAS_APP: ${{ secrets.DATA_REFRESH_APP_ID != '' && secrets.DATA_REFRESH_APP_PRIVATE_KEY != '' }}
       HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
       MONTH: ${{ needs.detect.outputs.month }}
     steps:
@@ -194,20 +181,9 @@ jobs:
           echo "refresh for $MONTH failed and no ANTHROPIC_API_KEY is configured — fix manually:" >> "$GITHUB_STEP_SUMMARY"
           echo '`make refresh MONTH='"$MONTH"'` (see docs/DATA_REFRESH.md)' >> "$GITHUB_STEP_SUMMARY"
           exit 1
-      - name: Mint GitHub App token
-        id: app
-        if: env.HAS_APP == 'true'
-        uses: actions/create-github-app-token@v2
-        with:
-          app-id: ${{ secrets.DATA_REFRESH_APP_ID }}
-          private-key: ${{ secrets.DATA_REFRESH_APP_PRIVATE_KEY }}
-      - name: Pick push token
-        id: tok
-        run: echo "token=${{ steps.app.outputs.token || github.token }}" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ steps.tok.outputs.token }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v5
@@ -227,10 +203,10 @@ jobs:
         id: claude
         uses: anthropics/claude-code-action@v1
         env:
-          GH_TOKEN: ${{ steps.tok.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ steps.tok.outputs.token }}
+          github_token: ${{ github.token }}
           # The refresh pipeline runs 10+ minute commands (oracle load, freeze,
           # make check); without these the Bash tool's 2-minute default timeout
           # kills them and the agent concludes it cannot do the job.
@@ -296,8 +272,8 @@ jobs:
             update the PR (base master, body target/refresh/report.md plus your
             root-cause explanation, labels data-refresh and agent-fixed, plus
             schema-change if vpic/schema or vpic/procs changed; create missing labels
-            with `gh label create`). If CI has not started on the PR after a couple of
-            minutes, start it: `gh workflow run ci.yaml --ref data/${{ needs.detect.outputs.month }}`.
+            with `gh label create`). The workflow starts CI and the review gate on
+            your PR after you finish — you don't need to.
 
             If you cannot get it green honestly, push what you have, open the PR as a
             draft labeled needs-human, and comment your diagnosis with the exact failing
@@ -305,7 +281,7 @@ jobs:
             PR — is a FAILED run, whatever else you accomplished.
       - name: Verify the agent delivered
         env:
-          GH_TOKEN: ${{ steps.tok.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ -z "$(git ls-remote --heads origin "data/$MONTH")" ]; then
             echo "::error::agent finished without pushing data/$MONTH — treating as failure"
@@ -316,21 +292,19 @@ jobs:
             exit 1
           fi
           echo "agent delivered: branch + PR for data/$MONTH"
-      # Merge policy is deterministic workflow logic, not agent judgment: same
-      # rules as the mechanical path, classification read from the PR labels.
-      - name: Auto-merge per policy
-        if: vars.DATA_REFRESH_AUTOMERGE == 'true' && env.HAS_APP == 'true'
+      - name: Kick checks (GITHUB_TOKEN events don't fire; dispatches do)
         env:
-          GH_TOKEN: ${{ steps.tok.outputs.token }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          cls=$(gh pr view "data/$MONTH" --json labels \
-            --jq 'if ([.labels[].name] | index("schema-change")) then "schema-change" else "data-only" end')
-          if [ "$cls" = "data-only" ] || [ "${{ vars.DATA_REFRESH_AUTOMERGE_SCHEMA }}" = "true" ]; then
-            gh pr merge "data/$MONTH" --auto --squash \
-              || echo "::notice::auto-merge unavailable (enable it in repo settings + branch protection)"
-          else
-            echo "::notice::schema-change PR left for human review (DATA_REFRESH_AUTOMERGE_SCHEMA=true opts these in)"
-          fi
+          gh workflow run ci.yaml --ref "data/$MONTH"
+          gh workflow run data-review.yaml -f pr="$(gh pr view "data/$MONTH" --json number --jq .number)"
+      - name: Merge per policy, tag, release
+        uses: ./.github/actions/merge-data-pr
+        with:
+          month: ${{ env.MONTH }}
+          automerge: ${{ vars.DATA_REFRESH_AUTOMERGE }}
+          automerge-schema: ${{ vars.DATA_REFRESH_AUTOMERGE_SCHEMA }}
+          autorelease: ${{ vars.DATA_REFRESH_AUTORELEASE }}
       - name: Claude transcript artifact
         if: always()
         uses: actions/upload-artifact@v4

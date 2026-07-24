@@ -1,16 +1,23 @@
-# Independent review gate — the control that makes unattended auto-merge
-# defensible. Required status check on PRs to master:
-#   - non-data PRs: pass in seconds, $0
+# Independent review gate for data PRs. Its verdict is published as the
+# `review-verdict` check run on the PR head SHA — a required check on master,
+# so a merge cannot happen without it:
+#   - non-data PRs: success in seconds, $0
 #   - data/* PRs touching only regenerated files: deterministic allowlist pass, $0
 #   - data/* PRs with code/doc changes (agent-fixed months): an adversarial
 #     Claude reviewer with a verdict-only contract must approve
-# pull_request_target on purpose: the review always runs THIS (master's) copy of
-# itself — a PR cannot edit the gate that judges it — and PR code is never
-# executed, only read out of git objects.
+# Two triggers: pull_request_target for human-created PRs (runs THIS master
+# copy of the gate — a PR cannot edit its own judge — and never executes PR
+# code), and workflow_dispatch for PRs created by the pipeline itself, whose
+# GITHUB_TOKEN events don't fire (the refresh/fix jobs dispatch it explicitly).
 name: Data Review
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      pr:
+        description: "PR number to review (for workflow-created PRs)"
+        required: true
 
 permissions: {}
 
@@ -22,16 +29,28 @@ jobs:
     permissions:
       contents: read
       pull-requests: write # findings comment on rejection
-    env:
-      HEAD_REF: ${{ github.event.pull_request.head.ref }}
-      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-      BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      checks: write # publish the review-verdict check run
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0 # base repo @ master — never the PR's code
+      - name: Resolve the PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_PR: ${{ github.event.pull_request.number }}
+          INPUT_PR: ${{ inputs.pr }}
+        run: |
+          n="${EVENT_PR:-$INPUT_PR}"
+          gh pr view "$n" --json headRefName,headRefOid,baseRefOid \
+            --jq '"head_ref=\(.headRefName)\nhead_sha=\(.headRefOid)\nbase_sha=\(.baseRefOid)"' >> "$GITHUB_OUTPUT"
+          echo "number=$n" >> "$GITHUB_OUTPUT"
       - name: Classify the diff
         id: scope
+        env:
+          HEAD_REF: ${{ steps.pr.outputs.head_ref }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          BASE_SHA: ${{ steps.pr.outputs.base_sha }}
         run: |
           git fetch origin "$HEAD_SHA"
           if ! printf '%s' "$HEAD_REF" | grep -q '^data/'; then
@@ -61,15 +80,16 @@ jobs:
             --json-schema '{"type":"object","properties":{"approved":{"type":"boolean"},"summary":{"type":"string"},"blocking_findings":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"issue":{"type":"string"}},"required":["file","issue"]}}},"required":["approved","summary","blocking_findings"]}'
           prompt: |
             You are the independent review gate for an automated monthly NHTSA
-            data-refresh PR (branch ${{ github.event.pull_request.head.ref }},
-            head ${{ github.event.pull_request.head.sha }}). It was produced by
-            another agent or the mechanical pipeline; your verdict alone decides
-            whether it auto-merges with no human involved. Be adversarial.
+            data-refresh PR (#${{ steps.pr.outputs.number }}, branch
+            ${{ steps.pr.outputs.head_ref }}, head ${{ steps.pr.outputs.head_sha }}).
+            It was produced by another agent or the mechanical pipeline; your
+            verdict alone decides whether it merges with no human involved. Be
+            adversarial.
 
             Your checkout is master. Inspect the PR without executing its code:
-            `git diff ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }}`
+            `git diff ${{ steps.pr.outputs.base_sha }} ${{ steps.pr.outputs.head_sha }}`
             (optionally `-- <path>`), `git show <head-sha>:<path>` to read a PR
-            file, and `gh pr view ${{ github.event.pull_request.number }} --json body`
+            file, and `gh pr view ${{ steps.pr.outputs.number }} --json body`
             for the refresh report. docs/DATA_REFRESH.md, docs/ACCEPTANCE.md and
             docs/KNOWN_DEVIATIONS.md define the policy.
 
@@ -97,21 +117,29 @@ jobs:
             Uncertainty is a rejection with the finding spelled out — a wrong
             block costs a human five minutes; a wrong approve ships bad decodes.
             Report via the structured output only.
-      - name: Enforce verdict
-        if: steps.scope.outputs.verdict == 'model-review'
+      - name: Publish verdict
+        if: always() && steps.pr.outputs.head_sha != ''
         env:
           GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          PR_NUM: ${{ steps.pr.outputs.number }}
+          SCOPE: ${{ steps.scope.outputs.verdict }}
           VERDICT: ${{ steps.claude.outputs.structured_output }}
         run: |
-          if [ -z "$VERDICT" ]; then
-            echo "::error::reviewer produced no structured verdict — failing closed"
+          conclusion=failure
+          if [ "$SCOPE" = "pass" ]; then
+            conclusion=success
+          elif [ "$SCOPE" = "model-review" ] && [ -n "$VERDICT" ]; then
+            echo "$VERDICT" | tee -a "$GITHUB_STEP_SUMMARY"
+            approved=$(printf '%s' "$VERDICT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["approved"])' || echo parse-error)
+            [ "$approved" = "True" ] && conclusion=success
+          fi
+          gh api "repos/${{ github.repository }}/check-runs" --silent \
+            -f name=review-verdict -f head_sha="$HEAD_SHA" \
+            -f status=completed -f conclusion="$conclusion"
+          if [ "$conclusion" != "success" ]; then
+            printf "Review gate REJECTED this PR:\n\n\`\`\`json\n%s\n\`\`\`\n" "${VERDICT:-no verdict produced (failing closed)}" \
+              | gh pr comment "$PR_NUM" --body-file -
             exit 1
           fi
-          echo "$VERDICT" | tee -a "$GITHUB_STEP_SUMMARY"
-          approved=$(printf '%s' "$VERDICT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["approved"])')
-          if [ "$approved" != "True" ]; then
-            printf "Review gate REJECTED this PR:\n\n\`\`\`json\n%s\n\`\`\`\n" "$VERDICT" \
-              | gh pr comment "${{ github.event.pull_request.number }}" --body-file -
-            exit 1
-          fi
-          echo "review gate: approved" >> "$GITHUB_STEP_SUMMARY"
+          echo "review-verdict: success @ $HEAD_SHA" >> "$GITHUB_STEP_SUMMARY"
