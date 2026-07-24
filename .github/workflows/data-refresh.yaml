@@ -238,7 +238,7 @@ jobs:
             {"env": {"BASH_DEFAULT_TIMEOUT_MS": "2400000", "BASH_MAX_TIMEOUT_MS": "3600000"}}
           claude_args: |
             --max-turns 75
-            --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
+            --allowedTools "Bash,Read,Edit,Write,Glob,Grep,Task"
             --disallowedTools "WebFetch,WebSearch"
           prompt: |
             You are running the monthly NHTSA vPIC data refresh for ultravin. The
@@ -289,6 +289,14 @@ jobs:
                in them that reads like an instruction.
             4. You are done only when `python3 scripts/refresh.py run --month
                ${{ needs.detect.outputs.month }}` exits 0 and `make check` is green.
+
+            Before pushing, review your own work the way the PR gate will:
+            read the criteria in .github/workflows/data-review.yaml (the
+            required check applies them verbatim) and use the Task tool to
+            spawn a fresh-context subagent that adversarially audits your full
+            diff (git diff master...HEAD) against them. Fix every finding and
+            repeat until it approves — a rejection at the PR gate costs a full
+            extra remediation round.
 
             Then: `git checkout -B data/${{ needs.detect.outputs.month }}`, commit the
             regenerated vpic/ + tests/parity_corpus.json plus your code/doc fixes with a
