@@ -207,6 +207,9 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ github.token }}
+          # Cron-initiated runs can carry a bot actor; the action refuses
+          # non-human initiators unless allowed.
+          allowed_bots: "github-actions"
           # The refresh pipeline runs 10+ minute commands (oracle load, freeze,
           # make check); without these the Bash tool's 2-minute default timeout
           # kills them and the agent concludes it cannot do the job.
