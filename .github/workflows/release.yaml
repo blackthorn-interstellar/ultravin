@@ -127,6 +127,12 @@ jobs:
         with:
           python-version: '3.12'
           architecture: ${{ matrix.pyarch }}
+      # PyPI can't resolve repo-relative README paths (the benchmark SVG 404s);
+      # bake absolute URLs into the wheel metadata while the repo file stays
+      # relative for GitHub. Windows runners may lack a `python3` shim.
+      - name: Rewrite README links to absolute URLs for PyPI
+        shell: bash
+        run: command -v python3 >/dev/null 2>&1 && python3 scripts/transform_readme.py --target pypi || python scripts/transform_readme.py --target pypi
       - name: Build wheel
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
@@ -159,6 +165,8 @@ jobs:
         with:
           name: vpic-data
           path: crates/ultravin-core/data
+      - name: Rewrite README links to absolute URLs for PyPI
+        run: python3 scripts/transform_readme.py --target pypi
       - name: Build sdist
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
