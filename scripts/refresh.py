@@ -34,23 +34,28 @@ import argparse
 import datetime as dt
 import email.utils
 import hashlib
+import io
 import json
 import os
 import re
 import subprocess
 import urllib.error
 import urllib.request
+import zipfile
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "vpic" / "manifest.json"
+LOOKUPS = ROOT / "vpic" / "lookups.json"
 CORPUS = ROOT / "tests" / "parity_corpus.json"
 REPORT_DIR = ROOT / "target" / "refresh"
 URL_TEMPLATE = "https://vpic.nhtsa.dot.gov/Downloads/vPICList_lite_{month}.plain.zip"
 MONTH_RE = re.compile(r"^\d{4}_(0[1-9]|1[0-2])$")
 SWEEP_LIMIT = 500
+LOOKUP_MAX_ROWS = 512  # tables above this aren't lookups; the parity gates still validate them
+LOOKUP_REPORT_CAP = 20
 
 # Documented, deliberate ultravin-vs-oracle deviations (docs/KNOWN_DEVIATIONS.md).
 # A diverging VIN outside this set fails the refresh. The oracle-crash VIN
@@ -286,6 +291,87 @@ def classify(old: dict, new: dict, changed: list[str]) -> Classification:
     )
 
 
+# --------------------------------------------------------------------------- lookups
+#
+# In-place value edits in small lookup tables (e.g. 2026_07 renamed bodystyle 7
+# "...(SUV)..." to "...[SUV]...") change decode output for huge VIN populations
+# yet are invisible to row-count deltas. Freezing those tables into
+# vpic/lookups.json makes the rename reviewable in the PR diff, and the report
+# names each changed value below.
+
+
+def freeze_lookups(dump: Path) -> dict[str, dict[str, str]]:
+    """{table: {first-column: rest-of-row}} for every vpic table with <= LOOKUP_MAX_ROWS rows.
+
+    Raw COPY text, untouched: the file is a diff surface, not a parser."""
+    copy_re = re.compile(r"^COPY vpic\.(\w+) \(")
+    tables: dict[str, dict[str, str]] = {}
+    name = ""
+    rows: dict[str, str] | None = None
+    with zipfile.ZipFile(dump) as z:
+        member = next(n for n in z.namelist() if n.endswith(".sql"))
+        with z.open(member) as raw:
+            for line in io.TextIOWrapper(raw, encoding="utf-8"):
+                if rows is None:
+                    m = copy_re.match(line)
+                    if m:
+                        name, rows = m.group(1), {}
+                elif line.startswith("\\."):
+                    if len(rows) <= LOOKUP_MAX_ROWS:
+                        tables[name] = rows
+                    rows = None
+                elif len(rows) <= LOOKUP_MAX_ROWS:
+                    key, _, rest = line.rstrip("\n").partition("\t")
+                    rows[key] = rest
+    return tables
+
+
+def pinned_lookups() -> dict | None:
+    """The committed freeze, or None before the first refresh ships one."""
+    p = sh(["git", "show", "HEAD:vpic/lookups.json"], check=False, capture=True)
+    if p.returncode == 0 and (p.stdout or "").strip():
+        return json.loads(p.stdout)
+    return None
+
+
+@dataclass
+class LookupDiff:
+    changed: list[tuple[str, str, str, str]] = field(default_factory=list)  # (table, id, old, new)
+    added: list[tuple[str, int]] = field(default_factory=list)
+    removed: list[tuple[str, int]] = field(default_factory=list)
+    baseline: bool = False  # first refresh: nothing committed to diff against
+
+
+def diff_lookups(old: dict, new: dict) -> LookupDiff:
+    d = LookupDiff()
+    order = lambda k: (len(k), k)  # noqa: E731 — numeric-string ids sort numerically
+    for t in sorted(set(old) | set(new)):
+        o, n = old.get(t, {}), new.get(t, {})
+        d.changed += ((t, k, o[k], n[k]) for k in sorted(o.keys() & n.keys(), key=order) if o[k] != n[k])
+        if len(n.keys() - o.keys()):
+            d.added.append((t, len(n.keys() - o.keys())))
+        if len(o.keys() - n.keys()):
+            d.removed.append((t, len(o.keys() - n.keys())))
+    return d
+
+
+def render_lookups(d: LookupDiff) -> list[str]:
+    lines = ["## Lookup value changes", ""]
+    if d.baseline:
+        return [*lines, "`vpic/lookups.json` baseline frozen — value diffs appear from the next refresh.", ""]
+    shown = d.changed[:LOOKUP_REPORT_CAP]
+    lines += [f"- `{t}[{k}]`: “{a}” → “{b}”" for t, k, a, b in shown]
+    if len(d.changed) > len(shown):
+        lines.append(f"- …{len(d.changed) - len(shown)} more — see the `vpic/lookups.json` diff")
+    if d.added:
+        lines.append("- rows added: " + ", ".join(f"`{t}` +{n}" for t, n in d.added))
+    if d.removed:
+        lines.append("- rows removed: " + ", ".join(f"`{t}` -{n}" for t, n in d.removed))
+    if not (d.changed or d.added or d.removed):
+        lines.append("none")
+    return [*lines, "", f"_(tables ≤ {LOOKUP_MAX_ROWS} rows; larger tables are gate-validated but not enumerated)_", ""]
+
+
 # --------------------------------------------------------------------------- report
 
 
@@ -297,6 +383,7 @@ class Report:
     sha256: str
     classification: Classification
     gates: list[Gate]
+    lookups: LookupDiff | None = None
     skipped_vins: list[str] = field(default_factory=list)
     followups: list[str] = field(default_factory=list)
 
@@ -330,9 +417,10 @@ def render_report(r: Report) -> str:
         "",
         "Largest table changes: " + (", ".join(f"{t} {b - a:+,}" for t, a, b in c.row_moves) or "none"),
         "",
-        "## Gates",
-        "",
     ]
+    if r.lookups is not None:
+        lines += render_lookups(r.lookups)
+    lines += ["## Gates", ""]
     lines += [f"- {'✅' if g.ok else '❌'} **{g.name}** — {g.detail}" for g in r.gates]
     if r.followups:
         lines += ["", "## Follow-ups", ""] + [f"- {f}" for f in r.followups]
@@ -423,6 +511,14 @@ def cmd_run(args: argparse.Namespace) -> int:
         ]
     )
     new_manifest = json.loads(MANIFEST.read_text())
+
+    # Freeze small lookup tables so in-place label renames surface in the PR
+    # diff and the report (row counts can't show them).
+    old_lookups = pinned_lookups()
+    new_lookups = freeze_lookups(dump)
+    LOOKUPS.write_text(json.dumps(new_lookups, indent=1, sort_keys=True, ensure_ascii=False) + "\n")
+    lookups = LookupDiff(baseline=True) if old_lookups is None else diff_lookups(old_lookups, new_lookups)
+
     sh(["uv", "sync", "--frozen", "--all-extras"])
     sh(["uv", "run", "--frozen", "--", "maturin", "develop", "--uv"])
 
@@ -498,6 +594,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         sha256=sha,
         classification=classification,
         gates=gates,
+        lookups=lookups,
         skipped_vins=skipped,
     )
     healed = sorted(

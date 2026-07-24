@@ -39,8 +39,14 @@ Exit 0 = integrated and green; exit 2 = gates failed (report still written to
 `target/refresh/report.{md,json}`); exit 1 = mechanical breakage. The PR body
 is the report: data-only vs schema-change classification (`git status` on
 `vpic/schema` + `vpic/procs` — the importer strips volatile dump noise, so a
-data-only month diffs clean there), manifest row/table/function deltas, gate
-results, and follow-ups (e.g. a healed known deviation).
+data-only month diffs clean there), manifest row/table/function deltas, lookup
+value changes, gate results, and follow-ups (e.g. a healed known deviation).
+
+Row counts can't show an in-place label edit (2026_07 silently renamed
+`bodystyle` 7 from `...(SUV)...` to `...[SUV]...` — 71 rows before and after),
+so `run` also freezes every vpic table with ≤ 512 rows into `vpic/lookups.json`:
+the rename becomes a one-line PR diff, and the report names each changed value
+against the committed freeze.
 
 ## The agent path
 

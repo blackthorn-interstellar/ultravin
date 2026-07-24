@@ -5,9 +5,10 @@ from __future__ import annotations
 import datetime as dt
 import json
 import subprocess
+import zipfile
 
 from scripts import refresh
-from scripts.refresh import Probe
+from scripts.refresh import LookupDiff, Probe
 
 
 def test_month_candidates_newest_first() -> None:
@@ -160,6 +161,82 @@ def test_parse_freeze_skips() -> None:
     )
     assert refresh.parse_freeze_skips(out) == ["7T0M6TGCURDSNZTHF"]
     assert refresh.parse_freeze_skips("wrote ... (272 VINs, 0 currently diverging)\n") == []
+
+
+def test_freeze_lookups_parses_and_caps(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(refresh, "LOOKUP_MAX_ROWS", 2)
+    sql = (
+        "SET search_path TO vpic;\n"
+        "COPY vpic.bodystyle (id, name) FROM stdin;\n"
+        "7\tSport Utility Vehicle [SUV]/Multipurpose Vehicle [MPV]\n"
+        "5\tHatchback\n"
+        "\\.\n"
+        "COPY vpic.country (id, name, displayorder) FROM stdin;\n"
+        "1\tAlbania\t5\n"
+        "\\.\n"
+        "COPY vpic.pattern (id, vinschemaid, keys) FROM stdin;\n"
+        "1\t2\ta\n"
+        "2\t2\tb\n"
+        "3\t2\tc\n"
+        "\\.\n"
+        "COPY public.notvpic (id) FROM stdin;\n"
+        "1\n"
+        "\\.\n"
+        "COPY vpic.decodingoutput (id, addedon) FROM stdin;\n"
+        "\\.\n"
+    )
+    dump = tmp_path / "dump.zip"
+    with zipfile.ZipFile(dump, "w") as z:
+        z.writestr("dump.sql", sql)
+    assert refresh.freeze_lookups(dump) == {
+        "bodystyle": {"7": "Sport Utility Vehicle [SUV]/Multipurpose Vehicle [MPV]", "5": "Hatchback"},
+        "country": {"1": "Albania\t5"},  # multi-column tail kept raw
+        "decodingoutput": {},
+        # pattern: 3 rows > cap of 2 — dropped; public.notvpic: wrong schema — ignored
+    }
+
+
+def test_diff_lookups_orders_ids_numerically() -> None:
+    old = {"bodystyle": {"2": "(SUV)", "10": "Van (old)", "1": "same"}, "gone": {"1": "x"}}
+    new = {"bodystyle": {"2": "[SUV]", "10": "Van (new)", "1": "same", "9": "added"}, "fresh": {"1": "y", "2": "z"}}
+    d = refresh.diff_lookups(old, new)
+    assert d.changed == [("bodystyle", "2", "(SUV)", "[SUV]"), ("bodystyle", "10", "Van (old)", "Van (new)")]
+    assert d.added == [("bodystyle", 1), ("fresh", 2)]
+    assert d.removed == [("gone", 1)]
+    assert not d.baseline
+
+
+def test_render_lookups_changed_values_and_cap() -> None:
+    changed = [("bodystyle", str(i), f"old{i}", f"new{i}") for i in range(refresh.LOOKUP_REPORT_CAP + 5)]
+    md = "\n".join(refresh.render_lookups(LookupDiff(changed=changed, added=[("enginemodel", 12)])))
+    assert "- `bodystyle[0]`: “old0” → “new0”" in md
+    assert "…5 more" in md
+    assert "rows added: `enginemodel` +12" in md
+
+
+def test_render_lookups_baseline_and_quiet_months() -> None:
+    assert "baseline frozen" in "\n".join(refresh.render_lookups(LookupDiff(baseline=True)))
+    assert "none" in "\n".join(refresh.render_lookups(LookupDiff()))
+
+
+def test_render_report_includes_lookup_section() -> None:
+    report = refresh.Report(
+        old_month="2026_06",
+        month="2026_07",
+        source=Probe(url="https://x/y.zip", exists=True, content_length=7),
+        sha256="abc",
+        classification=refresh.classify(
+            _manifest({"bodystyle": 71}, ["spvindecode"]),
+            _manifest({"bodystyle": 71}, ["spvindecode"]),
+            changed=[],
+        ),
+        gates=[refresh.Gate("corpus", True, "all exact")],
+        lookups=LookupDiff(changed=[("bodystyle", "7", "x (SUV)", "x [SUV]")]),
+    )
+    md = refresh.render_report(report)
+    assert "## Lookup value changes" in md
+    assert "- `bodystyle[7]`: “x (SUV)” → “x [SUV]”" in md
+    assert md.index("Lookup value changes") < md.index("## Gates")
 
 
 def test_main_writes_failure_context_on_mechanical_crash(monkeypatch, tmp_path) -> None:
