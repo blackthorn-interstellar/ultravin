@@ -137,10 +137,10 @@ begin
 		where w.wmi = var_wmi and (includeAll = true or (w.PublicAvailabilityDate <= NOW()));
 	
 		insert into DecodingItems (DecodingItem) select ROW(
-		null, pass, null, null, upper(var_wmi), null, WmiId, 27, cast(MfrId as character varying), MfrName, 'Manuf. Name', 100, null)::vpic."tblDecodingItem";
+		null, pass, null, null, upper(var_wmi), null, WmiId, 27, cast(MfrId as character varying), MfrName, 'Manu. Name', 100, null)::vpic."tblDecodingItem";
 	
 		insert into DecodingItems (DecodingItem) select ROW(
-		null, pass, null, null, upper(var_wmi), null, WmiId, 157, cast(MfrId as character varying), cast(MfrId as character varying), 'Manuf. Id', 100, null)::vpic."tblDecodingItem";
+		null, pass, null, null, upper(var_wmi), null, WmiId, 157, cast(MfrId as character varying), cast(MfrId as character varying), 'Manu. Id', 100, null)::vpic."tblDecodingItem";
 	
 		insert into DecodingItems (DecodingItem) select ROW(
 		null, pass, null, null, modelYearSource, null, null, 29,

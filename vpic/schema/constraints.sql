@@ -569,8 +569,5 @@ ALTER TABLE ONLY vpic.wmi_vinschema
     ADD CONSTRAINT fk_wmi_vinschema_wmi FOREIGN KEY (wmiid) REFERENCES vpic.wmi(id);
 
 
--- Completed on 2026-06-11 09:38:51
 
 -- PostgreSQL database dump complete
-
-\unrestrict dO69fbNW2dCkiN9wsDnBgbOQJIqxvSuStqxejkwQIanBEMdLpgWKfnYrXjDFpiZ
