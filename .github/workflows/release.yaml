@@ -2,7 +2,7 @@ name: Release
 
 # Cross-platform wheel + sdist build and PyPI publish. Mirrors the pypiron
 # pipeline, adapted for a PyO3 abi3 extension module (one wheel per platform
-# covers Python 3.12+) whose 82MB vpic.rkyv data artifact is gitignored and
+# covers Python 3.10+) whose 82MB vpic.rkyv data artifact is gitignored and
 # rebuilt deterministically from the pinned dump before any wheel compiles.
 #
 # Versions come solely from git tags: the repo carries 0.0.0 and CI stamps the
@@ -67,7 +67,7 @@ jobs:
           if-no-files-found: error
 
   # One job, one matrix over every (kind, runner, target). abi3 means a single
-  # wheel per platform serves Python 3.12+. No zig/CFLAGS: the crate is pure Rust
+  # wheel per platform serves Python 3.10+. No zig/CFLAGS: the crate is pure Rust
   # (blake3 uses its `pure` feature), so every cross target builds with the
   # default cross-gcc. fail-fast is off so one platform's failure spares the rest.
   wheels:

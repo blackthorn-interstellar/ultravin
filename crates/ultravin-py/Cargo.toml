@@ -13,9 +13,10 @@ crate-type = ["cdylib"]
 
 [dependencies]
 ultravin-core = { path = "../ultravin-core" }
-# generate-import-lib lets the Windows aarch64 wheel cross-compile with no arm
-# Python present (it synthesizes the python3.dll import lib); inert off Windows.
-pyo3 = { version = "0.23", features = ["abi3-py310", "extension-module", "generate-import-lib"] }
+# Windows links python3.dll via raw-dylib (pyo3 0.29+), so no import lib is
+# needed even for the aarch64 cross-build — the old generate-import-lib
+# feature is an inert no-op now and deliberately dropped.
+pyo3 = { version = "0.29", features = ["abi3-py310", "extension-module"] }
 
 # Sharded allocator for the decode hot path. The engine is allocation-bound, and
 # the system allocator's global lock serializes the parallel `decode_batch` across

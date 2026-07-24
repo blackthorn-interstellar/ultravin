@@ -122,7 +122,7 @@ fn decode<'py>(py: Python<'py>, vin: &str) -> PyResult<Bound<'py, PyDict>> {
 /// marshalling of results into Python dicts holds the GIL.
 #[pyfunction]
 fn decode_batch<'py>(py: Python<'py>, vins: Vec<String>) -> PyResult<Vec<Bound<'py, PyDict>>> {
-    let results = py.allow_threads(|| ultravin_core::decode_batch(&vins));
+    let results = py.detach(|| ultravin_core::decode_batch(&vins));
     results.iter().map(|r| result_to_dict(py, r)).collect()
 }
 
@@ -140,7 +140,7 @@ fn decode_json(vin: &str) -> String {
 /// `decode_batch`, which must build a ~15-key dict per element under the GIL.
 #[pyfunction]
 fn decode_batch_json(py: Python<'_>, vins: Vec<String>) -> String {
-    py.allow_threads(|| ultravin_core::decode_batch_json(&vins))
+    py.detach(|| ultravin_core::decode_batch_json(&vins))
 }
 
 #[pymodule]
