@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import datetime as dt
+import json
+import subprocess
 
 from scripts import refresh
 from scripts.refresh import Probe
@@ -161,9 +163,6 @@ def test_parse_freeze_skips() -> None:
 
 
 def test_main_writes_failure_context_on_mechanical_crash(monkeypatch, tmp_path) -> None:
-    import json
-    import subprocess
-
     def boom(args):
         raise subprocess.CalledProcessError(7, ["cargo", "run"])
 
