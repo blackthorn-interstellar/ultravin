@@ -12,7 +12,7 @@ use std::rc::Rc;
 use crate::checkdigit::{check_digit_v1, check_digit_with_flag};
 use crate::db::Db;
 use crate::decode::CoreResult;
-use crate::hash::IntSet;
+use crate::hash::{FxBuildHasher, IntSet};
 use crate::tables::{ArchivedWmi, NULL_I32};
 
 /// element-5 attribute ids that flag an off-road PIN (code 10).
@@ -140,6 +140,47 @@ pub fn valid_chars_in_key(key: &str) -> Vec<(i32, char)> {
         }
     }
     out
+}
+
+/// One key's expanded `(key index, allowed char)` pairs — the [`valid_chars_in_key`]
+/// result, shared by `Rc` so a memo hit hands out a pointer, not a copy.
+type KeyChars = Rc<[(i32, char)]>;
+
+/// High-water mark for [`KEY_CHARS`]. The archive holds ~74k distinct pattern
+/// keys, so a long-running batch that spans every WMI would otherwise grow the
+/// memo into double-digit megabytes *per worker thread*. Past the cap it resets;
+/// a decode's keys all come from one WMI, so the working set refills at once.
+const KEY_CHARS_CAP: usize = 16_384;
+
+thread_local! {
+    /// Per-thread memo of [`valid_chars_in_key`] for the E6 unused-position scan,
+    /// which expands every matched pattern key on every pass — and, for a bracket
+    /// key, compiles a regex to do it (see [`valid_chars_in_regex`]). The
+    /// expansion is a pure function of the key text and the keys come from the
+    /// immutable archive, so a hit is byte-identical to recomputing; this is the
+    /// same trade as `MATCHER_CACHE` in `matcher.rs` and [`CHARSET_CACHE`] below.
+    /// Not shared with [`valid_charset`], which sweeps *every* key of a WMI-year
+    /// (already memoized as a whole) and would flood the memo with keys E6 never
+    /// asks about. Keys are archive-derived, never caller-derived, so the fast
+    /// hasher is safe here for the same reason it is in `hash.rs`.
+    static KEY_CHARS: RefCell<HashMap<String, KeyChars, FxBuildHasher>> =
+        RefCell::new(HashMap::default());
+}
+
+/// [`valid_chars_in_key`], memoized per thread.
+fn key_chars(key: &str) -> KeyChars {
+    if let Some(hit) = KEY_CHARS.with(|c| c.borrow().get(key).cloned()) {
+        return hit;
+    }
+    let expansion: KeyChars = valid_chars_in_key(key).into();
+    KEY_CHARS.with(|c| {
+        let mut memo = c.borrow_mut();
+        if memo.len() >= KEY_CHARS_CAP {
+            memo.clear();
+        }
+        memo.insert(key.to_string(), Rc::clone(&expansion));
+    });
+    expansion
 }
 
 type Charset = Rc<HashMap<i32, BTreeSet<char>>>;
@@ -337,7 +378,7 @@ fn errorcode(
     // E6: unused positions from the matched-pattern keys.
     let mut ty: IntSet<(i32, char)> = IntSet::default();
     for &key in matched_keys {
-        for (kpos, c) in valid_chars_in_key(key) {
+        for &(kpos, c) in key_chars(key).iter() {
             if c != '|' {
                 ty.insert((kpos, c));
             }
