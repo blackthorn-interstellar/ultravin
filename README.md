@@ -51,10 +51,8 @@ r["wmi"]                # '1HG'
 r["check_digit_valid"]  # True
 r["error_codes"]        # [0]
 
-# `elements` is the full decoded attribute list; index it by variable name:
-attrs = {e["variable"]: e["value"] for e in r["elements"]}
-attrs["Make"]           # 'HONDA'
-attrs["Model"]          # 'Accord'
+# `elements` is the full decoded attribute list, one dict per attribute:
+r["elements"][0]        # {'variable': 'Make', 'value': 'HONDA', 'source': ..., …}
 ```
 
 `decode(vin)` returns a `dict` with keys `vin`, `wmi`, `descriptor`,
@@ -66,11 +64,40 @@ attrs["Model"]          # 'Accord'
 results = ultravin.decode_batch(["1HGCM82633A004352", "5YJ3E1EA7JF000000"])
 ```
 
+If you only want the values, pass `flat=True` and skip the per-attribute dicts
+entirely — **~2× faster end to end**. Decoding is no longer the expensive part;
+building ~615 dict entries per VIN is:
+
+```python
+r = ultravin.decode("1HGCM82633A004352", flat=True)
+
+r["attributes"]["Make"]   # 'HONDA'
+r["attributes"]["Model"]  # 'Accord'
+```
+
+`flat=True` replaces `elements` with `attributes`, a single `variable -> value`
+mapping (header keys are unchanged), and works the same on `decode_batch`,
+`decode_json` and `decode_batch_json`. Two things to know:
+
+- Values are `str`, except the free-text note fields listed in
+  `ultravin.MULTI_VALUED`, which are **always** `list[str]` — those are the only
+  vPIC elements allowed to repeat within one decode, and each row is a separate
+  note rather than a competing value.
+- It keeps the value and drops the provenance. If you need to know *where* a
+  value came from (`source` — over half of all rows are vehicle-type defaults
+  rather than something the VIN encodes), or the raw vPIC `attribute_id`, use the
+  default shape.
+
+`ultravin.ELEMENTS` maps each variable name to its static metadata
+(`element_id`, `group_name`, `data_type`, …). Pin to `element_id` if you need a
+key that survives NHTSA renaming a variable between data releases.
+
 From the command line:
 
 ```bash
 ultravin decode 1HGCM82633A004352          # human-readable table
 ultravin decode 1HGCM82633A004352 --json   # full JSON
+ultravin decode 1HGCM82633A004352 --flat   # values only, no provenance
 ultravin decode-batch vins.txt --json      # one VIN per line
 ultravin version
 ```

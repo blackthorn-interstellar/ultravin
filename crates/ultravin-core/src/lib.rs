@@ -69,6 +69,112 @@ pub struct DecodeResult<'a> {
     pub elements: Vec<DecodedElement<'a>>,
 }
 
+/// One attribute of a [`FlatResult`]: a single value, or the full list for the
+/// elements that are allowed to repeat (see [`FlatResult::attributes`]).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(untagged)]
+pub enum FlatValue {
+    One(String),
+    Many(Vec<String>),
+}
+
+/// A decoded VIN with its elements collapsed to `variable -> value`.
+///
+/// Same header fields as [`DecodeResult`]; `elements` is replaced by
+/// `attributes`, which drops the 13 per-element provenance columns and keeps the
+/// pair almost every caller actually reads. Building this costs one map entry per
+/// element instead of a 15-key dict, which is the whole point — the marshalling
+/// into Python, not the decode, is what it saves.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct FlatResult<'a> {
+    pub vin: String,
+    pub wmi: String,
+    pub descriptor: String,
+    pub model_year: Option<i32>,
+    pub error_codes: Vec<i32>,
+    pub check_digit_valid: bool,
+    pub corrected_vin: String,
+    /// `variable -> value`, in the element order of [`DecodeResult::elements`].
+    /// Kept as ordered pairs rather than a map so the order survives into
+    /// Python/JSON; the keys are unique, so it serializes as a JSON object.
+    #[serde(serialize_with = "serialize_pairs")]
+    pub attributes: Vec<(&'a str, FlatValue)>,
+}
+
+fn serialize_pairs<S: serde::Serializer>(
+    pairs: &[(&str, FlatValue)],
+    s: S,
+) -> Result<S::Ok, S::Error> {
+    s.collect_map(pairs.iter().map(|(k, v)| (k, v)))
+}
+
+impl<'a> From<DecodeResult<'a>> for FlatResult<'a> {
+    /// Collapse `elements` to `attributes`.
+    ///
+    /// The dedup-exempt elements ([`tables::EXEMPT_ELEMENTS`] — `Note`,
+    /// `Other Engine Info`, …) are the only ones the decoder may emit more than
+    /// once per VIN, and each row is an independent note rather than a competing
+    /// value. They are therefore **always** [`FlatValue::Many`], even at length
+    /// one, so a consumer's field type never depends on the data in front of it.
+    /// Every other variable takes its first occurrence; a second one is
+    /// unreachable with the current archive (no model maps to more than one make)
+    /// and would be a data change worth catching in the refresh gates.
+    fn from(r: DecodeResult<'a>) -> Self {
+        let mut attributes: Vec<(&'a str, FlatValue)> = Vec::with_capacity(r.elements.len());
+        let mut seen: std::collections::HashMap<&'a str, usize, hash::FxBuildHasher> =
+            std::collections::HashMap::default();
+        for e in r.elements {
+            match seen.get(e.variable) {
+                Some(&i) => {
+                    if let (_, FlatValue::Many(list)) = &mut attributes[i] {
+                        list.push(e.value);
+                    }
+                }
+                None => {
+                    seen.insert(e.variable, attributes.len());
+                    let value = if tables::is_exempt(e.element_id) {
+                        FlatValue::Many(vec![e.value])
+                    } else {
+                        FlatValue::One(e.value)
+                    };
+                    attributes.push((e.variable, value));
+                }
+            }
+        }
+        FlatResult {
+            vin: r.vin,
+            wmi: r.wmi,
+            descriptor: r.descriptor,
+            model_year: r.model_year,
+            error_codes: r.error_codes,
+            check_digit_valid: r.check_digit_valid,
+            corrected_vin: r.corrected_vin,
+            attributes,
+        }
+    }
+}
+
+/// The element's `Decode` text when it is one [`project`] emits, `None` when the
+/// element never reaches output (no Decode text, or private). The single gate for
+/// "can this element appear in a result", shared by the projection, the
+/// multi-valued list and the exported element table so they cannot drift.
+pub fn public_decode<'a>(db: &'a Db, e: &'a tables::ArchivedElement) -> Option<&'a str> {
+    let decode = db.s(e.decode.to_native());
+    (e.decode_present && !decode.is_empty() && !e.isprivate).then_some(decode)
+}
+
+/// The variable names whose [`FlatResult`] value is always a list. Only the
+/// exempt elements that can actually reach output — an exempt element the
+/// projection filters out is never a key, so advertising it would be a lie.
+pub fn multi_valued_variables(db: &Db) -> Vec<&str> {
+    tables::EXEMPT_ELEMENTS
+        .iter()
+        .filter_map(|id| db.element_by_id(*id))
+        .filter(|e| public_decode(db, e).is_some())
+        .map(|e| db.s(e.name.to_native()))
+        .collect()
+}
+
 fn opt_i32(v: i32) -> Option<i32> {
     if v == tables::NULL_I32 {
         None
@@ -137,6 +243,18 @@ pub fn decode_with<'a>(
 /// decoded independently via [`decode_with`] across rayon's thread pool. Output
 /// order matches `inputs`. Per-VIN output is identical to calling [`decode`].
 pub fn decode_batch(inputs: &[String]) -> Vec<DecodeResult<'static>> {
+    batch(inputs, |r| r)
+}
+
+/// [`decode_batch`] with the [`FlatResult`] shape. Flattening runs inside the
+/// parallel region, so only the (much smaller) marshalling is left to the caller.
+pub fn decode_batch_flat(inputs: &[String]) -> Vec<FlatResult<'static>> {
+    batch(inputs, FlatResult::from)
+}
+
+/// Shared body of the batch paths: decode every input in parallel over the shared
+/// archive, mapped through `shape`. Output order matches `inputs`.
+fn batch<T: Send>(inputs: &[String], shape: impl Fn(DecodeResult<'static>) -> T + Sync) -> Vec<T> {
     use rayon::prelude::*;
 
     let secs = SystemTime::now()
@@ -148,7 +266,7 @@ pub fn decode_batch(inputs: &[String]) -> Vec<DecodeResult<'static>> {
     let db = Db::embedded();
     inputs
         .par_iter()
-        .map(|v| decode_with(db, v, now_micros, year))
+        .map(|v| shape(decode_with(db, v, now_micros, year)))
         .collect()
 }
 
@@ -156,6 +274,12 @@ pub fn decode_batch(inputs: &[String]) -> Vec<DecodeResult<'static>> {
 /// dict). Serializing in Rust avoids the per-field Python dict construction.
 pub fn decode_json(input: &str) -> String {
     serde_json::to_string(&decode(input)).expect("DecodeResult is infallibly serializable")
+}
+
+/// [`decode_json`] with the [`FlatResult`] shape.
+pub fn decode_json_flat(input: &str) -> String {
+    serde_json::to_string(&FlatResult::from(decode(input)))
+        .expect("FlatResult is infallibly serializable")
 }
 
 /// Decode many VINs to a single compact JSON array string, in parallel.
@@ -167,6 +291,20 @@ pub fn decode_json(input: &str) -> String {
 /// otherwise caps `decode_batch`. `json.loads` of the output equals
 /// `decode_batch` element-for-element.
 pub fn decode_batch_json(inputs: &[String]) -> String {
+    batch_json(inputs, |r| r)
+}
+
+/// [`decode_batch_json`] with the [`FlatResult`] shape.
+pub fn decode_batch_json_flat(inputs: &[String]) -> String {
+    batch_json(inputs, FlatResult::from)
+}
+
+/// Shared body of the batch-JSON paths: decode + serialize in parallel through
+/// `shape`, then stitch one array serially.
+fn batch_json<T: serde::Serialize + Send>(
+    inputs: &[String],
+    shape: impl Fn(DecodeResult<'static>) -> T + Sync,
+) -> String {
     use rayon::prelude::*;
 
     let secs = SystemTime::now()
@@ -181,8 +319,8 @@ pub fn decode_batch_json(inputs: &[String]) -> String {
     let parts: Vec<String> = inputs
         .par_iter()
         .map(|v| {
-            serde_json::to_string(&decode_with(db, v, now_micros, year))
-                .expect("DecodeResult is infallibly serializable")
+            serde_json::to_string(&shape(decode_with(db, v, now_micros, year)))
+                .expect("decode results are infallibly serializable")
         })
         .collect();
     // Stitch the array serially (one pass, pre-sized) — cheap memcpy vs. the
@@ -457,10 +595,9 @@ fn project(db: &Db, items: Vec<decode::DecodingItem>) -> Vec<DecodedElement<'_>>
         let Some(e) = db.element_by_id(it.element_id) else {
             continue;
         };
-        let decode_str = db.s(e.decode.to_native());
-        if !e.decode_present || decode_str.is_empty() || e.isprivate {
+        let Some(decode_str) = public_decode(db, e) else {
             continue;
-        }
+        };
         elements.push(DecodedElement {
             group_name: db.s(e.groupname.to_native()),
             variable: db.s(e.name.to_native()),
@@ -590,6 +727,52 @@ mod tests {
             .expect("make element");
         assert_eq!(make["value"], "HONDA");
         assert_eq!(make["source"], "pattern - model");
+    }
+
+    #[test]
+    fn flat_collapses_elements_and_keeps_notes_as_lists() {
+        let d = db();
+        if !d.is_loaded() {
+            eprintln!("skipping: artifact not built");
+            return;
+        }
+        let full = decode_with(d, "1HGCM82633A004352", 1_750_000_000_000_000, 2026);
+        let notes: Vec<&str> = multi_valued_variables(d);
+        let flat = FlatResult::from(full.clone());
+
+        assert_eq!(flat.vin, full.vin);
+        assert_eq!(flat.model_year, full.model_year);
+        // Every element's variable is present exactly once, in element order.
+        let mut expected: Vec<&str> = Vec::new();
+        for e in &full.elements {
+            if !expected.contains(&e.variable) {
+                expected.push(e.variable);
+            }
+        }
+        let got: Vec<&str> = flat.attributes.iter().map(|(k, _)| *k).collect();
+        assert_eq!(got, expected);
+        // The exempt note elements are lists even at length one; nothing else is.
+        for (name, value) in &flat.attributes {
+            match value {
+                FlatValue::Many(_) => assert!(notes.contains(name), "{name} should not be a list"),
+                FlatValue::One(_) => assert!(!notes.contains(name), "{name} should be a list"),
+            }
+        }
+        let make = flat.attributes.iter().find(|(k, _)| *k == "Make");
+        assert_eq!(make.map(|(_, v)| v), Some(&FlatValue::One("HONDA".into())));
+    }
+
+    #[test]
+    fn flat_json_is_an_object_keyed_by_variable() {
+        if !db().is_loaded() {
+            return;
+        }
+        let v: serde_json::Value =
+            serde_json::from_str(&decode_json_flat("1HGCM82633A004352")).expect("valid JSON");
+        assert_eq!(v["model_year"], 2003);
+        assert_eq!(v["attributes"]["Make"], "HONDA");
+        assert_eq!(v["attributes"]["Model"], "Accord");
+        assert!(v["attributes"].get("elements").is_none());
     }
 
     #[test]
