@@ -19,7 +19,7 @@ OUT = Path(__file__).resolve().parents[2] / "assets" / "benchmark.svg"
 
 # (label, results-key, highlighted?) top -> bottom, fastest first.
 ROWS = [
-    ("ultravin — batched (10 cores)", "ultravin-batch", True),
+    ("ultravin — batched (4 cores)", "ultravin-batch", True),
     ("ultravin — 1 core", "ultravin", True),
     ("corgi v3", "corgi-v3", False),
     ("corgi v2", "corgi-v2", False),
@@ -28,8 +28,8 @@ ROWS = [
     ("NHTSA vPIC API (rate limit)", "nhtsa-api", False),
 ]
 
-# Linear axis: 0 .. 120,000 VIN/s.
-AXIS_MAX = 120_000
+# Linear axis: 0 .. 100,000 VIN/s.
+AXIS_MAX = 100_000
 TICKS = [
     (0, "0"),
     (20_000, "20k"),
@@ -37,7 +37,6 @@ TICKS = [
     (60_000, "60k"),
     (80_000, "80k"),
     (100_000, "100k"),
-    (120_000, "120k"),
 ]
 
 X0, X1 = 220, 690  # plot area (px); X0 leaves room for the longest label
