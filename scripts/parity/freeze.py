@@ -49,17 +49,33 @@ def _entry(conn: Any, vin: str, kind: str, note: str | None) -> dict[str, Any]:
     }
 
 
-def build(target: int, add_vins: str | None = None) -> tuple[dict[str, Any], list[tuple[str, str]]]:
-    """Build the corpus from a diverse sample, optionally merging specific VINs
-    (e.g. tests/brutal_repros.json). VINs the oracle itself errors on are skipped
-    (recorded as deviations) since they can't be snapshotted."""
-    cases = select(target)
+def build(
+    target: int, add_vins: str | None = None, vins_file: str | None = None
+) -> tuple[dict[str, Any], list[tuple[str, str]]]:
+    """Build the corpus, optionally merging specific VINs (e.g.
+    tests/brutal_repros.json). VINs the oracle itself errors on are skipped
+    (recorded as deviations) since they can't be snapshotted.
+
+    With `vins_file`, the corpus is exactly that list rather than a fresh
+    diverse sample — the way to freeze a corpus chosen for coverage instead of
+    for spread."""
+    if vins_file:
+        lines = [ln.strip() for ln in Path(vins_file).read_text().splitlines() if ln.strip()]
+        cases = [generator.VinCase(vin=ln, kind="cover", note=None) for ln in lines]
+    else:
+        cases = select(target)
     entries: dict[str, dict[str, Any]] = {}
     skipped: list[tuple[str, str]] = []
     with oracle.connect() as conn:
         cur_year = oracle.current_year(conn)
         for c in cases:
-            entries[c.vin] = _entry(conn, c.vin, c.kind, c.note)
+            try:
+                entries[c.vin] = _entry(conn, c.vin, c.kind, c.note)
+            except Exception as e:  # noqa: BLE001 — the oracle raises on malformed-regex patterns
+                # Documented deviation: `vpic.fvalidcharsinregex` rejects a
+                # reversed bracket range and spvindecode returns nothing, so
+                # there is no oracle answer to snapshot. See KNOWN_DEVIATIONS.md.
+                skipped.append((c.vin, repr(e)[:90]))
         if add_vins:
             data = json.loads(Path(add_vins).read_text())
             vins = [v["vin"] for v in data["vins"]] if isinstance(data, dict) else list(data)
@@ -85,13 +101,19 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Freeze the committed parity regression corpus.")
     ap.add_argument("--target", type=int, default=220, help="approx number of pattern VINs")
     ap.add_argument(
+        "--vins",
+        default=None,
+        dest="vins_file",
+        help="freeze exactly these VINs (one per line) instead of a fresh sample",
+    )
+    ap.add_argument(
         "--add-vins",
         default=None,
         dest="add_vins",
         help="merge VINs from a JSON file (e.g. tests/brutal_repros.json); oracle-erroring VINs are skipped",
     )
     args = ap.parse_args(argv)
-    corpus, skipped = build(args.target, args.add_vins)
+    corpus, skipped = build(args.target, args.add_vins, args.vins_file)
     # One compact line per entry: small + still git-diffable (one changed VIN = one line).
     head = {k: v for k, v in corpus.items() if k != "entries"}
     lines = [json.dumps(head, default=str)[:-1] + ', "entries": [']
