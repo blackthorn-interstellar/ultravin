@@ -20,6 +20,7 @@ fn main() {
     if !path.exists() {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         let empty = tables::VpicData {
+            cover: Vec::new(),
             arena_bytes: vec![0],
             arena_offsets: vec![0, 0],
             wmi: Vec::new(),

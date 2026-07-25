@@ -3,6 +3,7 @@
 
 use std::cell::RefCell;
 
+use pyo3::exceptions::PyValueError;
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyString};
@@ -226,6 +227,83 @@ fn decode_batch_json(py: Python<'_>, vins: Vec<String>, flat: bool) -> String {
     })
 }
 
+/// Generate `n` valid VINs, deterministic for a given `seed`.
+///
+/// Each VIN comes from a real WMI, a schema that WMI uses, and one of that
+/// schema's patterns, so it decodes to real attributes rather than to an
+/// unknown-manufacturer error. Filters are conjunctive; `vehicle_type` is a
+/// VehicleType row id (2 = passenger car, 7 = MPV). Returns fewer than `n` only
+/// when the filter matches nothing.
+#[pyfunction]
+#[pyo3(signature = (n, *, seed = 0, wmi = None, make = None, year = None, vehicle_type = None))]
+fn generate(
+    py: Python<'_>,
+    n: usize,
+    seed: u64,
+    wmi: Option<String>,
+    make: Option<String>,
+    year: Option<i32>,
+    vehicle_type: Option<i32>,
+) -> Vec<String> {
+    let filter = ultravin_core::Filter {
+        wmi,
+        make,
+        year,
+        vehicle_type,
+    };
+    py.detach(|| {
+        ultravin_core::generate(
+            ultravin_core::Db::embedded(),
+            n,
+            seed,
+            &filter,
+            ultravin_core::current_year(),
+        )
+    })
+}
+
+/// One VIN per row of every requested data dimension — the brute-force list.
+///
+/// `dimensions` names any of `wmi`, `pattern`, `engine`, `vspec`, `exception`,
+/// `default`; omit it for all six. This is large (the `pattern` dimension alone
+/// is ~545k VINs), so ask for one dimension at a time unless you want the lot.
+#[pyfunction]
+#[pyo3(signature = (dimensions = None))]
+fn sweep(py: Python<'_>, dimensions: Option<Vec<String>>) -> PyResult<Vec<String>> {
+    let dims = match dimensions {
+        None => ultravin_core::Dimension::ALL.to_vec(),
+        Some(names) => names
+            .iter()
+            .map(|n| match n.as_str() {
+                "wmi" => Ok(ultravin_core::Dimension::Wmi),
+                "pattern" => Ok(ultravin_core::Dimension::Pattern),
+                "engine" => Ok(ultravin_core::Dimension::Engine),
+                "vspec" => Ok(ultravin_core::Dimension::VehicleSpec),
+                "exception" => Ok(ultravin_core::Dimension::Exception),
+                "default" => Ok(ultravin_core::Dimension::Default),
+                other => Err(PyValueError::new_err(format!("unknown dimension: {other}"))),
+            })
+            .collect::<PyResult<Vec<_>>>()?,
+    };
+    Ok(py.detach(|| {
+        ultravin_core::sweep(
+            ultravin_core::Db::embedded(),
+            &dims,
+            ultravin_core::current_year(),
+        )
+    }))
+}
+
+/// The smallest VIN set that exercises every decode behaviour this data month
+/// can reach — computed when the artifact was built, so it costs nothing here.
+///
+/// Use it as a decoder test corpus: a few hundred VINs that between them touch
+/// every resolution rung, error code, conversion and tiebreak the data supports.
+#[pyfunction]
+fn cover_vins() -> Vec<String> {
+    ultravin_core::Db::embedded().cover()
+}
+
 #[pymodule]
 fn _ultravin(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(decode, m)?)?;
@@ -234,6 +312,9 @@ fn _ultravin(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(decode_batch_json, m)?)?;
     m.add_function(wrap_pyfunction!(multi_valued, m)?)?;
     m.add_function(wrap_pyfunction!(elements, m)?)?;
+    m.add_function(wrap_pyfunction!(generate, m)?)?;
+    m.add_function(wrap_pyfunction!(sweep, m)?)?;
+    m.add_function(wrap_pyfunction!(cover_vins, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

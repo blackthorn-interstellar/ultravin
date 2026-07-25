@@ -275,6 +275,58 @@ impl Db {
         self.a().element.as_slice()
     }
 
+    // --- Whole-table access. Decoding only ever needs keyed lookups; generating
+    // test VINs needs to walk the tables, so these exist for `generate`. ---
+
+    /// The baked behavioural cover: the smallest VIN set that exercises every
+    /// decode behaviour this data month can reach.
+    pub fn cover(&self) -> Vec<String> {
+        self.a().cover.iter().map(|v| v.to_string()).collect()
+    }
+
+    /// Every WMI, sorted by (wmi string ASC, id ASC).
+    pub fn wmis(&self) -> &[ArchivedWmi] {
+        self.a().wmi.as_slice()
+    }
+
+    /// Every pattern, sorted by (vinschemaid ASC, id ASC).
+    pub fn patterns(&self) -> &[crate::tables::ArchivedPattern] {
+        self.a().pattern.as_slice()
+    }
+
+    /// Every VinException VIN, sorted by the VIN string.
+    pub fn vinexceptions(&self) -> &[crate::tables::ArchivedVinException] {
+        self.a().vinexception.as_slice()
+    }
+
+    /// Every engine model, sorted by id.
+    pub fn enginemodels(&self) -> &[crate::tables::ArchivedEngineModel] {
+        self.a().enginemodel.as_slice()
+    }
+
+    /// Every vehicle-spec schema, sorted by (makeid ASC, id ASC).
+    pub fn vspecschemas(&self) -> &[crate::tables::ArchivedVSpecSchema] {
+        self.a().vspecschema.as_slice()
+    }
+
+    /// Every DefaultValue row, sorted by (vehicletypeid ASC, id ASC).
+    pub fn defaultvalues(&self) -> &[crate::tables::ArchivedDefaultValue] {
+        self.a().defaultvalue.as_slice()
+    }
+
+    /// Lookup ids whose value matches `name` case-insensitively, for one table
+    /// tag — the reverse of [`Db::lookup`], used to turn a make name into ids.
+    pub fn lookup_ids_by_name(&self, tag: u16, name: &str) -> Vec<i32> {
+        self.a()
+            .lookups
+            .iter()
+            .filter(|r| {
+                r.tag.to_native() == tag && self.s(r.name.to_native()).eq_ignore_ascii_case(name)
+            })
+            .map(|r| r.id.to_native())
+            .collect()
+    }
+
     pub fn makes_for_model(&self, modelid: i32) -> &[ArchivedMakeModel] {
         slice_eq(self.a().make_model.as_slice(), modelid, |r| {
             r.modelid.to_native()

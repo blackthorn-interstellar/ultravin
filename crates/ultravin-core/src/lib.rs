@@ -8,9 +8,11 @@
 
 mod checkdigit;
 mod conversion;
+pub mod cover;
 pub mod db;
 mod decode;
 mod errors;
+pub mod generate;
 mod hash;
 mod matcher;
 mod resolve;
@@ -23,6 +25,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use checkdigit::check_digit;
 pub use db::Db;
+pub use generate::{build_vin, generate, sweep, year_char, Dimension, Filter};
 pub use matcher::sqlwild_to_regex;
 pub use wmi::{vin_descriptor, vin_wmi};
 
@@ -215,6 +218,15 @@ fn epoch_to_year(secs: i64) -> i32 {
     let mp = (5 * doy + 2) / 153;
     let m = if mp < 10 { mp + 3 } else { mp - 9 };
     (if m <= 2 { y + 1 } else { y }) as i32
+}
+
+/// The current model year by the system clock, as the decoder reckons it.
+pub fn current_year() -> i32 {
+    let secs = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs() as i64)
+        .unwrap_or(0);
+    epoch_to_year(secs)
 }
 
 /// Decode a VIN using the embedded database and the system clock.

@@ -9,10 +9,13 @@ from typing import Any
 from ultravin import _ultravin
 from ultravin._ultravin import (
     __version__,
+    cover_vins,
     decode,
     decode_batch,
     decode_batch_json,
     decode_json,
+    generate,
+    sweep,
 )
 
 #: Variable names whose `flat=True` value is always a list, even at length one —
@@ -27,10 +30,13 @@ __all__ = [
     "ELEMENTS",
     "MULTI_VALUED",
     "__version__",
+    "cover_vins",
     "decode",
     "decode_batch",
     "decode_batch_json",
     "decode_json",
+    "generate",
+    "sweep",
 ]
 
 

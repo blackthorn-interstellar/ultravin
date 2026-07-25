@@ -296,8 +296,16 @@ fn run(cli: &Cli) -> Result<(), Box<dyn Error>> {
         .next()
         .and_then(|s| s.parse().ok())
         .unwrap_or(0);
+    // The cover is computed for the data month's own year, so the artifact is a
+    // pure function of the dump.
+    let cover_year: i32 = cli
+        .month
+        .split('_')
+        .next()
+        .and_then(|y| y.parse().ok())
+        .unwrap_or(2026);
     let (artifact_bytes, artifact_blake3) =
-        artifact::write_artifact(builder, &cli.emit_artifact, builder_version)?;
+        artifact::write_artifact(builder, &cli.emit_artifact, builder_version, cover_year)?;
 
     let total_rows: u64 = imp.tables.values().sum();
     let manifest = Manifest {

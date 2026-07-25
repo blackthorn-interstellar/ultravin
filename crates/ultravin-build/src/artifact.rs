@@ -384,7 +384,11 @@ impl ArtifactBuilder {
     }
 
     /// Sort, intern, serialize. Returns (artifact bytes, blake3 hex).
-    pub fn build(mut self, builder_version: u32) -> (Vec<u8>, String) {
+    ///
+    /// `cover_year` is the model year the behavioural cover is computed for —
+    /// taken from the data month, never the system clock, so the artifact stays
+    /// reproducible from the dump bytes alone.
+    pub fn build(mut self, builder_version: u32, cover_year: i32) -> (Vec<u8>, String) {
         // --- Total-order sorts.
         self.wmi
             .sort_by(|a, b| a.wmi.cmp(&b.wmi).then(a.id.cmp(&b.id)));
@@ -561,7 +565,8 @@ impl ArtifactBuilder {
             })
             .collect();
 
-        let data = VpicData {
+        let mut data = VpicData {
+            cover: Vec::new(),
             arena_bytes: intern.bytes,
             arena_offsets: intern.offsets,
             wmi,
@@ -584,6 +589,14 @@ impl ArtifactBuilder {
             vspecschemayear: self.vspecschemayear,
         };
 
+        // Two passes: the cover is computed by decoding against the artifact, so
+        // it cannot exist until the artifact does. Serialize, load, compute,
+        // serialize again with it filled in.
+        let staged = serialize_artifact(&data, builder_version);
+        match ultravin_core::Db::from_bytes(&staged) {
+            Ok(db) => data.cover = ultravin_core::cover::compute(&db, cover_year),
+            Err(e) => eprintln!("warning: cover not computed ({e})"),
+        }
         let bytes = serialize_artifact(&data, builder_version);
         let hex = ultravin_core::tables::artifact_blake3_hex(&bytes);
         (bytes, hex)
@@ -621,8 +634,9 @@ pub fn write_artifact(
     builder: ArtifactBuilder,
     path: &Path,
     builder_version: u32,
+    cover_year: i32,
 ) -> std::io::Result<(usize, String)> {
-    let (bytes, hex) = builder.build(builder_version);
+    let (bytes, hex) = builder.build(builder_version, cover_year);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }

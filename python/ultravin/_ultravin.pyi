@@ -51,3 +51,39 @@ def elements() -> list[dict[str, Any]]:
     Keys: ``variable``, ``element_id``, ``group_name``, ``code``, ``data_type``,
     ``decode``. Exposed as the ``ultravin.ELEMENTS`` mapping, keyed by variable.
     """
+
+def generate(
+    n: int,
+    *,
+    seed: int = 0,
+    wmi: str | None = None,
+    make: str | None = None,
+    year: int | None = None,
+    vehicle_type: int | None = None,
+) -> list[str]:
+    """Generate ``n`` valid VINs, deterministic for a given ``seed``.
+
+    Each VIN is built from a real WMI, a schema that WMI uses, and one of that
+    schema's patterns, with a correct check digit — so it decodes to real vehicle
+    attributes rather than to an unknown-manufacturer error. No database and no
+    network: everything comes from the embedded artifact.
+
+    Filters are conjunctive. ``vehicle_type`` is a VehicleType row id (2 =
+    passenger car, 7 = MPV). Returns fewer than ``n`` only when nothing matches.
+    """
+
+def sweep(dimensions: list[str] | None = None) -> list[str]:
+    """One VIN per row of every requested data dimension — the brute-force list.
+
+    ``dimensions`` names any of ``wmi``, ``pattern``, ``engine``, ``vspec``,
+    ``exception``, ``default``; omit for all six. Large: the ``pattern``
+    dimension alone is ~545k VINs, and all six are ~584k.
+    """
+
+def cover_vins() -> list[str]:
+    """The smallest VIN set exercising every decode behaviour this data reaches.
+
+    Computed when the artifact was built, so it costs nothing here. A few hundred
+    VINs that between them touch every resolution rung, error code, conversion
+    and tiebreak the data supports — a ready-made corpus for testing a decoder.
+    """

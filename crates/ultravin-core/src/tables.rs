@@ -433,6 +433,11 @@ pub struct VpicData {
     pub conversion: Vec<Conversion>,
     /// SORTED by (tag ASC, id ASC).
     pub lookups: Vec<LookupRow>,
+    /// The smallest VIN set exercising every decode behaviour this data can
+    /// reach, computed by `ultravin-build` (see `crate::cover`). Two or three
+    /// kilobytes, so the artifact carries it rather than making callers compute
+    /// half a million decodes.
+    pub cover: Vec<String>,
     /// SORTED by (makeid ASC, id ASC).
     pub vspecschema: Vec<VSpecSchema>,
     /// SORTED by (schemaid ASC, id ASC).
