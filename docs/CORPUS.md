@@ -121,6 +121,39 @@ two spec rows survive key elimination for the same element. Modelling that in
 Python means reimplementing engine internals that would then rot, so it stays
 measured rather than asserted.
 
+### The coverage gate
+
+`cargo llvm-cov` reports ~95% of the decode modules and always will, because some
+of that code is unreachable by construction. A permanent 5% gap hides regressions
+inside it, so the gap is written down instead: every uncovered region carries a
+reason in `scripts/coverage_allowances.json`, and `make coverage` fails on
+anything else.
+
+```
+decode path: 2599/2737 regions (94.96%)
+reachable:   2599/2599 (100.00%) after 39 allowances
+```
+
+It fails in both directions, which is the point:
+
+- an uncovered region with **no allowance** is a new gap — a corpus that used to
+  reach that code no longer does;
+- an allowance whose regions are **now covered** is stale, and the usual cause is
+  a monthly data refresh making the branch reachable. A dump that ships a
+  `tobeqced` schema, a reversed character class, or a model with two makes would
+  light up exactly those entries.
+
+The 138 allowed regions, by mechanism:
+
+| | regions | why no VIN reaches it |
+| --- | ---: | --- |
+| `sqlwild_to_regex` | 29 | runs in the artifact builder (`artifact.rs:456`), which precomputes `keys_regex`; decode reads the stored result |
+| conversion arithmetic | 35 | negative operands, zero denominators, all-nines rounding carries — the six vPIC formulas are positive multiply/divide over positive displacements |
+| matcher regex fallback | 18 | needs a negated, nested, unterminated or reversed character class; 2026_07 contains none |
+| decode-path guards | 26 | dump shapes the data does not have: 0 `tobeqced` schemas, 0 orphan `wmi_vinschema` rows, 0 patterns on elements 26/27/29/39, 0 duplicate (schema, element, keys) rows, 0 models with two makes, 0 WMIs double-linked to a schema |
+| error-path arms | 14 | corrections and charset arms for VIN shapes the corpus does not construct |
+| check-digit + misc | 16 | the public `check_digit` wrapper decode never calls, plus closure arms |
+
 ### What "covers everything" does and does not mean
 
 The token universe is defined as the union over the pool, so the cover always

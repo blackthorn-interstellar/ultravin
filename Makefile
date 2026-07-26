@@ -64,6 +64,12 @@ download-bak:  ## Download the pinned vPIC MS SQL .bak (zip) into downloads/ (us
 	@cd downloads && unzip -o "vPICList_lite_$(MONTH).bak.zip"
 	@echo "downloaded + extracted downloads/VPICList_lite_$(MONTH).bak"
 
+coverage:  ## Gate the decode path at 100% of the regions a VIN can reach.
+	@uv run -- python -m scripts.coverage
+
+coverage-update:  ## Refresh the region counts in scripts/coverage_allowances.toml.
+	@uv run -- python -m scripts.coverage --update
+
 oracle-up:  ## Start the Postgres parity oracle (Docker).
 	@bash scripts/oracle.sh up
 
