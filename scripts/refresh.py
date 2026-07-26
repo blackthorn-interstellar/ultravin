@@ -16,10 +16,13 @@ Postgres oracle (scripts/oracle.sh — WIPES any loaded oracle), re-freeze of
 tests/parity_corpus.json, a 500-VIN live sweep, pytest, cargo test. Nothing is
 hand-edited; the gates then decide:
 
-  corpus  every diverging re-frozen VIN is a documented known deviation
-  sweep   a fresh live sweep diverges only on known deviations
-  pytest  the offline suite passes
-  cargo   the Rust suite passes
+  corpus    every diverging re-frozen VIN is a documented known deviation
+  sweep     a fresh live sweep diverges only on known deviations
+  coverage  the decode path still reaches 100% of its reachable regions, and no
+            allowance went stale (a stale one means this month's data reaches a
+            branch the old data could not)
+  pytest    the offline suite passes
+  cargo     the Rust suite passes
 
 freeze.py and sweep.py deliberately exit 0 no matter what they observe; the
 gates here are what turn their reports into a verdict. Exit codes: 0 success or
@@ -580,6 +583,24 @@ def cmd_run(args: argparse.Namespace) -> int:
             "passed" if pytest.returncode == 0 else (pytest.stdout.strip().splitlines() or ["failed (see log)"])[-1],
         )
     )
+    # The cover is rebuilt from the new dump by vpic-import above, but *what it
+    # looks for* is code: the token grammar, the sweep dimensions, the candidate
+    # families. A month whose data reaches a branch the old data could not shows
+    # up here as a stale allowance — the reason for excluding it has expired.
+    coverage = sh(["uv", "run", "--frozen", "--", "python", "-m", "scripts.coverage"], check=False, capture=True)
+    print(coverage.stdout[-3000:], coverage.stderr[-2000:])
+    cov_detail = (coverage.stdout.strip().splitlines() or ["failed (see log)"])[-1]
+    if coverage.returncode != 0:
+        cov_detail = (
+            "; ".join(
+                ln.strip()
+                for ln in (coverage.stdout + coverage.stderr).splitlines()
+                if ln.strip().startswith(("NEW GAP", "STALE", "WIDENED", "NARROWED"))
+            )
+            or cov_detail
+        )
+    gates.append(Gate("coverage", coverage.returncode == 0, cov_detail))
+
     cargo = sh(["cargo", "test", "--workspace", "--exclude", "ultravin-py"], check=False, capture=True)
     print(cargo.stdout[-2000:], cargo.stderr[-2000:])
     gates.append(

@@ -33,7 +33,22 @@ oracle onto the new dump, re-freezes `tests/parity_corpus.json`, and gates:
   laundered into a green test suite.
 - **sweep** — 500 freshly generated VINs decoded live against the new oracle,
   zero undocumented divergence.
+- **coverage** — `make coverage`: the decode path still reaches 100% of the
+  regions a VIN can reach, and no allowance in
+  `scripts/coverage_allowances.json` went **stale**. A stale one is the
+  interesting failure: it means this month's data reaches a branch the previous
+  month's could not. The allowances rest on facts about the dump — 0 `tobeqced`
+  schemas, 0 models with two makes, no reversed character classes — and a month
+  that breaks one of those assumptions lights up exactly that entry instead of
+  passing silently.
+
 - **pytest / cargo** — the offline suites.
+
+The behavioural cover baked into the artifact is recomputed from the *new* dump
+by `vpic-import`, so it is never carried over. What does not update itself is the
+code that decides *what to look for*: the token grammar, the sweep dimensions and
+the constructed candidate families. The coverage gate is what notices when the
+new data outgrows them.
 
 Exit 0 = integrated and green; exit 2 = gates failed (report still written to
 `target/refresh/report.{md,json}`); exit 1 = mechanical breakage. The PR body
