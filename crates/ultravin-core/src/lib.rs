@@ -25,7 +25,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use checkdigit::check_digit;
 pub use db::Db;
-pub use generate::{build_vin, generate, sweep, year_char, Dimension, Filter};
+pub use generate::{build_vin, generate, pairwise, sweep, year_char, Dimension, Filter};
 pub use matcher::sqlwild_to_regex;
 pub use wmi::{vin_descriptor, vin_wmi};
 

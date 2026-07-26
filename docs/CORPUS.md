@@ -19,7 +19,37 @@ Postgres: auditing a corpus against the vPIC row counts.
 | --- | --- | --- | --- |
 | **generate** | `ultravin.generate(n, seed=…)` | any | fixtures, fuzzing, load tests |
 | **cover** | `ultravin.cover_vins()` | ~164 | CI, regressions, bisecting |
-| **sweep** | `ultravin.sweep()` | ~584k | "does this hit every make and model?" |
+| **sweep** | `ultravin.sweep()` | ~584k | every data row exercised once |
+| **pairwise** | `ultravin.pairwise()` | ~1.74M | every 2-way descriptor interaction |
+
+## Why there is no "enumerate everything"
+
+The decoder's output space does not have a size you can reach. Two facts:
+
+- **The decoder echoes its input.** "Vehicle Descriptor" (element 196), Suggested
+  VIN, and the error text all quote the VIN back, so counting them makes the
+  decoder injective — one distinct output per distinct input, ~10^11.9
+  distinguishable descriptors. Exclude them and you are counting what the decoder
+  says about the *vehicle*, which is the only useful question.
+- **What is left still factorizes.** In the largest schema, 120 of 300 element
+  pairs are driven by disjoint descriptor positions, so their values vary
+  independently and multiply. The population is a product, not a list.
+
+So exhaustiveness has to be defined by a *strength*, not by enumeration:
+
+| corpus | VINs | distinct vehicle-outputs |
+| --- | ---: | ---: |
+| sweep — every row once (1-wise over rows) | 584,019 | 464,142 |
+| pairwise — every 2-way class interaction | 1,736,895 | 882,955 |
+| **union** | **~2.3M** | **1,314,621** |
+
+The two are complementary, and the overlap is only 32,476. The sweep matches each
+pattern by satisfying all of its positions at once — a 13-way conjunction that
+pairwise never has to construct. Pairwise reaches combinations of *co-matching*
+patterns that the sweep, holding every other position at a fill character, never
+produces. Neither subsumes the other.
+
+Building pairwise takes ~200s (the sweep takes 1.7s), so it takes a `limit=`.
 
 The cover and the sweep are one pipeline, not two ideas: the sweep is the
 candidate pool and the cover is the greedy minimisation of it. Anything less as a

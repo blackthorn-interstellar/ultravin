@@ -87,3 +87,15 @@ def cover_vins() -> list[str]:
     VINs that between them touch every resolution rung, error code, conversion
     and tiebreak the data supports — a ready-made corpus for testing a decoder.
     """
+
+def pairwise(*, limit: int = 0) -> list[str]:
+    """Every pair of descriptor character-classes each schema can distinguish.
+
+    The full output space cannot be enumerated: elements driven by disjoint
+    descriptor positions vary independently, so their values multiply. This is
+    the strongest coverage that is finite — strength-2 covering arrays over the
+    per-position equivalence classes, which buy the interactions the decoder's
+    own logic turns on (dedup, tiebreaks) at roughly 3x the row sweep.
+
+    ``limit`` stops early (0 = all ~1.7M, which takes minutes to build).
+    """

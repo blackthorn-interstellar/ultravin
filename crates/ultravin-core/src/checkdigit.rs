@@ -28,7 +28,7 @@ fn translit(c: u8) -> Option<u32> {
 /// Is `c` allowed at 1-based position `i`, given pos-3 and the car/MPV/LT flag?
 /// Mirrors the `CASE` over `patternMY` / `patternNumbersOnly` / `patternDefault`
 /// in `fVINCheckDigit2`. Case-insensitive (input is upper-cased by the caller).
-fn valid_at(i: usize, c: u8, pos3: u8, is_car_mpv_lt: bool) -> bool {
+pub(crate) fn valid_at(i: usize, c: u8, pos3: u8, is_car_mpv_lt: bool) -> bool {
     // patternMY = [A-H,J-N,P,R-T,V-Y,1-9]; patternNumbersOnly = [0-9];
     // patternDefault = [A-H,J-N,P,R-Z,0-9].
     let my =

@@ -99,3 +99,22 @@ def test_cover_spans_the_reachable_error_codes() -> None:
     codes = {c for r in ultravin.decode_batch(ultravin.cover_vins()) for c in r["error_codes"]}
     # 12 needs a caller-supplied model year, which the decode API cannot accept.
     assert {0, 1, 5, 6, 7, 8, 11, 14, 400} <= codes, sorted(codes)
+
+
+def test_pairwise_vins_are_valid_and_match_patterns() -> None:
+    # The failure mode this guards: filling the numeric-only serial positions with
+    # letters. That yields error 400 on nearly every VIN — a corpus of malformed
+    # input dressed up as coverage, and it is invisible unless you look.
+    sample = ultravin.pairwise(limit=5000)
+    results = ultravin.decode_batch(sample)
+    assert not [r for r in results if 400 in r["error_codes"]]
+    matched = sum(1 for r in results if any(e.get("pattern_id") for e in r["elements"]))
+    assert matched > len(sample) * 0.9, f"only {matched}/{len(sample)} matched a pattern"
+
+
+def test_pairwise_pins_the_model_year_inside_the_schema_band() -> None:
+    # Varying position 10 would move the VIN out of its schema's year band, which
+    # tests year resolution rather than the pattern interaction pairwise is for.
+    years = {r["model_year"] for r in ultravin.decode_batch(ultravin.pairwise(limit=2000))}
+    assert years, "no model years resolved at all"
+    assert all(y is None or 1980 <= y <= 2040 for y in years)

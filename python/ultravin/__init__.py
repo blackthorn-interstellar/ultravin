@@ -15,6 +15,7 @@ from ultravin._ultravin import (
     decode_batch_json,
     decode_json,
     generate,
+    pairwise,
     sweep,
 )
 
@@ -36,6 +37,7 @@ __all__ = [
     "decode_batch_json",
     "decode_json",
     "generate",
+    "pairwise",
     "sweep",
 ]
 

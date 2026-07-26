@@ -304,6 +304,25 @@ fn cover_vins() -> Vec<String> {
     ultravin_core::Db::embedded().cover()
 }
 
+/// Every pair of descriptor character-classes each schema can distinguish.
+///
+/// The full output space cannot be enumerated — elements driven by disjoint
+/// descriptor positions vary independently, so their values multiply. This is
+/// the strongest coverage that is finite: strength-2 covering arrays, which buy
+/// the interactions the decoder's own logic turns on (dedup, tiebreaks, an
+/// element read while resolving a sibling) at roughly 3x the row sweep.
+#[pyfunction]
+#[pyo3(signature = (*, limit = 0))]
+fn pairwise(py: Python<'_>, limit: usize) -> Vec<String> {
+    py.detach(|| {
+        ultravin_core::pairwise(
+            ultravin_core::Db::embedded(),
+            ultravin_core::current_year(),
+            limit,
+        )
+    })
+}
+
 #[pymodule]
 fn _ultravin(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(decode, m)?)?;
@@ -315,6 +334,7 @@ fn _ultravin(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(generate, m)?)?;
     m.add_function(wrap_pyfunction!(sweep, m)?)?;
     m.add_function(wrap_pyfunction!(cover_vins, m)?)?;
+    m.add_function(wrap_pyfunction!(pairwise, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

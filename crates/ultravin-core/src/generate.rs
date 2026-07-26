@@ -14,6 +14,8 @@
 //! - [`sweep`] — one VIN per row of every dimension that can change a decode,
 //!   plus the cases that are not rows at all. Hundreds of thousands of VINs.
 
+use std::collections::HashSet;
+
 use crate::db::Db;
 use crate::tables::NULL_I32;
 
@@ -558,5 +560,281 @@ mod tests {
         let vin = build_vin("1G9ABC", "*****", 2020);
         assert!(vin.starts_with("1G9"));
         assert_eq!(&vin[11..14], "ABC");
+    }
+}
+
+// --------------------------------------------------------------------------- #
+// Pairwise coverage
+// --------------------------------------------------------------------------- #
+
+/// The alphabet a VIN position can hold.
+const ALPHABET: &[u8; 33] = b"ABCDEFGHJKLMNPRSTUVWXYZ0123456789";
+
+/// Per position, one representative character per *equivalence class*.
+///
+/// Two characters are equivalent at a position when exactly the same set of the
+/// schema's keys accept both — no pattern can tell them apart, so no VIN built
+/// from one differs from the same VIN built from the other. Collapsing to
+/// representatives turns 33 characters per position into a handful.
+fn position_classes(db: &Db, schema: i32, pos3: u8, car_lt: bool) -> Vec<Vec<u8>> {
+    let keys: Vec<&str> = db
+        .patterns_for(schema)
+        .iter()
+        .map(|p| db.s(p.keys.to_native()))
+        .collect();
+
+    VARYING
+        .iter()
+        .map(|&(vin_pos, var_idx)| {
+            // Only characters the VIN standard permits here: positions 14-17 are
+            // numeric, and a car/MPV/light truck also has a numeric position 13.
+            // Filling them with letters produces error 400, not vehicle variety.
+            let legal: Vec<u8> = ALPHABET
+                .iter()
+                .copied()
+                .filter(|&c| crate::checkdigit::valid_at(vin_pos, c, pos3, car_lt))
+                .collect();
+            // Signature of a character: which keys accept it here.
+            let mut by_sig: Vec<(Vec<u16>, u8)> = Vec::new();
+            for ch in legal {
+                let mut sig: Vec<u16> = Vec::new();
+                for (ki, k) in keys.iter().enumerate() {
+                    if accepts_at(k, var_idx, ch) {
+                        sig.push(ki as u16);
+                    }
+                }
+                if !by_sig.iter().any(|(s, _)| *s == sig) {
+                    by_sig.push((sig, ch));
+                }
+            }
+            by_sig.into_iter().map(|(_, ch)| ch).collect()
+        })
+        .collect()
+}
+
+/// The descriptor positions pairwise varies, as (1-based VIN position, index into
+/// `var_keys`). Position 10 (the model year) is excluded: varying it moves the
+/// VIN out of the schema's own year band, which tests year resolution rather
+/// than pattern interaction. `var_keys` index 5 is the `|` divider.
+const VARYING: [(usize, usize); 12] = [
+    (4, 0),
+    (5, 1),
+    (6, 2),
+    (7, 3),
+    (8, 4),
+    (11, 7),
+    (12, 8),
+    (13, 9),
+    (14, 10),
+    (15, 11),
+    (16, 12),
+    (17, 13),
+];
+
+/// Does `keys` accept `ch` at var_keys position `pos`? A position the spec does
+/// not reach, or leaves as `*`, accepts everything.
+fn accepts_at(keys: &str, pos: usize, ch: u8) -> bool {
+    let b = keys.as_bytes();
+    let (mut i, mut p) = (0usize, 0usize);
+    while i < b.len() {
+        let (accepts, next) = match b[i] {
+            b'*' | b'_' => (true, i + 1),
+            b'[' => match b[i..].iter().position(|&c| c == b']') {
+                Some(rel) => (class_accepts(&keys[i + 1..i + rel], ch), i + rel + 1),
+                None => (b[i] == ch, i + 1),
+            },
+            c => (c == ch, i + 1),
+        };
+        if p == pos {
+            return accepts;
+        }
+        i = next;
+        p += 1;
+    }
+    true
+}
+
+fn class_accepts(body: &str, ch: u8) -> bool {
+    let b = body.as_bytes();
+    let mut i = 0;
+    while i < b.len() {
+        if i + 2 < b.len() && b[i + 1] == b'-' {
+            if b[i] <= ch && ch <= b[i + 2] {
+                return true;
+            }
+            i += 3;
+        } else {
+            if b[i] == ch {
+                return true;
+            }
+            i += 1;
+        }
+    }
+    false
+}
+
+/// A strength-2 covering array over `levels`: every pair of (position, class)
+/// choices appears in at least one row.
+///
+/// Greedy row-at-a-time (AETG-style): seed each row with a still-uncovered pair,
+/// then fill the remaining positions with whichever class covers the most
+/// outstanding pairs. Greedy lands near the `v_max1 * v_max2` lower bound, and
+/// unlike the full cartesian it terminates.
+fn covering_array(levels: &[usize]) -> Vec<Vec<usize>> {
+    let n = levels.len();
+    let mut uncovered: HashSet<(usize, usize, usize, usize)> = HashSet::new();
+    for i in 0..n {
+        for j in (i + 1)..n {
+            for a in 0..levels[i] {
+                for b in 0..levels[j] {
+                    uncovered.insert((i, a, j, b));
+                }
+            }
+        }
+    }
+    if uncovered.is_empty() {
+        return vec![vec![0; n]];
+    }
+
+    let mut rows = Vec::new();
+    while let Some(&(p1, c1, p2, c2)) = uncovered.iter().next() {
+        let mut row = vec![usize::MAX; n];
+        row[p1] = c1;
+        row[p2] = c2;
+        for p in 0..n {
+            if row[p] != usize::MAX {
+                continue;
+            }
+            // The class at `p` that covers the most pairs against what is set.
+            let best = (0..levels[p])
+                .max_by_key(|&c| {
+                    (0..n)
+                        .filter(|&q| q != p && row[q] != usize::MAX)
+                        .filter(|&q| {
+                            let key = if p < q {
+                                (p, c, q, row[q])
+                            } else {
+                                (q, row[q], p, c)
+                            };
+                            uncovered.contains(&key)
+                        })
+                        .count()
+                })
+                .unwrap_or(0);
+            row[p] = best;
+        }
+        for i in 0..n {
+            for j in (i + 1)..n {
+                uncovered.remove(&(i, row[i], j, row[j]));
+            }
+        }
+        rows.push(row);
+    }
+    rows
+}
+
+/// VINs covering every pair of character-equivalence classes each schema can
+/// distinguish — the strongest coverage that is actually finite.
+///
+/// The full output space cannot be enumerated: elements driven by disjoint
+/// descriptor positions vary independently, so their values multiply. Strength 2
+/// buys the interactions where the decoder's own logic lives (dedup, tiebreaks,
+/// an element read while resolving a sibling) at roughly 3x the row sweep.
+///
+/// `limit` stops early (0 = the lot); the full run is ~1.7M VINs and minutes of
+/// work, which is more than a caller wanting a taste needs.
+pub fn pairwise(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
+    let index = schema_to_wmi(db);
+    let wmis = wmis_by_id(db);
+    let mut out = Vec::new();
+    for &(schema, wmiid, yearfrom, yearto) in &index {
+        if limit > 0 && out.len() >= limit {
+            break;
+        }
+        let Some(wmi) = wmi_string(&wmis, wmiid) else {
+            continue;
+        };
+        let wb = wmi.as_bytes();
+        let pos3 = *wb.get(2).unwrap_or(&b'A');
+        let car_lt = db
+            .wmi_any(wmi)
+            .map(|w| {
+                let vt = w.vehicletypeid.to_native();
+                matches!(vt, 2 | 7) || (vt == 3 && w.trucktypeid.to_native() == 1)
+            })
+            .unwrap_or(false);
+        let classes = position_classes(db, schema, pos3, car_lt);
+        let levels: Vec<usize> = classes.iter().map(|c| c.len()).collect();
+        let year = pick_year(yearfrom, yearto, current_year);
+        for row in covering_array(&levels) {
+            // Lay the row back out over var_keys, keeping `|` at index 5 and the
+            // model-year character at index 6 free for `build_vin` to set.
+            let mut keys = [b'*'; 14];
+            keys[5] = b'|';
+            for (slot, &c) in row.iter().enumerate() {
+                keys[VARYING[slot].1] = classes[slot][c];
+            }
+            out.push(build_vin(
+                wmi,
+                std::str::from_utf8(&keys).unwrap_or("*****"),
+                year,
+            ));
+        }
+    }
+    out
+}
+
+#[cfg(test)]
+mod pairwise_tests {
+    use super::*;
+
+    fn covers_all_pairs(levels: &[usize], rows: &[Vec<usize>]) -> bool {
+        for i in 0..levels.len() {
+            for j in (i + 1)..levels.len() {
+                for a in 0..levels[i] {
+                    for b in 0..levels[j] {
+                        if !rows.iter().any(|r| r[i] == a && r[j] == b) {
+                            return false;
+                        }
+                    }
+                }
+            }
+        }
+        true
+    }
+
+    #[test]
+    fn covering_array_covers_every_pair() {
+        for levels in [vec![2, 2, 2], vec![3, 2, 4, 2], vec![5, 4, 3, 2, 2, 1]] {
+            let rows = covering_array(&levels);
+            assert!(
+                covers_all_pairs(&levels, &rows),
+                "missed a pair for {levels:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn covering_array_stays_near_the_lower_bound() {
+        // No construction can beat v_max1 * v_max2; greedy should not be far off.
+        let levels = vec![4, 3, 3, 2, 2];
+        let rows = covering_array(&levels);
+        assert!(rows.len() >= 12, "below the mathematical floor");
+        assert!(rows.len() <= 24, "greedy drifted too far: {}", rows.len());
+    }
+
+    #[test]
+    fn a_single_level_everywhere_needs_one_row() {
+        assert_eq!(covering_array(&[1, 1, 1]).len(), 1);
+    }
+
+    #[test]
+    fn class_membership_matches_the_keys_language() {
+        assert!(accepts_at("CM826", 0, b'C'));
+        assert!(!accepts_at("CM826", 0, b'D'));
+        assert!(accepts_at("*M826", 0, b'D')); // wildcard
+        assert!(accepts_at("CM826", 9, b'Z')); // beyond the spec: unconstrained
+        assert!(accepts_at("[C-F]M", 0, b'E'));
+        assert!(!accepts_at("[C-F]M", 0, b'G'));
     }
 }
