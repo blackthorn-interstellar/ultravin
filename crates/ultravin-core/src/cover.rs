@@ -18,7 +18,9 @@ use std::cmp::Reverse;
 use std::collections::{BinaryHeap, HashSet};
 
 use crate::db::Db;
-use crate::generate::{build_vin, sweep, year_char, Dimension};
+use crate::generate::{
+    build_vin, pick_year_pub, schema_to_wmi, sweep, wmi_string, wmis_by_id, year_char, Dimension,
+};
 
 /// One behaviour a VIN demonstrates. Interned as a string so the whole grammar
 /// stays one comparable, hashable type.
@@ -154,6 +156,11 @@ pub fn candidates(db: &Db, current_year: i32) -> Vec<(String, Option<Token>)> {
         dedup_tie_candidates(db, current_year)
             .into_iter()
             .map(|(v, eid)| (v, Some(format!("tie|dedup|{eid}")))),
+    );
+    out.extend(
+        yearless_vspec_candidates(db, current_year)
+            .into_iter()
+            .map(|v| (v, Some("vspec|noyear".to_string()))),
     );
     out.extend(
         year_candidates(db, current_year)
@@ -366,6 +373,44 @@ fn wmi_for_schema(db: &Db, schema: i32) -> Option<(&str, i32, i32)> {
                 )
             })
     })
+}
+
+/// VINs for vehicle-spec schemas carrying no year rows.
+///
+/// `append_vehicle_specs` treats "no year rows" as matching every year — a
+/// different arm from the usual exact-year test, and only six schemas in the
+/// data can reach it. Nothing in the decode output distinguishes the arm, so the
+/// candidate declares it.
+fn yearless_vspec_candidates(db: &Db, current_year: i32) -> Vec<String> {
+    let index = schema_to_wmi(db);
+    let mut out = Vec::new();
+    for vs in db.vspecschemas() {
+        if !db.vspecschema_years_for(vs.id.to_native()).is_empty() {
+            continue;
+        }
+        let Some(m) = db.vspecschema_models_for(vs.id.to_native()).first() else {
+            continue;
+        };
+        let modelid = m.modelid.to_native().to_string();
+        let hit = db
+            .patterns()
+            .iter()
+            .find(|p| p.elementid.to_native() == 28 && db.s(p.attributeid.to_native()) == modelid);
+        let Some(p) = hit else { continue };
+        let Ok(i) = index.binary_search_by_key(&p.vinschemaid.to_native(), |e| e.0) else {
+            continue;
+        };
+        let e = index[i];
+        let wmis = wmis_by_id(db);
+        if let Some(wmi) = wmi_string(&wmis, e.1) {
+            out.push(build_vin(
+                wmi,
+                db.s(p.keys.to_native()),
+                pick_year_pub(e.2, e.3, current_year),
+            ));
+        }
+    }
+    out
 }
 
 /// VINs that force the ±30 schema retry: a car/MPV WMI whose schemas all end by

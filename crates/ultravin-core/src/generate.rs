@@ -334,7 +334,7 @@ pub fn sweep(db: &Db, dimensions: &[Dimension], current_year: i32) -> Vec<String
 
 /// Index from schema id to a WMI that uses it, so a pattern can be turned into a
 /// VIN. Built once per sweep; `wmi_vinschema` is keyed the other way round.
-fn schema_to_wmi(db: &Db) -> Vec<(i32, i32, i32, i32)> {
+pub(crate) fn schema_to_wmi(db: &Db) -> Vec<(i32, i32, i32, i32)> {
     let mut pairs: Vec<(i32, i32, i32, i32)> = Vec::new();
     for w in db.wmis() {
         for l in db.wmi_vinschema_for(w.id.to_native()) {
@@ -353,7 +353,7 @@ fn schema_to_wmi(db: &Db) -> Vec<(i32, i32, i32, i32)> {
 
 /// WMI strings by row id. `wmi` is sorted by the WMI *string*, so a lookup by id
 /// is a scan; doing that per pattern is the difference between seconds and hours.
-fn wmis_by_id(db: &Db) -> Vec<(i32, &str)> {
+pub(crate) fn wmis_by_id(db: &Db) -> Vec<(i32, &str)> {
     let mut index: Vec<(i32, &str)> = db
         .wmis()
         .iter()
@@ -363,7 +363,7 @@ fn wmis_by_id(db: &Db) -> Vec<(i32, &str)> {
     index
 }
 
-fn wmi_string<'a>(index: &[(i32, &'a str)], wmiid: i32) -> Option<&'a str> {
+pub(crate) fn wmi_string<'a>(index: &[(i32, &'a str)], wmiid: i32) -> Option<&'a str> {
     index
         .binary_search_by_key(&wmiid, |e| e.0)
         .ok()
