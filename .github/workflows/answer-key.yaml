@@ -1,0 +1,131 @@
+# Freeze the oracle's answers for a data month, so every later test can skip it.
+#
+# The oracle is the source of truth but needs Docker, an 11M-row load and ~35
+# VIN/s. Running it per commit is hopeless; running it once per data release is
+# cheap. This asks it for its answer to the whole seeded corpus (~1.8M VINs) and
+# publishes VIN + hash pairs as a release asset. `make answerkey-verify` then
+# checks ultravin against those answers with no Postgres anywhere.
+#
+# Sharded because one runner cannot finish in a job timeout: the oracle is
+# CPU-bound in plpgsql and saturates ~4 connections, so throughput comes from
+# more machines, not more workers. Each shard runs its own oracle.
+#
+# The corpus is deliberately derived from NHTSA's data (rules and the character
+# classes those rules distinguish), never from ultravin's own behaviour — an
+# answer key selected by our decoder could only confirm what we already test.
+name: Answer Key
+
+on:
+  workflow_dispatch:
+    inputs:
+      month:
+        description: "data month (YYYY_MM); defaults to the pinned manifest"
+        required: false
+  workflow_run:
+    workflows: ["Data Refresh"]
+    types: [completed]
+
+permissions:
+  contents: write
+
+env:
+  SHARDS: 16
+
+jobs:
+  build:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 350 # 1.8M/16 shards at stock oracle speed is ~55 min; headroom for a slow runner
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+      - uses: astral-sh/setup-uv@v6
+      - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
+
+      - name: Resolve the month and dump
+        id: month
+        run: |
+          month="${{ inputs.month }}"
+          [ -n "$month" ] || month=$(python3 -c "import json;print(json.load(open('vpic/manifest.json'))['month'])")
+          echo "month=$month" >> "$GITHUB_OUTPUT"
+          make download MONTH="$month"
+
+      - name: Load the oracle
+        run: |
+          make oracle-up
+          make oracle-load DUMP="downloads/vPICList_lite_${{ steps.month.outputs.month }}.plain.zip"
+
+      - name: Build the extension
+        run: make build-dev
+
+      - name: Freeze this shard
+        run: |
+          uv run -- python -m scripts.parity.answerkey build \
+            --out "target/answerkey/shard-$(printf '%02d' ${{ matrix.shard }}).jsonl" \
+            --shard ${{ matrix.shard }} --shards ${{ env.SHARDS }} --workers 4
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: answerkey-shard-${{ matrix.shard }}
+          path: target/answerkey/
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+      - uses: astral-sh/setup-uv@v6
+      - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: answerkey-shard-*
+          merge-multiple: true
+          path: target/answerkey/
+
+      - name: Combine, checksum, and pin
+        id: pin
+        run: |
+          month=$(python3 -c "import json;print(json.load(open('vpic/manifest.json'))['month'])")
+          out="answerkey-$month.jsonl"
+          # Shard order is by filename, and each shard carries its own header.
+          cat target/answerkey/shard-*.jsonl > "$out"
+          zstd -19 -q -o "$out.zst" "$out"
+          sha=$(sha256sum "$out.zst" | cut -d' ' -f1)
+          count=$(grep -vc '^{' "$out")
+          uv run -- python -m scripts.parity.answerkey pin \
+            --key "$out.zst" --sha256 "$sha" --count "$count"
+          echo "month=$month" >> "$GITHUB_OUTPUT"
+          echo "asset=$out.zst" >> "$GITHUB_OUTPUT"
+
+      - name: Attach to the month's release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="data-${{ steps.pin.outputs.month }}"
+          gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" \
+            --title "vPIC ${{ steps.pin.outputs.month }}" --notes "Frozen oracle answer key."
+          gh release upload "$tag" "${{ steps.pin.outputs.asset }}" --clobber
+
+      - name: Commit the pin
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/answerkey.json
+          git diff --cached --quiet || {
+            git commit -m "test: pin the ${{ steps.pin.outputs.month }} answer key"
+            git push
+          }

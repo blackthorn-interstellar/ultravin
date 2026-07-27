@@ -323,6 +323,26 @@ fn pairwise(py: Python<'_>, limit: usize) -> Vec<String> {
     })
 }
 
+/// Every decoding rule matched *and* every 2-way descriptor interaction covered,
+/// in one corpus.
+///
+/// Each rule's own key seeds a VIN — the positions it pins stay pinned, so the
+/// rule is guaranteed to match — and the positions it leaves free are chosen to
+/// knock out outstanding class pairs. Cheaper than sweeping and pairing
+/// separately, and stronger per VIN: the freed positions make sibling rules
+/// co-match instead of being padding chosen so nothing else does.
+#[pyfunction]
+#[pyo3(signature = (*, limit = 0))]
+fn seeded(py: Python<'_>, limit: usize) -> Vec<String> {
+    py.detach(|| {
+        ultravin_core::seeded(
+            ultravin_core::Db::embedded(),
+            ultravin_core::current_year(),
+            limit,
+        )
+    })
+}
+
 #[pymodule]
 fn _ultravin(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(decode, m)?)?;
@@ -335,6 +355,7 @@ fn _ultravin(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(sweep, m)?)?;
     m.add_function(wrap_pyfunction!(cover_vins, m)?)?;
     m.add_function(wrap_pyfunction!(pairwise, m)?)?;
+    m.add_function(wrap_pyfunction!(seeded, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

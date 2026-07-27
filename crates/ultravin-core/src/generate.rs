@@ -14,7 +14,7 @@
 //! - [`sweep`] — one VIN per row of every dimension that can change a decode,
 //!   plus the cases that are not rows at all. Hundreds of thousands of VINs.
 
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use crate::db::Db;
 use crate::tables::NULL_I32;
@@ -682,7 +682,10 @@ fn class_accepts(body: &str, ch: u8) -> bool {
 /// unlike the full cartesian it terminates.
 fn covering_array(levels: &[usize]) -> Vec<Vec<usize>> {
     let n = levels.len();
-    let mut uncovered: HashSet<(usize, usize, usize, usize)> = HashSet::new();
+    // Ordered, not hashed: HashSet iteration is randomized per process, so a
+    // hashed set here would make the corpus differ between runs — and an answer
+    // key built on one machine would not verify on another.
+    let mut uncovered: BTreeSet<(usize, usize, usize, usize)> = BTreeSet::new();
     for i in 0..n {
         for j in (i + 1)..n {
             for a in 0..levels[i] {
@@ -836,5 +839,210 @@ mod pairwise_tests {
         assert!(accepts_at("CM826", 9, b'Z')); // beyond the spec: unconstrained
         assert!(accepts_at("[C-F]M", 0, b'E'));
         assert!(!accepts_at("[C-F]M", 0, b'G'));
+    }
+}
+
+// --------------------------------------------------------------------------- #
+// Seeded coverage: every rule matched, every class pair covered, one corpus
+// --------------------------------------------------------------------------- #
+
+/// Which classes at each position a rule accepts. `None` means it accepts every
+/// class there — a free position the fill is allowed to choose.
+fn seed_row(keys: &str, classes: &[Vec<u8>]) -> Vec<Option<usize>> {
+    VARYING
+        .iter()
+        .enumerate()
+        .map(|(slot, &(_, var_idx))| {
+            let accepted: Vec<usize> = (0..classes[slot].len())
+                .filter(|&c| accepts_at(keys, var_idx, classes[slot][c]))
+                .collect();
+            // Accepts everything here, or nothing we can honour: leave it free.
+            if accepted.len() == classes[slot].len() || accepted.is_empty() {
+                None
+            } else {
+                Some(accepted[0])
+            }
+        })
+        .collect()
+}
+
+/// Pairs still uncovered, as a flat set keyed by (position, class, position, class).
+fn all_pairs(levels: &[usize]) -> BTreeSet<(usize, usize, usize, usize)> {
+    // Ordered: see covering_array — the corpus must be byte-identical run to run.
+    let mut out = BTreeSet::new();
+    for i in 0..levels.len() {
+        for j in (i + 1)..levels.len() {
+            for a in 0..levels[i] {
+                for b in 0..levels[j] {
+                    out.insert((i, a, j, b));
+                }
+            }
+        }
+    }
+    out
+}
+
+/// Fill the free positions of `row` to cover as many outstanding pairs as
+/// possible, then retire everything the finished row covers.
+fn fill_and_retire(
+    row: &mut [Option<usize>],
+    levels: &[usize],
+    uncovered: &mut BTreeSet<(usize, usize, usize, usize)>,
+) -> Vec<usize> {
+    for p in 0..row.len() {
+        if row[p].is_some() {
+            continue;
+        }
+        let best = (0..levels[p])
+            .max_by_key(|&c| {
+                (0..row.len())
+                    .filter(|&q| q != p)
+                    .filter_map(|q| row[q].map(|v| (q, v)))
+                    .filter(|&(q, v)| {
+                        let key = if p < q { (p, c, q, v) } else { (q, v, p, c) };
+                        uncovered.contains(&key)
+                    })
+                    .count()
+            })
+            .unwrap_or(0);
+        row[p] = Some(best);
+    }
+    let final_row: Vec<usize> = row.iter().map(|c| c.unwrap_or(0)).collect();
+    for i in 0..final_row.len() {
+        for j in (i + 1)..final_row.len() {
+            uncovered.remove(&(i, final_row[i], j, final_row[j]));
+        }
+    }
+    final_row
+}
+
+/// One corpus that does both jobs: every decoding rule is matched by some VIN,
+/// **and** every pair of character-classes any two positions can distinguish
+/// appears together.
+///
+/// Built the other way round from a plain covering array. Each rule's `Keys` is
+/// a seed — the positions it pins stay pinned, so the rule is guaranteed to
+/// match — and only the positions it leaves free are chosen to knock out
+/// outstanding pairs. Sweeping and pairwise separately costs ~2.26M VINs and
+/// spends half of them on fill characters chosen so that *nothing else* matches;
+/// seeding costs ~1.75M and spends those same positions making sibling rules
+/// co-match, which is where the tiebreak logic lives.
+pub fn seeded(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
+    let index = schema_to_wmi(db);
+    let wmis = wmis_by_id(db);
+    let mut out = Vec::new();
+
+    for &(schema, wmiid, yearfrom, yearto) in &index {
+        if limit > 0 && out.len() >= limit {
+            break;
+        }
+        let Some(wmi) = wmi_string(&wmis, wmiid) else {
+            continue;
+        };
+        let wb = wmi.as_bytes();
+        let pos3 = *wb.get(2).unwrap_or(&b'A');
+        let car_lt = db
+            .wmi_any(wmi)
+            .map(|w| {
+                let vt = w.vehicletypeid.to_native();
+                matches!(vt, 2 | 7) || (vt == 3 && w.trucktypeid.to_native() == 1)
+            })
+            .unwrap_or(false);
+        let classes = position_classes(db, schema, pos3, car_lt);
+        let levels: Vec<usize> = classes.iter().map(|c| c.len()).collect();
+        let year = pick_year(yearfrom, yearto, current_year);
+        let mut uncovered = all_pairs(&levels);
+
+        // One row per distinct rule, seeded and then filled.
+        let mut seen_keys: Vec<u32> = Vec::new();
+        for p in db.patterns_for(schema) {
+            let key_id = p.keys.to_native();
+            match seen_keys.binary_search(&key_id) {
+                Ok(_) => continue,
+                Err(pos) => seen_keys.insert(pos, key_id),
+            }
+            let mut row = seed_row(db.s(key_id), &classes);
+            let filled = fill_and_retire(&mut row, &levels, &mut uncovered);
+            out.push(emit(wmi, &classes, &filled, year));
+        }
+        // Whatever the rules did not incidentally cover.
+        while !uncovered.is_empty() {
+            let &(p1, c1, p2, c2) = uncovered.iter().next().expect("non-empty");
+            let mut row: Vec<Option<usize>> = vec![None; levels.len()];
+            row[p1] = Some(c1);
+            row[p2] = Some(c2);
+            let filled = fill_and_retire(&mut row, &levels, &mut uncovered);
+            out.push(emit(wmi, &classes, &filled, year));
+        }
+    }
+    out
+}
+
+/// A chosen class per position -> a VIN.
+fn emit(wmi: &str, classes: &[Vec<u8>], row: &[usize], year: i32) -> String {
+    let mut keys = [b'*'; 14];
+    keys[5] = b'|';
+    for (slot, &c) in row.iter().enumerate() {
+        keys[VARYING[slot].1] = classes[slot].get(c).copied().unwrap_or(b'A');
+    }
+    build_vin(wmi, std::str::from_utf8(&keys).unwrap_or("*****"), year)
+}
+
+#[cfg(test)]
+mod seeded_tests {
+    use super::*;
+
+    #[test]
+    fn a_seed_pins_only_what_its_rule_constrains() {
+        // "CM826" pins all five VDS positions; the VIS positions stay free for
+        // the fill to use on pair coverage.
+        let classes: Vec<Vec<u8>> = (0..12).map(|_| b"ABC".to_vec()).collect();
+        let row = seed_row("CM826", &classes);
+        assert!(row[0].is_some(), "position 4 is pinned by the rule");
+        assert!(row[5].is_none(), "position 11 is free");
+    }
+
+    #[test]
+    fn a_wildcard_rule_pins_nothing() {
+        let classes: Vec<Vec<u8>> = (0..12).map(|_| b"ABC".to_vec()).collect();
+        assert!(seed_row("*****", &classes).iter().all(Option::is_none));
+    }
+
+    #[test]
+    fn filling_retires_every_pair_the_row_covers() {
+        let levels = vec![2, 2, 2];
+        let mut uncovered = all_pairs(&levels);
+        assert_eq!(uncovered.len(), 12); // 3 position pairs x 2 x 2
+        let mut row = vec![Some(0), None, None];
+        let filled = fill_and_retire(&mut row, &levels, &mut uncovered);
+        assert_eq!(filled.len(), 3);
+        // A 3-position row covers exactly its own 3 pairs.
+        assert_eq!(uncovered.len(), 9);
+    }
+
+    #[test]
+    fn seeding_then_closing_covers_every_pair() {
+        let levels = vec![3, 2, 2];
+        let mut uncovered = all_pairs(&levels);
+        let mut rows = Vec::new();
+        while !uncovered.is_empty() {
+            let &(p1, c1, p2, c2) = uncovered.iter().next().unwrap();
+            let mut row: Vec<Option<usize>> = vec![None; levels.len()];
+            row[p1] = Some(c1);
+            row[p2] = Some(c2);
+            rows.push(fill_and_retire(&mut row, &levels, &mut uncovered));
+        }
+        for i in 0..levels.len() {
+            for j in (i + 1)..levels.len() {
+                for a in 0..levels[i] {
+                    for b in 0..levels[j] {
+                        assert!(
+                            rows.iter().any(|r| r[i] == a && r[j] == b),
+                            "pair ({i},{a})-({j},{b}) never appeared"
+                        );
+                    }
+                }
+            }
+        }
     }
 }

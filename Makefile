@@ -64,6 +64,12 @@ download-bak:  ## Download the pinned vPIC MS SQL .bak (zip) into downloads/ (us
 	@cd downloads && unzip -o "vPICList_lite_$(MONTH).bak.zip"
 	@echo "downloaded + extracted downloads/VPICList_lite_$(MONTH).bak"
 
+answerkey-build:  ## Freeze the oracle's answers for the pinned month (needs the loaded oracle).
+	@uv run -- python -m scripts.parity.answerkey build --out target/answerkey/key.jsonl $(ARGS)
+
+answerkey-verify:  ## Check ultravin against the frozen answers (no oracle needed).
+	@uv run -- python -m scripts.parity.answerkey verify --key target/answerkey $(ARGS)
+
 coverage:  ## Gate the decode path at 100% of the regions a VIN can reach.
 	@uv run -- python -m scripts.coverage
 

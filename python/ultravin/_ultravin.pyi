@@ -99,3 +99,11 @@ def pairwise(*, limit: int = 0) -> list[str]:
 
     ``limit`` stops early (0 = all ~1.7M, which takes minutes to build).
     """
+
+def seeded(*, limit: int = 0) -> list[str]:
+    """Every decoding rule matched and every 2-way interaction covered, in one list.
+
+    Each rule's own key seeds a VIN — the positions it pins stay pinned, so the
+    rule is guaranteed to match — and the positions it leaves free are chosen to
+    knock out outstanding class pairs. ``limit`` stops early (0 = all ~1.7M).
+    """
