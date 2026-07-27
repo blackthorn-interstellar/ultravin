@@ -147,10 +147,30 @@ def build(
 
 
 def read_key(path: Path) -> tuple[dict[str, Any], list[tuple[str, str]]]:
+    """Headers and answers out of a key file.
+
+    A published key is the shards concatenated, so headers appear throughout it,
+    not just on line one. Objects are headers, arrays are answers.
+    """
+    header: dict[str, Any] = {}
+    entries: list[tuple[str, str]] = []
     with path.open() as fh:
-        header = json.loads(fh.readline())
-        entries = [tuple(json.loads(ln)) for ln in fh if ln.strip()]
-    return header, entries  # type: ignore[return-value]
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            row = json.loads(line)
+            if isinstance(row, dict):
+                if header and (row["month"], row["artifact_blake3"]) != (
+                    header["month"],
+                    header["artifact_blake3"],
+                ):
+                    msg = f"{path.name} mixes shards from different builds"
+                    raise ValueError(msg)
+                header = row
+            else:
+                entries.append((row[0], row[1]))
+    return header, entries
 
 
 @app.command()
