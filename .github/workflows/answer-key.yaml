@@ -147,14 +147,16 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          git diff --quiet -- tests/answerkey.json && {
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Stage before diffing: the pin is untracked on its first run, and
+          # `git diff` says nothing about a file git has never seen.
+          git add tests/answerkey.json
+          git diff --cached --quiet -- tests/answerkey.json && {
             echo "pin unchanged"; exit 0;
           }
           branch="answerkey/${{ steps.pin.outputs.month }}"
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$branch"
-          git add tests/answerkey.json
           git commit -m "test: pin the ${{ steps.pin.outputs.month }} answer key"
           git push -f origin "$branch"
           if [ "$(gh pr list --head "$branch" --state open --json number --jq length)" = "0" ]; then
