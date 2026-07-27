@@ -203,6 +203,77 @@ so only environment changes were allowed. Decode output was hash-verified identi
 | 10M VINs | ~67 min, ~$1.30 | ~40 min, one wave | ~17 min, ~$1–2 |
 | 100M VINs | ~11 h, ~$12 | ~7 h (multi-wave, heavy) | ~2.8 h, ~$8–15 |
 
+## Applied to this repo
+
+The Postgres ladder is now landed in the local oracle. What went where:
+
+| Step | Where | Default |
+|---|---|---|
+| 1 image swap → `postgres:16` (Debian/glibc) | `docker-compose.yml` | always on |
+| 2 reckless config | `docker-compose.yml` `command:` | always on |
+| 3 PGDATA on tmpfs | `docker-compose.yml`, **primary `oracle` only** | always on |
+| 5 temp-table rewrite | `scripts/oracle.sh` `fast_procs()` | **off** — `ULTRAVIN_ORACLE_FAST_PROCS=1` |
+| 6a batching, 10/txn | `scripts/parity/oracle.py` | **off** — `ULTRAVIN_ORACLE_BATCH=10` |
+
+Step 4 (unix sockets) was skipped: measured a wash above, and it would cost a bind mount.
+
+Two sizing deviations, both forced by the Docker VM (~11.7 GB) having to hold five
+oracles where the EC2 box held one: `shared_buffers` is 1 GB rather than 4 GB (the DB
+is 1.4 GB and cache-resident either way — step 2's gain was the durability barriers,
+not buffer size), and tmpfs is on the primary `oracle` service only, with the pool left
+on disk. Note the primary now loses its data on *any* restart, not just `down -v`.
+
+### Local re-measurement (10-core Apple Silicon, Docker Desktop VM)
+
+Same method, 8s warmup + 30s timed, corpus VINs, 1 and 4 connections. This machine
+degrades past 4 connections, so 4 is the aggregate point rather than the doc's 8.
+
+| Config | Single | 4-conn |
+|---|---|---|
+| Baseline: `postgres:16-alpine`, stock config, disk, stock procs | 10.0 | 25.5 |
+| + steps 1–3 (glibc image, reckless config, tmpfs) | 13.1 | 29.5 |
+| + step 5 (temp-table rewrite) | 17.4 | 49.2 |
+| + step 6a (batch=10) | **17.6** | **52.3** |
+| | **1.76×** | **2.05×** |
+
+The shape reproduces — the rewrite is the dominant lever (+33% single, +67% aggregate)
+— but the magnitudes are smaller than EC2's. Two honest caveats:
+
+- **Steps 1–3 gave +31%/+16% here, not +72%.** This is aarch64 under a Docker Desktop
+  VM, not x86 EPYC on bare Ubuntu; the musl allocator penalty is real but nothing like
+  the x86 measurement. Kept anyway: it is free, and it is strictly positive.
+- **Batching gave +1% single / +6% at 4 conns, not +18%/+25%.** Single-connection is
+  inside the noise. Kept because it is opt-in, never negative, and the aggregate gain
+  is where bulk runs live. Do not expect it to matter on one connection here.
+
+Load time also dropped from minutes to ~35s (stock procs) / ~52s (rewritten), a
+side-effect of the reckless config plus tmpfs.
+
+### Equivalence, re-verified locally
+
+`vpic.spvindecode` under the rewritten procs vs. under the stock procs, same data, 399
+VINs (350 spread across the bench corpus + 49 malformed: short, bad-char, broken check
+digit, empty, and 40 `#`/`?` pattern VINs — the shapes the EC2 run found order-only
+diffs on): **0 content mismatches, 0 order-only mismatches**, under
+`scripts/parity/normalize.py`'s canonical comparison. The same 399 VINs also pass the
+full ultravin-vs-oracle parity sweep against the rewritten oracle, batched and
+unbatched.
+
+### The trust-story cost of step 5
+
+`docs/ACCEPTANCE.md` defines the parity oracle as the dump's `spvindecode` run
+**unmodified**. With `ULTRAVIN_ORACLE_FAST_PROCS=1` it is not literally unmodified —
+it is a mechanically rewritten oracle whose equivalence is *measured* rather than
+*definitional*. That is a real, if narrow, weakening: parity would no longer be proven
+against NHTSA's exact text, only against a transform of it that has never yet produced
+a differing answer.
+
+Hence the default is off. Correctness runs (`make check`, the frozen corpus, answer-key
+builds, anything whose output becomes a committed baseline) get the untouched oracle.
+Bulk differential runs, where the alternative is fewer VINs tested, can opt in. The
+committed `vpic/procs/*.sql` is never edited — the transform is applied to the dump
+stream at load time — so the `vpic-import` byte-reproduction gate is unaffected.
+
 ## Reproduction
 
 **Postgres:** `postgres:16` (Debian) on tmpfs, reckless config above, procs transformed

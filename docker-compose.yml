@@ -1,12 +1,45 @@
-# Parity oracle pool: 5 disk-backed Postgres instances, each the unmodified
-# vpic.spvindecode over the pinned dump. Disk-backed (not tmpfs) so 5 fit the
-# Docker VM. `oracle` (55432) is the primary used by the single-engine make
+# Parity oracle pool: 5 Postgres instances, each running the vPIC spvindecode over
+# the pinned dump. `oracle` (55432) is the primary used by the single-engine make
 # targets; the comprehensive campaign fans out across all five (55432-55436).
+#
+# Tuned per the measured ladder in docs/ORACLE_TUNING.md. Sizing here deviates from
+# that doc's numbers because it was measured on a dedicated 16 GB box and this
+# Docker VM (~11.7 GB) has to hold five of these at once.
 x-oracle: &oracle
-  image: postgres:16-alpine
+  # Debian/glibc, NOT alpine: musl's allocator is much slower for the constant small
+  # allocations interpreted plpgsql makes. ORACLE_TUNING step 1 measured +72% from this
+  # line alone on x86; on aarch64 here the image+config+tmpfs bundle is worth +31%.
+  image: postgres:16
   environment:
     POSTGRES_PASSWORD: postgres
     POSTGRES_DB: vpic
+  # Every durability guarantee traded away for throughput. Only defensible because
+  # this oracle is disposable: it holds nothing but a dump we can reload in minutes
+  # (`make oracle-load`), so surviving a crash buys us nothing. Never copy this
+  # config anywhere data matters.
+  #   shared_buffers 1GB (doc says 4GB): the DB is 1.4 GB and fully cache-resident
+  #   either way, and 5 pooled oracles must fit one Docker VM. Buffer size was not
+  #   the lever — step 2's whole +6% came from dropping the durability barriers.
+  #   client_min_messages: the rewritten procs (see scripts/oracle.sh) emit a
+  #   "relation already exists, skipping" notice on every decode; suppress it
+  #   server-side so it never reaches the wire.
+  #   max_locks_per_transaction: headroom for transaction batching (step 6a).
+  command: >
+    postgres
+    -c fsync=off
+    -c synchronous_commit=off
+    -c full_page_writes=off
+    -c wal_level=minimal
+    -c max_wal_senders=0
+    -c autovacuum=off
+    -c shared_buffers=1GB
+    -c work_mem=64MB
+    -c temp_buffers=64MB
+    -c checkpoint_timeout=1d
+    -c max_wal_size=8GB
+    -c jit=off
+    -c client_min_messages=warning
+    -c max_locks_per_transaction=4096
   healthcheck:
     test: ["CMD-SHELL", "pg_isready -U postgres -d vpic"]
     interval: 2s
@@ -17,6 +50,15 @@ services:
   oracle:
     <<: *oracle
     ports: ["55432:5432"]
+    # PGDATA on tmpfs (ORACLE_TUNING step 3): removes the file create/unlink
+    # syscalls behind per-decode temp-table relfilenodes. Primary only — tmpfs
+    # pages come out of the Docker VM's RAM, and five of these at ~2.2 GB apiece
+    # would exhaust it, so the pool stays on disk. 8g is a cap, not a reservation
+    # (2.2 GB data + WAL headroom).
+    # NB: this makes the primary lose its data on *any* container restart, not just
+    # `down -v`. Reload with `make oracle-load`.
+    tmpfs:
+      - /var/lib/postgresql/data:size=8g
   oracle2:
     <<: *oracle
     ports: ["55433:5432"]
