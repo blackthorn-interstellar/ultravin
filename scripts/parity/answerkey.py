@@ -28,6 +28,7 @@ from __future__ import annotations
 import hashlib
 import json
 import multiprocessing as mp
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -105,7 +106,11 @@ def corpus(limit: int, shard: int, shards: int) -> list[str]:
 @app.command()
 def build(
     out: str = typer.Option(..., help="where to write the key (JSONL)"),
-    limit: int = typer.Option(0, help="cap the corpus (0 = all ~1.7M)"),
+    limit: int = typer.Option(
+        0,
+        help="stop after roughly N VINs (0 = all ~1.8M). Cuts at a schema boundary, so it is "
+        "the first whole schemas by id — a plumbing smoke test, not a representative sample.",
+    ),
     shard: int = typer.Option(0, help="build only shard i of n"),
     shards: int = typer.Option(1, help="total shards"),
     workers: int = typer.Option(4, help="oracle connections; it saturates around 4 per 10 cores"),
@@ -197,6 +202,50 @@ def verify(
             typer.echo(f"  {vin}", err=True)
         raise typer.Exit(1)
     typer.echo("every answer matches")
+
+
+@app.command()
+def fetch(
+    dest: str = typer.Option("target/answerkey", help="where to put the key"),
+    tag: str = typer.Option("", help="release tag (default: data-<month> from the pin)"),
+) -> None:
+    """Download the published key named by `tests/answerkey.json` and check it.
+
+    The key is tens of megabytes and changes monthly, so it lives on the release
+    rather than in git; what git holds is the pin. A download that does not match
+    the pinned checksum is refused — an answer key you cannot trust the integrity
+    of is worse than none.
+    """
+    if not PIN.exists():
+        typer.echo(f"no pin at {PIN} — nothing has been published yet", err=True)
+        raise typer.Exit(2)
+    pinned = json.loads(PIN.read_text())
+    manifest = json.loads(MANIFEST.read_text())
+    if pinned["month"] != manifest["month"]:
+        typer.echo(f"pin is for {pinned['month']}, data is {manifest['month']} — rebuild the key", err=True)
+        raise typer.Exit(2)
+
+    out = Path(dest)
+    out.mkdir(parents=True, exist_ok=True)
+    asset = out / pinned["asset"]
+    release = tag or f"data-{pinned['month']}"
+    typer.echo(f"fetching {pinned['asset']} from {release}", err=True)
+    proc = subprocess.run(
+        ["gh", "release", "download", release, "--pattern", pinned["asset"], "--dir", str(out), "--clobber"],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        typer.echo(f"gh release download failed:\n{proc.stderr[-800:]}", err=True)
+        raise typer.Exit(1)
+
+    digest = hashlib.sha256(asset.read_bytes()).hexdigest()
+    if digest != pinned["sha256"]:
+        typer.echo(f"checksum mismatch: got {digest}, pinned {pinned['sha256']}", err=True)
+        raise typer.Exit(1)
+    if asset.suffix == ".zst":
+        subprocess.run(["zstd", "-df", str(asset), "-o", str(asset.with_suffix(""))], check=True)
+    typer.echo(f"{pinned['count']:,} answers ready in {out}")
 
 
 @app.command()

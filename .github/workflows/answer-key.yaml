@@ -21,6 +21,10 @@ on:
       month:
         description: "data month (YYYY_MM); defaults to the pinned manifest"
         required: false
+      limit:
+        description: "stop after ~N VINs per shard's slice — use a few thousand to smoke-test the plumbing before committing 16 runners to a full build"
+        required: false
+        default: "0"
   workflow_run:
     workflows: ["Data Refresh"]
     types: [completed]
@@ -70,7 +74,8 @@ jobs:
         run: |
           uv run -- python -m scripts.parity.answerkey build \
             --out "target/answerkey/shard-$(printf '%02d' ${{ matrix.shard }}).jsonl" \
-            --shard ${{ matrix.shard }} --shards ${{ env.SHARDS }} --workers 4
+            --shard ${{ matrix.shard }} --shards ${{ env.SHARDS }} --workers 4 \
+            --limit ${{ inputs.limit || 0 }}
 
       - uses: actions/upload-artifact@v4
         with:

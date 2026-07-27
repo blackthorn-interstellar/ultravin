@@ -67,6 +67,9 @@ download-bak:  ## Download the pinned vPIC MS SQL .bak (zip) into downloads/ (us
 answerkey-build:  ## Freeze the oracle's answers for the pinned month (needs the loaded oracle).
 	@uv run -- python -m scripts.parity.answerkey build --out target/answerkey/key.jsonl $(ARGS)
 
+answerkey-fetch:  ## Download the published answer key named by tests/answerkey.json.
+	@uv run -- python -m scripts.parity.answerkey fetch $(ARGS)
+
 answerkey-verify:  ## Check ultravin against the frozen answers (no oracle needed).
 	@uv run -- python -m scripts.parity.answerkey verify --key target/answerkey $(ARGS)
 
