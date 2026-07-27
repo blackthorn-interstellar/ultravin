@@ -62,6 +62,12 @@ jobs:
           echo "month=$month" >> "$GITHUB_OUTPUT"
           make download MONTH="$month"
 
+      # crates/ultravin-core/data/vpic.rkyv is gitignored. Without it build.rs
+      # bakes in an empty stub, `seeded()` sees zero schemas, and every shard
+      # writes a header and no answers — which is exactly how the first run of
+      # this workflow failed.
+      - uses: ./.github/actions/build-data
+
       - name: Load the oracle
         run: |
           make oracle-up
@@ -72,10 +78,17 @@ jobs:
 
       - name: Freeze this shard
         run: |
+          out="target/answerkey/shard-$(printf '%02d' ${{ matrix.shard }}).jsonl"
           uv run -- python -m scripts.parity.answerkey build \
-            --out "target/answerkey/shard-$(printf '%02d' ${{ matrix.shard }}).jsonl" \
+            --out "$out" \
             --shard ${{ matrix.shard }} --shards ${{ env.SHARDS }} --workers 4 \
             --limit ${{ inputs.limit || 0 }}
+          # A header with no answers means the corpus came out empty — almost
+          # always a missing data artifact. Say so here rather than letting the
+          # publish job die on a zero count with no message.
+          answers=$(grep -vc '^{' "$out" || true)
+          [ "$answers" -gt 0 ] || { echo "::error::shard produced 0 answers"; exit 1; }
+          echo "shard wrote $answers answers"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -110,7 +123,8 @@ jobs:
           cat target/answerkey/shard-*.jsonl > "$out"
           zstd -19 -q -o "$out.zst" "$out"
           sha=$(sha256sum "$out.zst" | cut -d' ' -f1)
-          count=$(grep -vc '^{' "$out")
+          count=$(grep -vc '^{' "$out" || true)
+          [ "$count" -gt 0 ] || { echo "::error::combined key has 0 answers"; exit 1; }
           uv run -- python -m scripts.parity.answerkey pin \
             --key "$out.zst" --sha256 "$sha" --count "$count"
           echo "month=$month" >> "$GITHUB_OUTPUT"
