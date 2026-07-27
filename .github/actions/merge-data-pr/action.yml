@@ -64,6 +64,13 @@ runs:
           git tag "data-$MONTH" "$sha"
           git push origin "data-$MONTH"
         fi
+        # The data is on master now, so this is the moment to freeze the oracle's
+        # answers for it. Dispatched rather than triggered: a tag pushed with
+        # GITHUB_TOKEN emits no event, the same reason release.yaml is dispatched
+        # below. Independent of autorelease — the key is a test asset, not a ship.
+        gh workflow run answer-key.yaml --ref master -f month="$MONTH" \
+          && echo "answer key build dispatched for $MONTH" >> "$GITHUB_STEP_SUMMARY" \
+          || echo "::warning::could not dispatch the answer key build for $MONTH"
         if [ "${{ inputs.autorelease }}" = "true" ]; then
           latest=$(git tag -l 'v*' --sort=-v:refname | head -1)
           latest=${latest:-v0.0.0}

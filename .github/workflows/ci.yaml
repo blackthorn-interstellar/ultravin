@@ -64,6 +64,49 @@ jobs:
         name: vpic-data
         path: crates/ultravin-core/data/vpic.rkyv
         if-no-files-found: error
+  # Every push, checked against the oracle's own frozen answers for this data
+  # month — ~1.8M of them, and no Postgres involved. The key is published by
+  # answer-key.yaml when a data month lands; until one exists for the pinned
+  # month this skips rather than failing, so a fresh data PR is not blocked by a
+  # key that has not been built yet.
+  answerkey:
+    needs: data
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version-file: pyproject.toml
+    - uses: astral-sh/setup-uv@v6
+      with:
+        enable-cache: false
+    - uses: actions/download-artifact@v4
+      with:
+        name: vpic-data
+        path: crates/ultravin-core/data
+    - run: echo "UV_PYTHON=$pythonLocation" >> $GITHUB_ENV
+    - run: uv sync --frozen --all-extras
+    - name: Is there a key for this data month?
+      id: pin
+      run: |
+        if [ ! -f tests/answerkey.json ]; then
+          echo "::notice::no answer key pinned yet"; echo "have=false" >> "$GITHUB_OUTPUT"; exit 0
+        fi
+        pinned=$(python3 -c "import json;print(json.load(open('tests/answerkey.json'))['month'])")
+        current=$(python3 -c "import json;print(json.load(open('vpic/manifest.json'))['month'])")
+        if [ "$pinned" != "$current" ]; then
+          echo "::notice::key is for $pinned, data is $current — not built yet"
+          echo "have=false" >> "$GITHUB_OUTPUT"; exit 0
+        fi
+        echo "have=true" >> "$GITHUB_OUTPUT"
+    - name: Verify against the frozen answers
+      if: steps.pin.outputs.have == 'true'
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        uv run --frozen -- python -m scripts.parity.answerkey fetch
+        uv run --frozen -- python -m scripts.parity.answerkey verify --key target/answerkey
   test:
     needs: data
     runs-on: ubuntu-latest

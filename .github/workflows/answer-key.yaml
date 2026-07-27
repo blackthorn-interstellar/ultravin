@@ -13,6 +13,11 @@
 # The corpus is deliberately derived from NHTSA's data (rules and the character
 # classes those rules distinguish), never from ultravin's own behaviour — an
 # answer key selected by our decoder could only confirm what we already test.
+#
+# Dispatched by .github/actions/merge-data-pr the moment a data month lands on
+# master, so the key is always built from the data it will be used to check.
+# ULTRAVIN_ORACLE_FAST_PROCS stays off here on purpose: this artifact becomes the
+# ground truth for a month, so it comes from the dump's procedures untouched.
 name: Answer Key
 
 on:
@@ -25,9 +30,6 @@ on:
         description: "stop after ~N VINs per shard's slice — use a few thousand to smoke-test the plumbing before committing 16 runners to a full build"
         required: false
         default: "0"
-  workflow_run:
-    workflows: ["Data Refresh"]
-    types: [completed]
 
 permissions:
   contents: write
@@ -38,7 +40,6 @@ env:
 
 jobs:
   build:
-    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 350 # 1.8M/16 shards at stock oracle speed is ~55 min; headroom for a slow runner
     strategy:
