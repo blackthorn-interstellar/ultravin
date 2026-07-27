@@ -31,6 +31,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 env:
   SHARDS: 16
@@ -129,6 +130,7 @@ jobs:
             --key "$out.zst" --sha256 "$sha" --count "$count"
           echo "month=$month" >> "$GITHUB_OUTPUT"
           echo "asset=$out.zst" >> "$GITHUB_OUTPUT"
+          echo "count=$count" >> "$GITHUB_OUTPUT"
 
       - name: Attach to the month's release
         env:
@@ -139,12 +141,25 @@ jobs:
             --title "vPIC ${{ steps.pin.outputs.month }}" --notes "Frozen oracle answer key."
           gh release upload "$tag" "${{ steps.pin.outputs.asset }}" --clobber
 
-      - name: Commit the pin
+      # master is protected and GITHUB_TOKEN cannot push to it, so the pin goes
+      # through a PR — the same route the data refresh already takes.
+      - name: Open a PR for the pin
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
+          git diff --quiet -- tests/answerkey.json && {
+            echo "pin unchanged"; exit 0;
+          }
+          branch="answerkey/${{ steps.pin.outputs.month }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$branch"
           git add tests/answerkey.json
-          git diff --cached --quiet || {
-            git commit -m "test: pin the ${{ steps.pin.outputs.month }} answer key"
-            git push
-          }
+          git commit -m "test: pin the ${{ steps.pin.outputs.month }} answer key"
+          git push -f origin "$branch"
+          if [ "$(gh pr list --head "$branch" --state open --json number --jq length)" = "0" ]; then
+            gh pr create --base master --head "$branch" \
+              --title "test: pin the ${{ steps.pin.outputs.month }} answer key" \
+              --body "$(printf '%s answers frozen from the oracle for %s.\n\nAsset `%s` is attached to release `data-%s`; this pins its checksum so `make answerkey-fetch` can verify what it downloads.' \
+                "${{ steps.pin.outputs.count }}" "${{ steps.pin.outputs.month }}" "${{ steps.pin.outputs.asset }}" "${{ steps.pin.outputs.month }}")"
+          fi
