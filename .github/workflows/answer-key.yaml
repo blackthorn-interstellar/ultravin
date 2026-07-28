@@ -108,6 +108,12 @@ jobs:
   # Earns the right to use the rewritten procedures, on this month's data, every
   # month. One slice is frozen twice — once from the dump's procedures untouched,
   # once from the rewrite — and any difference in any hash stops the release.
+  #
+  # The slice is ~14k VINs, and it is bounded by what the *stock* side can
+  # survive: measured, untouched procs manage roughly 33k decodes before the temp
+  # table churn bloats the catalog past the volume, even with autovacuum on. That
+  # limit is not a nuisance around the test — it is the reason the rewrite exists,
+  # and it is why the full 1.8M build cannot use stock procs at all.
   equivalence:
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -135,7 +141,7 @@ jobs:
           make oracle-up
           make oracle-load DUMP="downloads/vPICList_lite_${{ steps.month.outputs.month }}.plain.zip"
           uv run -- python -m scripts.parity.answerkey build \
-            --out target/equiv/stock.jsonl --shard 0 --shards 32 --workers 4
+            --out target/equiv/stock.jsonl --shard 0 --shards 128 --workers 4
 
       - name: Freeze the same slice from the rewritten procedures
         env:
@@ -145,7 +151,7 @@ jobs:
           make oracle-up
           make oracle-load DUMP="downloads/vPICList_lite_${{ steps.month.outputs.month }}.plain.zip"
           uv run -- python -m scripts.parity.answerkey build \
-            --out target/equiv/fast.jsonl --shard 0 --shards 32 --workers 4
+            --out target/equiv/fast.jsonl --shard 0 --shards 128 --workers 4
 
       - name: Compare
         run: uv run -- python -m scripts.parity.answerkey compare --a target/equiv/stock.jsonl --b target/equiv/fast.jsonl

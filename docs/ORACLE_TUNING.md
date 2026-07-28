@@ -84,6 +84,23 @@ tmpfs removes the file create/unlink syscalls for per-decode temp-table relfilen
 any residual page writeback. Sockets vs TCP was a wash — the ~40ms/decode of server CPU
 dwarfs localhost protocol overhead.
 
+### Step 5 is not optional at scale (measured 2026-07-28)
+
+The ladder presents the rewrite as a throughput win. Building a 1.8M-VIN answer
+key showed it is a correctness prerequisite for bulk runs, twice:
+
+- With `autovacuum = off` (step 2), stock procs filled an 8 GB volume about 40k
+  decodes into a 113k-VIN shard: 438k `DiskFull`, then 963k `OperationalError`
+  as connections died behind it. The key published as 77% holes and still passed
+  verification, because only what it had was compared.
+- With autovacuum back **on**, stock procs still only reached ~33k decodes of a
+  57k slice before the same failure. Autovacuum does not keep up with 9-20 temp
+  table drops per decode; it races the churn and loses.
+
+So `autovacuum=off` is dropped from the local recipe, and the answer-key build
+runs with `ULTRAVIN_ORACLE_FAST_PROCS=1`. The equivalence job that gates it is
+sized to ~14k VINs precisely because the stock side cannot go further.
+
 ### Step 5 — the temp-table rewrite (+75% single, +124% aggregate)
 
 The big lever. Stock procs create and drop **9–20 temp tables per decode** (`spvindecode`
