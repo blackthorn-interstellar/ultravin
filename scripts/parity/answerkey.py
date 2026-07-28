@@ -245,6 +245,38 @@ def verify(
 
 
 @app.command()
+def compare(
+    a: str = typer.Option(..., help="one key"),
+    b: str = typer.Option(..., help="the other"),
+) -> None:
+    """Assert two keys agree, VIN for VIN.
+
+    Used to hold the rewritten stored procedures to account: the same slice is
+    frozen from the dump's procedures untouched and from the rewrite, and any
+    difference means the rewrite is not the equivalence it claims to be — on this
+    month's data, not on the sample someone measured once.
+    """
+    _, left = read_key(Path(a))
+    _, right = read_key(Path(b))
+    lmap, rmap = dict(left), dict(right)
+    shared = lmap.keys() & rmap.keys()
+    if not shared:
+        typer.echo("the two keys share no VINs — nothing was compared", err=True)
+        raise typer.Exit(2)
+    differing = sorted(v for v in shared if lmap[v] != rmap[v])
+    only = lmap.keys() ^ rmap.keys()
+
+    typer.echo(f"{len(shared):,} VINs in both; {len(differing):,} differ")
+    if only:
+        typer.echo(f"{len(only):,} VINs are in only one of them", err=True)
+    if differing:
+        for vin in differing[:20]:
+            typer.echo(f"  {vin}: {lmap[vin]} != {rmap[vin]}", err=True)
+        raise typer.Exit(1)
+    typer.echo("the two agree on every VIN")
+
+
+@app.command()
 def fetch(
     dest: str = typer.Option("target/answerkey", help="where to put the key"),
     tag: str = typer.Option("", help="release tag (default: data-<month> from the pin)"),

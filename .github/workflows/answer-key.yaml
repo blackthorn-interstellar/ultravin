@@ -16,8 +16,13 @@
 #
 # Dispatched by .github/actions/merge-data-pr the moment a data month lands on
 # master, so the key is always built from the data it will be used to check.
-# ULTRAVIN_ORACLE_FAST_PROCS stays off here on purpose: this artifact becomes the
-# ground truth for a month, so it comes from the dump's procedures untouched.
+# The build uses the temp-table rewrite (ULTRAVIN_ORACLE_FAST_PROCS), and pays for
+# the privilege: the `equivalence` job below rebuilds a slice both ways against
+# this month's data and fails unless every hash matches. That turns "equivalent,
+# measured once on 5,292 VINs in a doc" into a fresh proof at ~57k VINs, on the
+# exact data the key is being frozen from. Without the rewrite, stock procs drop
+# 9-20 temp tables per decode and a 113k-VIN shard bloats the catalog until the
+# volume fills — which is how the first full build produced a key of 77% holes.
 name: Answer Key
 
 on:
@@ -71,6 +76,8 @@ jobs:
       - uses: ./.github/actions/build-data
 
       - name: Load the oracle
+        env:
+          ULTRAVIN_ORACLE_FAST_PROCS: 1
         run: |
           make oracle-up
           make oracle-load DUMP="downloads/vPICList_lite_${{ steps.month.outputs.month }}.plain.zip"
@@ -98,8 +105,53 @@ jobs:
           path: target/answerkey/
           retention-days: 7
 
+  # Earns the right to use the rewritten procedures, on this month's data, every
+  # month. One slice is frozen twice — once from the dump's procedures untouched,
+  # once from the rewrite — and any difference in any hash stops the release.
+  equivalence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+      - uses: astral-sh/setup-uv@v6
+      - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
+      - name: Resolve the month and dump
+        id: month
+        run: |
+          month="${{ inputs.month }}"
+          [ -n "$month" ] || month=$(python3 -c "import json;print(json.load(open('vpic/manifest.json'))['month'])")
+          echo "month=$month" >> "$GITHUB_OUTPUT"
+          make download MONTH="$month"
+      - uses: ./.github/actions/build-data
+      - run: make build-dev
+
+      - name: Freeze a slice from the untouched procedures
+        run: |
+          make oracle-up
+          make oracle-load DUMP="downloads/vPICList_lite_${{ steps.month.outputs.month }}.plain.zip"
+          uv run -- python -m scripts.parity.answerkey build \
+            --out target/equiv/stock.jsonl --shard 0 --shards 32 --workers 4
+
+      - name: Freeze the same slice from the rewritten procedures
+        env:
+          ULTRAVIN_ORACLE_FAST_PROCS: 1
+        run: |
+          make oracle-down
+          make oracle-up
+          make oracle-load DUMP="downloads/vPICList_lite_${{ steps.month.outputs.month }}.plain.zip"
+          uv run -- python -m scripts.parity.answerkey build \
+            --out target/equiv/fast.jsonl --shard 0 --shards 32 --workers 4
+
+      - name: Compare
+        run: uv run -- python -m scripts.parity.answerkey compare --a target/equiv/stock.jsonl --b target/equiv/fast.jsonl
+
   publish:
-    needs: build
+    needs: [build, equivalence]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
