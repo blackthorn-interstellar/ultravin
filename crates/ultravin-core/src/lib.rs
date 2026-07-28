@@ -21,6 +21,7 @@ mod wmi;
 mod year;
 
 use std::fmt::Write as _;
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use checkdigit::check_digit;
@@ -264,6 +265,40 @@ pub fn decode_batch_flat(inputs: &[String]) -> Vec<FlatResult<'static>> {
     batch(inputs, FlatResult::from)
 }
 
+/// The thread pool the batch paths run on, rebuilt whenever the pid changes.
+///
+/// rayon's *global* pool spawns its workers once per process, and `fork()` copies
+/// only the calling thread: the child inherits the pool's bookkeeping but none of
+/// its threads, so its first `par_iter` queues a job no worker will ever steal and
+/// blocks forever. That is the ordinary shape of a fork-based Python deployment —
+/// gunicorn prefork after a warmup decode, `multiprocessing` with the `fork` start
+/// method. Keying the cached pool on `process::id()` makes the child notice it is
+/// not the process that built the pool and build its own.
+fn batch_pool() -> Arc<rayon::ThreadPool> {
+    /// The cached pool, tagged with the pid that built it.
+    type Owned = Mutex<Option<(u32, Arc<rayon::ThreadPool>)>>;
+
+    static POOL: OnceLock<Owned> = OnceLock::new();
+
+    let pid = std::process::id();
+    // Poisoning only means another caller panicked while building; whatever is
+    // cached is still sound to read.
+    let mut slot = POOL
+        .get_or_init(|| Mutex::new(None))
+        .lock()
+        .unwrap_or_else(|e| e.into_inner());
+    if let Some((_, pool)) = slot.as_ref().filter(|(owner, _)| *owner == pid) {
+        return Arc::clone(pool);
+    }
+    let pool = Arc::new(
+        rayon::ThreadPoolBuilder::new()
+            .build()
+            .expect("rayon thread pool"),
+    );
+    *slot = Some((pid, Arc::clone(&pool)));
+    pool
+}
+
 /// Shared body of the batch paths: decode every input in parallel over the shared
 /// archive, mapped through `shape`. Output order matches `inputs`.
 fn batch<T: Send>(inputs: &[String], shape: impl Fn(DecodeResult<'static>) -> T + Sync) -> Vec<T> {
@@ -276,10 +311,12 @@ fn batch<T: Send>(inputs: &[String], shape: impl Fn(DecodeResult<'static>) -> T 
     let now_micros = secs * 1_000_000;
     let year = epoch_to_year(secs);
     let db = Db::embedded();
-    inputs
-        .par_iter()
-        .map(|v| shape(decode_with(db, v, now_micros, year)))
-        .collect()
+    batch_pool().install(|| {
+        inputs
+            .par_iter()
+            .map(|v| shape(decode_with(db, v, now_micros, year)))
+            .collect()
+    })
 }
 
 /// Decode one VIN to a compact JSON object string (same shape as the [`decode`]
@@ -328,13 +365,15 @@ fn batch_json<T: serde::Serialize + Send>(
     let db = Db::embedded();
     // Fuse decode + serialize so both happen in parallel; each task yields its
     // object's JSON text.
-    let parts: Vec<String> = inputs
-        .par_iter()
-        .map(|v| {
-            serde_json::to_string(&shape(decode_with(db, v, now_micros, year)))
-                .expect("decode results are infallibly serializable")
-        })
-        .collect();
+    let parts: Vec<String> = batch_pool().install(|| {
+        inputs
+            .par_iter()
+            .map(|v| {
+                serde_json::to_string(&shape(decode_with(db, v, now_micros, year)))
+                    .expect("decode results are infallibly serializable")
+            })
+            .collect()
+    });
     // Stitch the array serially (one pass, pre-sized) — cheap memcpy vs. the
     // parallel decode/serialize above.
     let cap = parts.iter().map(|p| p.len() + 1).sum::<usize>() + 2;
