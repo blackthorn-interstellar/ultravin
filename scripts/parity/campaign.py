@@ -23,9 +23,7 @@ from multiprocessing import Pool, Queue
 from pathlib import Path
 from typing import Any
 
-import psycopg
 import ultravin
-from psycopg.rows import dict_row
 
 from scripts.parity import brutal, generator, normalize, oracle
 
@@ -40,6 +38,9 @@ _conn: Any = None
 
 
 def _winit(q: Queue) -> None:
+    import psycopg  # noqa: PLC0415  (lazy: keep optional deps optional)
+    from psycopg.rows import dict_row  # noqa: PLC0415  (lazy: keep optional deps optional)
+
     global _conn
     _conn = psycopg.connect(q.get(), row_factory=dict_row, autocommit=True)  # ty: ignore[invalid-argument-type]
 

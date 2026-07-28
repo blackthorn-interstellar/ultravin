@@ -11,9 +11,6 @@ from __future__ import annotations
 import os
 from typing import Any
 
-import psycopg
-from psycopg.rows import dict_row
-
 DSN = os.environ.get(
     "ULTRAVIN_ORACLE_DSN",
     "host=localhost port=55432 dbname=vpic user=postgres password=postgres",
@@ -30,6 +27,13 @@ BATCH = int(os.environ.get("ULTRAVIN_ORACLE_BATCH", "1"))
 # NB: psycopg's dict_row overload confuses the type checker, so the connection
 # is typed as Any here; rows are real dicts at runtime (row_factory=dict_row).
 def connect(batch: int | None = None) -> Any:
+    # Lazy so that importing this module — which answerkey and coverage do for
+    # their oracle-free halves, and tests import those — costs nothing but the
+    # stdlib. psycopg is absent wherever no binary wheel exists yet (see the
+    # marker in pyproject); only actually talking to the oracle may need it.
+    import psycopg  # noqa: PLC0415  (lazy: keep optional deps optional)
+    from psycopg.rows import dict_row  # noqa: PLC0415  (lazy: keep optional deps optional)
+
     n = BATCH if batch is None else batch
     # autocommit: stock spvindecode creates/drops temp tables per call; without
     # per-call commits, lock objects accumulate and exhaust max_locks_per_transaction.
