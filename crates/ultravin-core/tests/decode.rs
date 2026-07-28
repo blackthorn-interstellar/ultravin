@@ -5,7 +5,7 @@
 use ultravin_core::{decode, Db};
 
 fn loaded() -> bool {
-    Db::embedded().is_loaded()
+    Db::try_embedded().is_some()
 }
 
 fn value(vin: &str, element_id: i32) -> Option<String> {

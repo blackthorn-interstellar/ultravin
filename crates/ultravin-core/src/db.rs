@@ -153,7 +153,37 @@ impl Db {
     }
 
     /// The process-wide embedded database (loaded once).
+    ///
+    /// # Panics
+    /// If this binary was built with the empty placeholder artifact (`build.rs`
+    /// stubs one so a fresh checkout compiles before the importer has run). A
+    /// placeholder decodes every VIN to "manufacturer not registered" — refusing
+    /// loudly here beats silently serving wrong answers to a crate consumer who
+    /// was never told the importer exists. Use [`Db::try_embedded`] to probe.
     pub fn embedded() -> &'static Db {
+        let db = Db::embedded_raw();
+        assert!(
+            db.is_loaded(),
+            "ultravin: this binary embeds the EMPTY placeholder artifact (data/vpic.rkyv \
+             was absent at build time), so every decode would be wrong. Get real data: \
+             `make download && make data` (runs vpic-import), download vpic.rkyv from a \
+             GitHub release of this repo, or install the prebuilt wheel from PyPI."
+        );
+        db
+    }
+
+    /// The embedded database, or `None` when this binary carries only the empty
+    /// placeholder artifact. The non-panicking form of [`Db::embedded`], for
+    /// tests and callers that degrade gracefully.
+    pub fn try_embedded() -> Option<&'static Db> {
+        let db = Db::embedded_raw();
+        db.is_loaded().then_some(db)
+    }
+
+    /// The embedded blob as-is, placeholder or not (loaded once). Crate-visible
+    /// so in-crate tests can probe `is_loaded` and skip without tripping the
+    /// [`Db::embedded`] refusal.
+    pub(crate) fn embedded_raw() -> &'static Db {
         static DB: OnceLock<Db> = OnceLock::new();
         DB.get_or_init(|| {
             check_header(&EMBEDDED.0).expect("embedded artifact header is valid");

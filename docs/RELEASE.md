@@ -35,6 +35,14 @@ self-verifying: it downloads the pinned dump, checks the `sha256`, runs
 The sdist embeds the artifact too (`[tool.maturin] include`), so a source install
 (`pip install` with no matching wheel) works fully offline.
 
+Tagged releases also attach that exact `vpic.rkyv` to the GitHub release. That
+is the supported data channel for Rust-crate users — the crate itself can't
+carry 82MB (crates.io size cap), and a build without the artifact embeds an
+empty placeholder that `Db::embedded()` refuses to serve at runtime. Download
+the asset and either `Db::open` it (`external-data` feature) or drop it at
+`crates/ultravin-core/data/vpic.rkyv` before building to bake it in; verify its
+`blake3` against the tag's `vpic/manifest.json`.
+
 Data bumps are automated: a daily workflow detects new NHTSA dumps, integrates
 them behind parity gates, and opens a classified PR (see
 [DATA_REFRESH.md](DATA_REFRESH.md)). The manual equivalent:

@@ -1,6 +1,7 @@
 name: Release
 
-# Cross-platform wheel + sdist build and PyPI publish. Mirrors the pypiron
+# Cross-platform wheel + sdist build, PyPI publish, and a GitHub release
+# carrying the data artifact for Rust-crate users. Mirrors the pypiron
 # pipeline, adapted for a PyO3 abi3 extension module (one wheel per platform
 # covers Python 3.10+) whose 82MB vpic.rkyv data artifact is gitignored and
 # rebuilt deterministically from the pinned dump before any wheel compiles.
@@ -186,13 +187,17 @@ jobs:
     permissions:
       id-token: write       # PyPI trusted publishing (OIDC) + provenance
       attestations: write   # build-provenance attestation
-      contents: read
+      contents: write       # create the GitHub release + data asset
     steps:
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: wheels-*
           merge-multiple: true
           path: dist
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: vpic-data
+          path: data
       # Build-provenance attestation is a public-repo-only feature; it skips on a
       # private repo and reactivates automatically once the repo is public.
       - name: Generate artifact attestation
@@ -204,3 +209,15 @@ jobs:
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # v1.14.0
         with:
           skip-existing: true
+      # The Rust crate can't ship the 82MB artifact (crates.io size cap), so the
+      # GitHub release carries the exact vpic.rkyv this release embeds — crate
+      # users mmap it (external-data) or bake it in themselves. Verify against
+      # artifact_blake3 in the tag's vpic/manifest.json. Runs after PyPI publish
+      # so a hiccup here never blocks the wheels.
+      - name: Create GitHub release with the data artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes
+          gh release upload "$GITHUB_REF_NAME" data/vpic.rkyv --repo "$GITHUB_REPOSITORY" --clobber

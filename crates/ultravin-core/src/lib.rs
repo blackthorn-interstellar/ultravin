@@ -693,7 +693,9 @@ mod tests {
     use super::*;
 
     fn db() -> &'static Db {
-        Db::embedded()
+        // Raw accessor: these tests check `is_loaded()` and skip on the
+        // placeholder instead of hitting `embedded()`'s refusal.
+        Db::embedded_raw()
     }
 
     #[test]

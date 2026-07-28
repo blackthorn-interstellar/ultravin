@@ -18,6 +18,13 @@ fn main() {
     println!("cargo:rerun-if-changed=data/vpic.rkyv");
 
     if !path.exists() {
+        // Cargo hides this for non-path dependencies; Db::embedded()'s runtime
+        // refusal is the real guard. This is the compile-time heads-up.
+        println!(
+            "cargo:warning=ultravin-core: data/vpic.rkyv missing — embedding an EMPTY \
+             placeholder artifact. Decoding will refuse at runtime; run `make data` \
+             (vpic-import) or fetch vpic.rkyv from a GitHub release."
+        );
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         let empty = tables::VpicData {
             cover: Vec::new(),
