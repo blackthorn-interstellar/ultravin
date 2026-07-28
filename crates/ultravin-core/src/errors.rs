@@ -15,6 +15,53 @@ use crate::decode::CoreResult;
 use crate::hash::{FxBuildHasher, IntSet};
 use crate::tables::{ArchivedWmi, NULL_I32};
 
+/// The "possible values" payload for element 144, in the reference's order.
+///
+/// vPIC ships SQL Server, whose database collation is
+/// `SQL_Latin1_General_CP1_CI_AS` (verified from `RESTORE HEADERONLY` on
+/// VPICList_lite_2026_06.bak). Under it `_` sorts *before* the digits, so the
+/// reference emits `(6:_123456789)`. A `BTreeSet` iterates in codepoint order
+/// and puts `_` last, which is what ultravin did and is wrong.
+///
+/// The characters vPIC actually uses here are exactly `_|0-9A-Z`, and over that
+/// closed alphabet this key reproduces SQL Server's order exactly. It is not a
+/// general implementation of that collation: a non-ASCII letter would sort with
+/// the punctuation here and after `Z` in the real thing. `|` never reaches this
+/// payload — it only ever occupies VIN position 9, which is skipped before the
+/// charset is consulted — so `_` is the only non-alphanumeric that arrives.
+#[derive(Debug, Default, Clone)]
+pub(crate) struct ValidChars(std::collections::BTreeSet<char>);
+
+impl ValidChars {
+    fn insert(&mut self, c: char) {
+        self.0.insert(c);
+    }
+
+    fn contains(&self, c: char) -> bool {
+        self.0.contains(&c)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+}
+
+/// Renders in the reference's order — the only way to turn this into a string.
+///
+/// Deliberately not `Deref`, and the inner set is private: a caller that could
+/// reach `.iter()` would get codepoint order, which is the bug this type exists
+/// to make unrepresentable.
+impl std::fmt::Display for ValidChars {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut chars: Vec<char> = self.0.iter().copied().collect();
+        chars.sort_by_key(|c| (c.is_ascii_alphanumeric(), *c));
+        for c in chars {
+            write!(f, "{c}")?;
+        }
+        Ok(())
+    }
+}
+
 /// element-5 attribute ids that flag an off-road PIN (code 10).
 const OFF_ROAD: [&str; 10] = [
     "69", "84", "86", "88", "97", "105", "113", "124", "126", "127",
@@ -183,7 +230,7 @@ fn key_chars(key: &str) -> KeyChars {
     expansion
 }
 
-type Charset = Rc<HashMap<i32, BTreeSet<char>>>;
+type Charset = Rc<HashMap<i32, ValidChars>>;
 
 thread_local! {
     /// Per-thread memo of [`valid_charset`], keyed by wmi then `model_year`. The
@@ -209,7 +256,7 @@ fn valid_charset(db: &Db, wmi: &str, model_year: Option<i32>) -> Charset {
     {
         return hit;
     }
-    let mut map: HashMap<i32, BTreeSet<char>> = HashMap::new();
+    let mut map: HashMap<i32, ValidChars> = HashMap::new();
     let mut keys: BTreeSet<String> = BTreeSet::new();
     for wmiid in db.wmi_ids_for_str(wmi) {
         for wvs in db.wmi_vinschema_for(wmiid) {
@@ -303,10 +350,10 @@ fn errorcode(
         }
         match charset.get(&i) {
             Some(set) if !set.is_empty() => {
-                if set.contains(&var_c) {
+                if set.contains(var_c) {
                     corrected.push(var_c);
                 } else {
-                    let x: String = set.iter().collect();
+                    let x = set.to_string();
                     replacements.push_str(&format!("({i}:{x})"));
                     cnt_errors += 1;
                     last_error_pos = i;
@@ -632,5 +679,37 @@ pub fn compute_errors(
         is_off_road,
         is_vin_exception,
         check_digit_valid,
+    }
+}
+
+#[cfg(test)]
+mod collation_tests {
+    use super::*;
+
+    #[test]
+    fn underscore_sorts_before_the_digits() {
+        // SQL_Latin1_General_CP1_CI_AS, which is what vPIC ships, orders the
+        // payload `_0129AZ`. Codepoint order would put `_` last.
+        let mut set = ValidChars::default();
+        "_0129AZ".chars().for_each(|c| set.insert(c));
+        assert_eq!(set.to_string(), "_0129AZ");
+    }
+
+    #[test]
+    fn an_alphanumeric_only_set_is_unchanged() {
+        let mut set = ValidChars::default();
+        "9A0Z".chars().for_each(|c| set.insert(c));
+        assert_eq!(set.to_string(), "09AZ");
+    }
+
+    #[test]
+    fn the_whole_vpic_alphabet_matches_the_reference() {
+        // Every distinct character in vpic.WMIYearValidChars for 2026_07, in the
+        // order SQL Server returns for it.
+        let mut set = ValidChars::default();
+        "_|0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+            .chars()
+            .for_each(|c| set.insert(c));
+        assert_eq!(set.to_string(), "_|0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
     }
 }

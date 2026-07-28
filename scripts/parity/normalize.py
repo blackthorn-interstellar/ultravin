@@ -35,6 +35,15 @@ FIELDS = (
 
 # Elements that carry error/correction state rather than vehicle attributes.
 ERROR_ELEMENTS = {142, 143, 144, 156, 191}
+# Element 144 ("possible values") renders a character set as a string, so its
+# byte order is whatever collation the server it ran on happens to use. vPIC's
+# SQL Server sorts `_` before the digits; no Postgres collation reproduces that
+# *and* the key tiebreak in element 143 at the same time, so the oracle's order
+# for this one field is an artifact of the dump host, not of NHTSA's rules. Sort
+# its characters before hashing: what the field *contains* is data and is
+# compared; the order it prints in is pinned by the unit tests in errors.rs and
+# by docs/KNOWN_DEVIATIONS.md, not by the oracle.
+COLLATION_DEPENDENT_ELEMENTS = {144}
 # Displacement conversions (CI/L derived from CC) — the priority-100 Conversion pass.
 CONVERSION_ELEMENTS = {12, 13}
 _EPOCH = datetime(1970, 1, 1)  # noqa: DTZ001 (oracle timestamps are naive UTC)
@@ -145,6 +154,23 @@ _GROUP_RANK = {
 
 def _group_rank(group_name: Any) -> int:
     return _GROUP_RANK.get(str(group_name), 99)
+
+
+def collation_agnostic(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Rows with the collation-dependent fields reduced to their character sets.
+
+    Both `value` and `attribute_id`: element 144 puts the same rendered string in
+    each, so normalizing one and not the other leaves the difference behind.
+    """
+    out = []
+    for row in rows:
+        if row.get("element_id") in COLLATION_DEPENDENT_ELEMENTS:
+            row = {
+                **row,
+                **{f: "".join(sorted(row[f])) for f in ("value", "attribute_id") if isinstance(row.get(f), str)},
+            }
+        out.append(row)
+    return out
 
 
 def _feature(element_id: int | None) -> str:

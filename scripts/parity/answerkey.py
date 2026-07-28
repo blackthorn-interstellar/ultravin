@@ -50,7 +50,7 @@ app = typer.Typer(add_completion=False, help="Build and check the frozen oracle 
 
 def canonical_hash(rows: list[dict[str, Any]]) -> str:
     """A stable digest of one decode, order-insensitive within a group."""
-    norm = [normalize.from_oracle(r) for r in rows]
+    norm = normalize.collation_agnostic([normalize.from_oracle(r) for r in rows])
     flat = sorted(json.dumps(r, sort_keys=True, default=str) for r in norm)
     return hashlib.blake2b("\n".join(flat).encode(), digest_size=8).hexdigest()
 
@@ -64,7 +64,8 @@ def ultravin_hashes(vins: list[str]) -> list[str]:
     results: Any = ultravin.decode_batch(vins)
     out = []
     for result in results:
-        flat = sorted(json.dumps(r, sort_keys=True, default=str) for r in normalize.ultravin_rows(result))
+        rows = normalize.collation_agnostic(normalize.ultravin_rows(result))
+        flat = sorted(json.dumps(r, sort_keys=True, default=str) for r in rows)
         out.append(hashlib.blake2b("\n".join(flat).encode(), digest_size=8).hexdigest())
     return out
 
