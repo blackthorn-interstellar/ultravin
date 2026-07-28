@@ -13,6 +13,10 @@ x-oracle: &oracle
   environment:
     POSTGRES_PASSWORD: postgres
     POSTGRES_DB: vpic
+    # --lc-collate only. A bare --locale=C also sets LC_CTYPE, which makes initdb
+    # pick SQL_ASCII encoding, and psycopg then hands back bytes instead of str
+    # for every text column — every row reads as a diff.
+    POSTGRES_INITDB_ARGS: "--lc-collate=C"
   # Every durability guarantee traded away for throughput. Only defensible because
   # this oracle is disposable: it holds nothing but a dump we can reload in minutes
   # (`make oracle-load`), so surviving a crash buys us nothing. Never copy this
