@@ -143,7 +143,20 @@ def build(
             if done % 20_000 == 0:
                 rate = done / (time.time() - started)
                 typer.echo(f"  {done:,}/{len(vins):,} at {rate:.0f} VIN/s", err=True)
-    typer.echo(f"wrote {path} in {(time.time() - started) / 60:.1f} min", err=True)
+    unanswered = sum(1 for _, h in read_key(path)[1] if h.startswith("!"))
+    share = unanswered / max(len(vins), 1)
+    typer.echo(
+        f"wrote {path} in {(time.time() - started) / 60:.1f} min "
+        f"({len(vins) - unanswered:,} answered, {unanswered:,} not)",
+        err=True,
+    )
+    # A handful of VINs genuinely kill the oracle (see KNOWN_DEVIATIONS). A large
+    # share means the oracle fell over — disk, a dropped connection — and the key
+    # is mostly holes. Publishing that would be worse than publishing nothing,
+    # because `verify` would pass on the strength of what little it could compare.
+    if share > 0.01:
+        typer.echo(f"{share:.1%} of this shard has no oracle answer — refusing it", err=True)
+        raise typer.Exit(1)
 
 
 def read_key(path: Path) -> tuple[dict[str, Any], list[tuple[str, str]]]:
@@ -215,7 +228,14 @@ def verify(
         f"{len(entries):,} frozen answers checked in {elapsed:.1f}s ({len(entries) / max(elapsed, 1e-9):,.0f} VIN/s)"
     )
     if oracle_failures:
-        typer.echo(f"{oracle_failures:,} the oracle itself could not answer (recorded, not compared)")
+        share = oracle_failures / max(len(entries), 1)
+        typer.echo(f"{oracle_failures:,} ({share:.1%}) the oracle itself could not answer, so not compared")
+        if share > 0.01:
+            typer.echo(
+                f"this key is {share:.0%} holes — it was built against a failing oracle and proves little",
+                err=True,
+            )
+            raise typer.Exit(2)
     if mismatches:
         typer.echo(f"{len(mismatches):,} MISMATCH against the oracle's frozen answer:", err=True)
         for vin in mismatches[:20]:

@@ -31,7 +31,12 @@ x-oracle: &oracle
     -c full_page_writes=off
     -c wal_level=minimal
     -c max_wal_senders=0
-    -c autovacuum=off
+    # autovacuum stays ON, unlike ORACLE_TUNING step 2. Stock spvindecode creates
+    # and drops 9-20 temp tables per decode, so a bulk run leaves dead tuples in
+    # pg_class/pg_attribute at that rate; with autovacuum off the catalog grows
+    # without bound and a 113k-decode shard fills the volume. The doc measured
+    # the whole reckless block at +6%, and this is a small part of that -- worth
+    # far less than the ability to finish an answer-key build.
     -c shared_buffers=1GB
     -c work_mem=64MB
     -c temp_buffers=64MB
