@@ -401,6 +401,33 @@ struct Pass {
     check_digit_valid: bool,
 }
 
+/// Normalize raw decode input into the byte-safe VIN the engine works on.
+///
+/// Everything downstream — [`vin_wmi`], [`build_var_keys`]'s `&vin[3..8]`/
+/// `&vin[9..17]` slices, the check-digit and error-code scans — indexes the VIN
+/// *by byte* on the assumption that one byte is one character. That holds only
+/// for ASCII: a multibyte char (`é`, `Ł`, …) puts a UTF-8 char boundary
+/// mid-index and panics a byte slice. So map every non-ASCII char to one
+/// representative invalid ASCII byte (`&`) here, once, at the single entry seam —
+/// downstream byte indexing is then unconditionally safe, and a non-ASCII char
+/// decodes exactly as an invalid ASCII `&` would at the same character position.
+///
+/// The all-ASCII case (every real VIN) keeps the original single-allocation
+/// `trim().to_ascii_uppercase()` untouched — no new allocation on the hot path.
+/// Non-ASCII input maps *before* trimming so the result is byte-for-byte what
+/// decoding the `&`-substituted string would produce: a non-ASCII whitespace
+/// char becomes a non-whitespace `&` that is kept, not trimmed away.
+fn sanitize(input: &str) -> String {
+    if input.is_ascii() {
+        return input.trim().to_ascii_uppercase();
+    }
+    let mapped: String = input
+        .chars()
+        .map(|c| if c.is_ascii() { c } else { '&' })
+        .collect();
+    mapped.trim().to_ascii_uppercase()
+}
+
 /// The full wrapper (`vpic.spvindecode`): up to 4 best-of passes, scoring, and
 /// the GroupName-ordered projection. `caller_year` is the optional caller MY.
 pub fn decode_full<'a>(
@@ -410,7 +437,7 @@ pub fn decode_full<'a>(
     current_year: i32,
     caller_year: Option<i32>,
 ) -> DecodeResult<'a> {
-    let vin = input.trim().to_ascii_uppercase();
+    let vin = sanitize(input);
     let var_wmi = vin_wmi(&vin);
     let descriptor = vin_descriptor(&vin);
     let var_keys = decode::build_var_keys(&vin);
@@ -740,6 +767,44 @@ mod tests {
     #[test]
     fn check_digit_helper_still_works() {
         assert_eq!(check_digit("1HGCM82633A004352"), Some('3'));
+    }
+
+    #[test]
+    fn sanitize_ascii_is_the_old_fast_path() {
+        // Byte-identical to the original `input.trim().to_ascii_uppercase()`.
+        assert_eq!(sanitize("  1hgcm82633a004352 "), "1HGCM82633A004352");
+        assert_eq!(sanitize(""), "");
+    }
+
+    #[test]
+    fn sanitize_maps_non_ascii_to_invalid_ascii() {
+        // Every non-ASCII char collapses to a single `&` at its char position, so
+        // downstream byte indexing sees one byte per input char.
+        assert_eq!(sanitize("AAé"), "AA&");
+        assert_eq!(sanitize("1HGCM8263Ł3A00435"), "1HGCM8263&3A00435");
+        assert_eq!(sanitize("1HGCM82633A0043é2"), "1HGCM82633A0043&2");
+        // A non-ASCII whitespace char maps to `&` (kept), not trimmed away — so it
+        // matches decoding the `&`-substituted string exactly.
+        assert_eq!(sanitize("\u{00a0}AB\u{00a0}"), "&AB&");
+    }
+
+    #[test]
+    fn multibyte_input_decodes_like_its_ampersand_twin() {
+        // The three field repros that raised PanicException through the wheel.
+        let d = db();
+        if !d.is_loaded() {
+            eprintln!("skipping: artifact not built");
+            return;
+        }
+        for (bad, twin) in [
+            ("AAé", "AA&"),
+            ("1HGCM8263Ł3A00435", "1HGCM8263&3A00435"),
+            ("1HGCM82633A0043é2", "1HGCM82633A0043&2"),
+        ] {
+            let a = decode_with(d, bad, 1_750_000_000_000_000, 2026);
+            let b = decode_with(d, twin, 1_750_000_000_000_000, 2026);
+            assert_eq!(a, b, "{bad} must decode like {twin}");
+        }
     }
 
     #[test]
