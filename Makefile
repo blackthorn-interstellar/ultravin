@@ -36,6 +36,9 @@ build-wheel:  ## Build a release wheel into target/wheels/ (local dry-run of the
 	@uv run -- maturin build --release --locked --out target/wheels
 	@echo -e "✅ wheel(s) in target/wheels/ ✨ 🍰 ✨"
 
+wheel-smoke: build-wheel  ## Build a wheel then prove the installed artifact really decodes.
+	@python3 scripts/wheel_smoke.py target/wheels/*.whl
+
 test: build-dev ## Run the Python tests (builds the extension first).
 	@uv run -- pytest
 	@echo -e "✅ The tests pass! ✨ 🍰 ✨"

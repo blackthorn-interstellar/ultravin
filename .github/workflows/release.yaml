@@ -79,7 +79,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { kind: linux,     runner: ubuntu-22.04,   target: x86_64 }
+          - { kind: linux,     runner: ubuntu-22.04,   target: x86_64,  smoke: true }
           - { kind: linux,     runner: ubuntu-22.04,   target: x86 }
           # manylinux_2_28: this is the one mimalloc-carrying cross target, and the
           # default (manylinux2014) cross-gcc predates -Wdate-time, so mimalloc's C
@@ -97,13 +97,13 @@ jobs:
           # pyarch picks the real interpreter setup-python installs (below): a
           # 32-bit Python for the x86 wheel, the x64 host Python for x64 and the
           # aarch64 cross (abi3 + pyo3's generated import lib need no arm Python).
-          - { kind: windows,   runner: windows-latest, target: x64,     pyarch: x64 }
-          - { kind: windows,   runner: windows-latest, target: x86,     pyarch: x86 }
+          - { kind: windows,   runner: windows-latest, target: x64,     pyarch: x64, smoke: true }
+          - { kind: windows,   runner: windows-latest, target: x86,     pyarch: x86, smoke: true }
           - { kind: windows,   runner: windows-latest, target: aarch64, pyarch: x64 }
           # GitHub retired macos-13 (Intel) on 2025-12-04; macos-15-intel is the
           # standard x86_64 replacement. macos-14 is Apple silicon.
-          - { kind: macos,     runner: macos-15-intel, target: x86_64 }
-          - { kind: macos,     runner: macos-14,       target: aarch64 }
+          - { kind: macos,     runner: macos-15-intel, target: x86_64,  smoke: true }
+          - { kind: macos,     runner: macos-14,       target: aarch64, smoke: true }
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
         with:
@@ -133,7 +133,12 @@ jobs:
       # relative for GitHub. Windows runners may lack a `python3` shim.
       - name: Rewrite README links to absolute URLs for PyPI
         shell: bash
-        run: command -v python3 >/dev/null 2>&1 && python3 scripts/transform_readme.py --target pypi || python scripts/transform_readme.py --target pypi
+        run: |
+          if command -v python3 >/dev/null 2>&1; then
+            python3 scripts/transform_readme.py --target pypi
+          else
+            python scripts/transform_readme.py --target pypi
+          fi
       - name: Build wheel
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
@@ -141,6 +146,30 @@ jobs:
           args: --release --locked --out dist
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
           manylinux: ${{ matrix.manylinux || 'auto' }}
+      # Prove the wheel we just built actually decodes before it can be published
+      # (build.rs can emit an import-clean, decode-nothing stub). Only matrix.smoke
+      # rows run the wheel natively on their runner; cross-compiled and libc-
+      # mismatched wheels can't execute here and are skipped with a visible note
+      # (no QEMU). Windows reuses the arch-matched interpreter set up above; other
+      # runners get one here (native arch — matches the wheel).
+      - name: Set up Python for smoke
+        if: ${{ matrix.smoke && runner.os != 'Windows' }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Smoke test the built wheel
+        if: matrix.smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then
+            export ULTRAVIN_EXPECT_VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then PY=python; else PY=python3; fi
+          "$PY" scripts/wheel_smoke.py dist/*.whl
+      - name: Note wheel not smoked (cross-compiled / libc-incompatible)
+        if: ${{ !matrix.smoke }}
+        run: echo "::notice::${{ matrix.kind }}/${{ matrix.target }} wheel is cross-compiled or libc-incompatible with this runner — built, not smoked"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: wheels-${{ matrix.kind }}-${{ matrix.target }}
@@ -173,6 +202,24 @@ jobs:
         with:
           command: sdist
           args: --out dist
+      # Smoke the sdist as a real source build (pip install compiles it from
+      # source), the one path that exercises build.rs picking up the embedded
+      # vpic.rkyv — the exact "source install stubs empty data" failure the
+      # pyproject include guards against. Needs the Rust toolchain the wheel jobs
+      # get from maturin-action; the sdist build itself only packages source.
+      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - name: Set up Python for smoke
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Smoke test the sdist (source build)
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then
+            export ULTRAVIN_EXPECT_VERSION="${GITHUB_REF_NAME#v}"
+          fi
+          python3 scripts/wheel_smoke.py dist/*.tar.gz
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: wheels-sdist
