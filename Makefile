@@ -76,7 +76,7 @@ answerkey-verify:  ## Check ultravin against the frozen answers (no oracle neede
 coverage:  ## Gate the decode path at 100% of the regions a VIN can reach.
 	@uv run -- python -m scripts.coverage
 
-coverage-update:  ## Refresh the region counts in scripts/coverage_allowances.toml.
+coverage-update:  ## Refresh the region counts in scripts/coverage_allowances.json.
 	@uv run -- python -m scripts.coverage --update
 
 oracle-up:  ## Start the Postgres parity oracle (Docker).

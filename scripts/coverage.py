@@ -6,7 +6,7 @@ alternate storage backend) and some is unreachable with the data NHTSA currently
 ships (arithmetic arms six positive formulas cannot take, a regex fallback for
 character classes no key contains). A permanent 5% gap hides regressions inside
 it, so the gap is written down instead — every uncovered region carries a reason
-in `coverage_allowances.toml`, and this check fails on anything else.
+in `coverage_allowances.json`, and this check fails on anything else.
 
 It fails in both directions:
 

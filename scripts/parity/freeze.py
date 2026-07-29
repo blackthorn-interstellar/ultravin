@@ -59,6 +59,10 @@ def build(
     With `vins_file`, the corpus is exactly that list rather than a fresh
     diverse sample — the way to freeze a corpus chosen for coverage instead of
     for spread."""
+    # Lazy like oracle.connect: no scripts.parity module may import psycopg at
+    # module load (test_import guards it; psycopg is absent on Python 3.15+).
+    import psycopg  # noqa: PLC0415  (lazy: keep optional deps optional)
+
     if vins_file:
         lines = [ln.strip() for ln in Path(vins_file).read_text().splitlines() if ln.strip()]
         cases = [generator.VinCase(vin=ln, kind="cover", note=None) for ln in lines]
@@ -71,7 +75,7 @@ def build(
         for c in cases:
             try:
                 entries[c.vin] = _entry(conn, c.vin, c.kind, c.note)
-            except Exception as e:  # noqa: BLE001 — the oracle raises on malformed-regex patterns
+            except psycopg.Error as e:  # the oracle raises on malformed-regex patterns
                 # Documented deviation: `vpic.fvalidcharsinregex` rejects a
                 # reversed bracket range and spvindecode returns nothing, so
                 # there is no oracle answer to snapshot. See KNOWN_DEVIATIONS.md.
@@ -84,7 +88,7 @@ def build(
                     continue
                 try:
                     entries[vin] = _entry(conn, vin, "brutal-repro", "brutal")
-                except Exception as e:  # noqa: BLE001 — oracle crashes on some malformed-regex VINs
+                except psycopg.Error as e:  # oracle crashes on some malformed-regex VINs
                     skipped.append((vin, repr(e)[:90]))
     corpus = {
         "_about": "Frozen oracle snapshot + current ultravin-diff baseline. Regenerate with "
