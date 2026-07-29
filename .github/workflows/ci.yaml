@@ -135,3 +135,28 @@ jobs:
     - run: uv sync --frozen --all-extras
     - name: Test with python ${{ matrix.python-version }}
       run: uv run --frozen --all-extras -- pytest -v
+  # `make rust` (fmt-check, clippy, cargo test) — the same gate dev machines run.
+  # Without this job PR CI runs zero cargo commands, so Rust regressions merge
+  # ungated. Needs the real artifact: the decode tests skip on build.rs's empty
+  # placeholder (Db::try_embedded()), so without it the test phase is vacuous.
+  rust:
+    needs: data
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    # clippy lints the whole workspace including the PyO3 crate, so pyo3 needs a
+    # Python interpreter at build-config time.
+    - uses: actions/setup-python@v5
+      with:
+        python-version-file: pyproject.toml
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        components: rustfmt, clippy
+    - uses: Swatinem/rust-cache@v2
+    # Place the artifact where include_bytes! expects it before cargo builds the
+    # crate; build.rs leaves an existing file untouched (same as the test job).
+    - uses: actions/download-artifact@v4
+      with:
+        name: vpic-data
+        path: crates/ultravin-core/data
+    - run: make rust
