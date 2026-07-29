@@ -227,13 +227,20 @@ fn decode_batch_json(py: Python<'_>, vins: Vec<String>, flat: bool) -> String {
     })
 }
 
+/// Upper bound on a single `generate` request. A larger `n` is almost certainly a
+/// mistake, and left unchecked it drives a multi-terabyte allocation that aborts
+/// the process (uncatchable) rather than raising. Ten million VINs is already far
+/// past any legitimate fixture.
+const GENERATE_MAX: usize = 10_000_000;
+
 /// Generate `n` valid VINs, deterministic for a given `seed`.
 ///
 /// Each VIN comes from a real WMI, a schema that WMI uses, and one of that
 /// schema's patterns, so it decodes to real attributes rather than to an
 /// unknown-manufacturer error. Filters are conjunctive; `vehicle_type` is a
 /// VehicleType row id (2 = passenger car, 7 = MPV). Returns fewer than `n` only
-/// when the filter matches nothing.
+/// when the filter matches nothing. Raises `ValueError` when `n` exceeds
+/// `GENERATE_MAX`.
 #[pyfunction]
 #[pyo3(signature = (n, *, seed = 0, wmi = None, make = None, year = None, vehicle_type = None))]
 fn generate(
@@ -244,14 +251,19 @@ fn generate(
     make: Option<String>,
     year: Option<i32>,
     vehicle_type: Option<i32>,
-) -> Vec<String> {
+) -> PyResult<Vec<String>> {
+    if n > GENERATE_MAX {
+        return Err(PyValueError::new_err(format!(
+            "n={n} is too large; generate at most {GENERATE_MAX} VINs per call"
+        )));
+    }
     let filter = ultravin_core::Filter {
         wmi,
         make,
         year,
         vehicle_type,
     };
-    py.detach(|| {
+    Ok(py.detach(|| {
         ultravin_core::generate(
             ultravin_core::Db::embedded(),
             n,
@@ -259,7 +271,7 @@ fn generate(
             &filter,
             ultravin_core::current_year(),
         )
-    })
+    }))
 }
 
 /// One VIN per row of every requested data dimension — the brute-force list.

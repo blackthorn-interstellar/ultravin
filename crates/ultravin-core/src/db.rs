@@ -300,7 +300,8 @@ impl Db {
         })
     }
 
-    /// All elements with a non-empty Decode and not private — the output set.
+    /// The whole element table. The public output set — elements with a non-empty
+    /// Decode and not private — is the subset `public_decode` keeps in the caller.
     pub fn elements(&self) -> &[ArchivedElement] {
         self.a().element.as_slice()
     }

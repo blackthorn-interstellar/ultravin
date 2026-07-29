@@ -345,7 +345,9 @@ fn tie_vin(
             let Some(merged) = merge_keys(group[i].3, group[j].3) else {
                 continue;
             };
-            let vin = build_vin(wmi, &merged, year);
+            let Some(vin) = build_vin(wmi, &merged, year) else {
+                continue;
+            };
             let var_keys = format!("{}|{}", &vin[3..8], &vin[9..17]);
             if keys_match(&var_keys, group[i].3) && keys_match(&var_keys, group[j].3) {
                 return Some(vin);
@@ -403,7 +405,7 @@ fn yearless_vspec_candidates(db: &Db, current_year: i32) -> Vec<String> {
         let e = index[i];
         let wmis = wmis_by_id(db);
         if let Some(wmi) = wmi_string(&wmis, e.1) {
-            out.push(build_vin(
+            out.extend(build_vin(
                 wmi,
                 db.s(p.keys.to_native()),
                 pick_year_pub(e.2, e.3, current_year),
@@ -436,8 +438,10 @@ fn year_candidates(db: &Db, current_year: i32) -> Vec<String> {
         if !(1980..=1998).contains(&latest) {
             continue;
         }
-        let mut vin: Vec<u8> =
-            build_vin(db.s(w.wmi.to_native()), "*****", latest + 30).into_bytes();
+        let Some(built) = build_vin(db.s(w.wmi.to_native()), "*****", latest + 30) else {
+            continue;
+        };
+        let mut vin: Vec<u8> = built.into_bytes();
         vin[6] = b'A'; // alphabetic position 7 keeps the year conclusive
         vin[8] = b'0';
         let text = String::from_utf8_lossy(&vin).into_owned();
@@ -465,7 +469,11 @@ fn error_candidates(db: &Db, current_year: i32) -> Vec<String> {
         return Vec::new();
     };
     let real = db.s(w.wmi.to_native());
-    let base = build_vin(real, "*****", current_year.min(2020));
+    // The lowest-sorted 3-char WMI has no I/O/Q, so this builds; the deliberate
+    // invalid-character case below is injected by `swap`, not by `build_vin`.
+    let Some(base) = build_vin(real, "*****", current_year.min(2020)) else {
+        return Vec::new();
+    };
     let swap = |i: usize, c: char| {
         let mut b = base.clone().into_bytes();
         b[i] = c as u8;

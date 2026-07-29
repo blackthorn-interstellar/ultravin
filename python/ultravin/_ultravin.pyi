@@ -70,6 +70,9 @@ def generate(
 
     Filters are conjunctive. ``vehicle_type`` is a VehicleType row id (2 =
     passenger car, 7 = MPV). Returns fewer than ``n`` only when nothing matches.
+
+    ``n`` may not exceed 10,000,000; a larger request raises ``ValueError``
+    rather than attempting a multi-terabyte allocation.
     """
 
 def sweep(dimensions: list[str] | None = None) -> list[str]:

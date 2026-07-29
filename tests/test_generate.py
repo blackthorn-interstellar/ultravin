@@ -15,9 +15,18 @@ def test_generate_is_deterministic_per_seed() -> None:
     assert ultravin.generate(20, seed=42) != ultravin.generate(20, seed=43)
 
 
-def test_generated_vins_are_well_formed() -> None:
-    for vin in ultravin.generate(50, seed=1):
+@pytest.mark.parametrize("seed", range(1, 21))
+def test_generated_vins_are_well_formed(seed: int) -> None:
+    # seed=7 previously produced I/O/Q VINs (e.g. 1H9AOAAA0WA588111) that failed
+    # this regex and decoded to error 400; such candidates are now skipped.
+    vins = ultravin.generate(500, seed=seed)
+    assert len(vins) == 500
+    for vin in vins:
         assert VIN_CHARS.match(vin), vin
+    # The decoder recomputes the position-9 check digit; a genuine one — not the
+    # '0' fallback the old I/O/Q path emitted — validates.
+    for result in ultravin.decode_batch(vins):
+        assert result["check_digit_valid"], result["vin"]
 
 
 def test_generated_vins_decode_to_real_vehicles() -> None:
@@ -54,6 +63,21 @@ def test_generate_filters_by_year() -> None:
 
 def test_generate_returns_nothing_for_an_impossible_filter() -> None:
     assert ultravin.generate(10, seed=6, wmi="ZZZZZZ") == []
+
+
+def test_generate_rejects_an_absurd_count() -> None:
+    # An unchecked `n` this size drives a multi-terabyte pre-allocation that aborts
+    # the process (uncatchable) instead of raising; the boundary rejects it first.
+    with pytest.raises(ValueError, match="too large"):
+        ultravin.generate(10**18)
+
+
+def test_generation_is_reproducible_across_runs() -> None:
+    # The corpora are ordered by BTreeSet, not HashSet (whose iteration order is
+    # randomized per process), so they are byte-identical run to run — an answer
+    # key built on one machine has to verify on another.
+    assert ultravin.pairwise(limit=300) == ultravin.pairwise(limit=300)
+    assert ultravin.seeded(limit=300) == ultravin.seeded(limit=300)
 
 
 def test_sweep_dimensions_are_independent() -> None:

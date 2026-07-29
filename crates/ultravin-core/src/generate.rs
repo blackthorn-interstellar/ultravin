@@ -82,31 +82,51 @@ fn key_positions(keys: &str) -> Vec<Option<u8>> {
     out
 }
 
-/// The lowest character a bracket class accepts, or `None` if it accepts none.
+/// I, O and Q are not legal VIN characters and have no check-digit
+/// transliteration; a VIN must never contain one.
+fn is_ioq(c: u8) -> bool {
+    matches!(c, b'I' | b'O' | b'Q')
+}
+
+/// The character a bracket class contributes: the lowest member that is legal in
+/// a VIN (I/O/Q excluded). If every member is I/O/Q, returns that illegal member
+/// so `build_vin` drops the candidate rather than silently mismatching the
+/// pattern; `None` only when the class has no members at all (e.g. a reversed
+/// range), which leaves the position at its fill.
 fn first_class_member(body: &str) -> Option<u8> {
     let b = body.as_bytes();
-    let mut best: Option<u8> = None;
+    let mut legal: Option<u8> = None;
+    let mut any: Option<u8> = None;
     let mut i = 0;
     while i < b.len() {
         if i + 2 < b.len() && b[i + 1] == b'-' {
-            if b[i] <= b[i + 2] {
-                best = Some(best.map_or(b[i], |m| m.min(b[i])));
+            let (lo, hi) = (b[i], b[i + 2]);
+            if lo <= hi {
+                any = Some(any.map_or(lo, |m| m.min(lo)));
+                if let Some(c) = (lo..=hi).find(|&c| !is_ioq(c)) {
+                    legal = Some(legal.map_or(c, |m| m.min(c)));
+                }
             }
             i += 3;
         } else {
-            best = Some(best.map_or(b[i], |m| m.min(b[i])));
+            any = Some(any.map_or(b[i], |m| m.min(b[i])));
+            if !is_ioq(b[i]) {
+                legal = Some(legal.map_or(b[i], |m| m.min(b[i])));
+            }
             i += 1;
         }
     }
-    best
+    legal.or(any)
 }
 
 /// Build a 17-character VIN for `wmi` that satisfies `keys` at model year `year`,
-/// with a correct check digit.
+/// with a correct check digit, or `None` when the WMI or a key would force an
+/// I/O/Q character into it. Those are illegal in a VIN and have no check-digit
+/// transliteration, so such a candidate is skipped rather than emitted malformed.
 ///
 /// A 6-character (low-volume) WMI also fills positions 12-14, which is where
 /// `fVinWMI` looks for the rest of it when position 3 is `9`.
-pub fn build_vin(wmi: &str, keys: &str, year: i32) -> String {
+pub fn build_vin(wmi: &str, keys: &str, year: i32) -> Option<String> {
     let mut vin = [FILL; 17];
     vin[11..17].fill(FILL_SERIAL);
 
@@ -137,15 +157,22 @@ pub fn build_vin(wmi: &str, keys: &str, year: i32) -> String {
         }
     }
 
+    // I/O/Q reached here only from the WMI bytes or a key literal/class; either
+    // way this is not a VIN we can emit, so skip the candidate.
+    if vin.iter().any(|&c| is_ioq(c)) {
+        return None;
+    }
+
     vin[8] = b'0';
     let text = String::from_utf8_lossy(&vin).into_owned();
-    // `None`/'?' means a character has no transliteration — an I/O/Q inside the
-    // WMI itself. Keep the VIN well formed; it is an error-400 case regardless.
+    // The '0' fallback still guards any other shape `check_digit` rejects (a
+    // letter in a numeric-only position); with I/O/Q gone it is not reached in
+    // practice, but it keeps the VIN well formed rather than panicking.
     vin[8] = match crate::check_digit(&text) {
         Some(c) if c != '?' => c as u8,
         _ => b'0',
     };
-    String::from_utf8_lossy(&vin).into_owned()
+    Some(String::from_utf8_lossy(&vin).into_owned())
 }
 
 /// A model year inside a schema's band, preferring recent years.
@@ -233,7 +260,10 @@ pub fn generate(db: &Db, n: usize, seed: u64, filter: &Filter, current_year: i32
     }
 
     let mut rng = Rng(seed);
-    let mut out = Vec::with_capacity(n);
+    // `n` is caller-supplied; a huge value would abort in the allocator before the
+    // attempt bound can limit the work. The Vec grows as needed, so only cap the
+    // starting capacity. The Python boundary rejects absurd `n` outright.
+    let mut out = Vec::with_capacity(n.min(65_536));
     // Bounded: a filtered WMI set can contain WMIs with no usable schema, and we
     // must not spin forever looking for one.
     let mut attempts = 0usize;
@@ -263,7 +293,7 @@ pub fn generate(db: &Db, n: usize, seed: u64, filter: &Filter, current_year: i32
             db.s(patterns[rng.below(patterns.len())].keys.to_native())
                 .to_string()
         };
-        out.push(build_vin(db.s(w.wmi.to_native()), &keys, year));
+        out.extend(build_vin(db.s(w.wmi.to_native()), &keys, year));
     }
     out
 }
@@ -313,7 +343,7 @@ pub fn sweep(db: &Db, dimensions: &[Dimension], current_year: i32) -> Vec<String
                     let year = links.first().map_or(current_year, |l| {
                         pick_year(l.yearfrom.to_native(), year_to(l), current_year)
                     });
-                    out.push(build_vin(db.s(w.wmi.to_native()), "*****", year));
+                    out.extend(build_vin(db.s(w.wmi.to_native()), "*****", year));
                 }
             }
             Dimension::Pattern => sweep_patterns(db, current_year, &mut out),
@@ -395,7 +425,7 @@ fn sweep_patterns(db: &Db, current_year: i32, out: &mut Vec<String>) {
             Err(_) => continue,
         };
         if let Some(wmi) = wmi_string(&wmis, entry.1) {
-            out.push(build_vin(
+            out.extend(build_vin(
                 wmi,
                 db.s(key_id),
                 pick_year(entry.2, entry.3, current_year),
@@ -446,7 +476,7 @@ fn sweep_engines(db: &Db, current_year: i32, out: &mut Vec<String>) {
         };
         let entry = index[i];
         if let Some(wmi) = wmi_string(&wmis, entry.1) {
-            out.push(build_vin(
+            out.extend(build_vin(
                 wmi,
                 db.s(p.keys.to_native()),
                 pick_year(entry.2, entry.3, current_year),
@@ -482,7 +512,7 @@ fn sweep_vspecs(db: &Db, current_year: i32, out: &mut Vec<String>) {
             .find(|y| *y >= entry.2 && *y <= entry.3)
             .unwrap_or_else(|| pick_year(entry.2, entry.3, current_year));
         if let Some(wmi) = wmi_string(&wmis, entry.1) {
-            out.push(build_vin(wmi, db.s(p.keys.to_native()), year));
+            out.extend(build_vin(wmi, db.s(p.keys.to_native()), year));
         }
     }
 }
@@ -500,7 +530,7 @@ fn sweep_defaults(db: &Db, current_year: i32, out: &mut Vec<String>) {
         });
         if let Some(w) = hit {
             let l = &db.wmi_vinschema_for(w.id.to_native())[0];
-            out.push(build_vin(
+            out.extend(build_vin(
                 db.s(w.wmi.to_native()),
                 "*****",
                 pick_year(l.yearfrom.to_native(), year_to(l), current_year),
@@ -524,7 +554,7 @@ mod tests {
 
     #[test]
     fn built_vins_are_well_formed() {
-        let vin = build_vin("1HG", "CM826", 2003);
+        let vin = build_vin("1HG", "CM826", 2003).unwrap();
         assert_eq!(vin.len(), 17);
         assert!(vin.starts_with("1HGCM826"));
         assert_eq!(crate::check_digit(&vin), vin.chars().nth(8));
@@ -533,7 +563,7 @@ mod tests {
     #[test]
     fn formula_digit_slots_do_not_leak_into_the_vin() {
         // '#' is a digit slot, not a literal; left alone it makes a non-VIN.
-        let vin = build_vin("1HG", "A#B*C", 2020);
+        let vin = build_vin("1HG", "A#B*C", 2020).unwrap();
         assert_eq!(vin.len(), 17);
         assert!(vin
             .chars()
@@ -544,20 +574,40 @@ mod tests {
     #[test]
     fn bracket_classes_pick_a_member_and_ranges_expand() {
         assert_eq!(
-            build_vin("1HG", "[CD]M826", 2020)[3..8].to_string(),
+            build_vin("1HG", "[CD]M826", 2020).unwrap()[3..8].to_string(),
             "CM826"
         );
         assert_eq!(
-            build_vin("1HG", "[C-F]M826", 2020)[3..8].to_string(),
+            build_vin("1HG", "[C-F]M826", 2020).unwrap()[3..8].to_string(),
             "CM826"
         );
         // A reversed range accepts nothing, so the position keeps its fill.
-        assert_eq!(build_vin("1HG", "[F-C]M826", 2020)[3..5].to_string(), "AM");
+        assert_eq!(
+            build_vin("1HG", "[F-C]M826", 2020).unwrap()[3..5].to_string(),
+            "AM"
+        );
+    }
+
+    #[test]
+    fn io_q_is_never_emitted() {
+        // A WMI carrying I/O/Q cannot yield a legal VIN, so the candidate is
+        // dropped rather than emitted malformed.
+        assert!(build_vin("1OG", "*****", 2020).is_none());
+        // A key literal demanding I/O/Q, likewise.
+        assert!(build_vin("1HG", "IM826", 2020).is_none());
+        // A class admitting I/O/Q *and* legal characters remaps to the lowest
+        // legal one ([I-Z] -> J) instead of skipping.
+        assert_eq!(
+            build_vin("1HG", "[I-Z]M826", 2020).unwrap()[3..8].to_string(),
+            "JM826"
+        );
+        // A class admitting only I/O/Q is dropped.
+        assert!(build_vin("1HG", "****[OQ]", 2020).is_none());
     }
 
     #[test]
     fn six_char_wmis_fill_the_second_block() {
-        let vin = build_vin("1G9ABC", "*****", 2020);
+        let vin = build_vin("1G9ABC", "*****", 2020).unwrap();
         assert!(vin.starts_with("1G9"));
         assert_eq!(&vin[11..14], "ABC");
     }
@@ -777,7 +827,7 @@ pub fn pairwise(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
             for (slot, &c) in row.iter().enumerate() {
                 keys[VARYING[slot].1] = classes[slot][c];
             }
-            out.push(build_vin(
+            out.extend(build_vin(
                 wmi,
                 std::str::from_utf8(&keys).unwrap_or("*****"),
                 year,
@@ -963,7 +1013,7 @@ pub fn seeded(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
             }
             let mut row = seed_row(db.s(key_id), &classes);
             let filled = fill_and_retire(&mut row, &levels, &mut uncovered);
-            out.push(emit(wmi, &classes, &filled, year));
+            out.extend(emit(wmi, &classes, &filled, year));
         }
         // Whatever the rules did not incidentally cover.
         while !uncovered.is_empty() {
@@ -972,14 +1022,14 @@ pub fn seeded(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
             row[p1] = Some(c1);
             row[p2] = Some(c2);
             let filled = fill_and_retire(&mut row, &levels, &mut uncovered);
-            out.push(emit(wmi, &classes, &filled, year));
+            out.extend(emit(wmi, &classes, &filled, year));
         }
     }
     out
 }
 
-/// A chosen class per position -> a VIN.
-fn emit(wmi: &str, classes: &[Vec<u8>], row: &[usize], year: i32) -> String {
+/// A chosen class per position -> a VIN, or `None` if `build_vin` skips it.
+fn emit(wmi: &str, classes: &[Vec<u8>], row: &[usize], year: i32) -> Option<String> {
     let mut keys = [b'*'; 14];
     keys[5] = b'|';
     for (slot, &c) in row.iter().enumerate() {
