@@ -37,14 +37,14 @@ fn main() {
     };
     // Warm caches first (charset/matcher thread-locals + embedded db).
     for v in &vins {
-        std::hint::black_box(ultravin_core::decode(v));
+        std::hint::black_box(ultravin_core::decode(v, None));
     }
     for v in &vins {
         let reps = 200u64;
         let n0 = N.load(Relaxed);
         let b0 = B.load(Relaxed);
         for _ in 0..reps {
-            std::hint::black_box(ultravin_core::decode(v));
+            std::hint::black_box(ultravin_core::decode(v, None));
         }
         let dn = N.load(Relaxed) - n0;
         let db = B.load(Relaxed) - b0;

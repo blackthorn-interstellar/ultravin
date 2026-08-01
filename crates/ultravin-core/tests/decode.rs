@@ -9,7 +9,7 @@ fn loaded() -> bool {
 }
 
 fn value(vin: &str, element_id: i32) -> Option<String> {
-    decode(vin)
+    decode(vin, None)
         .elements
         .into_iter()
         .find(|e| e.element_id == element_id)
@@ -22,7 +22,7 @@ fn canonical_honda() {
         eprintln!("skip: artifact not built");
         return;
     }
-    let r = decode("1HGCM82633A004352");
+    let r = decode("1HGCM82633A004352", None);
     let make = r.elements.iter().find(|e| e.element_id == 26).unwrap();
     assert_eq!(make.value, "HONDA");
     assert_eq!(make.source, "pattern - model");
@@ -50,7 +50,7 @@ fn smoke_error_codes() {
         ("ZZZCM82633A004352", &[1, 7]),
     ];
     for (vin, codes) in cases {
-        assert_eq!(&decode(vin).error_codes, codes, "codes for {vin}");
+        assert_eq!(&decode(vin, None).error_codes, codes, "codes for {vin}");
     }
 }
 
@@ -59,7 +59,7 @@ fn unknown_wmi_short_circuits() {
     if !loaded() {
         return;
     }
-    let r = decode("ZZZCM82633A004352");
+    let r = decode("ZZZCM82633A004352", None);
     // Only the 6 Corrections pseudo-elements survive an err-7 short circuit.
     assert!(r.elements.iter().all(|e| e.source == "Corrections"));
     assert_eq!(
@@ -75,7 +75,7 @@ fn single_wmi_make_fallback() {
         return;
     }
     // No Model -> Make resolves via the single-WMI fallback (source "Make").
-    let r = decode("SAL00000000000000");
+    let r = decode("SAL00000000000000", None);
     let make = r.elements.iter().find(|e| e.element_id == 26).unwrap();
     assert_eq!(make.value, "LAND ROVER");
     assert_eq!(make.source, "Make");
@@ -116,7 +116,7 @@ fn embedded_loader_is_consistent() {
         1_750_000_000_000_000,
         2026,
     );
-    let b = decode("1HGCM82633A004352");
+    let b = decode("1HGCM82633A004352", None);
     let map = |r: &ultravin_core::DecodeResult<'_>| {
         let mut v: Vec<_> = r
             .elements
@@ -131,4 +131,58 @@ fn embedded_loader_is_consistent() {
 
 fn db_ref(db: &Db) -> &Db {
     db
+}
+
+// Caller-year expectations below are oracle-verified against
+// `vpic.spvindecode(vin, false, year)` on the pinned 2026_07 dump, and use only
+// years whose in/out-of-window status cannot change as `current_year` grows
+// (the window is [1980, current_year + 2]).
+
+#[test]
+fn caller_year_matching_the_vin_changes_nothing() {
+    if !loaded() {
+        return;
+    }
+    assert_eq!(
+        decode("1HGCM82633A004352", Some(2003)),
+        decode("1HGCM82633A004352", None)
+    );
+}
+
+#[test]
+fn caller_year_pass_can_win_best_of() {
+    if !loaded() {
+        return;
+    }
+    // 1995 differs from the VIN-implied 2003, so it runs as its own pass and
+    // the +10000 model-year bonus carries it through the best-pass scoring.
+    let r = decode("1HGCM82633A004352", Some(1995));
+    assert_eq!(r.model_year, Some(1995));
+    assert_eq!(r.error_codes, vec![3, 12, 14]);
+}
+
+#[test]
+fn out_of_window_caller_year_still_flags_error_12() {
+    if !loaded() {
+        return;
+    }
+    // 1979 is below the [1980, current_year + 2] window: no caller-year pass,
+    // but the proc still compares it against the decoded year for error 12.
+    let r = decode("1HGCM82633A004352", Some(1979));
+    assert_eq!(r.model_year, Some(2003));
+    assert_eq!(r.error_codes, vec![0, 12]);
+}
+
+#[test]
+fn batch_years_thread_per_vin() {
+    if !loaded() {
+        return;
+    }
+    let vins = ["1HGCM82633A004352", "1HGCM82633A004352"].map(String::from);
+    let years = [None, Some(1995)];
+    let batch = ultravin_core::decode_batch(&vins, Some(&years));
+    assert_eq!(batch[0], decode(&vins[0], None));
+    assert_eq!(batch[1], decode(&vins[1], Some(1995)));
+    // No years slice decodes exactly like all-None.
+    assert_eq!(ultravin_core::decode_batch(&vins, None)[1], batch[0]);
 }

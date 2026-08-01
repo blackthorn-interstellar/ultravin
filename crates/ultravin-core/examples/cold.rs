@@ -10,7 +10,7 @@ fn main() {
     let vin = std::env::args()
         .nth(1)
         .unwrap_or_else(|| "1HGCM82633A004352".to_string());
-    let r = ultravin_core::decode(&vin);
+    let r = ultravin_core::decode(&vin, None);
     let ms = t0.elapsed().as_secs_f64() * 1000.0;
     // Touch the result so the load+decode can't be optimized away.
     eprintln!("cold_ms={ms:.3} elements={}", r.elements.len());

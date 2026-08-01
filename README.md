@@ -64,6 +64,17 @@ r["elements"][0]        # {'variable': 'Make', 'value': 'HONDA', 'source': ..., 
 results = ultravin.decode_batch(["1HGCM82633A004352", "5YJ3E1EA7JF000000"])
 ```
 
+If you already know a vehicle's model year, pass it — the same optional hint the
+vPIC API calls `modelyear`. It matters for pre-2010 vehicles, where the VIN's
+year character is ambiguous (`A` means 1980 *or* 2010): the hinted year gets its
+own decode pass that competes against the VIN-derived one, and a hint that
+contradicts the decoded year adds error code 12.
+
+```python
+ultravin.decode("1HGCM82633A004352", year=1995)          # decodes as a 1995
+ultravin.decode_batch(vins, years=[2011, None, 1987])    # one entry per VIN
+```
+
 If you only want the values, pass `flat=True` and skip the per-attribute dicts
 entirely — **~2× faster end to end**. Decoding is no longer the expensive part;
 building ~615 dict entries per VIN is:

@@ -135,11 +135,33 @@ fn flat_to_dict<'py>(py: Python<'py>, r: &FlatResult<'_>) -> PyResult<Bound<'py,
     Ok(d)
 }
 
+/// The optional per-VIN caller years for a batch, validated against the VIN
+/// count. vPIC's batch API carries one optional model year per VIN line, so the
+/// binding takes a parallel list; a silent zip-truncation would misattribute
+/// years, hence the hard length check.
+fn check_years(vins: &[String], years: &Option<Vec<Option<i32>>>) -> PyResult<()> {
+    if let Some(ys) = years {
+        if ys.len() != vins.len() {
+            return Err(PyValueError::new_err(format!(
+                "years has {} entries but vins has {}; pass one entry (int or None) per VIN",
+                ys.len(),
+                vins.len()
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Decode a single VIN to a dict.
 #[pyfunction]
-#[pyo3(signature = (vin, *, flat = false))]
-fn decode<'py>(py: Python<'py>, vin: &str, flat: bool) -> PyResult<Bound<'py, PyDict>> {
-    let r = ultravin_core::decode(vin);
+#[pyo3(signature = (vin, *, year = None, flat = false))]
+fn decode<'py>(
+    py: Python<'py>,
+    vin: &str,
+    year: Option<i32>,
+    flat: bool,
+) -> PyResult<Bound<'py, PyDict>> {
+    let r = ultravin_core::decode(vin, year);
     if flat {
         flat_to_dict(py, &r.into())
     } else {
@@ -152,30 +174,33 @@ fn decode<'py>(py: Python<'py>, vin: &str, flat: bool) -> PyResult<Bound<'py, Py
 /// The decode work runs in parallel with the GIL released; only the final
 /// marshalling of results into Python dicts holds the GIL.
 #[pyfunction]
-#[pyo3(signature = (vins, *, flat = false))]
+#[pyo3(signature = (vins, *, years = None, flat = false))]
 fn decode_batch<'py>(
     py: Python<'py>,
     vins: Vec<String>,
+    years: Option<Vec<Option<i32>>>,
     flat: bool,
 ) -> PyResult<Vec<Bound<'py, PyDict>>> {
+    check_years(&vins, &years)?;
+    let years = years.as_deref();
     if flat {
         // Flattening happens inside the parallel region, so the GIL-held part is
         // only the (much smaller) dict build.
-        let results = py.detach(|| ultravin_core::decode_batch_flat(&vins));
+        let results = py.detach(|| ultravin_core::decode_batch_flat(&vins, years));
         return results.iter().map(|r| flat_to_dict(py, r)).collect();
     }
-    let results = py.detach(|| ultravin_core::decode_batch(&vins));
+    let results = py.detach(|| ultravin_core::decode_batch(&vins, years));
     results.iter().map(|r| result_to_dict(py, r)).collect()
 }
 
 /// Decode a single VIN to a JSON object string (same shape as `decode`).
 #[pyfunction]
-#[pyo3(signature = (vin, *, flat = false))]
-fn decode_json(vin: &str, flat: bool) -> String {
+#[pyo3(signature = (vin, *, year = None, flat = false))]
+fn decode_json(vin: &str, year: Option<i32>, flat: bool) -> String {
     if flat {
-        ultravin_core::decode_json_flat(vin)
+        ultravin_core::decode_json_flat(vin, year)
     } else {
-        ultravin_core::decode_json(vin)
+        ultravin_core::decode_json(vin, year)
     }
 }
 
@@ -216,15 +241,22 @@ fn elements(py: Python<'_>) -> PyResult<Vec<Bound<'_, PyDict>>> {
 /// `decode_batch`). For large batches this is several times faster than
 /// `decode_batch`, which must build a ~15-key dict per element under the GIL.
 #[pyfunction]
-#[pyo3(signature = (vins, *, flat = false))]
-fn decode_batch_json(py: Python<'_>, vins: Vec<String>, flat: bool) -> String {
-    py.detach(|| {
+#[pyo3(signature = (vins, *, years = None, flat = false))]
+fn decode_batch_json(
+    py: Python<'_>,
+    vins: Vec<String>,
+    years: Option<Vec<Option<i32>>>,
+    flat: bool,
+) -> PyResult<String> {
+    check_years(&vins, &years)?;
+    Ok(py.detach(|| {
+        let years = years.as_deref();
         if flat {
-            ultravin_core::decode_batch_json_flat(&vins)
+            ultravin_core::decode_batch_json_flat(&vins, years)
         } else {
-            ultravin_core::decode_batch_json(&vins)
+            ultravin_core::decode_batch_json(&vins, years)
         }
-    })
+    }))
 }
 
 /// Upper bound on a single `generate` request. A larger `n` is almost certainly a

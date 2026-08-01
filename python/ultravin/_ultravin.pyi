@@ -4,8 +4,15 @@ from typing import Any
 
 __version__: str
 
-def decode(vin: str, *, flat: bool = False) -> dict[str, Any]:
+def decode(vin: str, *, year: int | None = None, flat: bool = False) -> dict[str, Any]:
     """Decode a VIN.
+
+    ``year`` is the optional caller-supplied model year (vPIC's ``modelyear``
+    parameter). When it lands in ``[1980, current_year + 2]`` and differs from
+    the year the VIN itself implies, it gets its own decode pass that competes
+    in the best-pass scoring — so a plausible hint can win and set
+    ``model_year``. In or out of that window, a year that contradicts the
+    decoded model year adds error code 12, exactly as the vPIC procedure does.
 
     Returns a dict with keys: ``vin``, ``wmi``, ``descriptor``, ``model_year``
     (int | None), ``error_codes`` (list[int]), ``check_digit_valid`` (bool),
@@ -23,20 +30,35 @@ def decode(vin: str, *, flat: bool = False) -> dict[str, Any]:
     entries per VIN instead of ~615, so it is materially faster to marshal.
     """
 
-def decode_batch(vins: list[str], *, flat: bool = False) -> list[dict[str, Any]]: ...
-def decode_json(vin: str, *, flat: bool = False) -> str:
+def decode_batch(
+    vins: list[str],
+    *,
+    years: list[int | None] | None = None,
+    flat: bool = False,
+) -> list[dict[str, Any]]:
+    """Decode many VINs; ``years`` optionally supplies one caller model year per
+    VIN (``None`` entries allowed), mirroring the vPIC batch API's per-line
+    ``VIN,year`` format. Raises ``ValueError`` if the lengths differ.
+    """
+
+def decode_json(vin: str, *, year: int | None = None, flat: bool = False) -> str:
     """Decode a VIN to a JSON object string (same shape as :func:`decode`).
 
     Serialized in Rust; ``json.loads(decode_json(vin)) == decode(vin)``.
     """
 
-def decode_batch_json(vins: list[str], *, flat: bool = False) -> str:
+def decode_batch_json(
+    vins: list[str],
+    *,
+    years: list[int | None] | None = None,
+    flat: bool = False,
+) -> str:
     """Decode many VINs to a single JSON array string, serialized in Rust.
 
     The high-throughput batch path: ``json.loads(decode_batch_json(vins)) ==
     decode_batch(vins)``, but the result is built without per-element Python
     dicts. Best when the consumer wants JSON bytes (files, DB, streams) rather
-    than Python objects.
+    than Python objects. ``years`` as in :func:`decode_batch`.
     """
 
 def multi_valued() -> list[str]:

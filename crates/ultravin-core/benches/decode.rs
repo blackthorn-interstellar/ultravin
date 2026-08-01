@@ -46,7 +46,7 @@ fn bench_batch(c: &mut Criterion) {
 /// Touch `decode` (system-clock path) once so it stays linked/benchable.
 fn bench_warm_syscall(c: &mut Criterion) {
     c.bench_function("warm_single_sysclock", |b| {
-        b.iter(|| decode(black_box(WARM_VIN)));
+        b.iter(|| decode(black_box(WARM_VIN), None));
     });
 }
 

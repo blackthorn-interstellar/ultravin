@@ -23,10 +23,10 @@ fn main() {
     let n = batch.len();
 
     // Warm the per-thread regex caches across the rayon pool.
-    let _ = ultravin_core::decode_batch(&batch);
+    let _ = ultravin_core::decode_batch(&batch, None);
 
     let t = Instant::now();
-    let out = ultravin_core::decode_batch(&batch);
+    let out = ultravin_core::decode_batch(&batch, None);
     let dt = t.elapsed();
     assert_eq!(out.len(), n);
 

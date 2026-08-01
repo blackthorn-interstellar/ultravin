@@ -231,12 +231,25 @@ pub fn current_year() -> i32 {
 }
 
 /// Decode a VIN using the embedded database and the system clock.
-pub fn decode(input: &str) -> DecodeResult<'static> {
+///
+/// `year` is the optional caller-supplied model year (the proc's `@year`): when
+/// it lands in `[1980, current_year + 2]` and differs from the VIN-derived
+/// candidates it gets its own decode pass, which competes in the best-pass
+/// scoring (with the +10000 bonus for a pass whose decoded year matches it).
+/// In or out of that window, a caller year that contradicts a pass's decoded
+/// year flags error 12 on that pass.
+pub fn decode(input: &str, year: Option<i32>) -> DecodeResult<'static> {
     let secs = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
-    decode_with(Db::embedded(), input, secs * 1_000_000, epoch_to_year(secs))
+    decode_full(
+        Db::embedded(),
+        input,
+        secs * 1_000_000,
+        epoch_to_year(secs),
+        year,
+    )
 }
 
 /// Decode a VIN against an explicit database and clock (injectable for tests),
@@ -253,16 +266,25 @@ pub fn decode_with<'a>(
 /// Decode many VINs in parallel over the shared (immutable) embedded archive.
 ///
 /// The clock is read once so a batch is internally consistent; each VIN is then
-/// decoded independently via [`decode_with`] across rayon's thread pool. Output
-/// order matches `inputs`. Per-VIN output is identical to calling [`decode`].
-pub fn decode_batch(inputs: &[String]) -> Vec<DecodeResult<'static>> {
-    batch(inputs, |r| r)
+/// decoded independently across rayon's thread pool. Output order matches
+/// `inputs`. `years` optionally supplies a caller model year per VIN (the batch
+/// equivalent of [`decode`]'s `year` — vPIC's batch API carries one per line);
+/// a missing entry or a `None` decodes that VIN with no year. Per-VIN output is
+/// identical to calling [`decode`] with the matching year.
+pub fn decode_batch(
+    inputs: &[String],
+    years: Option<&[Option<i32>]>,
+) -> Vec<DecodeResult<'static>> {
+    batch(inputs, years, |r| r)
 }
 
 /// [`decode_batch`] with the [`FlatResult`] shape. Flattening runs inside the
 /// parallel region, so only the (much smaller) marshalling is left to the caller.
-pub fn decode_batch_flat(inputs: &[String]) -> Vec<FlatResult<'static>> {
-    batch(inputs, FlatResult::from)
+pub fn decode_batch_flat(
+    inputs: &[String],
+    years: Option<&[Option<i32>]>,
+) -> Vec<FlatResult<'static>> {
+    batch(inputs, years, FlatResult::from)
 }
 
 /// The thread pool the batch paths run on, rebuilt whenever the pid changes.
@@ -299,9 +321,19 @@ fn batch_pool() -> Arc<rayon::ThreadPool> {
     pool
 }
 
+/// The caller year for input `i`: `years` may be absent entirely, shorter than
+/// the inputs, or hold `None` gaps — all mean "no year for this VIN".
+fn year_at(years: Option<&[Option<i32>]>, i: usize) -> Option<i32> {
+    years.and_then(|ys| ys.get(i)).copied().flatten()
+}
+
 /// Shared body of the batch paths: decode every input in parallel over the shared
 /// archive, mapped through `shape`. Output order matches `inputs`.
-fn batch<T: Send>(inputs: &[String], shape: impl Fn(DecodeResult<'static>) -> T + Sync) -> Vec<T> {
+fn batch<T: Send>(
+    inputs: &[String],
+    years: Option<&[Option<i32>]>,
+    shape: impl Fn(DecodeResult<'static>) -> T + Sync,
+) -> Vec<T> {
     use rayon::prelude::*;
 
     let secs = SystemTime::now()
@@ -309,25 +341,34 @@ fn batch<T: Send>(inputs: &[String], shape: impl Fn(DecodeResult<'static>) -> T 
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
     let now_micros = secs * 1_000_000;
-    let year = epoch_to_year(secs);
+    let current_year = epoch_to_year(secs);
     let db = Db::embedded();
     batch_pool().install(|| {
         inputs
             .par_iter()
-            .map(|v| shape(decode_with(db, v, now_micros, year)))
+            .enumerate()
+            .map(|(i, v)| {
+                shape(decode_full(
+                    db,
+                    v,
+                    now_micros,
+                    current_year,
+                    year_at(years, i),
+                ))
+            })
             .collect()
     })
 }
 
 /// Decode one VIN to a compact JSON object string (same shape as the [`decode`]
 /// dict). Serializing in Rust avoids the per-field Python dict construction.
-pub fn decode_json(input: &str) -> String {
-    serde_json::to_string(&decode(input)).expect("DecodeResult is infallibly serializable")
+pub fn decode_json(input: &str, year: Option<i32>) -> String {
+    serde_json::to_string(&decode(input, year)).expect("DecodeResult is infallibly serializable")
 }
 
 /// [`decode_json`] with the [`FlatResult`] shape.
-pub fn decode_json_flat(input: &str) -> String {
-    serde_json::to_string(&FlatResult::from(decode(input)))
+pub fn decode_json_flat(input: &str, year: Option<i32>) -> String {
+    serde_json::to_string(&FlatResult::from(decode(input, year)))
         .expect("FlatResult is infallibly serializable")
 }
 
@@ -339,19 +380,20 @@ pub fn decode_json_flat(input: &str) -> String {
 /// list of ~60-key dicts per VIN, sidestepping the GIL-serial marshalling that
 /// otherwise caps `decode_batch`. `json.loads` of the output equals
 /// `decode_batch` element-for-element.
-pub fn decode_batch_json(inputs: &[String]) -> String {
-    batch_json(inputs, |r| r)
+pub fn decode_batch_json(inputs: &[String], years: Option<&[Option<i32>]>) -> String {
+    batch_json(inputs, years, |r| r)
 }
 
 /// [`decode_batch_json`] with the [`FlatResult`] shape.
-pub fn decode_batch_json_flat(inputs: &[String]) -> String {
-    batch_json(inputs, FlatResult::from)
+pub fn decode_batch_json_flat(inputs: &[String], years: Option<&[Option<i32>]>) -> String {
+    batch_json(inputs, years, FlatResult::from)
 }
 
 /// Shared body of the batch-JSON paths: decode + serialize in parallel through
 /// `shape`, then stitch one array serially.
 fn batch_json<T: serde::Serialize + Send>(
     inputs: &[String],
+    years: Option<&[Option<i32>]>,
     shape: impl Fn(DecodeResult<'static>) -> T + Sync,
 ) -> String {
     use rayon::prelude::*;
@@ -361,16 +403,23 @@ fn batch_json<T: serde::Serialize + Send>(
         .map(|d| d.as_secs() as i64)
         .unwrap_or(0);
     let now_micros = secs * 1_000_000;
-    let year = epoch_to_year(secs);
+    let current_year = epoch_to_year(secs);
     let db = Db::embedded();
     // Fuse decode + serialize so both happen in parallel; each task yields its
     // object's JSON text.
     let parts: Vec<String> = batch_pool().install(|| {
         inputs
             .par_iter()
-            .map(|v| {
-                serde_json::to_string(&shape(decode_with(db, v, now_micros, year)))
-                    .expect("decode results are infallibly serializable")
+            .enumerate()
+            .map(|(i, v)| {
+                serde_json::to_string(&shape(decode_full(
+                    db,
+                    v,
+                    now_micros,
+                    current_year,
+                    year_at(years, i),
+                )))
+                .expect("decode results are infallibly serializable")
             })
             .collect()
     });
@@ -830,7 +879,7 @@ mod tests {
             eprintln!("skipping: artifact not built");
             return;
         }
-        let json = decode_json("1HGCM82633A004352");
+        let json = decode_json("1HGCM82633A004352", None);
         // Round-trips as valid JSON with the same shape/values as the struct.
         let v: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
         assert_eq!(v["wmi"], "1HG");
@@ -886,7 +935,7 @@ mod tests {
             return;
         }
         let v: serde_json::Value =
-            serde_json::from_str(&decode_json_flat("1HGCM82633A004352")).expect("valid JSON");
+            serde_json::from_str(&decode_json_flat("1HGCM82633A004352", None)).expect("valid JSON");
         assert_eq!(v["model_year"], 2003);
         assert_eq!(v["attributes"]["Make"], "HONDA");
         assert_eq!(v["attributes"]["Model"], "Accord");
@@ -898,10 +947,13 @@ mod tests {
         if !db().is_loaded() {
             return;
         }
-        let json = decode_batch_json(&[
-            "1HGCM82633A004352".to_string(),
-            "SAL00000000000000".to_string(),
-        ]);
+        let json = decode_batch_json(
+            &[
+                "1HGCM82633A004352".to_string(),
+                "SAL00000000000000".to_string(),
+            ],
+            None,
+        );
         let v: serde_json::Value = serde_json::from_str(&json).expect("valid JSON");
         let arr = v.as_array().expect("array");
         assert_eq!(arr.len(), 2);
