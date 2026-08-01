@@ -25,6 +25,17 @@ pyo3 = { version = "0.29", features = ["abi3-py310", "extension-module"] }
 # we don't need. Only the Rust extension's allocations route through it; Python's
 # own objects keep using Python's allocator.
 #
+# `v2`: libmimalloc-sys defaults to the mimalloc v3 C sources, which are the
+# experimental line with a live trail of heap-corruption/segfault reports in
+# multi-allocator processes (e.g. alongside pyarrow's bundled mimalloc). Pin the
+# mature v2 line; per-thread heaps — the property we're here for — are v2's too.
+# `local_dynamic_tls`: without it mimalloc compiles with -ftls-model=initial-exec,
+# which is illegal in a dlopen'd library. musl refuses to load the extension at
+# all ("initial-exec TLS resolves to dynamic definition" — the musllinux wheels
+# were unimportable), and on glibc it silently burns the process-wide static-TLS
+# surplus other libraries need. A Python extension is always dlopen'd, so
+# local-dynamic is the only correct model here.
+#
 # Gated to the mainstream 64-bit arches (covers macOS x86_64/aarch64, Linux
 # gnu+musl x86_64/aarch64, Windows x64/aarch64): mimalloc compiles a vendored C
 # blob via `cc`, and the release matrix cross-builds the exotic targets (x86,
@@ -32,7 +43,7 @@ pyo3 = { version = "0.29", features = ["abi3-py310", "extension-module"] }
 # wiring — keeping the crate pure-Rust there (see .github/workflows/release.yaml).
 # Those targets fall back to the system allocator; perf there is not a goal.
 [target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dependencies]
-mimalloc = { version = "0.1", default-features = false }
+mimalloc = { version = "0.1", default-features = false, features = ["v2", "local_dynamic_tls"] }
 
 [lints]
 workspace = true

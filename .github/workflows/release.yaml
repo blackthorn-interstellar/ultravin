@@ -90,7 +90,7 @@ jobs:
           - { kind: linux,     runner: ubuntu-22.04,   target: s390x }
           - { kind: linux,     runner: ubuntu-22.04,   target: ppc64le }
           - { kind: linux,     runner: ubuntu-22.04,   target: riscv64 }
-          - { kind: musllinux, runner: ubuntu-22.04,   target: x86_64,  manylinux: musllinux_1_2 }
+          - { kind: musllinux, runner: ubuntu-22.04,   target: x86_64,  manylinux: musllinux_1_2, container_smoke: true }
           - { kind: musllinux, runner: ubuntu-22.04,   target: x86,     manylinux: musllinux_1_2 }
           - { kind: musllinux, runner: ubuntu-22.04,   target: aarch64, manylinux: musllinux_1_2 }
           - { kind: musllinux, runner: ubuntu-22.04,   target: armv7,   manylinux: musllinux_1_2 }
@@ -167,8 +167,24 @@ jobs:
           fi
           if [[ "${RUNNER_OS}" == "Windows" ]]; then PY=python; else PY=python3; fi
           "$PY" scripts/wheel_smoke.py dist/*.whl
+      # musl wheels can't run on the glibc runner, but docker can: run the same
+      # smoke inside Alpine. This leg exists because v0.0.3–v0.0.6 shipped musl
+      # wheels that couldn't even be imported (mimalloc compiled with initial-exec
+      # TLS, which musl's dlopen refuses) and nothing noticed. One row — x86_64,
+      # the runner's native docker arch — covers the class; aarch64 musl would
+      # need QEMU and stays build-only.
+      - name: Smoke test the musllinux wheel in an Alpine container
+        if: matrix.container_smoke
+        run: |
+          set -euo pipefail
+          EXPECT=""
+          if [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then
+            EXPECT="-e ULTRAVIN_EXPECT_VERSION=${GITHUB_REF_NAME#v}"
+          fi
+          docker run --rm $EXPECT -v "$PWD:/repo:ro" python:3.12-alpine \
+            sh -c 'python3 /repo/scripts/wheel_smoke.py /repo/dist/*.whl'
       - name: Note wheel not smoked (cross-compiled / libc-incompatible)
-        if: ${{ !matrix.smoke }}
+        if: ${{ !matrix.smoke && !matrix.container_smoke }}
         run: echo "::notice::${{ matrix.kind }}/${{ matrix.target }} wheel is cross-compiled or libc-incompatible with this runner — built, not smoked"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
