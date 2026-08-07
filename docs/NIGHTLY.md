@@ -7,12 +7,17 @@ is real work, delivery as a PR through the same CI + `review-verdict` checks,
 and explicit dispatch of those checks (workflow-created PRs emit no events).
 
 ```
-deps    lockfile bump (7-day cooldown) ──▶ make check ──▶ PR ──▶ automerge (opt-in)
-                                              │ broken
-                                              ▼
-                                        agent fixes fallout ──▶ PR (human merges)
+deps    lockfile bump (7-day cooldown) ──▶ make check ──▶ PR ─┐
+                                              │ broken        │
+                                              ▼               ▼
+                                        agent fixes ──▶ PR ──▶ deps-checks: watch;
+                                                               red → agent works the
+                                                               checks green; then
+                                                               automerge (opt-in)
 
-fixes   covfuzz probe tops up backlog ──▶ agent drains ONE cluster ──▶ PR (human merges)
+fixes   covfuzz probe tops up backlog ──▶ agent drains ONE cluster ──▶ PR,
+                                          then the same agent kicks + watches its
+                                          checks and fixes failures (human merges)
 ```
 
 ## The deps lane
@@ -33,8 +38,14 @@ A green bump becomes a lockfile-only PR on the rolling `deps/nightly` branch
 code for the new versions (or pin a genuinely broken package back, justified),
 never weaken checks, deliver the PR even when stuck (`[needs-human]` draft).
 
-`vars.NIGHTLY_DEPS_AUTOMERGE=true` merges **mechanical** bumps once the
-required checks pass — hard-guarded to diffs touching only `Cargo.lock` +
+Whoever delivered the PR, the `deps-checks` job then owns its checks: it
+waits for the dispatched runs, and if any fail, an agent is checked out on
+the branch to work them green — read the failing log, fix, push, re-kick,
+wait (one blocking ~20-min call per CI cycle), repeat — until green or an
+honest give-up (diagnosis commented on the PR, job fails, human takes over).
+
+`vars.NIGHTLY_DEPS_AUTOMERGE=true` merges **mechanical** bumps after the
+checks are green — hard-guarded to diffs touching only `Cargo.lock` +
 `uv.lock`, so an agent-fixed PR (which carries code) never automerges.
 
 ## The fixes lane
@@ -56,9 +67,12 @@ the monthly refresh freezes into the parity corpus as a permanent regression.
 The finish line is machine-checked: `scripts.parity.sweep --cases` over the
 resolved VINs must show zero undocumented divergence, and `make check` green.
 
-Parity-fix PRs are **always merged by a human** — there is no automerge switch
-for decoder changes. One open `parity-backlog` PR blocks the next night's run
-(no stacking); merge or close it to resume draining.
+After delivering, the same agent session kicks CI + the review gate itself,
+watches them in the foreground, and fixes any failures on the branch until
+everything is green (the workflow re-kicks as a fallback if the session died
+before kicking). Parity-fix PRs are **always merged by a human** — there is
+no automerge switch for decoder changes. One open `parity-backlog` PR blocks
+the next night's run (no stacking); merge or close it to resume draining.
 
 On demand: `gh workflow run nightly.yaml -f lane=fixes -f vins="VIN1 VIN2"`
 runs an RCA on exactly those VINs, skipping the probe and the backlog pick.
