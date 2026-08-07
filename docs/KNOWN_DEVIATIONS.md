@@ -3,7 +3,8 @@
 ultravin targets **byte-for-byte parity** with the official Postgres `vpic.spvindecode`.
 The brutal multi-approach campaign (random + full systematic + coverage-guided
 covfuzz, 134,661 divergences → 35 signatures) drove that to **exact parity on every
-case except three — and in all three, the Postgres reference itself is defective.**
+case except three signatures — and in all three, the Postgres reference itself is
+defective.**
 These are intentional, documented deviations where ultravin is *more correct*: the
 first two where the oracle contradicts its own sources, the third where the dump
 contradicts the SQL Server database NHTSA actually publishes from.
@@ -13,19 +14,84 @@ All three are error/partial-VIN-only (they affect the error-correction outputs
 
 ---
 
-## 1. Oracle crashes on a malformed pattern regex — `7T0M6TGCURDSNZTHF`
+## 1. Oracle crashes on a malformed pattern regex — WMI `7T0`, MY 2023-2025
 
 The oracle aborts with a Postgres error inside `vpic.fvalidcharsinregex`:
 
 ```
-invalid regular expression: invalid character range
+ERROR:  invalid regular expression: invalid character range
+CONTEXT:  PL/pgSQL function vpic.fvalidcharsinregex(character varying) line 22 at IF
+          PL/pgSQL function vpic.fvalidcharsinkey(character varying) line 68 at assignment
+          SQL statement "insert into tbl_spVinDecode_ErrorCode1
+                         select * from vpic.fValidCharsInKey(key) where return_chr <> '|'"
+          PL/pgSQL function vpic.spvindecode_errorcode(character varying,integer) line 165
 ```
 
-A matched `Pattern.keys` contains a reversed bracket range (e.g. `[Z-A]`) that
-Postgres' regex engine rejects, so `spvindecode` raises and returns **nothing**.
-ultravin decodes the VIN normally (it tolerates the malformed class). You cannot
-have parity with a crash, so this VIN is **excluded** from the regression corpus
-(it can't be snapshotted). ultravin is strictly more robust here.
+`spvindecode` raises and returns **nothing** — not a partial row set, no rows at
+all — so there is no oracle answer to have parity *with*. ultravin decodes the
+VIN normally. This was first reported for one VIN in 2026_06; the 2026_07 parity
+campaign hit it 62 more times, which was enough data to name the exact cause.
+
+**The offending datum.** Exactly two rows in the 1,667,711-row `pattern` table
+carry a character class Postgres cannot compile:
+
+```
+  id    | vinschemaid |      keys       | elementid | attributeid
+--------+-------------+-----------------+-----------+-------------
+1827686 |       24522 | *****|*[1-A-JT] |        77 | INDIANA
+1827685 |       24522 | *****|*[1-A-JT] |        75 | 6
+```
+
+`vinschema` 24522 is *BRINKLEY RV, LLC Trailer Schema for 7T0 MY(2023-2025)*, so
+the blast radius is WMI `7T0`, model years 2023-2025 (`wmi_vinschema.yearfrom /
+yearto`) — the year codes `P`, `R`, `S`. A 7T0 VIN outside that range decodes
+fine; it matches schema 28060, whose keys are well-formed.
+
+**The mechanism.** `spvindecode_errorcode` feeds every matched item's `Keys` to
+`fValidCharsInKey`, which hands each bracket group to `fValidCharsInRegEx`, which
+builds `'^' || str || '$'` and evaluates `s ~ pattern` (line 22). For this key
+that is `^[1-A-JT]$`, and Postgres rejects the class outright:
+
+```
+vpic=# select '1' ~ '^[1-A-JT]$';
+ERROR:  invalid regular expression: invalid character range
+```
+
+The failure is in the *error-correction* path, not the matching path — which is
+what makes it a defect rather than a rule. **The dump contradicts itself here.**
+`vpic.sqlwild_to_regex`, which the matching path uses on the same key text, ends
+with a hand-written escape hatch for this exact string:
+
+```sql
+  out = REPLACE(out, '1-A', '1A');
+```
+
+So the translation to Postgres already knew `1-A` was hostile to its regex engine
+and patched it in one of the two places the key is compiled. `fValidCharsInRegEx`
+never got the same treatment, so half the proc tolerates the key and the other
+half aborts the entire decode.
+
+**What ultravin does.** `errors.rs::valid_chars_in_regex` compiles the class with
+the Rust `regex` crate, which accepts it — `1-A` is an ascending range, and the
+trailing `-` before `J` is a literal — and yields the valid characters
+`AJT123456789`. That is also what the class means to the SQL Server engine vPIC
+is authored on, where `LIKE '[1-A-JT]'` reads the same range, literal `-`, `J`,
+`T`. Nothing about the VIN is special; only Postgres' stricter class parser is.
+ultravin therefore decodes and returns an answer where the oracle returns none.
+
+**How it is handled.** You cannot snapshot a crash, so these VINs are **excluded**
+from the regression corpus: `freeze.py` skips any VIN the oracle errors on and
+surfaces new skips in the refresh report. `scripts/parity/sweep.py` records them
+under `oracle_errors` (it used to die on the first one), and `refresh.sweep_gate`
+**fails** on any crash VIN that is not in `ORACLE_CRASH_VINS` in `scripts/refresh.py`
+— the sample of 63 VINs observed so far. That list is a sample of an unbounded
+class, so a new 7T0 MY2023-2025 VIN will fail the gate until a human re-verifies
+it against this section. That is deliberate: a crash must never pass silently
+just because a similar one was once explained.
+
+`errors.rs` pins the tolerated expansion in a unit test, so if the class ever
+starts resolving to something else, that is a change in ultravin, not a rediscovery
+of this defect.
 
 ## 2. Stale `WMIYearValidChars` cache — `W1LSB0L72VEJV2EPX`
 

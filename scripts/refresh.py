@@ -17,7 +17,8 @@ tests/parity_corpus.json, a 500-VIN live sweep, pytest, cargo test. Nothing is
 hand-edited; the gates then decide:
 
   corpus    every diverging re-frozen VIN is a documented known deviation
-  sweep     a fresh live sweep diverges only on known deviations
+  sweep     a fresh live sweep diverges only on known deviations, and the oracle
+            crashed only on VINs documented as crashing it
   coverage  the decode path still reaches 100% of its reachable regions, and no
             allowance went stale (a stale one means this month's data reaches a
             branch the old data could not)
@@ -61,10 +62,86 @@ LOOKUP_MAX_ROWS = 512  # tables above this aren't lookups; the parity gates stil
 LOOKUP_REPORT_CAP = 20
 
 # Documented, deliberate ultravin-vs-oracle deviations (docs/KNOWN_DEVIATIONS.md).
-# A diverging VIN outside this set fails the refresh. The oracle-crash VIN
-# (7T0M6TGCURDSNZTHF) never appears here: freeze.py skips VINs the oracle errors
-# on; new skips are surfaced in the report as follow-ups, not failures.
-KNOWN_DEVIATION_VINS = frozenset({"W1LSB0L72VEJV2EPX"})
+# A diverging VIN outside this set fails the refresh, and so does a VIN the live
+# sweep saw the oracle *crash* on (KNOWN_DEVIATIONS.md #1). The two kinds are
+# listed together because both mean the same thing: the oracle cannot be used as
+# the answer for this VIN, and a human already signed off on why.
+#
+# The crash VINs below are the 62 WMI-7T0 VINs the 2026_07 campaign hit. They are
+# a *sample* of an unbounded class — any 7T0 VIN of model year 2023-2025 whose
+# decode matches vinschema 24522 aborts the same way — so a future sweep may find
+# a 7T0 VIN that is not listed here and fail the gate. That failure is correct:
+# it should be re-verified against §1's evidence and then added, not assumed.
+# freeze.py needs none of this: it skips oracle-erroring VINs before they ever
+# reach the corpus, and surfaces new skips in the report as follow-ups.
+ORACLE_CRASH_VINS = frozenset(
+    {
+        "7T0M6TGCURDSNZTHF",  # the original 2026_06 report (KNOWN_DEVIATIONS.md #1)
+        "7T0A1AAA0SA111111",
+        "7T0A1AAA1PA111111",
+        "7T0A1AAA8RA111111",
+        "7T0AA##A?PA111111",
+        "7T0AA##A?RA111111",
+        "7T0AA##A?SA111111",
+        "7T0AAAA#?PA111111",
+        "7T0AAAA#?RA111111",
+        "7T0AAAA#?SA111111",
+        "7T0AAAAA0PE111111",
+        "7T0AAAAA0S1111111",
+        "7T0AAAAA0SA111111",
+        "7T0AAAAA0SJ111111",
+        "7T0AAAAA1P1111111",
+        "7T0AAAAA1PA111111",
+        "7T0AAAAA1PJ111111",
+        "7T0AAAAA1RG111111",
+        "7T0AAAAA1SH111111",
+        "7T0AAAAA2PH111111",
+        "7T0AAAAA2RC111111",
+        "7T0AAAAA2RT111111",
+        "7T0AAAAA2SD111111",
+        "7T0AAAAA3PD111111",
+        "7T0AAAAA4RF111111",
+        "7T0AAAAA4SG111111",
+        "7T0AAAAA5PG111111",
+        "7T0AAAAA5RB111111",
+        "7T0AAAAA5SC111111",
+        "7T0AAAAA5ST111111",
+        "7T0AAAAA6PC111111",
+        "7T0AAAAA6PT111111",
+        "7T0AAAAA7RE111111",
+        "7T0AAAAA7SF111111",
+        "7T0AAAAA8PF111111",
+        "7T0AAAAA8R1111111",
+        "7T0AAAAA8RA111111",
+        "7T0AAAAA8RJ111111",
+        "7T0AAAAA8SB111111",
+        "7T0AAAAA9PB111111",
+        "7T0AAAAA9RH111111",
+        "7T0AAAAAXRD111111",
+        "7T0AAAAAXSE111111",
+        "7T0AAF#0?SA111111",
+        "7T0AAL#A?SA111111",
+        "7T0AGAAA2SA111111",
+        "7T0AGAAA3PA111111",
+        "7T0AGAAAXRA111111",
+        "7T0AH##A?SA111111",
+        "7T0ARAAA0PA111111",
+        "7T0ARAAA7RA111111",
+        "7T0ARAAAXSA111111",
+        "7T0AZAAA0PA111111",
+        "7T0AZAAA7RA111111",
+        "7T0AZAAAXSA111111",
+        "7T0FAAAA0RA111111",
+        "7T0FAAAA3SA111111",
+        "7T0FAAAA4PA111111",
+        "7T0TA##1?SA111111",
+        "7T0TA#71?SA111111",
+        "7T0TAAAA0PA111111",
+        "7T0TAAAA7RA111111",
+        "7T0TAAAAXSA111111",
+    }
+)
+KNOWN_DEVIATION_VINS = frozenset({"W1LSB0L72VEJV2EPX"}) | ORACLE_CRASH_VINS
 
 
 # --------------------------------------------------------------------------- util
@@ -237,13 +314,23 @@ def corpus_gate(corpus: dict) -> Gate:
 
 def sweep_gate(report: dict) -> Gate:
     total, exact = report["total"], report["exact_parity"]
+    # A VIN the oracle crashed on produced no answer, so it is neither parity nor
+    # a diff. sweep.py used to die on the first one; now it reports them and the
+    # verdict happens here, so an *undocumented* crash can never pass unnoticed.
+    crashed = sorted({e["vin"] for e in report.get("oracle_errors", [])})
+    undocumented_crashes = [v for v in crashed if v not in KNOWN_DEVIATION_VINS]
+    crash_detail = ""
+    if crashed:
+        crash_detail = f"; oracle crashed on {len(crashed)} VIN(s) (documented: {not undocumented_crashes})"
+        if undocumented_crashes:
+            crash_detail += f"; NOT documented: {undocumented_crashes}"
     if report["diverged"] == 0:
-        return Gate("sweep", True, f"{exact}/{total} exact")
+        return Gate("sweep", not undocumented_crashes, f"{exact}/{total} exact{crash_detail}")
     vins = sorted({ex["vin"] for ex in report["examples"]})
     unexpected = [v for v in vins if v not in KNOWN_DEVIATION_VINS]
     unlisted = report["diverged"] - len(report["examples"])  # only if --examples < limit
-    ok = not unexpected and unlisted <= 0
-    detail = f"{exact}/{total} exact; diverging: {vins}"
+    ok = not unexpected and unlisted <= 0 and not undocumented_crashes
+    detail = f"{exact}/{total} exact; diverging: {vins}{crash_detail}"
     if unlisted > 0:
         detail += f"; {unlisted} further diffs not enumerated"
     return Gate("sweep", ok, detail)
