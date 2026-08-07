@@ -38,11 +38,27 @@ def run(cases: list[dict[str, Any]], examples: int) -> dict[str, Any]:
     order_mismatches = 0
     n_ok = 0
     sample_diffs: list[dict[str, Any]] = []
+    oracle_errors: list[dict[str, str]] = []
+
+    # Lazy, like scripts.parity.oracle: importing this module must not need psycopg.
+    import psycopg  # noqa: PLC0415
 
     with oracle.connect() as conn:
         for case in cases:
             vin = case["vin"]
-            oracle_rows = [normalize.from_oracle(r) for r in oracle.decode(conn, vin)]
+            try:
+                oracle_rows = [normalize.from_oracle(r) for r in oracle.decode(conn, vin)]
+            except psycopg.Error as e:
+                # The oracle aborts on some VINs (malformed pattern regexes — see
+                # docs/KNOWN_DEVIATIONS.md). It returns nothing, so there is no
+                # answer to compare against; record it and let the caller judge.
+                # freeze.py already skips these; without this the whole sweep died
+                # on the first one.
+                oracle_errors.append({"vin": vin, "error": repr(e)[:200]})
+                if not conn.autocommit:  # a failed batch poisons the transaction
+                    conn.rollback()
+                    conn.uv_pending = 0
+                continue
             mine = normalize.ultravin_rows(uv.decode(vin))
             d = normalize.diff_rows(oracle_rows, mine)
             if d["ok"]:
@@ -76,7 +92,11 @@ def run(cases: list[dict[str, Any]], examples: int) -> dict[str, Any]:
     return {
         "total": total,
         "exact_parity": n_ok,
-        "diverged": total - n_ok,
+        # VINs the oracle crashed on are neither parity nor divergence: there is no
+        # oracle answer at all. They are counted on their own so a gate can judge
+        # them (refresh.sweep_gate fails on any that are not documented).
+        "diverged": total - n_ok - len(oracle_errors),
+        "oracle_errors": oracle_errors,
         "order_mismatches": order_mismatches,
         "by_feature": dict(feature_counter.most_common()),
         "by_field": dict(field_counter.most_common()),
@@ -115,7 +135,8 @@ def main(argv: list[str] | None = None) -> int:
             f.write(text)
     print(
         f"parity: {report['exact_parity']}/{report['total']} exact; "
-        f"diverged {report['diverged']}; features {report['by_feature']}",
+        f"diverged {report['diverged']}; oracle errors {len(report['oracle_errors'])}; "
+        f"features {report['by_feature']}",
         file=sys.stderr,
     )
     return 0
