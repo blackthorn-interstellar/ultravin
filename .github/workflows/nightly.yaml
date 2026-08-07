@@ -502,6 +502,19 @@ jobs:
         run: |
           uv sync --frozen --all-extras
           uv run --frozen -- maturin develop --uv
+      # The probe gets its own oracle, loaded with the fast-procs rewrite
+      # (measured equivalent; scripts/oracle.sh documents it). Stock procs
+      # churn temp tables per decode and filled the 8 GB tmpfs ~12 min into
+      # the first live probe, PANICking Postgres out from under the agent.
+      # The verification oracle on 55432 stays byte-faithful and untouched.
+      - name: Load the probe oracle (fast procs)
+        if: steps.gate.outputs.go == 'true' && env.VINS == ''
+        env:
+          ULTRAVIN_ORACLE_SVC: oracle2
+          ULTRAVIN_ORACLE_FAST_PROCS: "1"
+        run: |
+          bash scripts/oracle.sh up
+          bash scripts/oracle.sh load downloads/dump.zip
       - name: Restore covfuzz state
         if: steps.gate.outputs.go == 'true' && env.VINS == ''
         uses: actions/cache/restore@v4
@@ -518,24 +531,29 @@ jobs:
           rm -f campaign/fails-covfuzz.jsonl campaign/DONE-covfuzz
           rc=0
           uv run --frozen -- python -m scripts.parity.campaign run --engine covfuzz \
-            --ports 55432 --workers 4 --max-seconds 900 --dir campaign || rc=$?
+            --ports 55433 --workers 4 --max-seconds 900 --dir campaign || rc=$?
           # 42 = coverage saturated for the current decoder — a fine outcome.
           if [ "$rc" != 0 ] && [ "$rc" != 42 ]; then exit "$rc"; fi
           [ -f campaign/status-covfuzz.json ] && cat campaign/status-covfuzz.json >> "$GITHUB_STEP_SUMMARY" || true
           if [ -s campaign/fails-covfuzz.jsonl ]; then
-            python3 - <<'PYEOF'
+            # Filter dead-oracle artifacts: the first live probe enqueued
+            # 13,944 connection errors after Postgres died — noise, not signal.
+            uv run --frozen -- python - <<'PYEOF'
           import json
+          from scripts.parity.campaign import is_infra_error
           seen = {json.loads(line)["vin"] for line in open("tests/parity_backlog.jsonl")}
-          new = []
+          new, infra = [], 0
           for line in open("campaign/fails-covfuzz.jsonl"):
-              vin = json.loads(line)["vin"]
-              if vin not in seen:
-                  seen.add(vin)
+              rec = json.loads(line)
+              if is_infra_error(rec):
+                  infra += 1
+              elif rec["vin"] not in seen:
+                  seen.add(rec["vin"])
                   new.append(line)
           if new:
               with open("tests/parity_backlog.jsonl", "a") as f:
                   f.writelines(new)
-          print(f"{len(new)} new backlog entries from tonight's probe")
+          print(f"{len(new)} new backlog entries from tonight's probe ({infra} infra errors dropped)")
           PYEOF
           fi
       - name: Save covfuzz state

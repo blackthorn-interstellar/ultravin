@@ -18,6 +18,7 @@ import argparse
 import json
 import pickle
 import random
+import re
 import time
 from multiprocessing import Pool, Queue
 from pathlib import Path
@@ -30,6 +31,18 @@ from scripts.parity import brutal, generator, normalize, oracle
 YEAR_HI = 2027  # current model year + 2 (decode cap)
 YEAR_LO = 1980  # earliest yearfrom in the data
 COV_SATURATE = 2_000_000  # covfuzz done after this many consecutive no-new-coverage tries
+INFRA_STREAK_ABORT = 25  # consecutive connection errors = the oracle is down, stop logging a dead socket
+
+INFRA_ERROR_RE = re.compile(
+    r"connection is closed|server closed the connection|consuming input failed|connection refused",
+    re.IGNORECASE,
+)
+
+
+def is_infra_error(record: dict[str, Any]) -> bool:
+    """A dead-oracle artifact (socket/connection failure), not a parity signal."""
+    return bool(INFRA_ERROR_RE.search(record.get("error") or ""))
+
 
 # --------------------------------------------------------------------------- #
 # Worker: each holds one oracle connection (round-robin over the engine's ports)
@@ -234,6 +247,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     fh = open(faill, "a")  # noqa: SIM115
     t0 = last = time.time()
     tested = 0
+    infra_streak = 0
     try:
         with _pool(ports, args.workers) as pool:
             for res in pool.imap_unordered(_check, prod, chunksize=4):
@@ -242,6 +256,16 @@ def cmd_run(args: argparse.Namespace) -> int:
                 if res is not None:
                     state["failures"] += 1
                     fh.write(json.dumps(res[1]) + "\n")
+                    infra_streak = infra_streak + 1 if is_infra_error(res[1]) else 0
+                    if infra_streak >= INFRA_STREAK_ABORT:
+                        print(
+                            f"[campaign:{eng}] aborting chunk: {infra_streak} consecutive oracle "
+                            "connection errors — the oracle is down, not diverging",
+                            flush=True,
+                        )
+                        break
+                else:
+                    infra_streak = 0
                 now = time.time()
                 if now - last > 30:
                     fh.flush()

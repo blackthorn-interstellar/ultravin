@@ -6,7 +6,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
-SVC=oracle
+SVC="${ULTRAVIN_ORACLE_SVC:-oracle}" # oracle2..oracle5 target a pool member (e.g. a fast-procs probe oracle)
 POOL="oracle oracle2 oracle3 oracle4 oracle5"
 
 usage() {

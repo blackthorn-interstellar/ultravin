@@ -61,9 +61,13 @@ machinery must not be able to edit its own judges.
 Postgres vPIC oracle disagreed, logged by the parity campaign
 (`scripts/parity/campaign.py`). It was seeded from the local campaign's finds
 (the systematic engine ran to completion: 5.46M VINs, 48 model years) and is
-topped up every night in CI by a 15-minute covfuzz probe chunk against the
-pinned-dump oracle (coverage state resumes via actions/cache; a decoder change
-reopens coverage, so the probe never permanently retires).
+topped up every night in CI by a 15-minute covfuzz probe chunk against its
+own **fast-procs** copy of the pinned-dump oracle — isolated so probe load
+can never kill the byte-faithful oracle the agent verifies against (the first
+live probe's temp-table churn filled the stock oracle's tmpfs and PANICked
+it). Dead-oracle connection errors abort the probe and are filtered out of
+the queue, never enqueued. Coverage state resumes via actions/cache; a
+decoder change reopens coverage, so the probe never permanently retires.
 
 Each night the agent gets a loaded oracle and a built extension, and resolves
 **one root-cause cluster**: reproduce first (stale entries are deleted — that
