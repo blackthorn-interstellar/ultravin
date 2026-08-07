@@ -148,9 +148,11 @@ def cmd_cooldown(args: argparse.Namespace) -> int:
             sh(["git", "checkout", "--", "Cargo.lock"])
             named = ", ".join(f"`{n} {v}`" for n, v in blockers)
             cargo_notes = [
-                f"**Cargo bumps abandoned tonight**: {named} arrived inside the {args.days}-day "
-                "cooldown (or with unknown publish age) and has no safe revert target. "
-                "Tomorrow's run retries."
+                (
+                    f"**Cargo bumps abandoned tonight**: {named} arrived inside the {args.days}-day "
+                    "cooldown (or with unknown publish age) and has no safe revert target. "
+                    "Tomorrow's run retries."
+                )
             ]
             break
         if not reverts:

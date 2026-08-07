@@ -87,7 +87,7 @@ def run_checks() -> int:
         exe = "ultravin.exe" if os.name == "nt" else "ultravin"
         script = Path(sys.executable).parent / exe
         assert script.exists(), f"console script not found at {script}"
-        proc = subprocess.run([str(script), "decode", CANARY_VIN], capture_output=True, text=True)
+        proc = subprocess.run([str(script), "decode", CANARY_VIN], capture_output=True, text=True, check=False)
         assert proc.returncode == 0, f"exit {proc.returncode}; stderr: {proc.stderr.strip()[:200]}"
         assert "HONDA" in proc.stdout, "console script output did not contain HONDA"
 
@@ -135,6 +135,7 @@ def smoke_artifact(artifact: Path) -> bool:
         install = subprocess.run(
             [str(py), "-m", "pip", "install", "--disable-pip-version-check", "--no-input", str(artifact)],
             env=_clean_env(),
+            check=False,
         )
         if install.returncode != 0:
             print(f"FAIL: pip install {artifact.name} (exit {install.returncode})", flush=True)
@@ -145,7 +146,7 @@ def smoke_artifact(artifact: Path) -> bool:
         # holds no ultravin package to shadow the installed one.
         checker = tmp / "wheel_smoke.py"
         shutil.copyfile(Path(__file__).resolve(), checker)
-        checks = subprocess.run([str(py), str(checker), "--in-venv"], cwd=str(tmp), env=_clean_env())
+        checks = subprocess.run([str(py), str(checker), "--in-venv"], cwd=str(tmp), env=_clean_env(), check=False)
         return checks.returncode == 0
 
 

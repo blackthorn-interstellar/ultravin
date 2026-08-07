@@ -5,10 +5,10 @@ Generation ships **in the library**, so anyone testing a VIN decoder can use it:
 ```python
 import ultravin
 
-ultravin.generate(100, seed=42)                     # deterministic valid VINs
-ultravin.generate(50, make="HONDA", year=2020)      # filtered
-ultravin.cover_vins()                               # ~164: every behaviour, once
-ultravin.sweep(["pattern"])                         # ~545k: every pattern row
+ultravin.generate(100, seed=42)  # deterministic valid VINs
+ultravin.generate(50, make="HONDA", year=2020)  # filtered
+ultravin.cover_vins()  # ~164: every behaviour, once
+ultravin.sweep(["pattern"])  # ~545k: every pattern row
 ```
 
 No database, no network — it all comes from the artifact already baked into the

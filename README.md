@@ -46,13 +46,13 @@ import ultravin
 
 r = ultravin.decode("1HGCM82633A004352")
 
-r["model_year"]         # 2003
-r["wmi"]                # '1HG'
+r["model_year"]  # 2003
+r["wmi"]  # '1HG'
 r["check_digit_valid"]  # True
-r["error_codes"]        # [0]
+r["error_codes"]  # [0]
 
 # `elements` is the full decoded attribute list, one dict per attribute:
-r["elements"][0]        # {'variable': 'Make', 'value': 'HONDA', 'source': ..., …}
+r["elements"][0]  # {'variable': 'Make', 'value': 'HONDA', 'source': ..., …}
 ```
 
 `decode(vin)` returns a `dict` with keys `vin`, `wmi`, `descriptor`,
@@ -71,8 +71,8 @@ own decode pass that competes against the VIN-derived one, and a hint that
 contradicts the decoded year adds error code 12.
 
 ```python
-ultravin.decode("1HGCM82633A004352", year=1995)          # decodes as a 1995
-ultravin.decode_batch(vins, years=[2011, None, 1987])    # one entry per VIN
+ultravin.decode("1HGCM82633A004352", year=1995)  # decodes as a 1995
+ultravin.decode_batch(vins, years=[2011, None, 1987])  # one entry per VIN
 ```
 
 If you only want the values, pass `flat=True` and skip the per-attribute dicts
@@ -82,7 +82,7 @@ building ~615 dict entries per VIN is:
 ```python
 r = ultravin.decode("1HGCM82633A004352", flat=True)
 
-r["attributes"]["Make"]   # 'HONDA'
+r["attributes"]["Make"]  # 'HONDA'
 r["attributes"]["Model"]  # 'Accord'
 ```
 

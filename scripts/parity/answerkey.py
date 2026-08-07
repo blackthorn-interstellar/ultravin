@@ -307,6 +307,7 @@ def fetch(
         ["gh", "release", "download", release, "--pattern", pinned["asset"], "--dir", str(out), "--clobber"],
         capture_output=True,
         text=True,
+        check=False,
     )
     if proc.returncode != 0:
         typer.echo(f"gh release download failed:\n{proc.stderr[-800:]}", err=True)

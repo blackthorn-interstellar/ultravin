@@ -160,8 +160,9 @@ Hot path is alloc-light and no_std-friendly; `Db` is the swappable storage seam.
 **Python (`import ultravin`):**
 ```python
 import ultravin
-ultravin.decode("1HGCM82633A004352")          # -> dict
-ultravin.decode_batch([...])                    # -> list[dict]; GIL released, optional rayon
+
+ultravin.decode("1HGCM82633A004352")  # -> dict
+ultravin.decode_batch([...])  # -> list[dict]; GIL released, optional rayon
 ```
 Native module exposes a zero-copy view of the baked-in artifact (no file lookup, demand-paged).
 
