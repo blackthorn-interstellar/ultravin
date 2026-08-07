@@ -686,6 +686,46 @@ pub fn compute_errors(
 }
 
 #[cfg(test)]
+mod malformed_class_tests {
+    use super::*;
+
+    /// docs/KNOWN_DEVIATIONS.md #1. `pattern` rows 1827685/1827686 (vinschema
+    /// 24522, WMI 7T0, MY 2023-2025) carry the key `*****|*[1-A-JT]`. Postgres
+    /// refuses to compile that class ("invalid character range") and aborts the
+    /// whole `spvindecode`, so the oracle has no answer for those VINs. We
+    /// tolerate it: `1-A` is an ascending range and the second `-` is a literal,
+    /// which is also how the SQL Server engine vPIC is authored on reads it.
+    #[test]
+    fn the_7t0_malformed_class_expands_instead_of_aborting() {
+        assert_eq!(valid_chars_in_regex("[1-A-JT]"), "AJT123456789");
+    }
+
+    /// The whole key, as `fValidCharsInKey` walks it: `*` yields nothing in
+    /// strict mode, the literal `|` keeps its index, and the bracket group lands
+    /// on index 8. A crash here would mean we had adopted the oracle's defect.
+    #[test]
+    fn the_7t0_key_expands_at_the_bracket_index() {
+        let got = valid_chars_in_key("*****|*[1-A-JT]");
+        assert_eq!(got.first(), Some(&(6, '|')));
+        let bracket: String = got
+            .iter()
+            .filter(|(i, _)| *i == 8)
+            .map(|(_, c)| *c)
+            .collect();
+        assert_eq!(bracket, "AJT123456789");
+    }
+
+    /// A well-formed class from the same WMI's other schema (28060) is unaffected
+    /// — this deviation is one malformed datum, not a change of rule.
+    #[test]
+    fn a_well_formed_class_is_unchanged() {
+        let got = valid_chars_in_key("*[ZAGR1]");
+        let chars: String = got.iter().map(|(_, c)| *c).collect();
+        assert_eq!(chars, "ZAGR1");
+    }
+}
+
+#[cfg(test)]
 mod collation_tests {
     use super::*;
 

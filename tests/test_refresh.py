@@ -120,6 +120,44 @@ def test_sweep_gate_allows_duplicate_known_deviation_cases() -> None:
     assert refresh.sweep_gate(dup).ok
 
 
+def test_sweep_gate_fails_on_an_undocumented_oracle_crash() -> None:
+    """A VIN the oracle aborted on yields no answer; it must not pass as parity."""
+    crashed = {
+        "total": 500,
+        "exact_parity": 499,
+        "diverged": 0,
+        "examples": [],
+        "oracle_errors": [{"vin": "DDD", "error": "InvalidRegularExpression(...)"}],
+    }
+    gate = refresh.sweep_gate(crashed)
+    assert not gate.ok
+    assert "DDD" in gate.detail
+
+
+def test_sweep_gate_allows_a_documented_oracle_crash() -> None:
+    """The 7T0 malformed-class crash is documented (KNOWN_DEVIATIONS.md #1)."""
+    crashed = {
+        "total": 500,
+        "exact_parity": 499,
+        "diverged": 0,
+        "examples": [],
+        "oracle_errors": [{"vin": "7T0AAAAA0SA111111", "error": "InvalidRegularExpression(...)"}],
+    }
+    assert refresh.sweep_gate(crashed).ok
+
+
+def test_sweep_gate_fails_on_an_undocumented_crash_alongside_known_diffs() -> None:
+    """The crash check must survive the diverging branch too, not just the clean one."""
+    mixed = {
+        "total": 500,
+        "exact_parity": 498,
+        "diverged": 1,
+        "examples": [{"vin": "W1LSB0L72VEJV2EPX"}],
+        "oracle_errors": [{"vin": "DDD", "error": "InvalidRegularExpression(...)"}],
+    }
+    assert not refresh.sweep_gate(mixed).ok
+
+
 def _manifest(tables: dict[str, int], functions: list[str], rows: int = 100) -> dict:
     return {
         "month": "x",
