@@ -86,6 +86,7 @@ def measure(vins: Path, json_out: Path) -> dict[str, Any]:
         # Its own target dir: an ordinary `cargo build` running beside this would
         # otherwise wipe the instrumented objects mid-run.
         env={**os.environ, "CARGO_TARGET_DIR": str(REPO / "target" / "corpus-cov")},
+        check=False,
     )
     if proc.returncode != 0:
         msg = f"cargo llvm-cov failed ({proc.returncode}):\n{proc.stderr[-2000:]}"

@@ -149,7 +149,7 @@ def covfuzz_producer(state: dict[str, Any], cov: dict[str, Any], deadline: float
             cand = "".join(vinl)
         try:
             edges = brutal.ultravin_coverage(cand)
-        except Exception:  # noqa: BLE001
+        except ValueError:  # a bad candidate must not kill the loop
             continue
         new = {hash(e) & 0xFFFFFFFFFFFFFFFF for e in edges} - cov["seen"]
         if new:

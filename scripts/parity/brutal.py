@@ -217,7 +217,7 @@ def gen_covfuzz(n_seeds: int, budget: int, seed: int) -> Iterator[dict[str, Any]
         cand = "".join(vin)
         try:
             new = ultravin_coverage(cand) - seen
-        except Exception:  # noqa: BLE001 — a bad candidate must not kill the loop
+        except ValueError:  # a bad candidate must not kill the loop
             continue
         if new:
             seen |= new
