@@ -13,7 +13,7 @@ deps    lockfile bump (7-day cooldown) ──▶ make check ──▶ PR ─┐
                                         agent fixes ──▶ PR ──▶ deps-checks: watch;
                                                                red → agent works the
                                                                checks green; then
-                                                               automerge (opt-in)
+                                                               MERGE (end to end)
 
 fixes   covfuzz probe tops up backlog ──▶ agent drains ONE cluster ──▶ PR,
                                           then the same agent kicks + watches its
@@ -36,7 +36,13 @@ A green bump becomes a lockfile-only PR on the rolling `deps/nightly` branch
 (body = the bump report). A broken bump banks the evidence (bumped lockfiles,
 `check.log`, report) and hands it to the agent, whose contract is: fix the
 code for the new versions (or pin a genuinely broken package back, justified),
-never weaken checks, deliver the PR even when stuck (`[needs-human]` draft).
+and deliver the PR even when stuck (`[needs-human]` draft). The agent has
+**rule judgment**: a new lint/type rule arriving with a tool bump is a
+proposal, not law — it conforms where the rule genuinely improves the
+codebase and config-disables it (justified in the PR body) where it is churn.
+The codebase is not a hostage to whatever ruff rolls out. What it may never
+do is weaken an existing check or edit the automation itself (`.github/**`,
+`Makefile` — such diffs are refused at merge).
 
 Whoever delivered the PR, the `deps-checks` job then owns its checks: it
 waits for the dispatched runs, and if any fail, an agent is checked out on
@@ -44,9 +50,10 @@ the branch to work them green — read the failing log, fix, push, re-kick,
 wait (one blocking ~20-min call per CI cycle), repeat — until green or an
 honest give-up (diagnosis commented on the PR, job fails, human takes over).
 
-`vars.NIGHTLY_DEPS_AUTOMERGE=true` merges **mechanical** bumps after the
-checks are green — hard-guarded to diffs touching only `Cargo.lock` +
-`uv.lock`, so an agent-fixed PR (which carries code) never automerges.
+Once green, the deps PR **merges itself** — mechanical or agent-fixed alike,
+end to end with no human in the path. The single refusal: a diff touching
+`.github/**` or the `Makefile` fails the merge step for a human, because the
+machinery must not be able to edit its own judges.
 
 ## The fixes lane
 
