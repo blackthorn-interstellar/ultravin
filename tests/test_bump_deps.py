@@ -1,6 +1,12 @@
 from datetime import datetime, timedelta, timezone
 
-from scripts.bump_deps import markdown_moves, moves, plan, versions
+import pytest
+
+# bump_deps is nightly-CI tooling and runs on a current python there; the
+# library floor (3.10) predates tomllib, so skip rather than fail collection.
+pytest.importorskip("tomllib")
+
+from scripts.bump_deps import markdown_moves, moves, plan, versions  # noqa: E402
 
 NOW = datetime(2026, 8, 7, tzinfo=timezone.utc)
 CUTOFF = NOW - timedelta(days=7)
