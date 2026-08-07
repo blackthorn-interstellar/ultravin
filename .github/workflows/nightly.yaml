@@ -72,6 +72,9 @@ jobs:
         with:
           enable-cache: false
       - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
+      # cargo test embeds crates/ultravin-core/data/vpic.rkyv — provision it
+      # exactly like ci.yaml does or make check false-fails.
+      - uses: ./.github/actions/build-data
       - name: Bump inside the cooldown
         id: bump
         run: |
@@ -189,6 +192,7 @@ jobs:
         with:
           enable-cache: false
       - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/build-data
       - name: Failed attempt's evidence
         uses: actions/download-artifact@v4
         with:
@@ -208,7 +212,7 @@ jobs:
           settings: |
             {"env": {"BASH_DEFAULT_TIMEOUT_MS": "2400000", "BASH_MAX_TIMEOUT_MS": "3600000"}}
           claude_args: |
-            --max-turns 50
+            --max-turns 75
             --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
             --disallowedTools "WebFetch,WebSearch"
           prompt: |
@@ -224,6 +228,11 @@ jobs:
             - The bump is lockfile-only and semver-compatible; breakage is
               usually a deprecation landing, a behavioral patch change, or a
               dev tool (ruff, clippy) tightening a rule.
+            - The toolchain AND the embedded data artifact
+              (crates/ultravin-core/data/vpic.rkyv, via build-data) are already
+              provisioned — `make check` works out of the box. Don't spend
+              turns re-provisioning or re-deriving what target/deps/ already
+              shows; your turn budget exists to fix, verify, and DELIVER.
             - Fix the CODE to work with the new versions. If one package's new
               version is genuinely broken, you may instead pin it back
               (`cargo update -p <name> --precise <old>`, or narrow the
@@ -335,6 +344,8 @@ jobs:
           enable-cache: false
       - if: steps.gate.outputs.go == 'true'
         run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
+      - uses: ./.github/actions/build-data
+        if: steps.gate.outputs.go == 'true'
       - name: Load the pinned oracle
         if: steps.gate.outputs.go == 'true'
         run: |
