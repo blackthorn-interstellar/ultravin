@@ -413,6 +413,15 @@ jobs:
             fi
             sleep 30
           done
+          # gh pr merge refuses client-side on a stale BLOCKED mergeStateStatus
+          # even when the merge API's fresh evaluation passes (seen live on
+          # PR #9, 2026-08-07). The API is the authority — ask it directly.
+          pr=$(gh pr view deps/nightly --repo "${{ github.repository }}" --json number --jq .number)
+          if gh api -X PUT "repos/${{ github.repository }}/pulls/$pr/merge" -f merge_method=squash 2>/tmp/merge-err; then
+            gh api -X DELETE "repos/${{ github.repository }}/git/refs/heads/deps/nightly" || true
+            echo "merged deps/nightly (via merge API; gh CLI saw stale state)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           echo "::error::deps/nightly green but not mergeable; last error:"
           cat /tmp/merge-err || true
           exit 1
