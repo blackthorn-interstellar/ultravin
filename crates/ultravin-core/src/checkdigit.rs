@@ -25,16 +25,25 @@ fn translit(c: u8) -> Option<u32> {
     })
 }
 
+/// The model-year character class `patternMY` = `[A-H,J-N,P,R-T,V-Y,1-9]`.
+pub(crate) const fn is_my_char(c: u8) -> bool {
+    matches!(c, b'A'..=b'H' | b'J'..=b'N' | b'P' | b'R'..=b'T' | b'V'..=b'Y' | b'1'..=b'9')
+}
+
+/// The default character class `patternDefault` = `[A-H,J-N,P,R-Z,0-9]`.
+pub(crate) const fn is_default_char(c: u8) -> bool {
+    matches!(c, b'A'..=b'H' | b'J'..=b'N' | b'P' | b'R'..=b'Z' | b'0'..=b'9')
+}
+
 /// Is `c` allowed at 1-based position `i`, given pos-3 and the car/MPV/LT flag?
 /// Mirrors the `CASE` over `patternMY` / `patternNumbersOnly` / `patternDefault`
 /// in `fVINCheckDigit2`. Case-insensitive (input is upper-cased by the caller).
 pub(crate) fn valid_at(i: usize, c: u8, pos3: u8, is_car_mpv_lt: bool) -> bool {
     // patternMY = [A-H,J-N,P,R-T,V-Y,1-9]; patternNumbersOnly = [0-9];
     // patternDefault = [A-H,J-N,P,R-Z,0-9].
-    let my =
-        matches!(c, b'A'..=b'H' | b'J'..=b'N' | b'P' | b'R'..=b'T' | b'V'..=b'Y' | b'1'..=b'9');
+    let my = is_my_char(c);
     let nums = c.is_ascii_digit();
-    let default = matches!(c, b'A'..=b'H' | b'J'..=b'N' | b'P' | b'R'..=b'Z' | b'0'..=b'9');
+    let default = is_default_char(c);
     match i {
         10 => my,
         13 if pos3 != b'9' && is_car_mpv_lt => nums,
@@ -94,10 +103,9 @@ pub fn check_digit(vin: &str) -> Option<char> {
 /// 3). Differs from `fVINCheckDigit2`: positions 13 AND 14 are numeric whenever
 /// position 3 is not `'9'` (no car/MPV/LT gating on position 13).
 fn valid_at_v1(i: usize, c: u8, pos3: u8) -> bool {
-    let my =
-        matches!(c, b'A'..=b'H' | b'J'..=b'N' | b'P' | b'R'..=b'T' | b'V'..=b'Y' | b'1'..=b'9');
+    let my = is_my_char(c);
     let nums = c.is_ascii_digit();
-    let default = matches!(c, b'A'..=b'H' | b'J'..=b'N' | b'P' | b'R'..=b'Z' | b'0'..=b'9');
+    let default = is_default_char(c);
     match i {
         10 => my,
         13 | 14 if pos3 != b'9' => nums,

@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 use std::rc::Rc;
 
-use crate::checkdigit::{check_digit_v1, check_digit_with_flag};
+use crate::checkdigit::{check_digit_v1, check_digit_with_flag, is_default_char, is_my_char};
 use crate::db::Db;
 use crate::decode::CoreResult;
 use crate::hash::{FxBuildHasher, IntSet};
@@ -110,7 +110,7 @@ fn start_context(vin: &str, wmi: Option<&ArchivedWmi>) -> (usize, bool) {
 }
 
 fn class1(c: u8) -> bool {
-    c.is_ascii_digit() || matches!(c, b'A'..=b'H' | b'J'..=b'N' | b'P' | b'R'..=b'Z') || c == b'*'
+    is_default_char(c) || c == b'*'
 }
 fn class_digit(c: u8) -> bool {
     c.is_ascii_digit() || c == b'*'
@@ -119,8 +119,7 @@ fn class_cd(c: u8) -> bool {
     c.is_ascii_digit() || c == b'X' || c == b'*'
 }
 fn class_my(c: u8) -> bool {
-    matches!(c, b'1'..=b'9')
-        || matches!(c, b'A'..=b'H' | b'J'..=b'N' | b'P' | b'R'..=b'T' | b'V'..=b'Y')
+    is_my_char(c)
 }
 
 /// Port of `vpic.fValidCharsInRegEx`: the set of `validchars` that match a
