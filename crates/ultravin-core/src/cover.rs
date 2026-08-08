@@ -72,7 +72,9 @@ pub fn token_signature(
     t.insert(format!("corrected|{}", !result.corrected_vin.is_empty()));
 
     let pos7_digit = vin.as_bytes().get(6).is_some_and(u8::is_ascii_digit);
-    let car_lt = veh_type.parse::<i32>().is_ok_and(crate::tables::is_car_or_mpv);
+    let car_lt = veh_type
+        .parse::<i32>()
+        .is_ok_and(crate::tables::is_car_or_mpv);
     let conclusive = car_lt || raw_year(vin).is_some_and(|y| y > current_year + 2);
     t.insert(format!(
         "year|{}|{conclusive}",
@@ -122,7 +124,9 @@ fn year_kind(
     if veh_type == "3" && pos7_digit {
         return "ambiguous";
     }
-    let mut expected = if veh_type.parse::<i32>().is_ok_and(crate::tables::is_car_or_mpv)
+    let mut expected = if veh_type
+        .parse::<i32>()
+        .is_ok_and(crate::tables::is_car_or_mpv)
         && pos7_digit
     {
         raw - 30
@@ -190,10 +194,10 @@ fn charsets(keys: &str) -> Positions {
                 out.push(None);
                 i += 1;
             }
-            b'[' => match b[i..].iter().position(|&c| c == b']') {
-                Some(rel) => {
-                    out.push(Some(class_members(&keys[i + 1..i + rel])));
-                    i += rel + 1;
+            b'[' => match crate::keyspec::class_body(b, i) {
+                Some((body, next)) => {
+                    out.push(Some(class_members(body)));
+                    i = next;
                 }
                 None => {
                     out.push(Some(vec![b[i]]));
@@ -209,21 +213,11 @@ fn charsets(keys: &str) -> Positions {
     out
 }
 
-fn class_members(body: &str) -> Vec<u8> {
-    let b = body.as_bytes();
-    let mut out = Vec::new();
-    let mut i = 0;
-    while i < b.len() {
-        if i + 2 < b.len() && b[i + 1] == b'-' {
-            if b[i] <= b[i + 2] {
-                out.extend(b[i]..=b[i + 2]);
-            }
-            i += 3;
-        } else {
-            out.push(b[i]);
-            i += 1;
-        }
-    }
+fn class_members(body: &[u8]) -> Vec<u8> {
+    let mut out: Vec<u8> = crate::keyspec::class_ranges(body)
+        .filter(|&(lo, hi)| lo <= hi)
+        .flat_map(|(lo, hi)| lo..=hi)
+        .collect();
     out.sort_unstable();
     out.dedup();
     out
@@ -615,8 +609,8 @@ mod tests {
 
     #[test]
     fn charsets_expand_ranges_and_reject_reversed_ones() {
-        assert_eq!(class_members("A-C"), b"ABC".to_vec());
-        assert_eq!(class_members("C-A"), Vec::<u8>::new());
+        assert_eq!(class_members(b"A-C"), b"ABC".to_vec());
+        assert_eq!(class_members(b"C-A"), Vec::<u8>::new());
         assert!(keys_match("CM826|3A004352", "[C-F]M826"));
         assert!(!keys_match("CM826|3A004352", "[D-F]M826"));
     }

@@ -14,6 +14,7 @@ mod decode;
 mod errors;
 pub mod generate;
 mod hash;
+mod keyspec;
 mod matcher;
 mod resolve;
 pub mod tables;

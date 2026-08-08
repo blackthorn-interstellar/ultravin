@@ -62,10 +62,10 @@ fn key_positions(keys: &str) -> Vec<Option<u8>> {
                 out.push(Some(b'1'));
                 i += 1;
             }
-            b'[' => match b[i..].iter().position(|&c| c == b']') {
-                Some(rel) => {
-                    out.push(first_class_member(&keys[i + 1..i + rel]));
-                    i += rel + 1;
+            b'[' => match crate::keyspec::class_body(b, i) {
+                Some((body, next)) => {
+                    out.push(first_class_member(body));
+                    i = next;
                 }
                 None => {
                     out.push(Some(b[i]));
@@ -92,27 +92,16 @@ fn is_ioq(c: u8) -> bool {
 /// so `build_vin` drops the candidate rather than silently mismatching the
 /// pattern; `None` only when the class has no members at all (e.g. a reversed
 /// range), which leaves the position at its fill.
-fn first_class_member(body: &str) -> Option<u8> {
-    let b = body.as_bytes();
+fn first_class_member(body: &[u8]) -> Option<u8> {
     let mut legal: Option<u8> = None;
     let mut any: Option<u8> = None;
-    let mut i = 0;
-    while i < b.len() {
-        if i + 2 < b.len() && b[i + 1] == b'-' {
-            let (lo, hi) = (b[i], b[i + 2]);
-            if lo <= hi {
-                any = Some(any.map_or(lo, |m| m.min(lo)));
-                if let Some(c) = (lo..=hi).find(|&c| !is_ioq(c)) {
-                    legal = Some(legal.map_or(c, |m| m.min(c)));
-                }
-            }
-            i += 3;
-        } else {
-            any = Some(any.map_or(b[i], |m| m.min(b[i])));
-            if !is_ioq(b[i]) {
-                legal = Some(legal.map_or(b[i], |m| m.min(b[i])));
-            }
-            i += 1;
+    for (lo, hi) in crate::keyspec::class_ranges(body) {
+        if lo > hi {
+            continue; // a reversed range contributes nothing
+        }
+        any = Some(any.map_or(lo, |m| m.min(lo)));
+        if let Some(c) = (lo..=hi).find(|&c| !is_ioq(c)) {
+            legal = Some(legal.map_or(c, |m| m.min(c)));
         }
     }
     legal.or(any)
@@ -683,8 +672,8 @@ fn accepts_at(keys: &str, pos: usize, ch: u8) -> bool {
     while i < b.len() {
         let (accepts, next) = match b[i] {
             b'*' | b'_' => (true, i + 1),
-            b'[' => match b[i..].iter().position(|&c| c == b']') {
-                Some(rel) => (class_accepts(&keys[i + 1..i + rel], ch), i + rel + 1),
+            b'[' => match crate::keyspec::class_body(b, i) {
+                Some((body, next)) => (crate::keyspec::class_contains(body, ch), next),
                 None => (b[i] == ch, i + 1),
             },
             c => (c == ch, i + 1),
@@ -696,25 +685,6 @@ fn accepts_at(keys: &str, pos: usize, ch: u8) -> bool {
         p += 1;
     }
     true
-}
-
-fn class_accepts(body: &str, ch: u8) -> bool {
-    let b = body.as_bytes();
-    let mut i = 0;
-    while i < b.len() {
-        if i + 2 < b.len() && b[i + 1] == b'-' {
-            if b[i] <= ch && ch <= b[i + 2] {
-                return true;
-            }
-            i += 3;
-        } else {
-            if b[i] == ch {
-                return true;
-            }
-            i += 1;
-        }
-    }
-    false
 }
 
 /// A strength-2 covering array over `levels`: every pair of (position, class)
