@@ -19,7 +19,8 @@ use std::collections::{BinaryHeap, HashSet};
 
 use crate::db::Db;
 use crate::generate::{
-    build_vin, pick_year_pub, schema_to_wmi, sweep, wmi_string, wmis_by_id, year_char, Dimension,
+    build_vin, pick_year, schema_to_wmi, stamp_check_digit, sweep, wmi_string, wmis_by_id,
+    year_char, Dimension,
 };
 
 /// One behaviour a VIN demonstrates. Interned as a string so the whole grammar
@@ -168,11 +169,7 @@ pub fn candidates(db: &Db, current_year: i32) -> Vec<(String, Option<Token>)> {
             .into_iter()
             .map(|v| (v, Some("vspec|noyear".to_string()))),
     );
-    out.extend(
-        year_candidates(db, current_year)
-            .into_iter()
-            .map(|v| (v, None)),
-    );
+    out.extend(year_candidates(db).into_iter().map(|v| (v, None)));
     out.extend(
         error_candidates(db, current_year)
             .into_iter()
@@ -335,7 +332,7 @@ fn tie_vin(
         return None;
     }
     let (wmi, yearfrom, yearto) = wmi_for_schema(db, schema)?;
-    let year = crate::generate::pick_year_pub(yearfrom, yearto, current_year);
+    let year = pick_year(yearfrom, yearto, current_year);
     for i in 0..group.len().min(24) {
         for j in (i + 1)..group.len().min(24) {
             let Some(merged) = merge_keys(group[i].3, group[j].3) else {
@@ -399,7 +396,7 @@ fn yearless_vspec_candidates(db: &Db, current_year: i32) -> Vec<String> {
             out.extend(build_vin(
                 wmi,
                 db.s(p.keys.to_native()),
-                pick_year_pub(e.2, e.3, current_year),
+                pick_year(e.2, e.3, current_year),
             ));
         }
     }
@@ -410,7 +407,7 @@ fn yearless_vspec_candidates(db: &Db, current_year: i32) -> Vec<String> {
 /// 1998, given the year character for `yearto + 30`. The 1998 bound matters — a
 /// later year would exceed `current + 2` and be pulled back by the future-year
 /// correction instead, which never reaches the retry.
-fn year_candidates(db: &Db, current_year: i32) -> Vec<String> {
+fn year_candidates(db: &Db) -> Vec<String> {
     let mut out = Vec::new();
     for w in db.wmis() {
         if !crate::tables::is_car_or_mpv(w.vehicletypeid.to_native())
@@ -435,18 +432,12 @@ fn year_candidates(db: &Db, current_year: i32) -> Vec<String> {
         };
         let mut vin: Vec<u8> = built.into_bytes();
         vin[6] = b'A'; // alphabetic position 7 keeps the year conclusive
-        vin[8] = b'0';
-        let text = String::from_utf8_lossy(&vin).into_owned();
-        vin[8] = match crate::check_digit(&text) {
-            Some(c) if c != '?' => c as u8,
-            _ => b'0',
-        };
+        stamp_check_digit(&mut vin);
         out.push(String::from_utf8_lossy(&vin).into_owned());
         if out.len() >= 8 {
             break;
         }
     }
-    let _ = current_year;
     out
 }
 

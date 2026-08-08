@@ -27,7 +27,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub use checkdigit::check_digit;
 pub use db::Db;
-pub use generate::{build_vin, generate, pairwise, seeded, sweep, year_char, Dimension, Filter};
+pub use generate::{generate, pairwise, seeded, sweep, Dimension, Filter};
 pub use matcher::sqlwild_to_regex;
 pub use wmi::{vin_descriptor, vin_wmi};
 
@@ -222,12 +222,17 @@ fn epoch_to_year(secs: i64) -> i32 {
     (if m <= 2 { y + 1 } else { y }) as i32
 }
 
-/// The current model year by the system clock, as the decoder reckons it.
-pub fn current_year() -> i32 {
-    let secs = SystemTime::now()
+/// Unix epoch seconds by the system clock, saturating to 0 before 1970.
+fn now_secs() -> i64 {
+    SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
+        .unwrap_or(0)
+}
+
+/// The current model year by the system clock, as the decoder reckons it.
+pub fn current_year() -> i32 {
+    let secs = now_secs();
     epoch_to_year(secs)
 }
 
@@ -240,10 +245,7 @@ pub fn current_year() -> i32 {
 /// In or out of that window, a caller year that contradicts a pass's decoded
 /// year flags error 12 on that pass.
 pub fn decode(input: &str, year: Option<i32>) -> DecodeResult<'static> {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
+    let secs = now_secs();
     decode_full(
         Db::embedded(),
         input,
@@ -337,10 +339,7 @@ fn batch<T: Send>(
 ) -> Vec<T> {
     use rayon::prelude::*;
 
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
+    let secs = now_secs();
     let now_micros = secs * 1_000_000;
     let current_year = epoch_to_year(secs);
     let db = Db::embedded();
@@ -399,10 +398,7 @@ fn batch_json<T: serde::Serialize + Send>(
 ) -> String {
     use rayon::prelude::*;
 
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs() as i64)
-        .unwrap_or(0);
+    let secs = now_secs();
     let now_micros = secs * 1_000_000;
     let current_year = epoch_to_year(secs);
     let db = Db::embedded();
@@ -785,7 +781,7 @@ fn error_messages(db: &Db, err: &errors::ErrorState) -> String {
     }
     // `left(errorMessages, 500)` counts CHARACTERS, not bytes; multi-byte chars
     // (e.g. the en-dash in the code-10 message) must not be split mid-codepoint.
-    out.chars().take(500).collect()
+    errors::trunc500(&out)
 }
 
 fn append_correction(items: &mut Vec<decode::DecodingItem>, element_id: i32, value: &str) {

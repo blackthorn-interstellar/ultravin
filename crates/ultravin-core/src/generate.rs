@@ -151,24 +151,25 @@ pub fn build_vin(wmi: &str, keys: &str, year: i32) -> Option<String> {
         return None;
     }
 
+    stamp_check_digit(&mut vin);
+    Some(String::from_utf8_lossy(&vin).into_owned())
+}
+
+/// Stamp position 9 (index 8) with the computed check digit. The `'0'` fallback
+/// still guards any shape `check_digit` rejects (a letter in a numeric-only
+/// position); with I/O/Q gone it is not reached in practice, but it keeps the VIN
+/// well formed rather than panicking.
+pub(crate) fn stamp_check_digit(vin: &mut [u8]) {
     vin[8] = b'0';
-    let text = String::from_utf8_lossy(&vin).into_owned();
-    // The '0' fallback still guards any other shape `check_digit` rejects (a
-    // letter in a numeric-only position); with I/O/Q gone it is not reached in
-    // practice, but it keeps the VIN well formed rather than panicking.
+    let text = String::from_utf8_lossy(vin).into_owned();
     vin[8] = match crate::check_digit(&text) {
         Some(c) if c != '?' => c as u8,
         _ => b'0',
     };
-    Some(String::from_utf8_lossy(&vin).into_owned())
 }
 
 /// A model year inside a schema's band, preferring recent years.
-pub(crate) fn pick_year_pub(yearfrom: i32, yearto: i32, current_year: i32) -> i32 {
-    pick_year(yearfrom, yearto, current_year)
-}
-
-fn pick_year(yearfrom: i32, yearto: i32, current_year: i32) -> i32 {
+pub(crate) fn pick_year(yearfrom: i32, yearto: i32, current_year: i32) -> i32 {
     let cap = current_year + 2;
     let hi = yearto.min(cap).min(2039);
     let lo = yearfrom.max(2010);

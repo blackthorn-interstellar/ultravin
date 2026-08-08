@@ -451,7 +451,7 @@ fn errorcode(
     }
 }
 
-fn trunc500(s: &str) -> String {
+pub(crate) fn trunc500(s: &str) -> String {
     s.chars().take(500).collect()
 }
 

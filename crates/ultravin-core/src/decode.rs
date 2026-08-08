@@ -253,7 +253,6 @@ pub fn decode_core(
         db,
         &mut items,
         wmiid,
-        &wmi_upper,
         var_wmi,
         wmi.createdon_key.to_native(),
     );
@@ -458,7 +457,6 @@ fn append_make(
     db: &Db,
     items: &mut Vec<DecodingItem>,
     wmiid: i32,
-    wmi_upper: &str,
     var_wmi: &str,
     wmi_created: i64,
 ) {
@@ -472,7 +470,6 @@ fn append_make(
     });
 
     if let Some((model_attr, pattern_id, keys, vin_schema_id)) = model_item {
-        let _ = wmi_upper;
         if let Ok(modelid) = model_attr.parse::<i32>() {
             for mm in db.makes_for_model(modelid) {
                 let makeid = mm.makeid.to_native();
