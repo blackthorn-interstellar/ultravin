@@ -258,12 +258,7 @@ fn valid_charset(db: &Db, wmi: &str, model_year: Option<i32>) -> Charset {
     let mut keys: BTreeSet<String> = BTreeSet::new();
     for wmiid in db.wmi_ids_for_str(wmi) {
         for wvs in db.wmi_vinschema_for(wmiid) {
-            let to = if wvs.yearto.to_native() == NULL_I32 {
-                2999
-            } else {
-                wvs.yearto.to_native()
-            };
-            if year < wvs.yearfrom.to_native() || year > to {
+            if year < wvs.yearfrom.to_native() || year > wvs.yearto_or(2999) {
                 continue;
             }
             for p in db.patterns_for(wvs.vinschemaid.to_native()) {

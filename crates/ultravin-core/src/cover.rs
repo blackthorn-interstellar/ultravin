@@ -365,15 +365,10 @@ fn wmi_for_schema(db: &Db, schema: i32) -> Option<(&str, i32, i32)> {
             .iter()
             .find(|l| l.vinschemaid.to_native() == schema)
             .map(|l| {
-                let to = l.yearto.to_native();
                 (
                     db.s(w.wmi.to_native()),
                     l.yearfrom.to_native(),
-                    if to == crate::tables::NULL_I32 {
-                        9999
-                    } else {
-                        to
-                    },
+                    l.yearto_or(9999),
                 )
             })
     })

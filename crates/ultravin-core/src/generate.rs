@@ -17,7 +17,6 @@
 use std::collections::BTreeSet;
 
 use crate::db::Db;
-use crate::tables::NULL_I32;
 
 /// Model-year characters for 2010..=2039 (I/O/Q and U/Z excluded, 30-year cycle).
 const MY_CHARS: &[u8; 30] = b"ABCDEFGHJKLMNPRSTVWXY123456789";
@@ -194,12 +193,7 @@ fn pick_year(yearfrom: i32, yearto: i32, current_year: i32) -> i32 {
 }
 
 fn year_to(link: &crate::tables::ArchivedWmiVinSchema) -> i32 {
-    let to = link.yearto.to_native();
-    if to == NULL_I32 {
-        9999
-    } else {
-        to
-    }
+    link.yearto_or(9999)
 }
 
 /// SplitMix64 — a deterministic, dependency-free PRNG. Generation must repeat

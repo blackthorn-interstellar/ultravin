@@ -3,7 +3,6 @@
 //! W2; W1 decodes against this one year.
 
 use crate::db::Db;
-use crate::tables::NULL_I32;
 
 /// Raw `fVinModelYear2`: `None` when position 10 is unmapped, a negative value
 /// when the year is inconclusive, otherwise the positive model year. `carLT`
@@ -109,13 +108,6 @@ fn schema_count(var_wmi: &str, db: &Db, year: i32) -> i32 {
     };
     db.wmi_vinschema_for(w.id.to_native())
         .iter()
-        .filter(|r| {
-            let to = if r.yearto.to_native() == NULL_I32 {
-                2999
-            } else {
-                r.yearto.to_native()
-            };
-            year >= r.yearfrom.to_native() && year <= to
-        })
+        .filter(|r| year >= r.yearfrom.to_native() && year <= r.yearto_or(2999))
         .count() as i32
 }

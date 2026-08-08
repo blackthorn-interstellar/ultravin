@@ -85,12 +85,7 @@ pub fn decode_core(
     let mut schema_yearfrom: IntMap<i32, i32> = IntMap::default();
     for wvs in db.wmi_vinschema_for(wmiid) {
         if let Some(my) = model_year {
-            let to = if wvs.yearto.to_native() == NULL_I32 {
-                2999
-            } else {
-                wvs.yearto.to_native()
-            };
-            if my < wvs.yearfrom.to_native() || my > to {
+            if my < wvs.yearfrom.to_native() || my > wvs.yearto_or(2999) {
                 continue;
             }
         }
@@ -300,12 +295,7 @@ fn append_formula_patterns(
     let mut new_items: Vec<DecodingItem> = Vec::new();
     for wvs in db.wmi_vinschema_for(wmiid) {
         if let Some(my) = model_year {
-            let to = if wvs.yearto.to_native() == NULL_I32 {
-                2999
-            } else {
-                wvs.yearto.to_native()
-            };
-            if my < wvs.yearfrom.to_native() || my > to {
+            if my < wvs.yearfrom.to_native() || my > wvs.yearto_or(2999) {
                 continue;
             }
         }

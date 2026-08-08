@@ -283,6 +283,20 @@ pub struct WmiVinSchema {
     pub yearto: i32,
 }
 
+impl ArchivedWmiVinSchema {
+    /// `yearto`, or `sentinel` when the column is NULL (the band has no upper
+    /// bound). The decode path passes 2999, the generation path 9999; both exceed
+    /// every real model year, so the comparisons behave identically under either.
+    pub(crate) fn yearto_or(&self, sentinel: i32) -> i32 {
+        let to = self.yearto.to_native();
+        if to == NULL_I32 {
+            sentinel
+        } else {
+            to
+        }
+    }
+}
+
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
 pub struct VinSchema {
     pub id: i32,
