@@ -44,20 +44,22 @@ pub(crate) fn valid_at(i: usize, c: u8, pos3: u8, is_car_mpv_lt: bool) -> bool {
     }
 }
 
-/// Compute the position-9 check digit per `fVINCheckDigit2`. Returns `Some('X')`
-/// or `Some(d)`, `Some('?')` if any character is invalid at its position, or
-/// `None` when the VIN is not 17 characters (the SQL returns `''`).
-pub fn check_digit_with_flag(vin: &str, is_car_mpv_lt: bool) -> Option<char> {
+/// Shared body of both `fVINCheckDigit*` ports: transliterate-and-weight over the
+/// 17 positions, returning `Some('?')` on the first character invalid at its
+/// position or untransliteratable, `None` when the VIN is not 17 characters. The
+/// only thing that differs between the ports is the per-position validity
+/// predicate, which the caller supplies (`valid_at` vs `valid_at_v1`).
+#[inline]
+fn check_digit_kernel(vin: &str, valid_at: impl Fn(usize, u8) -> bool) -> Option<char> {
     let b = vin.as_bytes();
     if b.len() != 17 {
         return None;
     }
-    let pos3 = b[2];
     let weights: [u32; 17] = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
     let mut sum: u32 = 0;
     for (idx, &c) in b.iter().enumerate() {
         let i = idx + 1; // 1-based, matching the SQL
-        if !valid_at(i, c, pos3, is_car_mpv_lt) {
+        if !valid_at(i, c) {
             return Some('?');
         }
         let Some(v) = translit(c) else {
@@ -71,6 +73,16 @@ pub fn check_digit_with_flag(vin: &str, is_car_mpv_lt: bool) -> Option<char> {
     } else {
         (b'0' + r as u8) as char
     })
+}
+
+/// Compute the position-9 check digit per `fVINCheckDigit2`. Returns `Some('X')`
+/// or `Some(d)`, `Some('?')` if any character is invalid at its position, or
+/// `None` when the VIN is not 17 characters (the SQL returns `''`).
+pub fn check_digit_with_flag(vin: &str, is_car_mpv_lt: bool) -> Option<char> {
+    // Only read once len is known good; the kernel guards the length before
+    // consulting the predicate, so a short VIN never indexes here.
+    let pos3 = vin.as_bytes().get(2).copied().unwrap_or(0);
+    check_digit_kernel(vin, |i, c| valid_at(i, c, pos3, is_car_mpv_lt))
 }
 
 /// Convenience wrapper for `fVINCheckDigit2(vin, false)`.
@@ -98,29 +110,8 @@ fn valid_at_v1(i: usize, c: u8, pos3: u8) -> bool {
 /// `vpic/procs/fvincheckdigit.sql`). Same transliteration/weights as
 /// `fVINCheckDigit2`; only the position 13/14 validity classes differ.
 pub fn check_digit_v1(vin: &str) -> Option<char> {
-    let b = vin.as_bytes();
-    if b.len() != 17 {
-        return None;
-    }
-    let pos3 = b[2];
-    let weights: [u32; 17] = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
-    let mut sum: u32 = 0;
-    for (idx, &c) in b.iter().enumerate() {
-        let i = idx + 1;
-        if !valid_at_v1(i, c, pos3) {
-            return Some('?');
-        }
-        let Some(v) = translit(c) else {
-            return Some('?');
-        };
-        sum += v * weights[idx];
-    }
-    let r = sum % 11;
-    Some(if r == 10 {
-        'X'
-    } else {
-        (b'0' + r as u8) as char
-    })
+    let pos3 = vin.as_bytes().get(2).copied().unwrap_or(0);
+    check_digit_kernel(vin, |i, c| valid_at_v1(i, c, pos3))
 }
 
 #[cfg(test)]
