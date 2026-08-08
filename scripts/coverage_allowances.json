@@ -2,8 +2,7 @@
   "_about": "Regions of the decode path that no VIN can reach. Every entry needs a reason naming the mechanism, not the symptom. `make coverage` fails if an unlisted region is uncovered (a new gap) and also if a listed one becomes covered (the reason expired \u2014 usually a data refresh made the branch reachable). Refresh counts with `make coverage-update`.",
   "allow": [
     {"file": "checkdigit.rs", "function": "checkdigit::check_digit", "reason": "public wrapper; decode calls check_digit_with_flag directly, so no VIN routes through it", "regions": 4},
-    {"file": "checkdigit.rs", "function": "checkdigit::check_digit_v1", "reason": "the fVINCheckDigit (v1) arms for characters invalid at their position, which build_vin never emits", "regions": 2},
-    {"file": "checkdigit.rs", "function": "checkdigit::check_digit_with_flag", "reason": "is_car_mpv_lt=true path plus the non-17-character early return, both reached only via the v1 caller", "regions": 2},
+    {"file": "checkdigit.rs", "function": "checkdigit::check_digit_kernel::_", "reason": "the non-17-character early return and the transliterate-reject arm: C7 calls it only for 17-character VINs and E4b's candidates are 17-character, and valid_at rejects I/O/Q - the only bytes translit rejects - before translit runs", "regions": 2},
     {"file": "checkdigit.rs", "function": "checkdigit::translit", "reason": "the I/O/Q rejection arm; a WMI containing one cannot form a VIN whose digit is then computed", "regions": 1},
     {"file": "conversion.rs", "function": "conversion::_3::parse", "reason": "Dec::parse - sign and exponent forms no displacement value in the data uses", "regions": 6},
     {"file": "conversion.rs", "function": "conversion::_3::weight_and_firstdigit", "reason": "Dec::weight_and_firstdigit - the zero-magnitude arm; a displacement of 0 is not in the data", "regions": 1},
@@ -24,6 +23,7 @@
     {"file": "decode.rs", "function": "decode::dedup_cmp::_::::_", "reason": "dedup_cmp closure - the insertion-index tiebreak, reached only when two patterns share (schema, element, keys); the data has 0 such duplicates", "regions": 3},
     {"file": "decode.rs", "function": "decode::formula_value", "reason": "no-# and past-end returns; the caller pre-filters for '#', and 0 keys place one past position 6", "regions": 2},
     {"file": "decode.rs", "function": "decode::pick_element18", "reason": "the equal-priority equal-CreatedOn insertion-order arm", "regions": 1},
+    {"file": "errors.rs", "function": "errors::_10V::Cq::core::fmt::Display::fmt", "reason": "the write! error-propagation arm in ValidChars::Display; it is only rendered via to_string() into a String, whose fmt::Write never fails", "regions": 1},
     {"file": "errors.rs", "function": "errors::class_cd", "reason": "check-digit class arm for positions the corpus does not corrupt", "regions": 1},
     {"file": "errors.rs", "function": "errors::compute_errors", "reason": "correction arms for VIN shapes the corpus does not construct", "regions": 4},
     {"file": "errors.rs", "function": "errors::contains_ci", "reason": "case-insensitive miss arm", "regions": 1},
