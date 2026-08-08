@@ -122,6 +122,18 @@ def lock_moves(path: str) -> tuple[list[Move], list[tuple[str, set[str]]]]:
     return moves(versions(old_text), versions(new_text))
 
 
+def only_metadata_changed(old_text: str, new_text: str) -> bool:
+    """True when a lockfile's text moved but not one package pin did.
+
+    `uv lock --exclude-newer` stamps the cutoff into uv.lock's `[options]` table
+    even on a night that resolved nothing new. That stanza is provenance, not a
+    dependency change — and the next plain `uv run` re-resolves and strips it
+    back out — but while it sits there the lockfile differs from HEAD, which
+    every downstream "did anything bump?" check reads as a real bump.
+    """
+    return new_text != old_text and versions(old_text) == versions(new_text)
+
+
 def markdown_moves(clean: list[Move], unclean: list[tuple[str, set[str]]]) -> str:
     if not clean and not unclean:
         return "nothing to bump\n"
@@ -178,6 +190,13 @@ def cmd_cooldown(args: argparse.Namespace) -> int:
             + ", ".join(last_young)
             + f" stayed inside the {args.days}-day cooldown after reverts. Tomorrow's run retries."
         ]
+
+    # An empty night has to *look* empty: the caller decides whether to open a PR
+    # by asking git whether the lockfiles moved, so a leftover `[options]` stanza
+    # would send it off to branch and commit a bump that does not exist.
+    if only_metadata_changed(sh(["git", "show", "HEAD:uv.lock"], capture=True).stdout, (ROOT / "uv.lock").read_text()):
+        sh(["git", "checkout", "--", "uv.lock"])
+        log("uv.lock moved outside its package pins only — restored HEAD's copy")
 
     py_clean, py_unclean = lock_moves("uv.lock")
     cargo_clean, cargo_unclean = lock_moves("Cargo.lock")
