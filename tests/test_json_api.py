@@ -11,18 +11,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 import ultravin as uv
 
-# A spread of shapes: clean, single-WMI fallback, unknown WMI (err 7), short,
-# and a correction/invalid-char case — same family the parity corpus stresses.
-VINS = [
-    "1HGCM82633A004352",
-    "SAL00000000000000",
-    "ZZZCM82633A004352",
-    "5UXWX7C5XBA123456",
-    "1FTFW1ET5DFC10312",
-    "JH4KA8260MC000000",
-]
+from tests.vin_samples import VINS
 
 
 def test_decode_json_matches_decode() -> None:
@@ -42,6 +34,6 @@ def test_json_matches_over_corpus() -> None:
     """Lock the equivalence over the full benchmark corpus, not just samples."""
     corpus = Path(__file__).parent.parent / "scripts" / "bench" / "corpus.txt"
     if not corpus.exists():
-        return
+        pytest.skip("benchmark corpus not present (scripts/bench/corpus.txt)")
     vins = [ln.strip() for ln in corpus.read_text().splitlines() if len(ln.strip()) == 17]
     assert json.loads(uv.decode_batch_json(vins)) == uv.decode_batch(vins)

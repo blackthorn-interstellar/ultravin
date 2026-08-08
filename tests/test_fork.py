@@ -19,14 +19,9 @@ import signal
 import pytest
 import ultravin as uv
 
-VINS = [
-    "1HGCM82633A004352",
-    "SAL00000000000000",
-    "ZZZCM82633A004352",
-    "5UXWX7C5XBA123456",
-    "1FTFW1ET5DFC10312",
-    "JH4KA8260MC000000",
-] * 20
+from tests.vin_samples import VINS
+
+FORK_BATCH = VINS * 20
 
 CHILD_TIMEOUT_SECONDS = 10
 
@@ -35,13 +30,15 @@ CHILD_TIMEOUT_SECONDS = 10
 def test_decode_batch_survives_fork() -> None:
     # Warm the pool in the parent: without this the child would build its own and
     # the test could not fail.
-    assert len(uv.decode_batch(VINS)) == len(VINS)
+    assert len(uv.decode_batch(FORK_BATCH)) == len(FORK_BATCH)
 
     pid = os.fork()
     if pid == 0:
         signal.alarm(CHILD_TIMEOUT_SECONDS)
         try:
-            ok = len(uv.decode_batch(VINS)) == len(VINS) and uv.decode_batch_json(VINS).startswith("[")
+            ok = len(uv.decode_batch(FORK_BATCH)) == len(FORK_BATCH) and uv.decode_batch_json(FORK_BATCH).startswith(
+                "["
+            )
         except BaseException:  # noqa: BLE001 - the child must never unwind into pytest
             os._exit(1)
         os._exit(0 if ok else 1)

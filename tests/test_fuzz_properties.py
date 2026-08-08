@@ -20,6 +20,8 @@ import pytest
 import ultravin as uv
 from hypothesis import example, given, settings, strategies as st
 
+from tests.vin_samples import VINS
+
 # The three field repros that raised PanicException through the wheel.
 CRASHERS = ["AAé", "1HGCM8263Ł3A00435", "1HGCM82633A0043é2"]
 
@@ -43,14 +45,7 @@ BOUNDARY_POS = [0, 1, 2, 3, 4, 7, 8, 9, 10, 16, 17]
 
 def _base_vins() -> list[str]:
     """A spread of real VINs to mutate, from the frozen parity corpus if present."""
-    fallback = [
-        "1HGCM82633A004352",
-        "SAL00000000000000",
-        "5UXWX7C5XBA123456",
-        "1FTFW1ET5DFC10312",
-        "JH4KA8260MC000000",
-        "ZZZCM82633A004352",
-    ]
+    fallback = [v for v in VINS if not v.startswith("ZZZ")] + [v for v in VINS if v.startswith("ZZZ")]
     corpus = Path(__file__).parent / "parity_corpus.json"
     if not corpus.exists():
         return fallback
