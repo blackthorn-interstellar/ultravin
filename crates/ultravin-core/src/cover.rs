@@ -73,9 +73,7 @@ pub fn token_signature(
     t.insert(format!("corrected|{}", !result.corrected_vin.is_empty()));
 
     let pos7_digit = vin.as_bytes().get(6).is_some_and(u8::is_ascii_digit);
-    let car_lt = veh_type
-        .parse::<i32>()
-        .is_ok_and(crate::tables::is_car_or_mpv);
+    let car_lt = veh_type == "2" || veh_type == "7";
     let conclusive = car_lt || raw_year(vin).is_some_and(|y| y > current_year + 2);
     t.insert(format!(
         "year|{}|{conclusive}",
@@ -125,11 +123,7 @@ fn year_kind(
     if veh_type == "3" && pos7_digit {
         return "ambiguous";
     }
-    let mut expected = if veh_type
-        .parse::<i32>()
-        .is_ok_and(crate::tables::is_car_or_mpv)
-        && pos7_digit
-    {
+    let mut expected = if (veh_type == "2" || veh_type == "7") && pos7_digit {
         raw - 30
     } else {
         raw

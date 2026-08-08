@@ -6,7 +6,8 @@
 //! conversions, vehicle specs, defaults), per-element dedup and resolution, the
 //! four-pass best-of model-year selection, the error codes, and the suggested-VIN
 //! correction machinery. The same artifact also drives VIN generation
-//! ([`generate`], [`sweep`], [`pairwise`], [`seeded`], and the built-in cover) for
+//! ([`generate`](fn@generate), [`sweep`], [`pairwise`], [`seeded`], and the
+//! built-in cover) for
 //! exercising a decoder with nothing else installed.
 
 mod checkdigit;
