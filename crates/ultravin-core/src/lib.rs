@@ -1,10 +1,13 @@
 //! ultravin-core — pure-Rust NHTSA vPIC VIN decoder engine.
 //!
-//! W1: a working first-pass decode against the embedded rkyv artifact — WMI
-//! lookup, schema/pattern matching, layered sources, per-element dedup, element
-//! resolution, model year, and the basic error codes. Byte-for-byte parity with
-//! the official Postgres `vpic.spvindecode` is the long-term goal; the 4-pass
-//! best-of, Conversion/Vehicle-Specs sources, and suggested-VIN are W2.
+//! A full decode against the embedded rkyv artifact, targeting byte-for-byte
+//! parity with the official Postgres `vpic.spvindecode`: WMI lookup,
+//! schema/pattern matching, the layered sources (engine/formula patterns, make,
+//! conversions, vehicle specs, defaults), per-element dedup and resolution, the
+//! four-pass best-of model-year selection, the error codes, and the suggested-VIN
+//! correction machinery. The same artifact also drives VIN generation
+//! ([`generate`], [`sweep`], [`pairwise`], [`seeded`], and the built-in cover) for
+//! exercising a decoder with nothing else installed.
 
 mod checkdigit;
 mod conversion;
