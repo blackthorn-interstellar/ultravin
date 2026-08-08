@@ -17,7 +17,6 @@ ultravin = "ultravin.cli:main"
 
 [dependency-groups]
 dev = [
-    "coverage",
     "hypothesis>=6.163.0",
     "maturin>=1.7,<2",
     # psycopg-binary is wheel-only and trails new CPython releases; the marker
@@ -26,7 +25,6 @@ dev = [
     # import time — only at connect time. test_import guards that.
     "psycopg[binary]>=3.3.4; python_version < '3.15'",
     "pytest",
-    "pytest-asyncio",
     "pytest-randomly",
     "pytest-sugar",
     "ruff",
@@ -91,7 +89,6 @@ max-string-length = 50
 [tool.pytest.ini_options]
 addopts = "-s --tb=short -v --durations=10"
 norecursedirs = ["build", "dist", "target", ".hypothesis"]
-asyncio_default_fixture_loop_scope = "function"
 
 [tool.ty.terminal]
 output-format = "concise"

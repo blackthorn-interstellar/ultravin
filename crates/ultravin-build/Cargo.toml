@@ -18,7 +18,6 @@ sha2 = "0.10"
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 ultravin-core = { path = "../ultravin-core" }
-blake3 = { version = "1.8.5", features = ["pure"] }
 
 [lints]
 workspace = true
