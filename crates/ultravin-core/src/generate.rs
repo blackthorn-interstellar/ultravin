@@ -809,13 +809,7 @@ pub fn pairwise(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
         };
         let wb = wmi.as_bytes();
         let pos3 = *wb.get(2).unwrap_or(&b'A');
-        let car_lt = db
-            .wmi_any(wmi)
-            .map(|w| {
-                let vt = w.vehicletypeid.to_native();
-                matches!(vt, 2 | 7) || (vt == 3 && w.trucktypeid.to_native() == 1)
-            })
-            .unwrap_or(false);
+        let car_lt = db.wmi_any(wmi).map(|w| w.is_car_mpv_lt()).unwrap_or(false);
         let classes = position_classes(db, schema, pos3, car_lt);
         let levels: Vec<usize> = classes.iter().map(|c| c.len()).collect();
         let year = pick_year(yearfrom, yearto, current_year);
@@ -991,13 +985,7 @@ pub fn seeded(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
         };
         let wb = wmi.as_bytes();
         let pos3 = *wb.get(2).unwrap_or(&b'A');
-        let car_lt = db
-            .wmi_any(wmi)
-            .map(|w| {
-                let vt = w.vehicletypeid.to_native();
-                matches!(vt, 2 | 7) || (vt == 3 && w.trucktypeid.to_native() == 1)
-            })
-            .unwrap_or(false);
+        let car_lt = db.wmi_any(wmi).map(|w| w.is_car_mpv_lt()).unwrap_or(false);
         let classes = position_classes(db, schema, pos3, car_lt);
         let levels: Vec<usize> = classes.iter().map(|c| c.len()).collect();
         let year = pick_year(yearfrom, yearto, current_year);

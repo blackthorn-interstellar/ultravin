@@ -33,10 +33,7 @@ pub fn vin_model_year_raw(vin: &str, var_wmi: &str, db: &Db, current_year: i32) 
     // even when the WMI is absent from the table (e.g. an unknown WMI like `ZKU`).
     let car_lt = db
         .wmi_any(var_wmi)
-        .map(|w| {
-            let vt = w.vehicletypeid.to_native();
-            matches!(vt, 2 | 7) || (vt == 3 && w.trucktypeid.to_native() == 1)
-        })
+        .map(|w| w.is_car_mpv_lt())
         .unwrap_or(false);
     let pos7 = b.get(6).copied().unwrap_or(b' ');
     if car_lt && pos7.is_ascii_digit() {

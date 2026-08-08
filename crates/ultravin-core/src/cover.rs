@@ -72,7 +72,7 @@ pub fn token_signature(
     t.insert(format!("corrected|{}", !result.corrected_vin.is_empty()));
 
     let pos7_digit = vin.as_bytes().get(6).is_some_and(u8::is_ascii_digit);
-    let car_lt = veh_type == "2" || veh_type == "7";
+    let car_lt = veh_type.parse::<i32>().is_ok_and(crate::tables::is_car_or_mpv);
     let conclusive = car_lt || raw_year(vin).is_some_and(|y| y > current_year + 2);
     t.insert(format!(
         "year|{}|{conclusive}",
@@ -122,7 +122,9 @@ fn year_kind(
     if veh_type == "3" && pos7_digit {
         return "ambiguous";
     }
-    let mut expected = if (veh_type == "2" || veh_type == "7") && pos7_digit {
+    let mut expected = if veh_type.parse::<i32>().is_ok_and(crate::tables::is_car_or_mpv)
+        && pos7_digit
+    {
         raw - 30
     } else {
         raw
@@ -422,8 +424,9 @@ fn yearless_vspec_candidates(db: &Db, current_year: i32) -> Vec<String> {
 fn year_candidates(db: &Db, current_year: i32) -> Vec<String> {
     let mut out = Vec::new();
     for w in db.wmis() {
-        let vt = w.vehicletypeid.to_native();
-        if !(vt == 2 || vt == 7) || db.s(w.wmi.to_native()).len() != 3 {
+        if !crate::tables::is_car_or_mpv(w.vehicletypeid.to_native())
+            || db.s(w.wmi.to_native()).len() != 3
+        {
             continue;
         }
         let links = db.wmi_vinschema_for(w.id.to_native());

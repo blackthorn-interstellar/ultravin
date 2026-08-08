@@ -22,6 +22,12 @@ pub fn is_exempt(element_id: i32) -> bool {
     EXEMPT_ELEMENTS.contains(&element_id)
 }
 
+/// Passenger car or MPV (vehicle type 2 or 7): the 2-argument form used where the
+/// truck-type carve-out is not consulted.
+pub(crate) const fn is_car_or_mpv(vt: i32) -> bool {
+    matches!(vt, 2 | 7)
+}
+
 /// `ErrorCode.weight` for best-pass scoring (port of the `vpic.ErrorCode` table,
 /// summed by `fErrorValue`). Unlisted ids (0, 9, 10) weigh 0.
 pub fn errorcode_weight(id: i32) -> i32 {
@@ -256,6 +262,16 @@ pub struct Wmi {
     pub trucktypeid: i32,
     pub publicavailabilitydate: i64,
     pub createdon_key: i64,
+}
+
+impl ArchivedWmi {
+    /// Passenger car / MPV / light truck: the flag `fVINCheckDigit2`, model-year
+    /// resolution and the error scan all gate on (vehicle type 2 or 7, or a
+    /// vehicle-type-3 truck whose truck type is 1).
+    pub(crate) fn is_car_mpv_lt(&self) -> bool {
+        let vt = self.vehicletypeid.to_native();
+        matches!(vt, 2 | 7) || (vt == 3 && self.trucktypeid.to_native() == 1)
+    }
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]

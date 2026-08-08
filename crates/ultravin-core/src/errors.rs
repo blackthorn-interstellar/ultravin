@@ -99,9 +99,7 @@ fn start_context(vin: &str, wmi: Option<&ArchivedWmi>) -> (usize, bool) {
     if pos3 == Some(b'9') {
         (15, false)
     } else if let Some(w) = wmi {
-        let vt = w.vehicletypeid.to_native();
-        let car_lt = matches!(vt, 2 | 7) || (vt == 3 && w.trucktypeid.to_native() == 1);
-        if car_lt {
+        if w.is_car_mpv_lt() {
             (13, true)
         } else {
             (14, false)
