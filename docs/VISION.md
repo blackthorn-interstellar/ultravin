@@ -19,7 +19,7 @@ Decoding is not a database problem. It is WMI lookup → schema selection by mod
 
 ## Correctness: exact parity or it's a bug
 
-Parity is measured against the official `.plain` dump and live vPIC API as oracle. We **generate VINs exhaustively** — every WMI, every schema, every pattern path, partial and corrupted VINs, error-correction cases — and assert field-for-field equality. The one place vPIC is non-deterministic (the `NEWID()` tie-break in dedup) gets a single defined, documented ordering.
+Parity is measured against the official `.plain` dump and live vPIC API as oracle. We **generate VINs exhaustively** — every WMI, every schema, every pattern path, partial and corrupted VINs, error-correction cases — and assert field-for-field equality. The dedup tie-break resolves deterministically — lowest `id` wins, with no `NEWID` randomness — and we mirror that ordering exactly.
 
 ## Why we win on numbers
 

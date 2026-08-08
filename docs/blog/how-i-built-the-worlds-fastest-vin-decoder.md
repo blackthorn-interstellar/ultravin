@@ -59,9 +59,11 @@ stuff lives: the check-digit math, the suggested-VIN error correction, the error
 codes. and a generator that walks *every* manufacturer, *every* schema, *every*
 pattern, plus broken VINs, and checks every field against Postgres.
 
-fun detail: vPIC has exactly one random step (a `NEWID()` tiebreak deep in its
-dedup). you literally cannot match random. so we froze it to one fixed order and
-wrote down why. that's the kind of thing you only hit because the oracle caught it.
+fun detail: vPIC has one easy-to-miss tiebreak deep in its dedup — it breaks ties
+by row `id`, deterministically. there's nothing random about it, but miss the `id
+ASC` order and a handful of VINs resolve to the wrong attribute. so we mirror that
+exact order and wrote down why. that's the kind of thing you only hit because the
+oracle caught it.
 
 **pass 3 — make it fast.** zero-copy loading (the embedded database loads basically
 for free), caching, batching. but here's the rule that made it work: **every speed
