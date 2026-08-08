@@ -6,7 +6,7 @@ import pytest
 # library floor (3.10) predates tomllib, so skip rather than fail collection.
 pytest.importorskip("tomllib")
 
-from scripts.bump_deps import markdown_moves, moves, plan, versions  # noqa: E402
+from scripts.bump_deps import markdown_moves, moves, only_metadata_changed, plan, versions  # noqa: E402
 
 NOW = datetime(2026, 8, 7, tzinfo=timezone.utc)
 CUTOFF = NOW - timedelta(days=7)
@@ -93,6 +93,42 @@ def test_plan_blocks_on_young_or_unknown_unclean_arrivals():
     assert blockers == [("brandnew", "0.1.0")]
     _, blockers = plan([], unclean, {("brandnew", "0.1.0"): OLD_AGE}, CUTOFF)
     assert blockers == []
+
+
+UV_LOCK_HEAD = """
+version = 1
+revision = 3
+requires-python = ">=3.10"
+
+[[package]]
+name = "ruff"
+version = "0.16.1"
+"""
+
+# What `uv lock --upgrade --exclude-newer` writes on a night nothing resolved
+# differently: the same pins, plus the cutoff it was handed.
+UV_LOCK_STANZA_ONLY = UV_LOCK_HEAD.replace(
+    'requires-python = ">=3.10"\n',
+    'requires-python = ">=3.10"\n\n[options]\nexclude-newer = "2026-08-01T09:19:41Z"\n',
+)
+
+
+def test_only_metadata_changed_spots_the_exclude_newer_stanza():
+    assert only_metadata_changed(UV_LOCK_HEAD, UV_LOCK_STANZA_ONLY)
+
+
+def test_only_metadata_changed_lets_a_real_pin_move_through():
+    bumped = UV_LOCK_STANZA_ONLY.replace('version = "0.16.1"', 'version = "0.16.2"')
+    assert not only_metadata_changed(UV_LOCK_HEAD, bumped)
+
+
+def test_only_metadata_changed_ignores_an_untouched_lockfile():
+    assert not only_metadata_changed(UV_LOCK_HEAD, UV_LOCK_HEAD)
+
+
+def test_only_metadata_changed_spots_a_dropped_package():
+    dropped = UV_LOCK_HEAD.replace('name = "ruff"\nversion = "0.16.1"\n', "")
+    assert not only_metadata_changed(UV_LOCK_HEAD, dropped)
 
 
 def test_markdown_moves_renders_table_and_empty_case():
