@@ -29,6 +29,17 @@ def test_corpus_present() -> None:
     assert _ENTRIES, "parity_corpus.json is empty — run scripts.parity.freeze"
 
 
+def test_corpus_year_not_stale() -> None:
+    frozen = _DATA["oracle_current_year"]
+    now = datetime.datetime.now().year  # noqa: DTZ005
+    assert now <= frozen, (
+        f"parity corpus was frozen for {frozen} but the clock now reads {now}: "
+        "ultravin caps the model year using the system year, so test_parity_unchanged "
+        "is silently skipping and the strongest correctness gate is dark. "
+        "Re-run the live oracle sweep and `uv run python -m scripts.parity.freeze`."
+    )
+
+
 @pytest.mark.skipif(
     datetime.datetime.now().year != _DATA["oracle_current_year"],  # noqa: DTZ005
     reason="ultravin uses the system year for the model-year cap; corpus was frozen in a different year",
