@@ -11,6 +11,10 @@ contradicts the SQL Server database NHTSA actually publishes from.
 All three are error/partial-VIN-only (they affect the error-correction outputs
 142/143/144/156/191); clean full-VIN decode is byte-identical to the oracle.
 
+The policy that governs *how* a divergence earns a place on this list — the bar
+of evidence, the bounded scope, the freeze — is `docs/ACCEPTANCE.md`. This file
+is the list it refers to.
+
 ---
 
 ## 1. Oracle crashes on a malformed pattern regex — `7T0M6TGCURDSNZTHF`
