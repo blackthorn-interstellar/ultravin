@@ -15,6 +15,11 @@ repository = "https://github.com/blackthorn-interstellar/ultravin"
 # Keep the bar high; deny on warnings is enforced in `make check`.
 all = "warn"
 
+[profile.dev]
+# Keep file and line information for backtraces without retaining type and
+# variable debug information in loose object files on macOS.
+debug = "line-tables-only"
+
 [profile.release]
 opt-level = 3
 # Fat LTO (with the single codegen unit below) lets the optimizer inline the tiny,
