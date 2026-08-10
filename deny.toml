@@ -1,0 +1,56 @@
+# cargo-deny: advisories + license allowlist + source hygiene.
+# Run locally: `cargo deny check` (or `make security-rust`).
+# Docs: https://embarkstudios.github.io/cargo-deny/
+
+[graph]
+all-features = true
+
+[advisories]
+yanked = "deny"
+# Unmaintained is a signal, not a CVE — only fail on direct workspace deps.
+unmaintained = "workspace"
+# Ignore entries go here as needed:
+# ignore = [
+#   { id = "RUSTSEC-XXXX-XXXX", reason = "..." },
+# ]
+
+[licenses]
+confidence-threshold = 0.8
+# Permissive-only allowlist. Unused entries stay as future headroom, not noise.
+unused-allowed-license = "allow"
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "Unicode-DFS-2016",
+    "CC0-1.0",
+    "CDLA-Permissive-2.0",
+    "OpenSSL",
+    "NCSA",
+    "BSL-1.0",
+]
+
+[licenses.private]
+ignore = true
+
+[bans]
+multiple-versions = "warn"
+# Workspace path deps omit a version requirement. cargo-deny treats that as a
+# wildcard; allow-wildcard-paths does not apply once a crate is publishable.
+# Warn rather than fail — pinning path versions is separate hygiene work.
+wildcards = "warn"
+allow-wildcard-paths = true
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

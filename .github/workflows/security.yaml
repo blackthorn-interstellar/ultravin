@@ -1,0 +1,314 @@
+# Free multi-scanner security suite — mirrors what corporate AppSec stacks
+# (Snyk, Black Duck, Sonar, GitGuardian, Checkmarx, …) typically surface:
+#
+#   SCA     cargo-audit, cargo-deny, pip-audit, OSV-Scanner, Trivy
+#   SAST    CodeQL (python + rust + actions), Semgrep community
+#   Secrets gitleaks, TruffleHog (verified only), Trivy secret mode
+#   Supply  OpenSSF Scorecard, zizmor (Actions), actionlint
+#   Optional Snyk (runs only when SNYK_TOKEN is set in repo secrets)
+#
+# All tools here are free for public GitHub repos. Results land in the
+# job summary and, where supported, GitHub Code Scanning (Security tab).
+# Secrets and known-CVE SCA hard-fail; SAST/hygiene report and soft-fail
+# so a noisy first run doesn't brick merges before baselines exist.
+name: Security
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+  schedule:
+    # Weekly Monday 09:17 UTC — far from nightly (08:41) and data-refresh (20:23)
+    - cron: "17 9 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ─── Secrets ───────────────────────────────────────────────────────────
+  gitleaks:
+    name: secrets (gitleaks)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # gitleaks-action posts a PR comment + uploads SARIF when available
+      pull-requests: write
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  trufflehog:
+    name: secrets (trufflehog)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: trufflesecurity/trufflehog@v3.88.30
+        with:
+          # Verified findings only — unverified is mostly noise for this purpose
+          extra_args: --only-verified
+
+  # ─── SCA: known CVEs in dependencies ───────────────────────────────────
+  cargo-audit:
+    name: sca (cargo-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rustsec/audit-check@v2.0.0
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  cargo-deny:
+    name: sca (cargo-deny)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          # advisories hard-fail; licenses/bans/sources configured in deny.toml
+          command: check
+          arguments: --all-features
+
+  pip-audit:
+    name: sca (pip-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: false
+      - name: Sync env + audit installed packages
+        run: |
+          # Audit the resolved env (incl. dev deps). Prefer --local over
+          # requirements-file mode: pip-audit's venv resolver fights uv-managed
+          # Pythons that ship without ensurepip.
+          echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
+          uv sync --frozen --all-extras
+          uv run --with pip-audit pip-audit --local --progress-spinner off
+
+  osv:
+    name: sca (osv-scanner)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scan lockfiles
+        uses: google/osv-scanner-action/osv-scanner-action@v2.0.3
+        with:
+          # Cargo.lock + uv.lock (and any other supported manifests)
+          scan-args: |-
+            --recursive
+            --skip-git
+            ./
+      # osv-scanner-action fails the step on vulns; surface is enough
+
+  trivy:
+    name: sca+secrets+misconfig (trivy)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          # vuln + secret + misconfig covers SCA, secrets, docker-compose IaC
+          scanners: vuln,secret,misconfig
+          format: sarif
+          output: trivy.sarif
+          # Don't fail the action on findings — we upload SARIF and fail below
+          # so Code Scanning still gets the results either way.
+          exit-code: "0"
+          skip-dirs: target,campaign,downloads,.git
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy.sarif
+          category: trivy
+      - name: Fail on HIGH/CRITICAL
+        uses: aquasecurity/trivy-action@0.30.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          scanners: vuln,secret,misconfig
+          exit-code: "1"
+          skip-dirs: target,campaign,downloads,.git
+
+  # ─── SAST ──────────────────────────────────────────────────────────────
+  codeql:
+    name: sast (codeql ${{ matrix.language }})
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        # Free on public repos. actions catches workflow injection patterns.
+        language: [python, rust, actions]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          # security-extended catches more of what commercial SAST reports
+          queries: security-extended
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+      - name: Analyze
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:${{ matrix.language }}"
+
+  semgrep:
+    name: sast (semgrep)
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    # Soft-fail: community rules are noisy on first run; SARIF still lands.
+    continue-on-error: true
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Semgrep community rules
+        run: |
+          semgrep scan \
+            --config auto \
+            --sarif \
+            --output semgrep.sarif \
+            --error \
+            --exclude='target/**' \
+            --exclude='campaign/**' \
+            --exclude='downloads/**' \
+            --exclude='**/*.rkyv' \
+            .
+      - name: Upload Semgrep SARIF
+        if: always() && hashFiles('semgrep.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+
+  # ─── Supply chain / Actions hygiene ────────────────────────────────────
+  zizmor:
+    name: actions (zizmor)
+    runs-on: ubuntu-latest
+    # Soft-fail: findings are actionable but shouldn't gate every PR day-one
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version-file: pyproject.toml
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: false
+      - name: Audit workflows
+        run: |
+          uvx zizmor --format plain .github/workflows .github/actions | tee "$GITHUB_STEP_SUMMARY"
+          # Re-run with pedantic exit so the job soft-fails on findings
+          uvx zizmor --pedantic .github/workflows .github/actions
+
+  actionlint:
+    name: actions (actionlint)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: rhysd/actionlint@v1.7.7
+        with:
+          args: -color
+
+  scorecard:
+    name: supply-chain (openssf scorecard)
+    # Scorecard wants the default branch; on PRs the signal is weaker.
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+      id-token: write
+    steps:
+      - name: Run OpenSSF Scorecard
+        uses: ossf/scorecard-action@v2.4.2
+        with:
+          results_file: results.sarif
+          results_format: sarif
+          publish_results: true
+      - name: Upload Scorecard SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+          category: openssf-scorecard
+
+  # ─── Optional commercial (free tier) ───────────────────────────────────
+  snyk:
+    name: sca+sast (snyk)
+    # Free plan works. Job-level `if` cannot read secrets (GitHub context rule),
+    # so we always schedule the job and no-op when SNYK_TOKEN is unset.
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+    steps:
+      - name: Skip when unconfigured
+        if: env.SNYK_TOKEN == ''
+        run: echo "SNYK_TOKEN not set — skipping (add repo secret to enable free-tier Snyk)"
+      - uses: actions/checkout@v4
+        if: env.SNYK_TOKEN != ''
+      - uses: snyk/actions/setup@master
+        if: env.SNYK_TOKEN != ''
+      - name: Snyk Open Source (all projects)
+        if: env.SNYK_TOKEN != ''
+        continue-on-error: true
+        run: |
+          snyk test --all-projects --severity-threshold=high --sarif-file-output=snyk-oss.sarif
+      - name: Snyk Code (SAST)
+        if: env.SNYK_TOKEN != ''
+        continue-on-error: true
+        run: |
+          snyk code test --severity-threshold=high --sarif-file-output=snyk-code.sarif
+      - name: Upload Snyk OSS SARIF
+        if: env.SNYK_TOKEN != '' && hashFiles('snyk-oss.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: snyk-oss.sarif
+          category: snyk-oss
+        continue-on-error: true
+      - name: Upload Snyk Code SARIF
+        if: env.SNYK_TOKEN != '' && hashFiles('snyk-code.sarif') != ''
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: snyk-code.sarif
+          category: snyk-code
+        continue-on-error: true

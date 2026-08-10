@@ -118,6 +118,31 @@ install-uv:  # Install uv if not already installed
 		echo -e "\033[0;32m ✔️  uv installed \033[0m"; \
 	fi
 
+# ── Security scanners (local mirrors of .github/workflows/security.yaml) ──
+# CI runs the full free suite (CodeQL, Trivy, gitleaks, Semgrep, Scorecard,
+# …). These targets cover what you can run without GitHub's code-scanning API.
+
+security: security-rust security-python ## Run local SCA scanners (Rust + Python).
+	@echo -e "✅ local security scanners clean ✨ 🍰 ✨"
+
+security-rust:  ## cargo-audit + cargo-deny (installs tools via cargo if missing).
+	@command -v cargo-audit >/dev/null || cargo install cargo-audit --locked
+	@command -v cargo-deny >/dev/null || cargo install cargo-deny --locked
+	@cargo audit
+	@cargo deny check
+
+security-python:  ## pip-audit the synced venv (incl. dev deps from the lock).
+	@uv sync --frozen --all-extras
+	@uv run --with pip-audit pip-audit --local --progress-spinner off
+
+security-osv:  ## Google OSV-Scanner over the tree (needs `osv-scanner` on PATH).
+	@command -v osv-scanner >/dev/null || { echo "install: brew install osv-scanner (or go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest)"; exit 1; }
+	@osv-scanner scan source --recursive --skip-git .
+
+security-secrets:  ## gitleaks secret scan (needs `gitleaks` on PATH).
+	@command -v gitleaks >/dev/null || { echo "install: brew install gitleaks"; exit 1; }
+	@gitleaks detect --source . --verbose
+
 help: ## Show this help message.
 	@## https://gist.github.com/prwhite/8168133#gistcomment-1716694
 	@echo -e "$$(grep -hE '^\S+:.*##' $(MAKEFILE_LIST) | sed -e 's/:.*##\s*/:/' -e 's/^\(.\+\):\(.*\)/\\x1b[36m\1\\x1b[m:\2/' | column -c2 -t -s :)" | sort
