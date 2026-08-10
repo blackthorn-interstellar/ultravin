@@ -875,6 +875,24 @@ mod tests {
     }
 
     #[test]
+    fn long_all_invalid_input_stamps_without_quadratic_blowup() {
+        let d = db();
+        if !d.is_loaded() {
+            eprintln!("skipping: artifact not built");
+            return;
+        }
+        // 200 chars invalid at every VIN position (`#` fails every char class —
+        // unlike `*`, which vPIC treats as a wildcard). The WMI (`###`) is
+        // unregistered, so the corrected VIN starts empty and the C5 scan stamps
+        // `!` across the whole input — the path that used to rebuild the Vec once
+        // per char (O(n^2)). It must complete and yield exactly one `!` per position.
+        let input = "#".repeat(200);
+        let r = decode_with(d, &input, 1_750_000_000_000_000, 2026);
+        assert_eq!(r.corrected_vin, "!".repeat(200));
+        assert!(r.error_codes.contains(&400)); // 400 = invalid character(s)
+    }
+
+    #[test]
     fn decode_json_is_valid_and_matches() {
         if !db().is_loaded() {
             eprintln!("skipping: artifact not built");

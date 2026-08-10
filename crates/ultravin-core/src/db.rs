@@ -110,6 +110,9 @@ impl Db {
         // the boundary — every interned slice at its declared offsets. (The trusted
         // embedded blob skips this; it is built from `&str` by our importer.)
         validate_arena(archived)?;
+        // Bound the element ids so the lazily-built dense `element_index` cannot be
+        // driven to a huge allocation by a crafted artifact (see `check_element_ids`).
+        check_element_ids(archived)?;
         // SAFETY: just validated above; the borrow is converted to a raw pointer
         // into the buffer owned by `backing` (stable across the move below).
         let archive = unsafe {
@@ -199,6 +202,14 @@ impl Db {
     }
 
     /// Load an artifact from a file via memory map (external-data backend).
+    ///
+    /// # Safety contract
+    /// The returned [`Db`] holds a read-only [`memmap2::Mmap`] over `path` for its
+    /// entire lifetime and treats those bytes as immutable, already-validated rkyv.
+    /// The backing file must not be mutated or truncated while the `Db` lives —
+    /// another writer changing bytes out from under the zero-copy views would cause
+    /// torn reads or out-of-bounds slicing. A caller that cannot guarantee a stable
+    /// file should load an owned copy with [`Db::from_bytes`] instead.
     #[cfg(feature = "external-data")]
     pub fn open(path: &std::path::Path) -> Result<Db, String> {
         let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
@@ -528,6 +539,36 @@ fn validate_arena(a: &ArchivedVpicData) -> Result<(), String> {
                 .map_err(|_| format!("arena string {} is not valid UTF-8", i - 1))?;
         }
         prev = cur;
+    }
+    Ok(())
+}
+
+/// The lazily-built `element_index` ([`Db::element_index`]) is a dense
+/// `vec![-1i32; max_element_id + 1]`. On trusted data the real vPIC `Element.id`
+/// maximum is ~203, so that vec is a few hundred entries. An untrusted artifact
+/// carrying a crafted `Element.id` near `i32::MAX` would instead force a multi-GB
+/// allocation (OOM) on the first `element_by_id`. Reject any untrusted artifact
+/// whose largest element id exceeds this cap.
+///
+/// 100_000 is ~500x the real max — far beyond any plausible vPIC growth — while
+/// still bounding the dense index to <400 KB (4 bytes/entry). The trusted embedded
+/// blob skips this check (see `build_trusted`), so tightening the cap can only
+/// reject a hostile external artifact, never the baked-in data.
+const MAX_ELEMENT_ID: i32 = 100_000;
+
+/// Reject an untrusted artifact whose largest `Element.id` exceeds
+/// [`MAX_ELEMENT_ID`] (bounds the dense `element_index` allocation).
+fn check_element_ids(a: &ArchivedVpicData) -> Result<(), String> {
+    let max = a
+        .element
+        .iter()
+        .map(|e| e.id.to_native())
+        .max()
+        .unwrap_or(-1);
+    if max > MAX_ELEMENT_ID {
+        return Err(format!(
+            "element id {max} exceeds cap {MAX_ELEMENT_ID} (artifact rejected)"
+        ));
     }
     Ok(())
 }

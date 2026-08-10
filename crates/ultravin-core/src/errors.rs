@@ -560,13 +560,18 @@ pub fn compute_errors(
             }
             invalid_chars.push_str(&format!(", {}:{}", j, vb[j - 1]));
             // CorrectedVIN = left(cv, j-1) || '!' || substring(cv, j+1, 100).
-            let take_left = (j - 1).min(cv.len());
-            let mut newcv: Vec<char> = cv[..take_left].to_vec();
-            newcv.push('!');
-            if j < cv.len() {
-                newcv.extend_from_slice(&cv[j..]);
+            // For a monotonically increasing `j` that prefix+'!'+suffix rebuild is
+            // exactly an in-place stamp of `!` at index j-1 — O(1) here instead of
+            // rebuilding the whole Vec per bad char (which was O(vlen^2) on a long
+            // all-invalid input). When j-1 is at or past the current end (a
+            // corrected VIN shorter than the input), `left(cv, j-1)` caps at the
+            // length, so the `!` lands at the end rather than at j-1 — an append.
+            let idx = j - 1;
+            if idx < cv.len() {
+                cv[idx] = '!';
+            } else {
+                cv.push('!');
             }
-            cv = newcv;
         }
     }
     corrected_vin = cv.iter().collect();
@@ -703,5 +708,66 @@ mod collation_tests {
             .chars()
             .for_each(|c| set.insert(c));
         assert_eq!(set.to_string(), "_|0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+    }
+}
+
+#[cfg(test)]
+mod c5_stamp_tests {
+    /// The original C5 corrected-VIN rebuild, kept verbatim as the oracle the
+    /// shipped in-place stamp must reproduce byte-for-byte: for each bad position
+    /// `j` (1-indexed, ascending) `cv = left(cv, j-1) || '!' || substring(cv, j+1)`.
+    /// This is the O(vlen) rebuild-per-char that made a long invalid input O(vlen^2).
+    fn stamp_rebuild(mut cv: Vec<char>, bad: &[usize]) -> Vec<char> {
+        for &j in bad {
+            let take_left = (j - 1).min(cv.len());
+            let mut newcv: Vec<char> = cv[..take_left].to_vec();
+            newcv.push('!');
+            if j < cv.len() {
+                newcv.extend_from_slice(&cv[j..]);
+            }
+            cv = newcv;
+        }
+        cv
+    }
+
+    /// The O(1)-per-stamp form now shipped in `compute_errors`.
+    fn stamp_inplace(mut cv: Vec<char>, bad: &[usize]) -> Vec<char> {
+        for &j in bad {
+            let idx = j - 1;
+            if idx < cv.len() {
+                cv[idx] = '!';
+            } else {
+                cv.push('!');
+            }
+        }
+        cv
+    }
+
+    #[test]
+    fn inplace_stamp_matches_the_rebuild() {
+        // Covers in-range stamps, a stamp exactly at the last index, and the
+        // grow-past-end edge where the corrected VIN is shorter than the bad
+        // positions (the `!` must land at the end, not at j-1).
+        let cases: &[(&str, &[usize])] = &[
+            ("ABCDE", &[1]),
+            ("ABCDE", &[3]),
+            ("ABCDE", &[5]),
+            ("ABCDE", &[1, 3, 5]),
+            ("ABC", &[3]),    // stamp exactly at the end index -> replace last
+            ("ABC", &[4]),    // one past the end -> append
+            ("ABC", &[5]),    // two past the end -> still just appends at the end
+            ("ABC", &[2, 5]), // in-range then grow-past-end
+            ("ABC", &[4, 5, 6]),
+            ("ABC", &[2, 4, 6, 8]),
+            ("", &[1]), // degenerate empty start (transform still agrees)
+        ];
+        for (s, bad) in cases {
+            let cv: Vec<char> = s.chars().collect();
+            assert_eq!(
+                stamp_inplace(cv.clone(), bad),
+                stamp_rebuild(cv, bad),
+                "mismatch for cv={s:?} bad={bad:?}"
+            );
+        }
     }
 }
