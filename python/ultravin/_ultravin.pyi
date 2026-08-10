@@ -122,7 +122,8 @@ def pairwise(*, limit: int = 0) -> list[str]:
     per-position equivalence classes, which buy the interactions the decoder's
     own logic turns on (dedup, tiebreaks) at roughly 3x the row sweep.
 
-    ``limit`` stops early (0 = all ~1.7M, which takes minutes to build).
+    ``limit`` caps the result at that many VINs (0 = all ~1.7M, which takes
+    minutes to build).
     """
 
 def seeded(*, limit: int = 0) -> list[str]:
@@ -130,5 +131,6 @@ def seeded(*, limit: int = 0) -> list[str]:
 
     Each rule's own key seeds a VIN — the positions it pins stay pinned, so the
     rule is guaranteed to match — and the positions it leaves free are chosen to
-    knock out outstanding class pairs. ``limit`` stops early (0 = all ~1.7M).
+    knock out outstanding class pairs. ``limit`` caps the result at that many
+    VINs (0 = all ~1.7M).
     """

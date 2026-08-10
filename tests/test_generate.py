@@ -136,6 +136,13 @@ def test_pairwise_vins_are_valid_and_match_patterns() -> None:
     assert matched > len(sample) * 0.9, f"only {matched}/{len(sample)} matched a pattern"
 
 
+def test_limit_is_an_exact_cap() -> None:
+    # `limit` is a hard ceiling, not a per-schema-batch stopping point: the last
+    # schema's covering array must not push the result past the requested count.
+    assert len(ultravin.pairwise(limit=300)) <= 300
+    assert len(ultravin.seeded(limit=300)) <= 300
+
+
 def test_pairwise_pins_the_model_year_inside_the_schema_band() -> None:
     # Varying position 10 would move the VIN out of its schema's year band, which
     # tests year resolution rather than the pattern interaction pairwise is for.

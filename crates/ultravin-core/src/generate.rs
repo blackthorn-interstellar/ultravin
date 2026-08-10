@@ -759,8 +759,9 @@ fn covering_array(levels: &[usize]) -> Vec<Vec<usize>> {
 /// buys the interactions where the decoder's own logic lives (dedup, tiebreaks,
 /// an element read while resolving a sibling) at roughly 3x the row sweep.
 ///
-/// `limit` stops early (0 = the lot); the full run is ~1.7M VINs and minutes of
-/// work, which is more than a caller wanting a taste needs.
+/// `limit` caps the result at that many VINs (0 = the lot); the full run is
+/// ~1.7M VINs and minutes of work, which is more than a caller wanting a taste
+/// needs.
 pub fn pairwise(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
     let index = schema_to_wmi(db);
     let wmis = wmis_by_id(db);
@@ -792,6 +793,9 @@ pub fn pairwise(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
                 year,
             ));
         }
+    }
+    if limit > 0 {
+        out.truncate(limit);
     }
     out
 }
@@ -977,6 +981,9 @@ pub fn seeded(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
             let filled = fill_and_retire(&mut row, &levels, &mut uncovered);
             out.extend(emit(wmi, &classes, &filled, year));
         }
+    }
+    if limit > 0 {
+        out.truncate(limit);
     }
     out
 }
