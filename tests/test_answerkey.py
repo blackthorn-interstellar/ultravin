@@ -143,19 +143,41 @@ def test_verify_refuses_a_key_from_another_month(tmp_path: Path) -> None:
     assert exc.value.exit_code == 2
 
 
-def test_element_144_hashes_as_a_set_not_a_sorted_string() -> None:
-    # Element 144's byte order is the dump host's collation, not NHTSA's rules
-    # (docs/KNOWN_DEVIATIONS.md #3). The key must not freeze one host's order, or
-    # re-pointing the oracle silently invalidates it.
-    rows = [{"element_id": 144, "value": "_0129AZ", "attribute_id": "_0129AZ"}]
-    shuffled = [{"element_id": 144, "value": "0129AZ_", "attribute_id": "0129AZ_"}]
-    assert normalize.collation_agnostic(rows) == normalize.collation_agnostic(shuffled)
+def test_element_144_collation_reorder_still_collides() -> None:
+    # Element 144 renders each error position as a `(position:charset)` group. The
+    # order *within* a charset is the dump host's collation, not NHTSA's rules
+    # (docs/KNOWN_DEVIATIONS.md #3): SQL Server sorts `_` before the digits, a
+    # codepoint producer sorts it after. Those must normalize equal, or
+    # re-pointing the oracle silently invalidates the key.
+    rows = [{"element_id": 144, "value": "(6:_123456789)", "attribute_id": "(6:_123456789)"}]
+    reordered = [{"element_id": 144, "value": "(6:123456789_)", "attribute_id": "(6:123456789_)"}]
+    assert normalize.collation_agnostic(rows) == normalize.collation_agnostic(reordered)
+
+
+def test_element_144_position_assignment_is_not_collation() -> None:
+    # But which charset belongs to which position is data, not collation. Sorting
+    # the whole string used to erase it, so `(4:5)(5:4)` and `(4:4)(5:5)` hashed
+    # identically and a wrong element-144 output could pass the key. They must
+    # normalize (and so hash) differently.
+    a = [{"element_id": 144, "value": "(4:5)(5:4)", "attribute_id": "(4:5)(5:4)"}]
+    b = [{"element_id": 144, "value": "(4:4)(5:5)", "attribute_id": "(4:4)(5:5)"}]
+    assert normalize.collation_agnostic(a) != normalize.collation_agnostic(b)
 
 
 def test_element_144_still_compares_its_contents() -> None:
-    a = normalize.collation_agnostic([{"element_id": 144, "value": "_0129AZ"}])
-    b = normalize.collation_agnostic([{"element_id": 144, "value": "_0129A"}])
+    # Different charset *contents* (not just order) must still register as different.
+    a = normalize.collation_agnostic([{"element_id": 144, "value": "(6:_123456789)"}])
+    b = normalize.collation_agnostic([{"element_id": 144, "value": "(6:_12345678)"}])
     assert a != b
+
+
+def test_element_144_bare_charset_still_neutralized() -> None:
+    # A field with no parenthesized group (a bare charset) is sorted as one set.
+    # Element 144 always parenthesizes today, but the neutralization must not
+    # depend on that shape.
+    a = normalize.collation_agnostic([{"element_id": 144, "value": "_0129AZ"}])
+    b = normalize.collation_agnostic([{"element_id": 144, "value": "0129AZ_"}])
+    assert a == b
 
 
 def test_other_elements_keep_their_order() -> None:
