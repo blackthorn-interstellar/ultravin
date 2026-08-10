@@ -118,3 +118,6 @@ ENV/
 
 # Detached campaign runtime (state, logs, fail-logs, coverage)
 /campaign/
+
+# Claude Code session state (local permissions, locks, saved workflows)
+/.claude/
