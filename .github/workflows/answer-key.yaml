@@ -37,8 +37,7 @@ on:
         default: "0"
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 env:
   SHARDS: 16
@@ -63,9 +62,12 @@ jobs:
 
       - name: Resolve the month and dump
         id: month
+        env:
+          INPUT_MONTH: ${{ inputs.month }}
         run: |
-          month="${{ inputs.month }}"
+          month="$INPUT_MONTH"
           [ -n "$month" ] || month=$(python3 -c "import json;print(json.load(open('vpic/manifest.json'))['month'])")
+          [[ "$month" =~ ^[0-9]{4}_[0-9]{2}$ ]] || { echo "::error::month must be YYYY_MM"; exit 1; }
           echo "month=$month" >> "$GITHUB_OUTPUT"
           make download MONTH="$month"
 
@@ -86,12 +88,15 @@ jobs:
         run: make build-dev
 
       - name: Freeze this shard
+        env:
+          INPUT_LIMIT: ${{ inputs.limit || 0 }}
         run: |
+          [[ "$INPUT_LIMIT" =~ ^[0-9]+$ ]] || { echo "::error::limit must be a non-negative integer"; exit 1; }
           out="target/answerkey/shard-$(printf '%02d' ${{ matrix.shard }}).jsonl"
           uv run -- python -m scripts.parity.answerkey build \
             --out "$out" \
             --shard ${{ matrix.shard }} --shards ${{ env.SHARDS }} --workers 4 \
-            --limit ${{ inputs.limit || 0 }}
+            --limit "$INPUT_LIMIT"
           # A header with no answers means the corpus came out empty — almost
           # always a missing data artifact. Say so here rather than letting the
           # publish job die on a zero count with no message.
@@ -128,9 +133,12 @@ jobs:
       - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
       - name: Resolve the month and dump
         id: month
+        env:
+          INPUT_MONTH: ${{ inputs.month }}
         run: |
-          month="${{ inputs.month }}"
+          month="$INPUT_MONTH"
           [ -n "$month" ] || month=$(python3 -c "import json;print(json.load(open('vpic/manifest.json'))['month'])")
+          [[ "$month" =~ ^[0-9]{4}_[0-9]{2}$ ]] || { echo "::error::month must be YYYY_MM"; exit 1; }
           echo "month=$month" >> "$GITHUB_OUTPUT"
           make download MONTH="$month"
       - uses: ./.github/actions/build-data
@@ -160,6 +168,9 @@ jobs:
     needs: [build, equivalence]
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

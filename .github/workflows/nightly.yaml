@@ -45,23 +45,27 @@ concurrency:
 permissions: {}
 
 jobs:
+  # Validate lane: bump the lockfiles inside the cooldown and run `make check`
+  # with the freshly bumped dependencies. That build runs UNTRUSTED code (build
+  # scripts, proc macros, package entry points from just-bumped crates/wheels),
+  # so this job holds NO write token and checks out WITHOUT persisted
+  # credentials — untrusted code and the write token must never share a VM.
+  # Step-scoping a token is not enough: same-VM code can read another process's
+  # env. deps-publish (a separate job, clean VM, no bumped code) carries the
+  # token and opens the PR from the lockfiles this job banks into the artifact.
   deps:
     if: github.event_name == 'schedule' || inputs.lane != 'fixes'
     runs-on: ubuntu-latest
     timeout-minutes: 75
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write # gh label create
-      actions: write # dispatch ci.yaml/data-review.yaml, approve gated runs
+      contents: read
     outputs:
       changed: ${{ steps.bump.outputs.changed }}
-    env:
-      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v5
@@ -91,15 +95,54 @@ jobs:
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
-          # Bank the bumped lockfiles for the fix agent before anything can fail.
+          # Bank the bumped lockfiles for deps-publish and the fix agent before
+          # anything can fail.
           cp Cargo.lock uv.lock target/deps/
       - name: Check with bumped dependencies
         if: steps.bump.outputs.changed == 'true'
         run: |
           set -o pipefail
           make check 2>&1 | tee target/deps/check.log
+      - name: Capture failure context
+        if: failure() && steps.bump.outputs.changed == 'true'
+        run: git diff -- Cargo.lock uv.lock > target/deps/lock.diff || true
+      - name: Evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-deps-evidence
+          path: target/deps/
+          if-no-files-found: ignore
+
+  # Publish lane: open the deps PR from the lockfiles the validate job banked.
+  # This job runs NO bumped/untrusted code — a clean checkout plus git and gh —
+  # so it is the only place the write token lives. It runs only when validate
+  # passed (implicit success() on `needs`, since the `if` uses no status
+  # function) AND the bump actually changed the lockfiles.
+  deps-publish:
+    needs: deps
+    if: needs.deps.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write # gh label create
+      actions: write # dispatch ci.yaml/data-review.yaml, approve gated runs
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Bumped lockfiles from the validate job
+        uses: actions/download-artifact@v4
+        with:
+          name: nightly-deps-evidence
+          path: target/deps/
+      - name: Apply the bumped lockfiles
+        run: cp target/deps/Cargo.lock target/deps/uv.lock .
       - name: Branch, push, pull request
-        if: steps.bump.outputs.changed == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -124,16 +167,6 @@ jobs:
             gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
               || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
           done
-      - name: Capture failure context
-        if: failure() && steps.bump.outputs.changed == 'true'
-        run: git diff -- Cargo.lock uv.lock > target/deps/lock.diff || true
-      - name: Evidence artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: nightly-deps-evidence
-          path: target/deps/
-          if-no-files-found: ignore
 
   deps-fix:
     needs: deps
@@ -281,8 +314,8 @@ jobs:
   # on the branch until they are green. Automerge (mechanical bumps only)
   # happens here, after green, not before.
   deps-checks:
-    needs: [deps, deps-fix]
-    if: always() && needs.deps.outputs.changed == 'true' && (needs.deps.result == 'success' || needs['deps-fix'].result == 'success')
+    needs: [deps, deps-publish, deps-fix]
+    if: always() && needs.deps.outputs.changed == 'true' && (needs['deps-publish'].result == 'success' || needs['deps-fix'].result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 170
     environment: data-refresh
