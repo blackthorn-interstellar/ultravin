@@ -303,14 +303,19 @@ def classify(old: dict, new: dict, changed: list[str]) -> Classification:
 # names each changed value below.
 
 
-def freeze_lookups(dump: Path) -> dict[str, dict[str, str]]:
-    """{table: {first-column: rest-of-row}} for every vpic table with <= LOOKUP_MAX_ROWS rows.
+def freeze_lookups(dump: Path) -> dict[str, list[list[str]]]:
+    """{table: sorted list of full rows} for every vpic table with <= LOOKUP_MAX_ROWS rows.
 
-    Raw COPY text, untouched: the file is a diff surface, not a parser."""
+    Rows are raw COPY text split on tabs — otherwise untouched: the file is a diff
+    surface, not a parser. Whole rows are kept (not just {first-column: rest}) so
+    composite-key tables (e.g. defs_model, keyed by make+id+from_year+mode) don't
+    collapse when a later row shares a first column, and the cap counts real rows
+    rather than distinct first columns."""
     copy_re = re.compile(r"^COPY vpic\.(\w+) \(")
-    tables: dict[str, dict[str, str]] = {}
+    tables: dict[str, list[list[str]]] = {}
     name = ""
-    rows: dict[str, str] | None = None
+    rows: list[list[str]] | None = None
+    capped = False  # this table exceeded the cap; consume to \. but don't keep it
     with zipfile.ZipFile(dump) as z:
         member = next(n for n in z.namelist() if n.endswith(".sql"))
         with z.open(member) as raw:
@@ -318,14 +323,14 @@ def freeze_lookups(dump: Path) -> dict[str, dict[str, str]]:
                 if rows is None:
                     m = copy_re.match(line)
                     if m:
-                        name, rows = m.group(1), {}
+                        name, rows, capped = m.group(1), [], False
                 elif line.startswith("\\."):
-                    if len(rows) <= LOOKUP_MAX_ROWS:
-                        tables[name] = rows
+                    if not capped:
+                        tables[name] = sorted(rows)
                     rows = None
-                elif len(rows) <= LOOKUP_MAX_ROWS:
-                    key, _, rest = line.rstrip("\n").partition("\t")
-                    rows[key] = rest
+                elif not capped:
+                    rows.append(line.rstrip("\n").split("\t"))
+                    capped = len(rows) > LOOKUP_MAX_ROWS
     return tables
 
 
@@ -343,18 +348,46 @@ class LookupDiff:
     added: list[tuple[str, int]] = field(default_factory=list)
     removed: list[tuple[str, int]] = field(default_factory=list)
     baseline: bool = False  # first refresh: nothing committed to diff against
+    migrated: bool = False  # pinned freeze predates full-row storage; per-row diff skipped
+
+
+def _keyed_rows(rows: list[list[str]]) -> dict[str, str] | None:
+    """{first-column: rest-of-row} when the first column is a unique id, else None.
+
+    Single-column-keyed lookups (the label tables where a rename matters) get a
+    readable id→value diff. Composite-key tables have no such id, so their diff
+    falls back to counting whole rows added/removed."""
+    ids = [r[0] for r in rows if r]
+    if len(set(ids)) != len(ids):
+        return None
+    return {r[0]: "\t".join(r[1:]) for r in rows if r}
+
+
+def _is_keyed_shape(snapshot: dict) -> bool:
+    """True for the pre-migration {table: {id: rest}} freeze (table values are dicts)."""
+    return any(isinstance(v, dict) for v in snapshot.values())
 
 
 def diff_lookups(old: dict, new: dict) -> LookupDiff:
+    if _is_keyed_shape(old) != _is_keyed_shape(new):
+        # The pinned freeze predates full-row storage; a per-row diff across the
+        # two shapes would be a wall of noise, so skip it for this one cycle.
+        return LookupDiff(migrated=True)
     d = LookupDiff()
     order = lambda k: (len(k), k)  # noqa: E731 — numeric-string ids sort numerically
     for t in sorted(set(old) | set(new)):
-        o, n = old.get(t, {}), new.get(t, {})
-        d.changed += ((t, k, o[k], n[k]) for k in sorted(o.keys() & n.keys(), key=order) if o[k] != n[k])
-        if len(n.keys() - o.keys()):
-            d.added.append((t, len(n.keys() - o.keys())))
-        if len(o.keys() - n.keys()):
-            d.removed.append((t, len(o.keys() - n.keys())))
+        o_rows, n_rows = old.get(t, []), new.get(t, [])
+        o, n = _keyed_rows(o_rows), _keyed_rows(n_rows)
+        if o is not None and n is not None:
+            d.changed += ((t, k, o[k], n[k]) for k in sorted(o.keys() & n.keys(), key=order) if o[k] != n[k])
+            added, removed = len(n.keys() - o.keys()), len(o.keys() - n.keys())
+        else:  # composite key: no stable id, so diff whole rows as a set
+            o_set, n_set = {tuple(r) for r in o_rows}, {tuple(r) for r in n_rows}
+            added, removed = len(n_set - o_set), len(o_set - n_set)
+        if added:
+            d.added.append((t, added))
+        if removed:
+            d.removed.append((t, removed))
     return d
 
 
@@ -362,6 +395,15 @@ def render_lookups(d: LookupDiff) -> list[str]:
     lines = ["## Lookup value changes", ""]
     if d.baseline:
         return [*lines, "`vpic/lookups.json` baseline frozen — value diffs appear from the next refresh.", ""]
+    if d.migrated:
+        return [
+            *lines,
+            (
+                "Lookup snapshot format migrated to full-row storage — per-row value diff "
+                "unavailable this cycle; compare the `vpic/lookups.json` diff directly."
+            ),
+            "",
+        ]
     shown = d.changed[:LOOKUP_REPORT_CAP]
     lines += [f"- `{t}[{k}]`: “{a}” → “{b}”" for t, k, a, b in shown]
     if len(d.changed) > len(shown):

@@ -189,21 +189,79 @@ def test_freeze_lookups_parses_and_caps(monkeypatch, tmp_path) -> None:
     with zipfile.ZipFile(dump, "w") as z:
         z.writestr("dump.sql", sql)
     assert refresh.freeze_lookups(dump) == {
-        "bodystyle": {"7": "Sport Utility Vehicle [SUV]/Multipurpose Vehicle [MPV]", "5": "Hatchback"},
-        "country": {"1": "Albania\t5"},  # multi-column tail kept raw
-        "decodingoutput": {},
+        # full rows, split on tabs and sorted (row "5" sorts before row "7")
+        "bodystyle": [["5", "Hatchback"], ["7", "Sport Utility Vehicle [SUV]/Multipurpose Vehicle [MPV]"]],
+        "country": [["1", "Albania", "5"]],  # every column kept, not just a first/rest split
+        "decodingoutput": [],
         # pattern: 3 rows > cap of 2 — dropped; public.notvpic: wrong schema — ignored
     }
 
 
+def test_freeze_lookups_keeps_composite_key_rows(monkeypatch, tmp_path) -> None:
+    """Rows sharing a first column must all survive, and the cap counts real rows."""
+    monkeypatch.setattr(refresh, "LOOKUP_MAX_ROWS", 3)
+    sql = (
+        # defs_model-style: same first column (make), distinct rows
+        "COPY vpic.defs_model (make, id, fromyear, name) FROM stdin;\n"
+        "440\t1\t2010\tCivic\n"
+        "440\t2\t2011\tAccord\n"
+        "\\.\n"
+        # 4 real rows but only 1 distinct first column: the old first-column count
+        # would call this a 1-row "small table" and collapse it; the real count drops it.
+        "COPY vpic.wmi_make (wmi, make) FROM stdin;\n"
+        "1XK\tA\n"
+        "1XK\tB\n"
+        "1XK\tC\n"
+        "1XK\tD\n"
+        "\\.\n"
+    )
+    dump = tmp_path / "dump.zip"
+    with zipfile.ZipFile(dump, "w") as z:
+        z.writestr("dump.sql", sql)
+    frozen = refresh.freeze_lookups(dump)
+    assert frozen["defs_model"] == [["440", "1", "2010", "Civic"], ["440", "2", "2011", "Accord"]]
+    assert "wmi_make" not in frozen  # 4 rows > cap of 3
+
+
 def test_diff_lookups_orders_ids_numerically() -> None:
-    old = {"bodystyle": {"2": "(SUV)", "10": "Van (old)", "1": "same"}, "gone": {"1": "x"}}
-    new = {"bodystyle": {"2": "[SUV]", "10": "Van (new)", "1": "same", "9": "added"}, "fresh": {"1": "y", "2": "z"}}
+    old = {
+        "bodystyle": [["2", "(SUV)"], ["10", "Van (old)"], ["1", "same"]],
+        "gone": [["1", "x"]],
+    }
+    new = {
+        "bodystyle": [["2", "[SUV]"], ["10", "Van (new)"], ["1", "same"], ["9", "added"]],
+        "fresh": [["1", "y"], ["2", "z"]],
+    }
     d = refresh.diff_lookups(old, new)
     assert d.changed == [("bodystyle", "2", "(SUV)", "[SUV]"), ("bodystyle", "10", "Van (old)", "Van (new)")]
     assert d.added == [("bodystyle", 1), ("fresh", 2)]
     assert d.removed == [("gone", 1)]
     assert not d.baseline
+    assert not d.migrated
+
+
+def test_diff_lookups_composite_key_counts_whole_rows() -> None:
+    """Tables whose first column repeats have no id, so diffs count added/removed rows."""
+    old = {"defs_model": [["440", "1", "Civic"], ["440", "2", "Accord"]]}
+    new = {"defs_model": [["440", "1", "Civic"], ["440", "2", "Accord Hybrid"], ["440", "3", "CR-V"]]}
+    d = refresh.diff_lookups(old, new)
+    assert d.changed == []  # no stable id to attribute a value edit to
+    assert d.added == [("defs_model", 2)]  # the renamed row + the new row
+    assert d.removed == [("defs_model", 1)]  # the pre-rename row
+
+
+def test_diff_lookups_detects_format_migration() -> None:
+    """Old-shape pin (dict values) vs new-shape freeze (list values) degrades, not crashes."""
+    old = {"bodystyle": {"7": "x (SUV)"}}  # pre-migration {id: rest}
+    new = {"bodystyle": [["7", "x [SUV]"]]}  # post-migration full rows
+    d = refresh.diff_lookups(old, new)
+    assert d.migrated
+    assert d.changed == []
+    assert d.added == []
+    assert d.removed == []
+    md = "\n".join(refresh.render_lookups(d))
+    assert "migrated" in md.lower()
+    assert "## Gates" not in md  # renders cleanly, no wall of false changes
 
 
 def test_render_lookups_changed_values_and_cap() -> None:
