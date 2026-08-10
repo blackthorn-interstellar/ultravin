@@ -68,7 +68,8 @@ case "$cmd" in
   decode)
     vin="${1:?$(usage)}"
     docker compose exec -T "$SVC" psql -P pager=off -U postgres -d vpic \
-      -c "select variable, value from vpic.spvindecode('$vin') where coalesce(value,'') <> '' order by itemelementid;"
+      --set=vin="$vin" \
+      -c "select variable, value from vpic.spvindecode(:'vin') where coalesce(value,'') <> '' order by itemelementid;"
     ;;
   psql)
     docker compose exec -T "$SVC" psql -U postgres -d vpic "$@"

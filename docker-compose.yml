@@ -59,7 +59,7 @@ x-oracle: &oracle
 services:
   oracle:
     <<: *oracle
-    ports: ["55432:5432"]
+    ports: ["127.0.0.1:55432:5432"]
     # PGDATA on tmpfs (ORACLE_TUNING step 3): removes the file create/unlink
     # syscalls behind per-decode temp-table relfilenodes. Primary only — tmpfs
     # pages come out of the Docker VM's RAM, and five of these at ~2.2 GB apiece
@@ -71,13 +71,13 @@ services:
       - /var/lib/postgresql/data:size=8g
   oracle2:
     <<: *oracle
-    ports: ["55433:5432"]
+    ports: ["127.0.0.1:55433:5432"]
   oracle3:
     <<: *oracle
-    ports: ["55434:5432"]
+    ports: ["127.0.0.1:55434:5432"]
   oracle4:
     <<: *oracle
-    ports: ["55435:5432"]
+    ports: ["127.0.0.1:55435:5432"]
   oracle5:
     <<: *oracle
-    ports: ["55436:5432"]
+    ports: ["127.0.0.1:55436:5432"]
