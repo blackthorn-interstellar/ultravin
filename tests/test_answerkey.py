@@ -96,3 +96,56 @@ def test_element_144_still_compares_its_contents() -> None:
 def test_other_elements_keep_their_order() -> None:
     rows = [{"element_id": 143, "value": "BA"}]
     assert normalize.collation_agnostic(rows) == rows
+
+
+def _write_key(path: Path, pairs: list[tuple[str, str]]) -> Path:
+    with path.open("w") as fh:
+        fh.write(json.dumps({"month": "m", "artifact_blake3": "art"}) + "\n")
+        for vin, digest in pairs:
+            fh.write(json.dumps([vin, digest]) + "\n")
+    return path
+
+
+def test_compare_agrees_on_identical_keys(tmp_path: Path, capsys) -> None:
+    a = _write_key(tmp_path / "a.jsonl", [("V1", "h1"), ("V2", "h2")])
+    b = _write_key(tmp_path / "b.jsonl", [("V1", "h1"), ("V2", "h2")])
+    answerkey.compare(a=str(a), b=str(b))  # no raise == agreement
+    assert "agree on every VIN" in capsys.readouterr().out
+
+
+def test_compare_flags_a_hash_mismatch(tmp_path: Path) -> None:
+    a = _write_key(tmp_path / "a.jsonl", [("V1", "h1"), ("V2", "h2")])
+    b = _write_key(tmp_path / "b.jsonl", [("V1", "h1"), ("V2", "CHANGED")])
+    with pytest.raises(typer.Exit) as exc:
+        answerkey.compare(a=str(a), b=str(b))
+    assert exc.value.exit_code == 1
+
+
+def test_compare_rejects_duplicate_vins(tmp_path: Path, capsys) -> None:
+    # dict() would silently drop the duplicate; a malformed key must fail, not pass.
+    a = _write_key(tmp_path / "a.jsonl", [("V1", "h1"), ("V1", "h1"), ("V2", "h2")])
+    b = _write_key(tmp_path / "b.jsonl", [("V1", "h1"), ("V2", "h2")])
+    with pytest.raises(typer.Exit) as exc:
+        answerkey.compare(a=str(a), b=str(b))
+    assert exc.value.exit_code == 2
+    err = capsys.readouterr().err
+    assert "duplicate" in err
+    assert "V1" in err
+
+
+def test_compare_fails_when_one_side_drops_rows(tmp_path: Path, capsys) -> None:
+    # The exact regression: a rewrite that drops a VIN used to pass on the overlap.
+    a = _write_key(tmp_path / "a.jsonl", [("V1", "h1"), ("V2", "h2"), ("V3", "h3")])
+    b = _write_key(tmp_path / "b.jsonl", [("V1", "h1"), ("V2", "h2")])
+    with pytest.raises(typer.Exit) as exc:
+        answerkey.compare(a=str(a), b=str(b))
+    assert exc.value.exit_code == 1
+    assert "V3" in capsys.readouterr().err
+
+
+def test_compare_rejects_keys_with_no_overlap(tmp_path: Path) -> None:
+    a = _write_key(tmp_path / "a.jsonl", [("V1", "h1")])
+    b = _write_key(tmp_path / "b.jsonl", [("V2", "h2")])
+    with pytest.raises(typer.Exit) as exc:
+        answerkey.compare(a=str(a), b=str(b))
+    assert exc.value.exit_code == 2

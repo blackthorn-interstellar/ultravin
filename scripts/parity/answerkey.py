@@ -30,6 +30,7 @@ import json
 import multiprocessing as mp
 import subprocess
 import time
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -245,6 +246,12 @@ def verify(
     typer.echo("every answer matches")
 
 
+def _duplicate_vins(entries: list[tuple[str, str]]) -> list[str]:
+    """VINs that appear more than once (a malformed key: dict() would hide the loss)."""
+    counts = Counter(vin for vin, _ in entries)
+    return sorted(vin for vin, n in counts.items() if n > 1)
+
+
 @app.command()
 def compare(
     a: str = typer.Option(..., help="one key"),
@@ -256,20 +263,40 @@ def compare(
     frozen from the dump's procedures untouched and from the rewrite, and any
     difference means the rewrite is not the equivalence it claims to be — on this
     month's data, not on the sample someone measured once.
+
+    Fail-closed. Both keys cover the same corpus slice by construction, so a
+    duplicate VIN (a malformed key) or differing VIN sets (the rewrite dropped or
+    added rows) is itself a failure — not something to collapse with dict() or
+    print and pass. Exit 1 means the two genuinely disagree (a VIN's hash differs,
+    or one side is missing VINs the other has); exit 2 means the comparison could
+    not be trusted (a malformed key, or no VINs in common at all).
     """
     _, left = read_key(Path(a))
     _, right = read_key(Path(b))
+
+    for side, entries in (("a", left), ("b", right)):
+        dups = _duplicate_vins(entries)
+        if dups:
+            typer.echo(f"key {side} has {len(dups):,} duplicate VIN(s): {dups[:20]}", err=True)
+            raise typer.Exit(2)
+
     lmap, rmap = dict(left), dict(right)
+    only_a = sorted(lmap.keys() - rmap.keys())
+    only_b = sorted(rmap.keys() - lmap.keys())
     shared = lmap.keys() & rmap.keys()
     if not shared:
         typer.echo("the two keys share no VINs — nothing was compared", err=True)
         raise typer.Exit(2)
-    differing = sorted(v for v in shared if lmap[v] != rmap[v])
-    only = lmap.keys() ^ rmap.keys()
+    if only_a or only_b:
+        typer.echo(f"the keys cover different VINs: {len(only_a):,} only in a, {len(only_b):,} only in b", err=True)
+        if only_a:
+            typer.echo(f"  only in a: {only_a[:10]}", err=True)
+        if only_b:
+            typer.echo(f"  only in b: {only_b[:10]}", err=True)
+        raise typer.Exit(1)
 
+    differing = sorted(v for v in shared if lmap[v] != rmap[v])
     typer.echo(f"{len(shared):,} VINs in both; {len(differing):,} differ")
-    if only:
-        typer.echo(f"{len(only):,} VINs are in only one of them", err=True)
     if differing:
         for vin in differing[:20]:
             typer.echo(f"  {vin}: {lmap[vin]} != {rmap[vin]}", err=True)
