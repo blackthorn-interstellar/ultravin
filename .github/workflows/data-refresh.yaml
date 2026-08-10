@@ -140,7 +140,7 @@ jobs:
           # queued check suites hold the required contexts in "expected" state,
           # blocking the merge. Approve them so they run instead of dangling.
           head=$(gh pr view "data/$MONTH" --json headRefOid --jq .headRefOid)
-          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[].id'); do
+          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml") | .id'); do
             gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
               || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
           done
@@ -325,7 +325,7 @@ jobs:
           gh workflow run ci.yaml --ref "data/$MONTH"
           gh workflow run data-review.yaml -f pr="$(gh pr view "data/$MONTH" --json number --jq .number)"
           head=$(gh pr view "data/$MONTH" --json headRefOid --jq .headRefOid)
-          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[].id'); do
+          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml") | .id'); do
             gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
               || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
           done

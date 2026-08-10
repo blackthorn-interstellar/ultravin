@@ -3,7 +3,7 @@ description: >
   Materialize and verify the embedded crates/ultravin-core/data/vpic.rkyv from the
   dump pinned in vpic/manifest.json. Self-verifying (dump sha256 + artifact blake3)
   and cached by the artifact's blake3, so an unchanged pin skips the download and
-  import entirely. Requires a Rust toolchain and jq (preinstalled on GH runners).
+  import entirely. Requires a Rust toolchain, jq, and python3 (preinstalled on GH runners).
 
 runs:
   using: composite
@@ -22,7 +22,7 @@ runs:
     # cache key: it changes only when the dump (or importer output) changes.
     - name: Cache built artifact
       id: cache
-      uses: actions/cache@v4
+      uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: crates/ultravin-core/data/vpic.rkyv
         key: vpic-artifact-${{ steps.meta.outputs.artifact_blake3 }}
@@ -52,3 +52,48 @@ runs:
     - name: Confirm artifact present
       shell: bash
       run: test -s crates/ultravin-core/data/vpic.rkyv
+    # Independent integrity gate — UNCONDITIONAL (no cache-hit guard): on a cache
+    # HIT this is the ONLY verification that runs, so a poisoned cache entry cannot
+    # ship unverified into the wheels/sdist; on a MISS it's a cheap belt-and-braces
+    # check. We re-hash the restored bytes ourselves rather than trusting any
+    # importer-emitted manifest. The header layout and hash scheme below MUST stay
+    # in sync with `serialize_artifact` in crates/ultravin-core/src/tables.rs (the
+    # source of truth): 64-byte header [magic "ULTRAVIN"(8) | format u16 | builder
+    # version u32 | blake3(32) | ...], rkyv body at [64:], and the recorded digest
+    # is blake3(body || builder_version_le) — NOT a plain whole-file hash. The
+    # magic + format asserts are load-bearing: any future format/scheme change trips
+    # them here loudly instead of letting this check silently drift.
+    - name: Verify restored artifact integrity (independent re-hash)
+      shell: bash
+      run: |
+        # blake3 isn't in the Python stdlib, and uv is NOT guaranteed on every
+        # caller's runner (release.yaml's build-data job sets up only Rust + jq;
+        # uv is not preinstalled on ubuntu-latest), so pull the prebuilt blake3
+        # wheel into a throwaway venv via the preinstalled python3 — a genuinely
+        # independent implementation, no compile, and no dependency on the caller.
+        python3 -m venv "$RUNNER_TEMP/b3venv"
+        "$RUNNER_TEMP/b3venv/bin/pip" install --quiet --disable-pip-version-check blake3
+        want="$(jq -r .artifact_blake3 vpic/manifest.json)"
+        export want
+        "$RUNNER_TEMP/b3venv/bin/python" - <<'PY'
+        import os
+        import blake3
+
+        want = os.environ["want"].strip().lower()
+        data = open("crates/ultravin-core/data/vpic.rkyv", "rb").read()
+        if data[:8] != b"ULTRAVIN":
+            print(f"::error::vpic.rkyv bad magic {data[:8]!r}; expected b'ULTRAVIN'")
+            raise SystemExit(1)
+        fmt = int.from_bytes(data[8:10], "little")
+        if fmt != 1:
+            print(
+                f"::error::vpic.rkyv format {fmt} != 1 — header/hash scheme changed; "
+                "update this step to match serialize_artifact in tables.rs"
+            )
+            raise SystemExit(1)
+        got = blake3.blake3(data[64:] + data[10:14]).hexdigest().lower()
+        if got != want:
+            print(f"::error::vpic.rkyv blake3 mismatch: got {got}, want {want}")
+            raise SystemExit(1)
+        print(f"artifact verified (independent re-hash): {got}")
+        PY

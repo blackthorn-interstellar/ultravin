@@ -29,10 +29,43 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Branch protection does not cover tags: a pushed vX.Y.Z can point at any
+  # commit, and this workflow builds and trusted-publishes from the tagged
+  # commit — so a tag at an arbitrary, unreviewed commit would otherwise ship to
+  # PyPI, bypassing code review. Refuse unless the built commit is reachable from
+  # master. Every job on the publish path needs this, so an unauthorized tag
+  # never even starts the wheel matrix. Only tag pushes publish (the release job
+  # is tag-gated); a workflow_dispatch dry-run runs on a branch ref, never
+  # publishes, and is exempt — enforcing ancestry there would only wrongly block
+  # a legit dry-run from an unmerged branch.
+  authorize:
+    name: authorize (tag reachable from master)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Refuse a tag not reachable from master
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/master:refs/remotes/origin/master
+          if git merge-base --is-ancestor "$GITHUB_SHA" origin/master; then
+            echo "authorized: $GITHUB_SHA is reachable from master"
+          else
+            echo "::error::tag commit $GITHUB_SHA is not on master — refusing to release"
+            exit 1
+          fi
+
   # Nothing publishes unless the Rust side is clean. Data-dependent tests skip
   # gracefully without the artifact (see tests/decode.rs), so this needs no data.
   gate:
     name: rust gate (fmt, clippy, test)
+    needs: authorize
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -53,6 +86,7 @@ jobs:
   # of the dump bytes, so a matching input guarantees a byte-identical output.
   build-data:
     name: build data artifact
+    needs: authorize
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
@@ -73,7 +107,7 @@ jobs:
   # default cross-gcc. fail-fast is off so one platform's failure spares the rest.
   wheels:
     name: wheels (${{ matrix.kind }}, ${{ matrix.target }})
-    needs: build-data
+    needs: [authorize, build-data]
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -212,7 +246,7 @@ jobs:
 
   sdist:
     name: sdist
-    needs: build-data
+    needs: [authorize, build-data]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1

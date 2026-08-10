@@ -12,6 +12,7 @@ permissions: {}
 
 jobs:
   selfcheck:
+    if: github.ref == 'refs/heads/master' # dispatch only from master; never run a non-default ref's code with the write token
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: data-refresh # also proves the master-pinned key environment mounts
@@ -22,6 +23,8 @@ jobs:
       HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false # keep the write token out of .git/config so detect/key-check steps can't reach it
       - name: detect runs on a bare runner
         run: python3 scripts/refresh.py detect
       - name: ANTHROPIC_API_KEY present and valid
@@ -46,6 +49,7 @@ jobs:
           br="selfcheck/canary-${{ github.run_id }}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          gh auth setup-git # checkout ran persist-credentials:false; authenticate git push via GH_TOKEN, not a persisted remote
           git checkout -b "$br"
           date -u > .github/selfcheck-canary
           git add .github/selfcheck-canary

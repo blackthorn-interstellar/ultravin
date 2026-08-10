@@ -163,7 +163,7 @@ jobs:
           gh workflow run ci.yaml --ref deps/nightly
           gh workflow run data-review.yaml -f pr="$(gh pr view deps/nightly --json number --jq .number)"
           head=$(gh pr view deps/nightly --json headRefOid --jq .headRefOid)
-          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[].id'); do
+          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml") | .id'); do
             gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
               || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
           done
@@ -297,7 +297,7 @@ jobs:
           gh workflow run ci.yaml --ref deps/nightly
           gh workflow run data-review.yaml -f pr="$(gh pr view deps/nightly --json number --jq .number)"
           head=$(gh pr view deps/nightly --json headRefOid --jq .headRefOid)
-          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[].id'); do
+          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml") | .id'); do
             gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
               || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
           done
@@ -406,7 +406,7 @@ jobs:
                `gh workflow run data-review.yaml -f pr="$(gh pr view deps/nightly --json number --jq .number)"`
                then approve any approval-gated runs on the new head:
                `head=$(gh pr view deps/nightly --json headRefOid --jq .headRefOid)`
-               `for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[].id'); do gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve"; done`
+               `for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml") | .id'); do gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve"; done`
             5. Wait for them in the FOREGROUND:
                `gh pr checks deps/nightly --watch --interval 30`
                A full CI cycle is ~20 minutes — that is ONE blocking command;
@@ -700,7 +700,7 @@ jobs:
             `gh workflow run data-review.yaml -f pr="$(gh pr view ${{ steps.gate.outputs.branch }} --json number --jq .number)"`
             approve any approval-gated runs on the head:
             `head=$(gh pr view ${{ steps.gate.outputs.branch }} --json headRefOid --jq .headRefOid)`
-            `for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[].id'); do gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve"; done`
+            `for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml") | .id'); do gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve"; done`
             then wait in the FOREGROUND:
             `gh pr checks ${{ steps.gate.outputs.branch }} --watch --interval 30`
             (a full CI cycle is ~20 minutes — one blocking command). If a
@@ -742,7 +742,7 @@ jobs:
           gh workflow run ci.yaml --ref "$BRANCH"
           gh workflow run data-review.yaml -f pr="$(gh pr view "$BRANCH" --json number --jq .number)"
           head=$(gh pr view "$BRANCH" --json headRefOid --jq .headRefOid)
-          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[].id'); do
+          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml") | .id'); do
             gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
               || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
           done
