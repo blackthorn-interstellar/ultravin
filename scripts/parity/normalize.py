@@ -11,6 +11,7 @@ by element id.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any
 
@@ -35,14 +36,18 @@ FIELDS = (
 
 # Elements that carry error/correction state rather than vehicle attributes.
 ERROR_ELEMENTS = {142, 143, 144, 156, 191}
-# Element 144 ("possible values") renders a character set as a string, so its
-# byte order is whatever collation the server it ran on happens to use. vPIC's
-# SQL Server sorts `_` before the digits; no Postgres collation reproduces that
-# *and* the key tiebreak in element 143 at the same time, so the oracle's order
-# for this one field is an artifact of the dump host, not of NHTSA's rules. Sort
-# its characters before hashing: what the field *contains* is data and is
-# compared; the order it prints in is pinned by the unit tests in errors.rs and
-# by docs/KNOWN_DEVIATIONS.md, not by the oracle.
+# Element 144 ("possible values") renders each error position as a
+# `(position:charset)` group and concatenates them in ascending error position —
+# e.g. `(6:_123456789)` or `(4:5)(5:4)`. The characters *inside* one charset
+# print in whatever collation the server it ran on happens to use: vPIC's SQL
+# Server sorts `_` before the digits; no Postgres collation reproduces that *and*
+# the key tiebreak in element 143 at the same time, so that within-charset order
+# is an artifact of the dump host, not of NHTSA's rules. Sort only the characters
+# inside each charset before hashing, and keep the group order and the position
+# numbers intact: which charset belongs to which position is data, so flattening
+# the whole string would let `(4:5)(5:4)` and `(4:4)(5:5)` hash alike and a wrong
+# element-144 output slip past the key. The within-charset print order is pinned
+# by the unit tests in errors.rs and by docs/KNOWN_DEVIATIONS.md, not by the oracle.
 COLLATION_DEPENDENT_ELEMENTS = {144}
 # Displacement conversions (CI/L derived from CC) — the priority-100 Conversion pass.
 CONVERSION_ELEMENTS = {12, 13}
@@ -156,8 +161,26 @@ def _group_rank(group_name: Any) -> int:
     return _GROUP_RANK.get(str(group_name), 99)
 
 
+# One element-144 group: `(position:charset)`. The position is bounded by `:`
+# and the charset by the closing paren; neither `:` nor `)` occurs inside a
+# charset (it is drawn from `_|0-9A-Z`, and `|` never reaches this payload).
+_ELEMENT_144_GROUP = re.compile(r"\(([^:]*):([^)]*)\)")
+
+
+def _collation_agnostic_field(field: str) -> str:
+    """Neutralize element 144's within-charset collation order, and nothing else.
+
+    Sort only the characters inside each `(position:charset)` group, preserving
+    the group order (ascending error position) and the position numbers. A field
+    with no group — a bare charset — is treated as one set and sorted whole.
+    """
+    if "(" in field:
+        return _ELEMENT_144_GROUP.sub(lambda m: f"({m.group(1)}:{''.join(sorted(m.group(2)))})", field)
+    return "".join(sorted(field))
+
+
 def collation_agnostic(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Rows with the collation-dependent fields reduced to their character sets.
+    """Rows with element 144's collation-dependent charsets reduced to a set order.
 
     Both `value` and `attribute_id`: element 144 puts the same rendered string in
     each, so normalizing one and not the other leaves the difference behind.
@@ -167,7 +190,11 @@ def collation_agnostic(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if row.get("element_id") in COLLATION_DEPENDENT_ELEMENTS:
             row = {
                 **row,
-                **{f: "".join(sorted(row[f])) for f in ("value", "attribute_id") if isinstance(row.get(f), str)},
+                **{
+                    f: _collation_agnostic_field(row[f])
+                    for f in ("value", "attribute_id")
+                    if isinstance(row.get(f), str)
+                },
             }
         out.append(row)
     return out
