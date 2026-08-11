@@ -365,6 +365,7 @@ jobs:
           name: claude-fix-transcript
           path: ${{ steps.claude.outputs.execution_file }}
           if-no-files-found: ignore
+          retention-days: 30
 
   # Publish lane for the fix agent. A clean VM running no untrusted code, so it
   # is the only place the write token lives (mirrors deps-publish in

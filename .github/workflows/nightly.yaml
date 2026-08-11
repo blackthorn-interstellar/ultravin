@@ -327,6 +327,7 @@ jobs:
           name: nightly-deps-fix-transcript
           path: ${{ steps.claude.outputs.execution_file }}
           if-no-files-found: ignore
+          retention-days: 30
 
   # Repair lane, publish half: open the deps PR from the patch the fix agent
   # banked. Mirrors deps-publish — a clean checkout plus git and gh, running
@@ -548,6 +549,7 @@ jobs:
           name: nightly-deps-checks-transcript
           path: ${{ steps.claude.outputs.execution_file }}
           if-no-files-found: ignore
+          retention-days: 30
 
   fixes:
     if: github.event_name == 'schedule' || inputs.lane != 'deps'
@@ -839,3 +841,4 @@ jobs:
             campaign/fails-covfuzz.jsonl
             ${{ steps.claude.outputs.execution_file }}
           if-no-files-found: ignore
+          retention-days: 30
