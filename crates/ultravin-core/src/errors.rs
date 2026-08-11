@@ -589,6 +589,12 @@ pub fn compute_errors(
     if vlen < 17 {
         raw.insert(6);
     } else if let Some(calc) = check_digit_with_flag(vin, is_car_mpv_lt) {
+        // Bug-for-bug parity, NOT a bug (do not "fix"): `check_digit_with_flag`
+        // (fVINCheckDigit2) returns '?' on any invalid char, so a VIN with a literal
+        // '?' at position 9 compares '?' == '?' here and reads as *valid*. The oracle
+        // does the same — spvindecode compares `cd <> calcCD`, '?' <> '?' is false, so
+        // it emits no code 1. Rejecting the '?' sentinel would diverge from the oracle
+        // (the spec) and force an answer-key rebuild. Frozen in the parity corpus.
         check_digit_valid = vb[8] == calc;
         if !check_digit_valid && !is_vin_exception {
             raw.insert(1);

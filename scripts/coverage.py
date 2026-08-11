@@ -95,7 +95,15 @@ def measure(vins: Path, json_out: Path) -> dict[str, Any]:
 
 
 def uncovered_by_function(report: dict[str, Any]) -> dict[tuple[str, str], int]:
-    """Uncovered region count per (file, function) across the decode path."""
+    """Uncovered region count per (file, function) across the decode path.
+
+    Keying allowances on a COUNT (not on region spans or line ranges) is
+    deliberate, not a bug to "fix" with span tracking: line-level identity would
+    churn every allowance whenever an unrelated edit above a region shifts its line
+    numbers. The accepted tradeoff is a blind spot to a count-preserving shift (a
+    new uncovered branch appearing exactly as an old one becomes covered). We take
+    stability over that precision.
+    """
     out: dict[tuple[str, str], int] = {}
     for fn in report["data"][0]["functions"]:
         file = fn["filenames"][0].split("/")[-1]
@@ -141,6 +149,9 @@ def check(
     found = uncovered_by_function(report)
     allowed = load_allowances()
 
+    # Count-keyed by design (see uncovered_by_function): the gate compares the
+    # per-(file, function) missed-region COUNT, so a count-preserving shift is
+    # intentionally not distinguished. Stability over span-level identity.
     new_gaps = {k: v for k, v in found.items() if k not in allowed}
     grown = {k: (v, allowed[k]["regions"]) for k, v in found.items() if k in allowed and v > allowed[k]["regions"]}
     stale = {k: a["regions"] for k, a in allowed.items() if k not in found}

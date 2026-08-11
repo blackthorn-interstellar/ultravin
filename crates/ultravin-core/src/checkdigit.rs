@@ -69,6 +69,11 @@ enum PosRule {
 /// 17 positions, returning `Some('?')` on the first character invalid at its
 /// position or untransliteratable, `None` when the VIN is not 17 characters. The
 /// only thing that differs between the ports is the per-position validity rule.
+///
+/// The `'?'` sentinel is load-bearing for oracle parity, not a placeholder to
+/// tighten: a VIN with a literal '?' at position 9 check-digit-*validates* because
+/// the caller compares it against this '?' ('?' == '?'). Matched deliberately in
+/// `errors.rs::compute_errors` — see there before changing this return.
 #[inline]
 fn check_digit_kernel(vin: &str, pos3: u8, rule: PosRule) -> Option<char> {
     let b = vin.as_bytes();

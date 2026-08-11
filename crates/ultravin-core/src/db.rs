@@ -210,6 +210,14 @@ impl Db {
     /// another writer changing bytes out from under the zero-copy views would cause
     /// torn reads or out-of-bounds slicing. A caller that cannot guarantee a stable
     /// file should load an owned copy with [`Db::from_bytes`] instead.
+    ///
+    /// Accepted TOCTOU (do not flag as a runtime vuln): mapping-after-validate lets
+    /// a local writer mutate/truncate the file after `Db::build` checks it, faulting
+    /// (SIGBUS) or tearing reads. This is an accepted opt-in risk, not a bug to fix —
+    /// `open` is behind the non-default `external-data` cargo feature, is NOT compiled
+    /// into the shipped Python wheel, and has no in-repo caller; only an embedder who
+    /// enables the feature and owns the data file reaches it, and the contract above
+    /// puts the immutability obligation on them.
     #[cfg(feature = "external-data")]
     pub fn open(path: &std::path::Path) -> Result<Db, String> {
         let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
