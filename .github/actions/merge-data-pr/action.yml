@@ -33,8 +33,25 @@ runs:
           exit 0
         fi
         pr=$(gh pr view "$BR" --json number --jq .number)
-        cls=$(gh pr view "$pr" --json labels \
-          --jq 'if ([.labels[].name] | index("schema-change")) then "schema-change" else "data-only" end')
+        # Classify from the TRUSTED git diff, not the agent-applied label, so a
+        # missing label can't slip a schema/proc change past the
+        # DATA_REFRESH_AUTOMERGE_SCHEMA boundary. Mirror scripts/refresh.py
+        # classify(): a change under vpic/schema or vpic/procs is structural
+        # (schema-change); so is anything outside the pure monthly-data set
+        # (decoder code, scripts, packaging, .github). Only a clean data
+        # regeneration is data-only. Fail closed — an unreadable or empty diff
+        # is treated as schema-change, never merged.
+        files=$(gh pr diff "$pr" --name-only) || files=""
+        if [ -z "$files" ]; then
+          echo "::warning::empty or unreadable diff for PR #$pr — treating as schema-change"
+          cls="schema-change"
+        elif printf '%s\n' "$files" | grep -qE '^vpic/(schema|procs)/'; then
+          cls="schema-change"   # structural: mirrors refresh.py classify()
+        elif printf '%s\n' "$files" | grep -qvE '^(vpic/|tests/parity_corpus\.json$)'; then
+          cls="schema-change"   # decoder code / scripts / packaging / .github
+        else
+          cls="data-only"
+        fi
         if [ "$cls" = "schema-change" ] && [ "${{ inputs.automerge-schema }}" != "true" ]; then
           echo "::notice::schema-change PR left for human review (DATA_REFRESH_AUTOMERGE_SCHEMA=true opts in)"
           exit 0

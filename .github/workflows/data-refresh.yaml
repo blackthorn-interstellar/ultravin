@@ -3,8 +3,11 @@
 #   detect   daily probe for a dump newer than the vpic/manifest.json pin
 #   refresh  mechanical integration + parity gates (scripts/refresh.py run),
 #            then a `data/<month>` branch and a classified pull request
-#   fix      on refresh failure, a Claude agent debugs the integration on a
-#            runner with the full toolchain and pushes an honest fix to the PR
+#   fix      on refresh failure, a KEYLESS Claude agent (no write token, no
+#            persisted git creds — it reads the untrusted NHTSA diff + CI logs)
+#            debugs the integration and commits an honest fix locally
+#   fix-publish  a clean job holding the write token recreates the branch from
+#            the agent's committed fix, opens/updates the PR, and merges per policy
 #
 # Secrets/variables (all optional except ANTHROPIC_API_KEY for the fix job):
 #   ANTHROPIC_API_KEY                  enables the agent fix job
@@ -170,6 +173,13 @@ jobs:
           path: target/refresh/
           if-no-files-found: ignore
 
+  # Keyless agent job. It reads attacker-influenceable input — the NHTSA dump
+  # diff and prior CI logs — so it must never share a VM with a write token or
+  # persisted git credentials (same-VM code can read another process's env, so
+  # step-scoping is not enough). It commits its fix locally; fix-publish (a
+  # clean VM running no untrusted code) carries the token and opens the PR. The
+  # only secrets here are ANTHROPIC_API_KEY (required to run the agent) and a
+  # READ-only GITHUB_TOKEN for reading logs — neither can push or reach write.
   fix:
     needs: [detect, refresh]
     if: always() && needs.detect.outputs.month != '' && needs.refresh.result == 'failure'
@@ -180,10 +190,10 @@ jobs:
     # a future workflow grows an unsafe trigger.
     environment: data-refresh
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-      actions: write # read the failed job's logs + kick CI after pushing
+      contents: read
+      actions: read # the agent reads the failed job's logs via `gh run view --log`
+    outputs:
+      has_changes: ${{ steps.capture.outputs.has_changes }}
     env:
       HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
       MONTH: ${{ needs.detect.outputs.month }}
@@ -197,6 +207,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
@@ -217,10 +228,20 @@ jobs:
         with:
           name: data-refresh-report
           path: target/refresh/
+      # Record the base commit and a git identity so the agent's local commit
+      # succeeds without credentials (commit is local; only push needs them).
+      - name: Prepare for the agent
+        id: base
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
       - name: Claude fixes the integration
         id: claude
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@5ef2e550a465a721f4f45e4a7d3c340c873e1dcc # v1.0.190
         env:
+          # Read-only (the job's permissions are read-only): the agent uses it
+          # only to read the failed job's CI logs, never to push.
           GH_TOKEN: ${{ github.token }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -241,7 +262,7 @@ jobs:
             You are running the monthly NHTSA vPIC data refresh for ultravin. The
             mechanical attempt for month ${{ needs.detect.outputs.month }} failed in this
             workflow run (id ${{ github.run_id }}). Get the refresh passing honestly, then
-            open or update the pull request.
+            commit your fix locally — a separate job publishes it.
 
             Context:
             - `python3 scripts/refresh.py run --month ${{ needs.detect.outputs.month }}` is the
@@ -272,7 +293,7 @@ jobs:
               process exits and nothing ever re-invokes you. Never run a command
               in the background, and never stop to "wait for a notification" —
               run every long command in the FOREGROUND and block until it
-              completes. Work you haven't pushed when you stop is simply lost.
+              completes. Work you haven't committed when you stop is simply lost.
             - Read the failed job's log: `gh run view ${{ github.run_id }} --log`.
             - docs/DATA_REFRESH.md is the runbook; docs/ACCEPTANCE.md and
               docs/KNOWN_DEVIATIONS.md define parity policy. The Postgres oracle (the
@@ -292,36 +313,132 @@ jobs:
             4. You are done only when `python3 scripts/refresh.py run --month
                ${{ needs.detect.outputs.month }}` exits 0 and `make check` is green.
 
-            Then: `git checkout -B data/${{ needs.detect.outputs.month }}`, commit the
-            regenerated vpic/ + tests/parity_corpus.json plus your code/doc fixes with a
-            message explaining the root cause, force-push the branch, and create or
-            update the PR (base master, body target/refresh/report.md plus your
-            root-cause explanation, labels data-refresh and agent-fixed, plus
-            schema-change if vpic/schema or vpic/procs changed; create missing labels
-            with `gh label create`). The workflow starts CI and the review gate on
-            your PR after you finish — you don't need to.
+            Then hand off to the publish job — you have NO write access and must not
+            push, open a PR, or touch labels:
+            - `git checkout -B data/${{ needs.detect.outputs.month }}`, then commit the
+              regenerated vpic/ + tests/parity_corpus.json plus your code/doc fixes
+              with a message explaining the root cause. Committing is local and needs
+              no credentials; the publish job force-pushes exactly this branch.
+            - Write the PR body to target/refresh/pr-body.md: the failed attempt's
+              target/refresh/report.md (if present) followed by your root-cause
+              explanation. The publish job opens or updates the PR from it, applies the
+              data-refresh / schema-change labels, and starts CI and the review gate —
+              you don't do any of that.
 
-            If you cannot get it green honestly, push what you have, open the PR as a
-            draft labeled needs-human, and comment your diagnosis with the exact failing
-            command output. A run that ends with only analysis — no pushed branch, no
-            PR — is a FAILED run, whatever else you accomplished.
-      - name: Verify the agent delivered
-        env:
-          GH_TOKEN: ${{ github.token }}
+            If you cannot get it green honestly, still commit what you have, create the
+            file target/refresh/needs-human (any content), and put your diagnosis with
+            the exact failing command output in target/refresh/pr-body.md — the publish
+            job then opens the PR as a draft labeled needs-human. A run that ends with
+            only analysis and no commit on data/${{ needs.detect.outputs.month }} is a
+            FAILED run, whatever else you accomplished.
+      # Bank the agent's committed fix as a portable patch plus the out-of-band
+      # PR metadata (target/ is gitignored, so pr-body.md / needs-human can't
+      # ride in the patch). fix-publish rebuilds the branch from these.
+      - name: Bank the agent's fix for the publish job
+        id: capture
         run: |
-          if [ -z "$(git ls-remote --heads origin "data/$MONTH")" ]; then
-            echo "::error::agent finished without pushing data/$MONTH — treating as failure"
+          base="${{ steps.base.outputs.sha }}"
+          # fix runs only after refresh already FAILED, so an empty diff means the
+          # refresh went unrepaired and no PR will open — fail LOUD rather than end
+          # green-and-silent. The needs-human path still commits a marker, so this
+          # only trips on a truly empty or crashed session.
+          if git diff --quiet "$base"..HEAD; then
+            echo "::error::the refresh failed and the fix agent produced no commit — a human must look"
             exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/fix-bundle"
+          git diff --binary "$base"..HEAD > "$RUNNER_TEMP/fix-bundle/fix.patch"
+          cp -r target/refresh "$RUNNER_TEMP/fix-bundle/refresh" 2>/dev/null || true
+          echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          git diff --stat "$base"..HEAD >> "$GITHUB_STEP_SUMMARY" || true
+      - name: Fix bundle artifact
+        if: steps.capture.outputs.has_changes == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: data-refresh-fix-bundle
+          path: ${{ runner.temp }}/fix-bundle/
+          if-no-files-found: error
+      - name: Claude transcript artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-fix-transcript
+          path: ${{ steps.claude.outputs.execution_file }}
+          if-no-files-found: ignore
+
+  # Publish lane for the fix agent. A clean VM running no untrusted code, so it
+  # is the only place the write token lives (mirrors deps-publish in
+  # nightly.yaml). It recreates data/<month> from the agent's banked patch,
+  # opens/updates the PR, kicks the checks, and merges per policy.
+  fix-publish:
+    needs: [detect, fix]
+    if: needs.fix.outputs.has_changes == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40 # merge-data-pr retries the merge for ~22 min
+    # Same master-pinned environment; merge-data-pr may dispatch the answer-key
+    # and release workflows, which the environment gates to master.
+    environment: data-refresh
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write # `gh label create` writes labels through the Issues API
+      actions: write # dispatch ci.yaml/data-review.yaml, approve gated runs
+    env:
+      GH_TOKEN: ${{ github.token }}
+      MONTH: ${{ needs.detect.outputs.month }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Agent's fix from the keyless job
+        uses: actions/download-artifact@v4
+        with:
+          name: data-refresh-fix-bundle
+          path: fix-bundle/
+      - name: Branch, apply, push, pull request
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "data/$MONTH"
+          git apply --binary fix-bundle/fix.patch
+          git add -A
+          # Classify from the TRUSTED applied diff, mirroring refresh.py: a
+          # change under vpic/schema or vpic/procs is a schema-change.
+          if git diff --cached --name-only | grep -qE '^vpic/(schema|procs)/'; then
+            CLASSIFICATION="schema-change"
+          else
+            CLASSIFICATION="data-only"
+          fi
+          git commit -m "data: NHTSA vPIC $MONTH (agent fix, $CLASSIFICATION)"
+          git push -f origin "data/$MONTH"
+          gh label create data-refresh --color 0E8A16 --description "automated monthly vPIC data update" || true
+          gh label create schema-change --color D93F0B --description "vpic/schema or vpic/procs changed" || true
+          gh label create agent-fixed --color 5319E7 --description "integration repaired by the fix agent" || true
+          # PR body: the agent's root-cause writeup, falling back to the failed
+          # attempt's report, then to a one-liner if neither survived.
+          body=fix-bundle/refresh/pr-body.md
+          [ -s "$body" ] || body=fix-bundle/refresh/report.md
+          [ -s "$body" ] || { printf 'Automated vPIC %s integration, repaired by the fix agent.\n' "$MONTH" > fix-bundle/body.md; body=fix-bundle/body.md; }
+          draft=
+          if [ -f fix-bundle/refresh/needs-human ]; then
+            draft=--draft
+            gh label create needs-human --color B60205 --description "the fix agent could not get it green — needs a human" || true
           fi
           if [ "$(gh pr list --head "data/$MONTH" --state open --json number --jq length)" = "0" ]; then
-            echo "::error::branch data/$MONTH exists but no open PR — treating as failure"
-            exit 1
+            gh pr create --base master --head "data/$MONTH" $draft \
+              --title "data: NHTSA vPIC $MONTH ($CLASSIFICATION)" \
+              --body-file "$body" \
+              --label data-refresh --label agent-fixed
+          else
+            gh pr edit "data/$MONTH" --body-file "$body"
           fi
-          echo "agent delivered: branch + PR for data/$MONTH"
-      - name: Kick checks (GITHUB_TOKEN events don't fire; dispatches do)
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
+          if [ "$CLASSIFICATION" = "schema-change" ]; then
+            gh pr edit "data/$MONTH" --add-label schema-change
+          fi
+          if [ -f fix-bundle/refresh/needs-human ]; then
+            gh pr edit "data/$MONTH" --add-label needs-human
+          fi
+          # GITHUB_TOKEN events don't trigger workflows; explicit dispatches do.
           gh workflow run ci.yaml --ref "data/$MONTH"
           gh workflow run data-review.yaml -f pr="$(gh pr view "data/$MONTH" --json number --jq .number)"
           head=$(gh pr view "data/$MONTH" --json headRefOid --jq .headRefOid)
@@ -336,10 +453,3 @@ jobs:
           automerge: ${{ vars.DATA_REFRESH_AUTOMERGE }}
           automerge-schema: ${{ vars.DATA_REFRESH_AUTOMERGE_SCHEMA }}
           autorelease: ${{ vars.DATA_REFRESH_AUTORELEASE }}
-      - name: Claude transcript artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: claude-fix-transcript
-          path: ${{ steps.claude.outputs.execution_file }}
-          if-no-files-found: ignore

@@ -42,8 +42,8 @@ jobs:
           INPUT_PR: ${{ inputs.pr }}
         run: |
           n="${EVENT_PR:-$INPUT_PR}"
-          gh pr view "$n" --json headRefName,headRefOid,baseRefOid \
-            --jq '"head_ref=\(.headRefName)\nhead_sha=\(.headRefOid)\nbase_sha=\(.baseRefOid)"' >> "$GITHUB_OUTPUT"
+          gh pr view "$n" --json headRefName,headRefOid,baseRefOid,headRepository,headRepositoryOwner \
+            --jq '"head_ref=\(.headRefName)\nhead_sha=\(.headRefOid)\nbase_sha=\(.baseRefOid)\nhead_repo=\(.headRepositoryOwner.login)/\(.headRepository.name)"' >> "$GITHUB_OUTPUT"
           echo "number=$n" >> "$GITHUB_OUTPUT"
       - name: Classify the diff
         id: scope
@@ -51,13 +51,23 @@ jobs:
           HEAD_REF: ${{ steps.pr.outputs.head_ref }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
           BASE_SHA: ${{ steps.pr.outputs.base_sha }}
+          HEAD_REPO: ${{ steps.pr.outputs.head_repo }}
+          THIS_REPO: ${{ github.repository }}
         run: |
-          git fetch origin "$HEAD_SHA"
           if ! printf '%s' "$HEAD_REF" | grep -q '^data/'; then
             echo "verdict=pass" >> "$GITHUB_OUTPUT"
             echo "not a data-refresh PR — nothing to gate" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
+          # Fork PRs never reach the model reviewer (no key mount) and never
+          # auto-pass — the untrusted head could carry a prompt-injection or a
+          # crafted diff. Route to human-review; the publish step fails closed.
+          if [ "$HEAD_REPO" != "$THIS_REPO" ]; then
+            echo "verdict=human-review" >> "$GITHUB_OUTPUT"
+            echo "data/* PR from fork ($HEAD_REPO) — automated review disabled; a maintainer must review" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          git fetch origin "$HEAD_SHA"
           files=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
           printf 'changed files:\n%s\n' "$files"
           if printf '%s\n' "$files" | grep -qvE '^(vpic/|tests/parity_corpus\.json$)'; then
@@ -69,7 +79,7 @@ jobs:
       - name: Adversarial review
         id: claude
         if: steps.scope.outputs.verdict == 'model-review'
-        uses: anthropics/claude-code-action@v1
+        uses: anthropics/claude-code-action@5ef2e550a465a721f4f45e4a7d3c340c873e1dcc # v1.0.190
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ github.token }}
@@ -130,8 +140,11 @@ jobs:
           VERDICT: ${{ steps.claude.outputs.structured_output }}
         run: |
           conclusion=failure
+          note=""
           if [ "$SCOPE" = "pass" ]; then
             conclusion=success
+          elif [ "$SCOPE" = "human-review" ]; then
+            note="This PR comes from a fork, so the automated data-review gate does not run (it never mounts credentials or judges untrusted content). A maintainer must review the diff and, if legitimate, reproduce it on a \`data/*\` branch in this repository for the gate to run."
           elif [ "$SCOPE" = "model-review" ] && [ -n "$VERDICT" ]; then
             echo "$VERDICT" | tee -a "$GITHUB_STEP_SUMMARY"
             approved=$(printf '%s' "$VERDICT" | python3 -c 'import json,sys; print(json.load(sys.stdin)["approved"])' || echo parse-error)
@@ -141,8 +154,12 @@ jobs:
             -f name=review-verdict -f head_sha="$HEAD_SHA" \
             -f status=completed -f conclusion="$conclusion"
           if [ "$conclusion" != "success" ]; then
-            printf "Review gate REJECTED this PR:\n\n\`\`\`json\n%s\n\`\`\`\n" "${VERDICT:-no verdict produced (failing closed)}" \
-              | gh pr comment "$PR_NUM" --body-file -
+            if [ -n "$note" ]; then
+              printf '%s\n' "$note" | gh pr comment "$PR_NUM" --body-file -
+            else
+              printf "Review gate REJECTED this PR:\n\n\`\`\`json\n%s\n\`\`\`\n" "${VERDICT:-no verdict produced (failing closed)}" \
+                | gh pr comment "$PR_NUM" --body-file -
+            fi
             exit 1
           fi
           echo "review-verdict: success @ $HEAD_SHA" >> "$GITHUB_STEP_SUMMARY"
