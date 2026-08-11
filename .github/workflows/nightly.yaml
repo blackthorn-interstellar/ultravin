@@ -409,12 +409,13 @@ jobs:
       issues: write
       actions: write
     env:
-      GH_TOKEN: ${{ github.token }}
       HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
     steps:
       - name: Wait for checks
         id: wait
         timeout-minutes: 50
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           sleep 60 # dispatched runs need a moment to register on the head SHA
           if gh pr checks deps/nightly --repo "${{ github.repository }}" --watch --interval 30; then
@@ -434,6 +435,11 @@ jobs:
         with:
           ref: deps/nightly
           fetch-depth: 0
+          # The agent runs `make check` on the just-bumped (untrusted) dependency
+          # code and reads untrusted CI logs; keep the write token out of
+          # .git/config. The agent's push authenticates via the credential helper
+          # (gh auth setup-git, below) using the GH_TOKEN in its step env.
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
         if: steps.wait.outputs.failed == 'true'
       - uses: Swatinem/rust-cache@v2
@@ -450,6 +456,16 @@ jobs:
         run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
       - uses: ./.github/actions/build-data
         if: steps.wait.outputs.failed == 'true'
+      # persist-credentials:false left no persisted credential for the agent's
+      # `git push`; configure git's credential helper to authenticate via
+      # GH_TOKEN at push time. The claude step carries GH_TOKEN in its step env,
+      # so its `git push`/`gh` calls authenticate through it. Same pattern as
+      # data-refresh-selfcheck.yaml.
+      - name: Authenticate git pushes via GH_TOKEN
+        if: steps.wait.outputs.failed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh auth setup-git
       - name: Claude works the checks green
         id: claude
         if: steps.wait.outputs.failed == 'true'
@@ -510,10 +526,14 @@ jobs:
             human takes over.
       - name: Verify checks are green
         if: steps.wait.outputs.failed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           sleep 30
           gh pr checks deps/nightly --repo "${{ github.repository }}"
       - name: Merge when green
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           # End to end: green checks merge, no human in the path. The one
           # refusal: the machinery may not merge edits to itself — anything
@@ -562,15 +582,22 @@ jobs:
       issues: write
       actions: write
     env:
-      GH_TOKEN: ${{ github.token }}
       HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
       VINS: ${{ inputs.vins }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          # Keep the write token out of .git/config: the untrusted dump-download
+          # and probe steps run on this VM and must not be able to read a
+          # persisted credential. Pushes authenticate via the credential helper
+          # (gh auth setup-git, below) using GH_TOKEN, which only the steps that
+          # need write carry.
+          persist-credentials: false
       - name: Gate
         id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ "$HAS_KEY" != "true" ]; then
             echo "go=false" >> "$GITHUB_OUTPUT"
@@ -693,6 +720,18 @@ jobs:
             echo "agent=false" >> "$GITHUB_OUTPUT"
             echo "backlog empty and the probe found nothing — quiet night" >> "$GITHUB_STEP_SUMMARY"
           fi
+      # persist-credentials:false kept the write token out of .git/config, so the
+      # agent's `git push` has no persisted credential to lean on. Configure git's
+      # credential helper to authenticate pushes via GH_TOKEN at push time; the
+      # claude step (and the verify/kick steps) carry GH_TOKEN in their step env,
+      # so their `git push`/`gh` calls authenticate through it, while the earlier
+      # untrusted dump-download and probe steps — which hold no GH_TOKEN — cannot.
+      # Same pattern as data-refresh-selfcheck.yaml.
+      - name: Authenticate git pushes via GH_TOKEN
+        if: steps.count.outputs.agent == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh auth setup-git
       - name: Claude drains one cluster
         id: claude
         if: steps.count.outputs.agent == 'true'
@@ -801,6 +840,7 @@ jobs:
       - name: Verify the agent delivered
         if: steps.count.outputs.agent == 'true'
         env:
+          GH_TOKEN: ${{ github.token }}
           BRANCH: ${{ steps.gate.outputs.branch }}
         run: |
           if [ -z "$(git ls-remote --heads origin "$BRANCH")" ]; then
@@ -817,6 +857,7 @@ jobs:
       - name: Kick checks if the agent did not
         if: steps.count.outputs.agent == 'true'
         env:
+          GH_TOKEN: ${{ github.token }}
           BRANCH: ${{ steps.gate.outputs.branch }}
         run: |
           head=$(gh pr view "$BRANCH" --json headRefOid --jq .headRefOid)
