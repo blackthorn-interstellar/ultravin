@@ -83,7 +83,7 @@ jobs:
     - uses: astral-sh/setup-uv@v6
       with:
         enable-cache: false
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v8
       with:
         name: vpic-data
         path: crates/ultravin-core/data
@@ -129,7 +129,7 @@ jobs:
         enable-cache: false
     # Place the artifact where include_bytes! expects it, before uv sync builds
     # the extension (build.rs leaves an existing file untouched).
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v8
       with:
         name: vpic-data
         path: crates/ultravin-core/data
@@ -157,7 +157,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     # Place the artifact where include_bytes! expects it before cargo builds the
     # crate; build.rs leaves an existing file untouched (same as the test job).
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v8
       with:
         name: vpic-data
         path: crates/ultravin-core/data

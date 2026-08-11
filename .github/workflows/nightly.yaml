@@ -136,7 +136,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Bumped lockfiles from the validate job
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: nightly-deps-evidence
           path: target/deps/
@@ -214,7 +214,7 @@ jobs:
       - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
       - uses: ./.github/actions/build-data
       - name: Failed attempt's evidence
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: nightly-deps-evidence
           path: target/deps/
@@ -350,12 +350,12 @@ jobs:
         with:
           fetch-depth: 0
       - name: The bumped bump's report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: nightly-deps-evidence
           path: target/deps/
       - name: The agent's fix patch
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: nightly-deps-fix-bundle
           path: fix/

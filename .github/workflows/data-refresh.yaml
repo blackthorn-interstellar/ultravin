@@ -223,7 +223,7 @@ jobs:
           enable-cache: false
       - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
       - name: Failed attempt's report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         continue-on-error: true # the attempt may have died before writing one
         with:
           name: data-refresh-report
@@ -392,7 +392,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Agent's fix from the keyless job
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: data-refresh-fix-bundle
           path: fix-bundle/
