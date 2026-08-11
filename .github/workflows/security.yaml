@@ -110,7 +110,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Scan lockfiles
-        uses: google/osv-scanner-action/osv-scanner-action@v2.0.3
+        uses: google/osv-scanner-action/osv-scanner-action@v2.5.0
         with:
           # Cargo.lock + uv.lock (and any other supported manifests)
           scan-args: |-
