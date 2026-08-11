@@ -80,6 +80,14 @@ def test_generation_is_reproducible_across_runs() -> None:
     assert ultravin.seeded(limit=300) == ultravin.seeded(limit=300)
 
 
+def test_seeded_emits_each_vin_once() -> None:
+    # Two schemas can generate the same filler-heavy VIN string. The answer-key
+    # corpus (ultravin.seeded) must emit each unique VIN once, or the fail-closed
+    # compare gate rejects the redundant rows. Dedup keeps first-occurrence order.
+    vins = ultravin.seeded(limit=20_000)
+    assert len(vins) == len(set(vins))
+
+
 def test_sweep_dimensions_are_independent() -> None:
     wmis = ultravin.sweep(["wmi"])
     exceptions = ultravin.sweep(["exception"])

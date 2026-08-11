@@ -15,6 +15,7 @@
 //!   plus the cases that are not rows at all. Hundreds of thousands of VINs.
 
 use std::collections::BTreeSet;
+use std::collections::HashSet;
 
 use crate::db::Db;
 
@@ -944,6 +945,10 @@ pub fn seeded(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
     let index = schema_to_wmi(db);
     let wmis = wmis_by_id(db);
     let mut out = Vec::new();
+    // Two schemas can generate the same VIN string (filler-heavy rows collide);
+    // emit each unique VIN once so the answer key / equivalence compare don't
+    // see duplicate rows. First occurrence wins, so order stays deterministic.
+    let mut seen: HashSet<String> = HashSet::new();
 
     for &(schema, wmiid, yearfrom, yearto) in &index {
         if limit > 0 && out.len() >= limit {
@@ -970,7 +975,11 @@ pub fn seeded(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
             }
             let mut row = seed_row(db.s(key_id), &classes);
             let filled = fill_and_retire(&mut row, &levels, &mut uncovered);
-            out.extend(emit(wmi, &classes, &filled, year));
+            if let Some(vin) = emit(wmi, &classes, &filled, year) {
+                if seen.insert(vin.clone()) {
+                    out.push(vin);
+                }
+            }
         }
         // Whatever the rules did not incidentally cover.
         while !uncovered.is_empty() {
@@ -979,7 +988,11 @@ pub fn seeded(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
             row[p1] = Some(c1);
             row[p2] = Some(c2);
             let filled = fill_and_retire(&mut row, &levels, &mut uncovered);
-            out.extend(emit(wmi, &classes, &filled, year));
+            if let Some(vin) = emit(wmi, &classes, &filled, year) {
+                if seen.insert(vin.clone()) {
+                    out.push(vin);
+                }
+            }
         }
     }
     if limit > 0 {
