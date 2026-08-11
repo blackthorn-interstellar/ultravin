@@ -95,13 +95,30 @@ def _ask(vin: str) -> tuple[str, str]:
         return vin, f"!{type(e).__name__}"
 
 
-def corpus(limit: int, shard: int, shards: int) -> list[str]:
-    """The data-derived corpus, optionally one shard of it.
+def sample_selected(vin: str, mod: int) -> bool:
+    """Whether this VIN falls in the stable 1/mod sample of the corpus.
+
+    A STABLE hash, deliberately not Python's built-in hash(): str hashing is
+    randomized per process by PYTHONHASHSEED, and the stock and fast keys the
+    equivalence gate compares are frozen in separate jobs — a per-process hash
+    would pick different VINs on each side and make `compare` fail spuriously.
+    """
+    return int.from_bytes(hashlib.blake2b(vin.encode(), digest_size=8).digest(), "big") % mod == 0
+
+
+def corpus(limit: int, shard: int, shards: int, sample_mod: int = 0) -> list[str]:
+    """The data-derived corpus, optionally one shard of it or a stable sample.
 
     Sharding is by position, so N shards partition the corpus exactly and each
-    can be built by a separate machine against its own oracle.
+    can be built by a separate machine against its own oracle. `sample_mod` is a
+    different cut, for the equivalence gate: the stable-hash-selected 1/N of the
+    whole corpus, spread across every manufacturer. A contiguous stride aliases
+    with the schema-grouped corpus and permanently misses ~half the makes; the
+    hash sample does not. When set it takes precedence over shard/shards.
     """
     vins = ultravin.seeded(limit=limit)
+    if sample_mod > 0:
+        return [v for v in vins if sample_selected(v, sample_mod)]
     return vins[shard::shards] if shards > 1 else vins
 
 
@@ -115,11 +132,17 @@ def build(
     ),
     shard: int = typer.Option(0, help="build only shard i of n"),
     shards: int = typer.Option(1, help="total shards"),
+    sample_mod: int = typer.Option(
+        0,
+        help="instead of a shard slice, freeze the stable-hash 1/N sample of the whole corpus "
+        "(0 = off). Spread across every manufacturer; takes precedence over --shard/--shards.",
+    ),
     workers: int = typer.Option(4, help="oracle connections; it saturates around 4 per 10 cores"),
 ) -> None:
     """Ask the oracle for its answer to every VIN in the corpus and record it."""
-    vins = corpus(limit, shard, shards)
-    typer.echo(f"corpus: {len(vins):,} VINs (shard {shard + 1}/{shards})", err=True)
+    vins = corpus(limit, shard, shards, sample_mod)
+    where = f"1/{sample_mod} hash sample" if sample_mod else f"shard {shard + 1}/{shards}"
+    typer.echo(f"corpus: {len(vins):,} VINs ({where})", err=True)
 
     manifest = json.loads(MANIFEST.read_text())
     started = time.time()
@@ -135,6 +158,7 @@ def build(
                     "artifact_blake3": manifest["artifact_blake3"],
                     "shard": shard,
                     "shards": shards,
+                    "sample_mod": sample_mod,
                     "count": len(vins),
                 }
             )

@@ -17,10 +17,11 @@
 # Dispatched by .github/actions/merge-data-pr the moment a data month lands on
 # master, so the key is always built from the data it will be used to check.
 # The build uses the temp-table rewrite (ULTRAVIN_ORACLE_FAST_PROCS), and pays for
-# the privilege: the `equivalence` job below rebuilds a slice both ways against
+# the privilege: the `equivalence` job below rebuilds a sample both ways against
 # this month's data and fails unless every hash matches. That turns "equivalent,
-# measured once on 5,292 VINs in a doc" into a fresh proof at ~57k VINs, on the
-# exact data the key is being frozen from. Without the rewrite, stock procs drop
+# measured once on 5,292 VINs in a doc" into a fresh proof on a ~9k-VIN
+# sample spread by stable hash across every manufacturer, on the exact data the
+# key is being frozen from. Without the rewrite, stock procs drop
 # 9-20 temp tables per decode and a 113k-VIN shard bloats the catalog until the
 # volume fills — which is how the first full build produced a key of 77% holes.
 name: Answer Key
@@ -111,14 +112,18 @@ jobs:
           retention-days: 7
 
   # Earns the right to use the rewritten procedures, on this month's data, every
-  # month. One slice is frozen twice — once from the dump's procedures untouched,
+  # month. One sample is frozen twice — once from the dump's procedures untouched,
   # once from the rewrite — and any difference in any hash stops the release.
   #
-  # The slice is ~14k VINs, and it is bounded by what the *stock* side can
-  # survive: measured, untouched procs manage roughly 33k decodes before the temp
-  # table churn bloats the catalog past the volume, even with autovacuum on. That
-  # limit is not a nuisance around the test — it is the reason the rewrite exists,
-  # and it is why the full 1.8M build cannot use stock procs at all.
+  # The sample is the stable-hash 1/200 of the corpus (~9k VINs, 0.5%), spread
+  # across every manufacturer: a contiguous stride like the old `--shards 128`
+  # slice aliases with the schema-grouped corpus and permanently misses ~47% of
+  # makes, so it could never have caught a make-specific divergence. The size is
+  # also bounded by what the *stock* side can survive: measured, untouched procs
+  # manage roughly 33k decodes before the temp table churn bloats the catalog
+  # past the volume, even with autovacuum on — 9k clears that with room to spare.
+  # That limit is the reason the rewrite exists, and why the full 1.8M build
+  # cannot use stock procs at all.
   equivalence:
     runs-on: ubuntu-latest
     timeout-minutes: 90
@@ -149,7 +154,7 @@ jobs:
           make oracle-up
           make oracle-load DUMP="downloads/vPICList_lite_${{ steps.month.outputs.month }}.plain.zip"
           uv run -- python -m scripts.parity.answerkey build \
-            --out target/equiv/stock.jsonl --shard 0 --shards 128 --workers 4
+            --out target/equiv/stock.jsonl --sample-mod 200 --workers 4
 
       - name: Freeze the same slice from the rewritten procedures
         env:
@@ -159,7 +164,7 @@ jobs:
           make oracle-up
           make oracle-load DUMP="downloads/vPICList_lite_${{ steps.month.outputs.month }}.plain.zip"
           uv run -- python -m scripts.parity.answerkey build \
-            --out target/equiv/fast.jsonl --shard 0 --shards 128 --workers 4
+            --out target/equiv/fast.jsonl --sample-mod 200 --workers 4
 
       - name: Compare
         run: uv run -- python -m scripts.parity.answerkey compare --a target/equiv/stock.jsonl --b target/equiv/fast.jsonl

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -49,6 +52,68 @@ def test_sharding_partitions_the_corpus_exactly() -> None:
     assert sum(len(p) for p in parts) == len(whole)
     rejoined = [v for i in range(len(whole)) for v in [parts[i % 4][i // 4]]]
     assert rejoined == whole
+
+
+def test_the_sample_does_not_depend_on_process_hash() -> None:
+    # The equivalence gate freezes the same sample twice, in two separate jobs,
+    # and `compare` fails unless both cover the identical VIN set. Python's
+    # built-in hash() of a str is randomized per process by PYTHONHASHSEED, so a
+    # sampler built on it would pick different VINs on each side. Prove the
+    # selection is byte-identical under two different hash seeds — i.e. it does
+    # not use hash() — and that a live in-process call agrees with it.
+    vins = [f"{i:017d}" for i in range(3000)]
+    code = (
+        "import json, sys\n"
+        "from scripts.parity.answerkey import sample_selected\n"
+        "print(json.dumps([v for v in json.load(sys.stdin) if sample_selected(v, 200)]))\n"
+    )
+
+    def selected_under(seed: str) -> list[str]:
+        proc = subprocess.run(
+            [sys.executable, "-c", code],
+            input=json.dumps(vins),
+            capture_output=True,
+            text=True,
+            cwd=str(answerkey.REPO),
+            env={**os.environ, "PYTHONHASHSEED": seed, "PYTHONPATH": str(answerkey.REPO)},
+            check=True,
+        )
+        return json.loads(proc.stdout)
+
+    under_zero = selected_under("0")
+    assert under_zero, "the sample selected nothing"
+    assert under_zero == selected_under("12345")
+    assert under_zero == [v for v in vins if answerkey.sample_selected(v, 200)]
+
+
+def test_the_sample_keeps_roughly_one_in_n() -> None:
+    vins = ultravin.generate(40_000, seed=11)
+    kept = sum(answerkey.sample_selected(v, 200) for v in vins)
+    ratio = kept / len(vins)
+    # 1/200 = 0.5%. A wide band around it absorbs binomial noise (~5 sigma over
+    # 40k draws) so CI never flakes, while a broken sampler — selecting all,
+    # none, or on the wrong stride — still lands well outside it.
+    assert 0.003 < ratio < 0.007, f"kept {kept}/{len(vins)} = {ratio:.4%}"
+
+
+def test_the_sample_is_the_same_set_every_time() -> None:
+    # Mirrors the compare() invariant: the stock and fast keys must cover the
+    # identical VIN set, so the sample has to be reproducible and self-consistent.
+    a = answerkey.corpus(limit=6000, shard=0, shards=1, sample_mod=200)
+    b = answerkey.corpus(limit=6000, shard=0, shards=1, sample_mod=200)
+    assert a == b
+    assert a, "the sample selected nothing"
+    assert all(answerkey.sample_selected(v, 200) for v in a)
+    assert set(a) < set(answerkey.corpus(limit=6000, shard=0, shards=1))
+
+
+def test_sample_mod_takes_precedence_over_shard() -> None:
+    # Documented behavior: when sampling, the shard slice is ignored, so both the
+    # stock and fast builds select the same VINs whatever shard defaults are in
+    # play. If this ever regressed, the two equivalence keys would diverge.
+    unsharded = answerkey.corpus(limit=6000, shard=0, shards=1, sample_mod=200)
+    sharded = answerkey.corpus(limit=6000, shard=3, shards=16, sample_mod=200)
+    assert unsharded == sharded
 
 
 def test_a_mismatch_is_reported(tmp_path: Path) -> None:
