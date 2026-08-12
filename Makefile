@@ -1,5 +1,12 @@
 SHELL := /bin/bash
 
+# uv.lock's [options] exclude-newer cooldown pin is owned by the nightly bump
+# lane (nightly.yaml runs `uv lock --upgrade --exclude-newer ...`). It exists
+# only in the lock, not in [tool.uv], so any unfrozen local uv command
+# re-resolves and strips it. Frozen keeps make targets read-only on the lock;
+# use `uv add`/`uv remove`/`uv lock` directly when you mean to change it.
+export UV_FROZEN := 1
+
 init: install-uv ## Setup a dev environment for local development.
 	uv sync --all-extras
 	uv tool install ruff@0.0.287
