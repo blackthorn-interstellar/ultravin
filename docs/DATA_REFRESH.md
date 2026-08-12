@@ -79,14 +79,23 @@ with `needs-human` + diagnosis if it can't get there honestly).
 ## The review gate
 
 `data-review.yaml` publishes a `review-verdict` check run on the PR head —
-a **required status check** on master, so nothing merges without it. Non-data
-PRs pass in seconds; data PRs whose diff is pure regeneration (`vpic/**` + the
-corpus) pass a deterministic allowlist for $0; any data PR carrying code or
-doc changes — i.e. agent-fixed months — must be approved by an adversarial
-Claude reviewer (read-only, verdict-only) that checks diff scope, that every
-decoder edit is justified by an upstream `vpic/` hunk, gate integrity (a new
-`KNOWN_DEVIATION_VINS` entry needs documented evidence of an upstream defect),
-and injection artifacts. Human-created PRs trigger it via
+a **required status check** on master, so nothing merges without it. It gates
+the two branch prefixes the automation merges by itself, `data/*` and
+`deps/*`; every other PR passes in seconds for $0. Data PRs whose diff is pure
+regeneration (`vpic/**` + the corpus) pass a deterministic allowlist, also
+$0; any data PR carrying code or doc changes — i.e. agent-fixed months — must
+be approved by an adversarial Claude reviewer (read-only, verdict-only) that
+checks diff scope, that every decoder edit is justified by an upstream `vpic/`
+hunk, gate integrity (a new `KNOWN_DEVIATION_VINS` entry needs documented
+evidence of an upstream defect), and injection artifacts. `deps/*` PRs — the
+nightly lockfile bump, which merges itself — get a second adversarial
+reviewer with no allowlist shortcut, judging scope, gate integrity,
+supply-chain sanity of the lock diff (sources stay on crates.io/PyPI, new
+packages are plausible transitive deps, moves match the bump report), and
+injection artifacts; see `docs/NIGHTLY.md`. Whenever a model reviews, the
+check run is opened `in_progress` before the review starts, so watchers see a
+pending required check for the whole review rather than a window where it
+does not exist yet. Human-created PRs trigger it via
 `pull_request_target` (the gate always runs master's copy of itself and never
 executes PR code); pipeline-created PRs emit no events, so the refresh/fix
 jobs dispatch it explicitly. Uncertainty fails closed with findings posted as

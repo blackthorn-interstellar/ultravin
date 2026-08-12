@@ -11,9 +11,11 @@ deps    lockfile bump (7-day cooldown) ──▶ make check ──▶ PR ─┐
                                               │ broken        │
                                               ▼               ▼
                                         agent fixes ──▶ PR ──▶ deps-checks: watch;
-                                                               red → agent works the
-                                                               checks green; then
-                                                               MERGE (end to end)
+                                                               review rejected → stop
+                                                               for a human; else red →
+                                                               agent works the checks
+                                                               green; then MERGE
+                                                               (end to end)
 
 fixes   covfuzz probe tops up backlog ──▶ agent drains ONE cluster ──▶ PR,
                                           then the same agent kicks + watches its
@@ -44,16 +46,31 @@ The codebase is not a hostage to whatever ruff rolls out. What it may never
 do is weaken an existing check or edit the automation itself (`.github/**`,
 `Makefile` — such diffs are refused at merge).
 
+The PR is also **content-reviewed**: `data-review.yaml` gates `deps/*` the
+same way it gates `data/*`, with an adversarial read-only Claude reviewer and
+no allowlist shortcut, publishing the required `review-verdict` check. It
+approves only a diff that is lockfiles (plus fallout fixes the PR body
+justifies), leaves every existing test/lint/type/parity gate intact, and
+whose lock diff is supply-chain sane: sources stay on crates.io and PyPI, new
+packages are plausible transitive dependencies, version moves match the bump
+report. Nothing in the diff or report may read like an instruction to the
+automation. Uncertainty is a rejection.
+
 Whoever delivered the PR, the `deps-checks` job then owns its checks: it
 waits for the dispatched runs, and if any fail, an agent is checked out on
 the branch to work them green — read the failing log, fix, push, re-kick,
 wait (one blocking ~20-min call per CI cycle), repeat — until green or an
 honest give-up (diagnosis commented on the PR, job fails, human takes over).
+That agent handles **mechanical** failures only. If the failing check is
+`review-verdict`, the job stops before the agent runs, labels the PR
+`needs-human`, and comments why: the reviewer's verdict is a human's call,
+never something for the pipeline to work around.
 
-Once green, the deps PR **merges itself** — mechanical or agent-fixed alike,
-end to end with no human in the path. The single refusal: a diff touching
-`.github/**` or the `Makefile` fails the merge step for a human, because the
-machinery must not be able to edit its own judges.
+Once CI is green **and** the review approved, the deps PR **merges itself** —
+mechanical or agent-fixed alike, end to end with no human in the path. The
+single refusal beyond the review: a diff touching `.github/**` or the
+`Makefile` fails the merge step for a human, because the machinery must not
+be able to edit its own judges.
 
 ## The fixes lane
 
@@ -100,6 +117,11 @@ fails the run for a human.
 - **deps red, agent delivered a `[needs-human]` draft** — the bump genuinely
   broke something the agent couldn't fix honestly; the draft has the
   diagnosis. Fix, or close it and let tomorrow retry.
+- **deps PR labeled `needs-human`, `review-verdict` red** — the adversarial
+  review gate rejected the bump's content; its findings comment says why. The
+  pipeline deliberately stops rather than remediate a verdict. Address the
+  finding and re-run the gate (`gh workflow run data-review.yaml -f pr=<n>`),
+  or close the PR and let tomorrow retry.
 - **Cargo bumps repeatedly abandoned** — a young release is pinned by its
   parent (named in the report). Expected; it ages out within 7 days.
 - **fixes lane keeps skipping** — an open `parity-backlog` PR is waiting for
