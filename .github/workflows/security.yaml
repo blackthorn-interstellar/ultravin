@@ -81,8 +81,14 @@ jobs:
           persist-credentials: false
       - uses: trufflesecurity/trufflehog@c8921694a53d95ce424af6ae76dbebf3b6a83aef # v3.88.30
         with:
-          # Verified findings only — unverified is mostly noise for this purpose
-          extra_args: --only-verified
+          # Verified findings only — unverified is mostly noise for this purpose.
+          # lob is excluded: the action runs the floating :latest engine
+          # regardless of the pin above, and v3.96.0 widened the Lob key regex
+          # to (live|test)_[a-zA-Z0-9_]{35}, which matches 40-char snake_case
+          # pytest names in git history — and Lob's API "verifies" the garbage.
+          # Tightened upstream after 3.96.0; this repo will never hold a Lob
+          # (postal-mail API) key anyway.
+          extra_args: --only-verified --exclude-detectors=lob
 
   # ─── SCA: known CVEs in dependencies ───────────────────────────────────
   cargo-audit:
@@ -161,7 +167,10 @@ jobs:
       # One scan, not two: trivy writes the SARIF and then applies exit-code, so
       # a single invocation both fails the job and leaves a report to upload.
       - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@6c175e9c4083a92bbca2f9724c8a5e33bc2d97a5 # v0.30.0
+        # v0.30.0 broke when upstream deleted the setup-trivy v0.2.2 tag its
+        # composite referenced; v0.36.0 SHA-pins setup-trivy and a concrete
+        # trivy engine (v0.70.0), so nothing inside floats anymore.
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           scan-type: fs
           scan-ref: .
