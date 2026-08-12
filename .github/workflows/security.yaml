@@ -384,22 +384,32 @@ jobs:
         run: |
           uv export --frozen --no-hashes --no-emit-project \
             --format requirements-txt -o requirements-snyk.txt
-      # snyk's pip scanner builds its graph from an INSTALLED environment, not
-      # from the manifest alone: with nothing installed it fails with
-      # SNYK-OS-PYTHON-0013 (exit 2), which is what the export alone got us.
-      # Install the closure into a throwaway venv and point snyk at that
-      # interpreter. uv evaluates the export's environment markers, so the
-      # win32-only and py<3.11 lines are listed but not installed here — snyk
-      # evaluates the same markers when it reads the file, so they don't count
-      # as missing. If that ever stops holding, the symptom is SNYK-OS-PYTHON-0013
-      # naming those packages; the fix is --skip-unresolved=true, which is
-      # deliberately NOT set because it drops unresolvable lines silently and
-      # would let a genuinely empty scan pass as green.
+      # snyk's pip scanner reads the manifest but resolves versions from an
+      # INSTALLED environment, so it needs a venv holding the closure. Two
+      # non-obvious things have to be true about that venv, both found by running
+      # snyk's own resolver (snyk-python-plugin/pysrc/pip_resolve.py) locally:
+      #
+      #   pip/setuptools — uv venvs are pip-less by design, but the plugin's
+      #   bundled pkg_resources does `from pip._internal.utils._jaraco_text
+      #   import ...` on Python >= 3.12 (pysrc/pkg_resources_py3_12/__init__.py).
+      #   Without pip in the target interpreter the resolver dies on import and
+      #   snyk surfaces it only as SNYK-CLI-0000 "Failed to test pip project".
+      #
+      #   markers stripped — the plugin honors sys_platform markers but NOT
+      #   python_version ones, so it demands the py<3.11 and py<3.13 backports be
+      #   installed even where they don't apply, and errors with "Required
+      #   packages missing" when they aren't. Installing the whole locked closure
+      #   satisfies that and scans what ships to every platform we build wheels
+      #   for. The alternative, --skip-unresolved=true, is deliberately NOT used:
+      #   it drops unresolved lines silently, so a scan that resolved nothing
+      #   would still report green.
       - name: Install the closure for snyk to inspect
         if: env.SNYK_TOKEN != ''
         run: |
           uv venv snyk-venv
-          uv pip install --python snyk-venv/bin/python -r requirements-snyk.txt
+          sed 's/ ;.*//' requirements-snyk.txt > requirements-snyk-install.txt
+          uv pip install --python snyk-venv/bin/python \
+            pip setuptools -r requirements-snyk-install.txt
       - name: Snyk Open Source (Python closure)
         if: env.SNYK_TOKEN != ''
         run: |
