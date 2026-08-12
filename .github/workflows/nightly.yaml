@@ -700,7 +700,7 @@ jobs:
         with:
           path: |
             campaign/state-covfuzz.json
-            campaign/coverage.pkl
+            campaign/coverage.json
           key: covfuzz-state-${{ github.run_id }}
           restore-keys: covfuzz-state-
       - name: Covfuzz probe (top up the backlog)
@@ -741,7 +741,7 @@ jobs:
         with:
           path: |
             campaign/state-covfuzz.json
-            campaign/coverage.pkl
+            campaign/coverage.json
           key: covfuzz-state-${{ github.run_id }}
       - name: Anything to drain?
         id: count

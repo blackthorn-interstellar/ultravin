@@ -15,8 +15,8 @@ per-engine fail logs (JSONL), and status-<engine>.json live under --dir.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
-import pickle
 import random
 import re
 import time
@@ -138,6 +138,22 @@ def systematic_producer(state: dict[str, Any], enum_conn: Any, deadline: float):
 # --------------------------------------------------------------------------- #
 # covfuzz engine: coverage-guided (with truncation), persists coverage to resume
 # --------------------------------------------------------------------------- #
+def _edge_key(edge: tuple) -> int:
+    """Stable 64-bit id for a coverage edge. Deliberately not built-in hash(): str hashing is
+    randomized per process by PYTHONHASHSEED, and these keys are persisted and compared across runs."""
+    return int.from_bytes(hashlib.blake2b(repr(edge).encode(), digest_size=8).digest(), "big")
+
+
+def _load_cov(covf: Path) -> dict[str, Any]:
+    """The covfuzz resume cache: private to this script, in the gitignored campaign/ dir."""
+    saved = json.loads(covf.read_text()) if covf.exists() else {"seen": [], "corpus": []}
+    return {"seen": set(saved["seen"]), "corpus": saved["corpus"]}
+
+
+def _save_cov(covf: Path, cov: dict[str, Any]) -> None:
+    covf.write_text(json.dumps({"seen": sorted(cov["seen"]), "corpus": cov["corpus"]}))
+
+
 def covfuzz_producer(state: dict[str, Any], cov: dict[str, Any], deadline: float):
     rng = random.Random(98765 + state["counter"])
     if not cov["corpus"]:
@@ -164,7 +180,7 @@ def covfuzz_producer(state: dict[str, Any], cov: dict[str, Any], deadline: float
             edges = brutal.ultravin_coverage(cand)
         except ValueError:  # a bad candidate must not kill the loop
             continue
-        new = {hash(e) & 0xFFFFFFFFFFFFFFFF for e in edges} - cov["seen"]
+        new = {_edge_key(e) for e in edges} - cov["seen"]
         if new:
             cov["seen"] |= new
             if len(cand) == 17:
@@ -233,21 +249,15 @@ def cmd_run(args: argparse.Namespace) -> int:
             if statef.exists()
             else {"counter": 0, "since_new": 0, "saturated": False, "tested": 0, "failures": 0}
         )
-        covf = d / "coverage.pkl"
-        # coverage.pkl is written and read only by this script, in the gitignored
-        # campaign/ dir on the operator's own box. It never crosses a trust
-        # boundary and is not shipped.
-        # nosemgrep: avoid-pickle
-        cov = pickle.loads(covf.read_bytes()) if covf.exists() else {"seen": set(), "corpus": []}
+        covf = d / "coverage.json"
+        cov = _load_cov(covf)
         prod = covfuzz_producer(state, cov, deadline)
         done_fn = lambda: state["saturated"]  # noqa: E731
 
     def persist() -> None:
         statef.write_text(json.dumps(state))
         if cov is not None:
-            # Same private campaign/ cache the load above reads back.
-            # nosemgrep: avoid-pickle
-            (d / "coverage.pkl").write_bytes(pickle.dumps(cov))
+            _save_cov(d / "coverage.json", cov)
         (d / f"status-{eng}.json").write_text(json.dumps(_status(eng, state, cov, tested, time.time() - t0)))
 
     fh = open(faill, "a")  # noqa: SIM115
