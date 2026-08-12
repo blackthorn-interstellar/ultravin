@@ -1,41 +1,23 @@
-# Dependabot: free GitHub SCA alerts + automated version PRs.
-# Complements the Security workflow (cargo-audit / pip-audit / OSV / Trivy).
 version: 2
 updates:
-  - package-ecosystem: cargo
-    directory: /
+  - package-ecosystem: "cargo"
+    directory: "/"
     schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 10
-    labels:
-      - dependencies
-      - rust
+      interval: "monthly"
+    cooldown:
+      default-days: 30
     groups:
-      rust-patch:
-        update-types:
-          - patch
+      all-cargo:
+        patterns:
+          - "*"
 
-  - package-ecosystem: pip
-    directory: /
+  - package-ecosystem: "github-actions"
+    directory: "/"
     schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 10
-    labels:
-      - dependencies
-      - python
+      interval: "monthly"
+    cooldown:
+      default-days: 30
     groups:
-      python-patch:
-        update-types:
-          - patch
-
-  - package-ecosystem: github-actions
-    directory: /
-    schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 10
-    labels:
-      - dependencies
-      - github-actions
+      all-actions:
+        patterns:
+          - "*"
