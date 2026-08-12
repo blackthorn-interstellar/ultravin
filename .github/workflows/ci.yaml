@@ -11,41 +11,47 @@ jobs:
   autoformat:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        persist-credentials: false
+    - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
       with:
         python-version-file: pyproject.toml
-    - uses: astral-sh/setup-uv@v6
+    - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       with:
         enable-cache: false
-    - run: echo "UV_PYTHON=$pythonLocation" >> $GITHUB_ENV
-    - run: uv pip install $(uv export --no-hashes --frozen | grep '^ruff==')
+    - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
+    - run: uv pip install "$(uv export --no-hashes --frozen | grep '^ruff==')"
     - run: uv run --frozen --no-sync -- ruff format . --check
   lint:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        persist-credentials: false
+    - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
       with:
         python-version-file: pyproject.toml
-    - uses: astral-sh/setup-uv@v6
+    - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       with:
         enable-cache: false
-    - run: echo "UV_PYTHON=$pythonLocation" >> $GITHUB_ENV
-    - run: uv pip install $(uv export --no-hashes --frozen | grep '^ruff==')
+    - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
+    - run: uv pip install "$(uv export --no-hashes --frozen | grep '^ruff==')"
     - run: |
         uv run --frozen --no-sync -- ruff check .
   typecheck:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        persist-credentials: false
+    - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
       with:
         python-version-file: pyproject.toml
-    - uses: astral-sh/setup-uv@v6
+    - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       with:
         enable-cache: false
-    - run: echo "UV_PYTHON=$pythonLocation" >> $GITHUB_ENV
+    - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
     - run: uv sync --frozen --all-extras
     - run: uv pip install ty
     - name: Typecheck
@@ -57,11 +63,13 @@ jobs:
   data:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
-    - uses: dtolnay/rust-toolchain@stable
-    - uses: Swatinem/rust-cache@v2
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        persist-credentials: false
+    - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
     - uses: ./.github/actions/build-data
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
       with:
         name: vpic-data
         path: crates/ultravin-core/data/vpic.rkyv
@@ -76,18 +84,20 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        persist-credentials: false
+    - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
       with:
         python-version-file: pyproject.toml
-    - uses: astral-sh/setup-uv@v6
+    - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       with:
         enable-cache: false
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
       with:
         name: vpic-data
         path: crates/ultravin-core/data
-    - run: echo "UV_PYTHON=$pythonLocation" >> $GITHUB_ENV
+    - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
     - run: uv sync --frozen --all-extras
     - name: Is there a key for this data month?
       id: pin
@@ -119,21 +129,23 @@ jobs:
     # exemption (and allow-prereleases) once 3.15.0 final is out.
     continue-on-error: ${{ matrix.python-version == '3.15' }}
     steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        persist-credentials: false
+    - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
       with:
         python-version: ${{ matrix.python-version }}
         allow-prereleases: true
-    - uses: astral-sh/setup-uv@v6
+    - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       with:
         enable-cache: false
     # Place the artifact where include_bytes! expects it, before uv sync builds
     # the extension (build.rs leaves an existing file untouched).
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
       with:
         name: vpic-data
         path: crates/ultravin-core/data
-    - run: echo "UV_PYTHON=$pythonLocation" >> $GITHUB_ENV
+    - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
     - run: uv sync --frozen --all-extras
     - name: Test with python ${{ matrix.python-version }}
       run: uv run --frozen --all-extras -- pytest -v
@@ -145,19 +157,21 @@ jobs:
     needs: data
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        persist-credentials: false
     # clippy lints the whole workspace including the PyO3 crate, so pyo3 needs a
     # Python interpreter at build-config time.
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
       with:
         python-version-file: pyproject.toml
-    - uses: dtolnay/rust-toolchain@stable
+    - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
       with:
         components: rustfmt, clippy
-    - uses: Swatinem/rust-cache@v2
+    - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
     # Place the artifact where include_bytes! expects it before cargo builds the
     # crate; build.rs leaves an existing file untouched (same as the test job).
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
       with:
         name: vpic-data
         path: crates/ultravin-core/data

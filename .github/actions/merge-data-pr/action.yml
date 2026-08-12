@@ -25,10 +25,13 @@ runs:
       env:
         GH_TOKEN: ${{ github.token }}
         MONTH: ${{ inputs.month }}
+        AUTOMERGE: ${{ inputs.automerge }}
+        AUTOMERGE_SCHEMA: ${{ inputs.automerge-schema }}
+        AUTORELEASE: ${{ inputs.autorelease }}
       run: |
         set -euo pipefail
         BR="data/$MONTH"
-        if [ "${{ inputs.automerge }}" != "true" ]; then
+        if [ "$AUTOMERGE" != "true" ]; then
           echo "::notice::DATA_REFRESH_AUTOMERGE is off — PR left open for a human"
           exit 0
         fi
@@ -52,7 +55,7 @@ runs:
         else
           cls="data-only"
         fi
-        if [ "$cls" = "schema-change" ] && [ "${{ inputs.automerge-schema }}" != "true" ]; then
+        if [ "$cls" = "schema-change" ] && [ "$AUTOMERGE_SCHEMA" != "true" ]; then
           echo "::notice::schema-change PR left for human review (DATA_REFRESH_AUTOMERGE_SCHEMA=true opts in)"
           exit 0
         fi
@@ -88,7 +91,7 @@ runs:
         gh workflow run answer-key.yaml --ref master -f month="$MONTH" \
           && echo "answer key build dispatched for $MONTH" >> "$GITHUB_STEP_SUMMARY" \
           || echo "::warning::could not dispatch the answer key build for $MONTH"
-        if [ "${{ inputs.autorelease }}" = "true" ]; then
+        if [ "$AUTORELEASE" = "true" ]; then
           latest=$(git tag -l 'v*' --sort=-v:refname | head -1)
           latest=${latest:-v0.0.0}
           next=$(printf '%s' "${latest#v}" | awk -F. '{printf "v%d.%d.%d", $1, $2, $3 + 1}')

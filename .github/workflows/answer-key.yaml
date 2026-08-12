@@ -52,13 +52,15 @@ jobs:
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version-file: pyproject.toml
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
 
       - name: Resolve the month and dump
@@ -105,7 +107,7 @@ jobs:
           [ "$answers" -gt 0 ] || { echo "::error::shard produced 0 answers"; exit 1; }
           echo "shard wrote $answers answers"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: answerkey-shard-${{ matrix.shard }}
           path: target/answerkey/
@@ -128,13 +130,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version-file: pyproject.toml
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
       - name: Resolve the month and dump
         id: month
@@ -178,14 +182,16 @@ jobs:
       pull-requests: write
       actions: write # dispatch ci.yaml/data-review.yaml, approve gated runs
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      # No persist-credentials: false here — the pin PR below pushes a branch
+      # with this checkout's token.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version-file: pyproject.toml
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
       - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: answerkey-shard-*
           merge-multiple: true
@@ -204,9 +210,11 @@ jobs:
           [ "$count" -gt 0 ] || { echo "::error::combined key has 0 answers"; exit 1; }
           uv run -- python -m scripts.parity.answerkey pin \
             --key "$out.zst" --sha256 "$sha" --count "$count"
-          echo "month=$month" >> "$GITHUB_OUTPUT"
-          echo "asset=$out.zst" >> "$GITHUB_OUTPUT"
-          echo "count=$count" >> "$GITHUB_OUTPUT"
+          {
+            echo "month=$month"
+            echo "asset=$out.zst"
+            echo "count=$count"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Attach to the month's release
         env:
@@ -236,6 +244,9 @@ jobs:
           git commit -m "test: pin the ${{ steps.pin.outputs.month }} answer key"
           git push -f origin "$branch"
           if [ "$(gh pr list --head "$branch" --state open --json number --jq length)" = "0" ]; then
+            # SC2016: the single quotes are printf's format string, and the
+            # backticks in it are literal markdown for the PR body.
+            # shellcheck disable=SC2016
             gh pr create --base master --head "$branch" \
               --title "test: pin the ${{ steps.pin.outputs.month }} answer key" \
               --body "$(printf '%s answers frozen from the oracle for %s.\n\nAsset `%s` is attached to release `data-%s`; this pins its checksum so `make answerkey-fetch` can verify what it downloads.' \

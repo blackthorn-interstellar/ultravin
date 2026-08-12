@@ -1,0 +1,8 @@
+# actionlint's builtin runner-label database lags GitHub's fleet, so labels that
+# exist and schedule fine are reported as unknown. Declare them here.
+#
+# macos-15-intel: the last x86_64 macOS image. release.yaml uses it to build the
+# x86_64 mac wheel (macos-15 is arm64-only), and the lane has shipped green.
+self-hosted-runner:
+  labels:
+    - macos-15-intel

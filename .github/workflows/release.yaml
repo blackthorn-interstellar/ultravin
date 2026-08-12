@@ -226,6 +226,11 @@ jobs:
           if [[ "${GITHUB_REF:-}" == refs/tags/v* ]]; then
             EXPECT="-e ULTRAVIN_EXPECT_VERSION=${GITHUB_REF_NAME#v}"
           fi
+          # SC2086: $EXPECT must word-split — it is either empty or the two
+          # tokens `-e ULTRAVIN_EXPECT_VERSION=<ver>`. Quoting it would hand
+          # docker one bogus argument (or an empty one). Version strings carry
+          # no spaces or glob characters, so splitting is safe here.
+          # shellcheck disable=SC2086
           docker run --rm $EXPECT -v "$PWD:/repo:ro" python:3.12-alpine \
             sh -c 'python3 /repo/scripts/wheel_smoke.py /repo/dist/*.whl'
       - name: Note wheel not smoked (cross-compiled / libc-incompatible)
