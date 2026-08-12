@@ -47,7 +47,7 @@ jobs:
       month: ${{ steps.pick.outputs.month }}
       reason: ${{ steps.detect.outputs.reason }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Probe NHTSA for a newer dump
         id: detect
         env:
@@ -91,7 +91,7 @@ jobs:
     env:
       MONTH: ${{ needs.detect.outputs.month }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: dtolnay/rust-toolchain@stable
@@ -204,7 +204,7 @@ jobs:
           echo "refresh for $MONTH failed and no ANTHROPIC_API_KEY is configured — fix manually:" >> "$GITHUB_STEP_SUMMARY"
           echo '`make refresh MONTH='"$MONTH"'` (see docs/DATA_REFRESH.md)' >> "$GITHUB_STEP_SUMMARY"
           exit 1
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -388,7 +388,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       MONTH: ${{ needs.detect.outputs.month }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Agent's fix from the keyless job

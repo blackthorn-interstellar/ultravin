@@ -62,7 +62,7 @@ jobs:
     outputs:
       changed: ${{ steps.bump.outputs.changed }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -132,7 +132,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Bumped lockfiles from the validate job
@@ -199,7 +199,7 @@ jobs:
         run: |
           echo "the nightly deps bump broke make check and no ANTHROPIC_API_KEY is configured — fix manually (docs/NIGHTLY.md)" >> "$GITHUB_STEP_SUMMARY"
           exit 1
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -346,7 +346,7 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: The bumped bump's report
@@ -430,7 +430,7 @@ jobs:
         run: |
           echo "::error::checks failed on deps/nightly and no ANTHROPIC_API_KEY is configured — fix by hand (docs/NIGHTLY.md)"
           exit 1
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.wait.outputs.failed == 'true'
         with:
           ref: deps/nightly
@@ -585,7 +585,7 @@ jobs:
       HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
       VINS: ${{ inputs.vins }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
           # Keep the write token out of .git/config: the untrusted dump-download

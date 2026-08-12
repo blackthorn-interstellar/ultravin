@@ -22,7 +22,7 @@ jobs:
     env:
       HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false # keep the write token out of .git/config so detect/key-check steps can't reach it
       - name: detect runs on a bare runner

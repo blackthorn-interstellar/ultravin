@@ -41,7 +41,7 @@ jobs:
       pull-requests: write
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: gitleaks/gitleaks-action@v2
@@ -52,7 +52,7 @@ jobs:
     name: secrets (trufflehog)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - uses: trufflesecurity/trufflehog@v3.88.30
@@ -65,7 +65,7 @@ jobs:
     name: sca (cargo-audit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: rustsec/audit-check@v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -74,7 +74,7 @@ jobs:
     name: sca (cargo-deny)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           # advisories hard-fail; licenses/bans/sources configured in deny.toml
@@ -85,7 +85,7 @@ jobs:
     name: sca (pip-audit)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version-file: pyproject.toml
@@ -108,7 +108,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Scan lockfiles
         uses: google/osv-scanner-action/osv-scanner-action@v2.0.3
         with:
@@ -126,7 +126,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Trivy filesystem scan
         uses: aquasecurity/trivy-action@0.30.0
         with:
@@ -170,7 +170,7 @@ jobs:
         # Free on public repos. actions catches workflow injection patterns.
         language: [python, rust, actions]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
@@ -195,7 +195,7 @@ jobs:
       contents: read
       security-events: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Semgrep community rules
         run: |
           semgrep scan \
@@ -224,7 +224,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v5
         with:
           python-version-file: pyproject.toml
@@ -242,7 +242,7 @@ jobs:
     runs-on: ubuntu-latest
     continue-on-error: true
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: rhysd/actionlint@v1.7.7
         with:
           args: -color
@@ -284,7 +284,7 @@ jobs:
       - name: Skip when unconfigured
         if: env.SNYK_TOKEN == ''
         run: echo "SNYK_TOKEN not set — skipping (add repo secret to enable free-tier Snyk)"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: env.SNYK_TOKEN != ''
       - uses: snyk/actions/setup@master
         if: env.SNYK_TOKEN != ''
