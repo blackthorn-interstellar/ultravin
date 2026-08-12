@@ -7,3 +7,20 @@ rules:
       # reviewing bot-authored data PRs. Audited: it checks out the base ref,
       # never the PR head, so no untrusted code executes with that token.
       - data-review.yaml
+
+  artipacked:
+    # These five jobs `git push -f` a bot branch using the credential checkout
+    # persists into .git/config, so persist-credentials: false would break them.
+    # The real fix is persist-credentials: false + `gh auth setup-git` (already
+    # the pattern in nightly.yaml's deps-checks/deps-fixes jobs, L442+L468 and
+    # L596+L734); porting it here is deferred, not rejected.
+    #
+    # Pinned to the checkout's line so a NEW job that persists credentials still
+    # fails the gate. Line drift will surface as a stale-ignore warning, not a
+    # silent pass — re-pin rather than widening these to bare filenames.
+    ignore:
+      - answer-key.yaml:192   # job `publish` — pushes the answer-key pin branch (L255)
+      - data-refresh.yaml:96  # job `refresh` — pushes data/$MONTH (L127)
+      - data-refresh.yaml:395 # job `fix-publish` — re-pushes data/$MONTH after an agent fix (L418)
+      - nightly.yaml:135      # job `deps-publish` — pushes deps/nightly (L152)
+      - nightly.yaml:349      # job `deps-fix-publish` — re-pushes deps/nightly after a fix (L370)

@@ -12,8 +12,8 @@
 # gitleaks-action hard-fails on organization-owned repos without a paid
 # GITLEAKS_LICENSE — so the job below downloads and runs the binary directly.
 # Results land in the job summary and, where supported, GitHub Code Scanning
-# (Security tab). Secrets, known-CVE SCA, and Actions hygiene hard-fail;
-# Semgrep still soft-fails until its baseline annotations land.
+# (Security tab). Every job here hard-fails on a finding — the tree is at zero
+# across all of them. Only Snyk soft-fails, since it no-ops without a token.
 name: Security
 
 on:
@@ -221,9 +221,6 @@ jobs:
     runs-on: ubuntu-latest
     container:
       image: semgrep/semgrep:1.172.0@sha256:65dcd4408adda7c183a6b4550cb1e9b19f7f627a6fbb7e0559bd466bedc44d7b
-    # Soft-fail: community rules are noisy on first run; SARIF still lands.
-    # TODO: make blocking once annotations land.
-    continue-on-error: true
     permissions:
       contents: read
       security-events: write
