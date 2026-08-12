@@ -137,11 +137,11 @@ security-python:  ## pip-audit the synced venv (incl. dev deps from the lock).
 
 security-osv:  ## Google OSV-Scanner over the tree (needs `osv-scanner` on PATH).
 	@command -v osv-scanner >/dev/null || { echo "install: brew install osv-scanner (or go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest)"; exit 1; }
-	@osv-scanner scan source --recursive --skip-git .
+	@osv-scanner scan source --recursive .
 
 security-secrets:  ## gitleaks secret scan (needs `gitleaks` on PATH).
 	@command -v gitleaks >/dev/null || { echo "install: brew install gitleaks"; exit 1; }
-	@gitleaks detect --source . --verbose
+	@gitleaks detect --source . --redact --verbose
 
 help: ## Show this help message.
 	@## https://gist.github.com/prwhite/8168133#gistcomment-1716694

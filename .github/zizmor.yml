@@ -1,0 +1,9 @@
+# Findings we accept deliberately. Everything else fails the zizmor job in
+# .github/workflows/security.yaml, so keep this list short and justified.
+rules:
+  dangerous-triggers:
+    ignore:
+      # data-review.yaml needs pull_request_target to read repo secrets when
+      # reviewing bot-authored data PRs. Audited: it checks out the base ref,
+      # never the PR head, so no untrusted code executes with that token.
+      - data-review.yaml

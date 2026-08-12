@@ -1,0 +1,21 @@
+# gitleaks config. Auto-loaded from the scan root by both CI
+# (.github/workflows/security.yaml) and `make security-secrets`.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Generated artifacts that are never committed"
+# The scan CI runs walks git history, where these paths don't exist — but a
+# developer's working tree has them, and the answer-key JSONL trips
+# generic-api-key on VIN strings that happen to contain "KEY". Every other
+# scanner in security.yaml skips the same three directories.
+paths = [
+  '''^target/''',
+  '''^campaign/''',
+  '''^downloads/''',
+]
+
+# Deliberately NOT allowlisted: the repo's fake local-dev credentials
+# (Ultravin!2026 in scripts/bench/*, `postgres` in docker-compose.yml and
+# scripts/parity/*). The default ruleset does not flag them, and pre-emptively
+# suppressing those strings would also mask a real leak that reused them.
