@@ -70,8 +70,12 @@ coverage-fuzzer cache that the campaign script writes and reads back on the
 operator's own machine, in `campaign/` — a gitignored runtime directory
 (`.gitignore:120`). It is never transmitted, never committed, never shipped in
 a package, and has no producer other than the same script that consumes it, so
-there is no trust boundary for a malicious payload to cross. Both sites carry
+there is no trust boundary for a malicious payload to cross. Both sites carried
 `nosemgrep` annotations with this justification inline.
+
+**Resolved** in `dba6ebe`: the checkpoint is now `campaign/coverage.json`, keyed by
+blake2b digests instead of per-process-randomized `hash()`. Both `pickle` sites
+and their `nosemgrep` annotations are gone; the rule no longer fires here.
 
 ## e. f-string-interpolated SQL
 
@@ -178,7 +182,8 @@ untrusted input where the only input is an operator's own command line.
   just reported, aimed at the throwaway local container of (a) and (e).
 - **Deserialization of untrusted data** (`scripts/parity/campaign.py`) —
   `coverage.pkl` is the tool's own resume state, written and read by that one
-  script in the gitignored `campaign/` dir. Already covered by (d).
+  script in the gitignored `campaign/` dir. Already covered by (d), and since
+  fixed outright: the checkpoint is now JSON with stable blake2b edge keys.
 - **Path traversal** (`brutal.py`, `campaign.py`, `freeze.py`, `generator.py`,
   `sweep.py`, `refresh.py`) — every "tainted" path is an argparse flag the
   operator typed, except `refresh.py`'s two, which are `$GITHUB_OUTPUT` and
