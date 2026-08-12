@@ -12,10 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v6
       with:
         python-version-file: pyproject.toml
-    - uses: astral-sh/setup-uv@v6
+    - uses: astral-sh/setup-uv@v7
       with:
         enable-cache: false
     - run: echo "UV_PYTHON=$pythonLocation" >> $GITHUB_ENV
@@ -25,10 +25,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v6
       with:
         python-version-file: pyproject.toml
-    - uses: astral-sh/setup-uv@v6
+    - uses: astral-sh/setup-uv@v7
       with:
         enable-cache: false
     - run: echo "UV_PYTHON=$pythonLocation" >> $GITHUB_ENV
@@ -39,10 +39,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v6
       with:
         python-version-file: pyproject.toml
-    - uses: astral-sh/setup-uv@v6
+    - uses: astral-sh/setup-uv@v7
       with:
         enable-cache: false
     - run: echo "UV_PYTHON=$pythonLocation" >> $GITHUB_ENV
@@ -61,7 +61,7 @@ jobs:
     - uses: dtolnay/rust-toolchain@stable
     - uses: Swatinem/rust-cache@v2
     - uses: ./.github/actions/build-data
-    - uses: actions/upload-artifact@v4
+    - uses: actions/upload-artifact@v7
       with:
         name: vpic-data
         path: crates/ultravin-core/data/vpic.rkyv
@@ -77,13 +77,13 @@ jobs:
     timeout-minutes: 40
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v6
       with:
         python-version-file: pyproject.toml
-    - uses: astral-sh/setup-uv@v6
+    - uses: astral-sh/setup-uv@v7
       with:
         enable-cache: false
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v8
       with:
         name: vpic-data
         path: crates/ultravin-core/data
@@ -120,16 +120,16 @@ jobs:
     continue-on-error: ${{ matrix.python-version == '3.15' }}
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v6
       with:
         python-version: ${{ matrix.python-version }}
         allow-prereleases: true
-    - uses: astral-sh/setup-uv@v6
+    - uses: astral-sh/setup-uv@v7
       with:
         enable-cache: false
     # Place the artifact where include_bytes! expects it, before uv sync builds
     # the extension (build.rs leaves an existing file untouched).
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v8
       with:
         name: vpic-data
         path: crates/ultravin-core/data
@@ -148,7 +148,7 @@ jobs:
     - uses: actions/checkout@v4
     # clippy lints the whole workspace including the PyO3 crate, so pyo3 needs a
     # Python interpreter at build-config time.
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v6
       with:
         python-version-file: pyproject.toml
     - uses: dtolnay/rust-toolchain@stable
@@ -157,7 +157,7 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     # Place the artifact where include_bytes! expects it before cargo builds the
     # crate; build.rs leaves an existing file untouched (same as the test job).
-    - uses: actions/download-artifact@v4
+    - uses: actions/download-artifact@v8
       with:
         name: vpic-data
         path: crates/ultravin-core/data

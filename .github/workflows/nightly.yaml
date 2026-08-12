@@ -68,10 +68,10 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version-file: pyproject.toml
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
       - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
@@ -108,7 +108,7 @@ jobs:
         run: git diff -- Cargo.lock uv.lock > target/deps/lock.diff || true
       - name: Evidence artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nightly-deps-evidence
           path: target/deps/
@@ -136,7 +136,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Bumped lockfiles from the validate job
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: nightly-deps-evidence
           path: target/deps/
@@ -205,16 +205,16 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version-file: pyproject.toml
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
       - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
       - uses: ./.github/actions/build-data
       - name: Failed attempt's evidence
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: nightly-deps-evidence
           path: target/deps/
@@ -313,7 +313,7 @@ jobs:
           echo "has_changes=true" >> "$GITHUB_OUTPUT"
       - name: Bank the fix for the publish job
         if: steps.capture.outputs.has_changes == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nightly-deps-fix-bundle
           path: |
@@ -322,7 +322,7 @@ jobs:
           if-no-files-found: error
       - name: Claude transcript artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nightly-deps-fix-transcript
           path: ${{ steps.claude.outputs.execution_file }}
@@ -350,12 +350,12 @@ jobs:
         with:
           fetch-depth: 0
       - name: The bumped bump's report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: nightly-deps-evidence
           path: target/deps/
       - name: The agent's fix patch
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: nightly-deps-fix-bundle
           path: fix/
@@ -444,11 +444,11 @@ jobs:
         if: steps.wait.outputs.failed == 'true'
       - uses: Swatinem/rust-cache@v2
         if: steps.wait.outputs.failed == 'true'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: steps.wait.outputs.failed == 'true'
         with:
           python-version-file: pyproject.toml
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         if: steps.wait.outputs.failed == 'true'
         with:
           enable-cache: false
@@ -564,7 +564,7 @@ jobs:
           exit 1
       - name: Claude transcript artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nightly-deps-checks-transcript
           path: ${{ steps.claude.outputs.execution_file }}
@@ -620,11 +620,11 @@ jobs:
         if: steps.gate.outputs.go == 'true'
       - uses: Swatinem/rust-cache@v2
         if: steps.gate.outputs.go == 'true'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: steps.gate.outputs.go == 'true'
         with:
           python-version-file: pyproject.toml
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         if: steps.gate.outputs.go == 'true'
         with:
           enable-cache: false
@@ -662,7 +662,7 @@ jobs:
           bash scripts/oracle.sh load downloads/dump.zip
       - name: Restore covfuzz state
         if: steps.gate.outputs.go == 'true' && env.VINS == ''
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: |
             campaign/state-covfuzz.json
@@ -703,7 +703,7 @@ jobs:
           fi
       - name: Save covfuzz state
         if: always() && steps.gate.outputs.go == 'true' && env.VINS == ''
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: |
             campaign/state-covfuzz.json
@@ -874,7 +874,7 @@ jobs:
           done
       - name: Evidence artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: nightly-fixes-evidence
           path: |

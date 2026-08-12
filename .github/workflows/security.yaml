@@ -44,7 +44,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: gitleaks/gitleaks-action@v2
+      - uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -55,7 +55,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - uses: trufflesecurity/trufflehog@v3.88.30
+      - uses: trufflesecurity/trufflehog@v3.95.9
         with:
           # Verified findings only — unverified is mostly noise for this purpose
           extra_args: --only-verified
@@ -86,10 +86,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version-file: pyproject.toml
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
       - name: Sync env + audit installed packages
@@ -110,7 +110,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Scan lockfiles
-        uses: google/osv-scanner-action/osv-scanner-action@v2.0.3
+        uses: google/osv-scanner-action/osv-scanner-action@v2.3.8
         with:
           # Cargo.lock + uv.lock (and any other supported manifests)
           scan-args: |-
@@ -128,7 +128,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Trivy filesystem scan
-        uses: aquasecurity/trivy-action@0.30.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -147,7 +147,7 @@ jobs:
           sarif_file: trivy.sarif
           category: trivy
       - name: Fail on HIGH/CRITICAL
-        uses: aquasecurity/trivy-action@0.30.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -225,10 +225,10 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version-file: pyproject.toml
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
       - name: Audit workflows
@@ -243,7 +243,7 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
-      - uses: rhysd/actionlint@v1.7.7
+      - uses: rhysd/actionlint@v1.7.12
         with:
           args: -color
 
@@ -258,7 +258,7 @@ jobs:
       id-token: write
     steps:
       - name: Run OpenSSF Scorecard
-        uses: ossf/scorecard-action@v2.4.2
+        uses: ossf/scorecard-action@v2.4.3
         with:
           results_file: results.sarif
           results_format: sarif

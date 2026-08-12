@@ -101,10 +101,10 @@ jobs:
         with:
           tool: cargo-llvm-cov
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version-file: pyproject.toml
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
       - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
@@ -167,7 +167,7 @@ jobs:
           git status --porcelain > target/refresh/git-status.txt || true
       - name: Report artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: data-refresh-report
           path: target/refresh/
@@ -215,15 +215,15 @@ jobs:
         with:
           tool: cargo-llvm-cov
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version-file: pyproject.toml
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: false
       - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
       - name: Failed attempt's report
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         continue-on-error: true # the attempt may have died before writing one
         with:
           name: data-refresh-report
@@ -353,14 +353,14 @@ jobs:
           git diff --stat "$base"..HEAD >> "$GITHUB_STEP_SUMMARY" || true
       - name: Fix bundle artifact
         if: steps.capture.outputs.has_changes == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: data-refresh-fix-bundle
           path: ${{ runner.temp }}/fix-bundle/
           if-no-files-found: error
       - name: Claude transcript artifact
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: claude-fix-transcript
           path: ${{ steps.claude.outputs.execution_file }}
@@ -392,7 +392,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Agent's fix from the keyless job
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: data-refresh-fix-bundle
           path: fix-bundle/

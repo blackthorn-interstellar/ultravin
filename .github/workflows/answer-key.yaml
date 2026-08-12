@@ -55,10 +55,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version-file: pyproject.toml
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
 
       - name: Resolve the month and dump
@@ -105,7 +105,7 @@ jobs:
           [ "$answers" -gt 0 ] || { echo "::error::shard produced 0 answers"; exit 1; }
           echo "shard wrote $answers answers"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: answerkey-shard-${{ matrix.shard }}
           path: target/answerkey/
@@ -131,10 +131,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version-file: pyproject.toml
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
       - name: Resolve the month and dump
         id: month
@@ -179,13 +179,13 @@ jobs:
       actions: write # dispatch ci.yaml/data-review.yaml, approve gated runs
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version-file: pyproject.toml
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
       - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           pattern: answerkey-shard-*
           merge-multiple: true
