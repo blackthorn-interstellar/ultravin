@@ -145,11 +145,23 @@ well-formed VINs.
 `Cargo.lock`, and this tree carries no `requirements.txt`, `setup.py`, or
 `poetry.lock` for it to fall back on, so it finds nothing to analyse. Read that
 error as a tooling gap, not a clean bill of health: it means Snyk never looked,
-and a customer pointing it at the repo will hit the same exit code. To get a
-real Python result, export the locked closure into a format Snyk understands —
-`uv export --frozen --format requirements-txt` — and scan that; it resolves to
-exactly what `uv.lock` pins, and it is how Snyk would surface the `psycopg`
-advisories described in (h). The Rust closure has no Snyk equivalent at all
-(Snyk has no Cargo support), and is instead covered by cargo-audit, cargo-deny,
-OSV-Scanner, and Trivy — four scanners that do parse `Cargo.lock`, all of which
-hard-fail this repo's CI on a known CVE.
+and a customer pointing it at the repo will hit the same exit code. Which is why
+our own CI does not invoke it that way: the Snyk job first exports the locked
+closure into a format Snyk does read,
+
+```
+uv export --frozen --no-hashes --no-emit-project --format requirements-txt \
+  -o requirements-snyk.txt
+```
+
+then scans that file with `--file=requirements-snyk.txt --package-manager=pip`,
+so Snyk's proprietary database does see every pinned Python dependency —
+including the `psycopg` advisories described in (h). A customer wanting the same
+coverage should export the same way. `--frozen` is the part that matters: an
+unfrozen export re-resolves and drops `uv.lock`'s cooldown pin, quietly changing
+what gets scanned.
+
+The Rust closure has no Snyk equivalent at all (Snyk has no Cargo support), and
+is instead covered by cargo-audit, cargo-deny, OSV-Scanner, and Trivy — four
+scanners that do parse `Cargo.lock`, all of which hard-fail this repo's CI on a
+known CVE.
