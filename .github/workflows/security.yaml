@@ -13,8 +13,9 @@
 # GITLEAKS_LICENSE — so the job below downloads and runs the binary directly.
 # Trivy, CodeQL, Semgrep, Scorecard, and Snyk upload SARIF to GitHub Code
 # Scanning (Security tab); every other job — gitleaks included — reports in the
-# job log only. All of them hard-fail on a finding and the tree is at zero
-# across the board. Only Snyk soft-fails, since it no-ops without a token.
+# job log only. Every job hard-fails on a finding, with no soft-fail left in the
+# file: Snyk skips green without a token, but once one is set it gates like the
+# rest, on tool errors as well as findings.
 name: Security
 
 on:
@@ -336,7 +337,16 @@ jobs:
   snyk:
     name: sca+sast (snyk)
     # Free plan works. Job-level `if` cannot read secrets (GitHub context rule),
-    # so we always schedule the job and no-op when SNYK_TOKEN is unset.
+    # so we always schedule the job and no-op when SNYK_TOKEN is unset. With the
+    # token present it's a hard gate like every other scanner: snyk exits 1 on
+    # findings and 2/3 on tool errors, and all of those now fail the job. They
+    # used to be swallowed by per-step continue-on-error, which rendered this
+    # job green while `snyk code test` was erroring out.
+    #
+    # Snyk Code must be enabled in the Snyk org settings; until it is, the SAST
+    # step exits 2 with SNYK-CODE-0005 ("Snyk Code is not enabled for the
+    # current Organization") and this job goes red. That red is real — enable it
+    # org-side or drop the step — not flake to retry away.
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -358,25 +368,23 @@ jobs:
         if: env.SNYK_TOKEN != ''
       - name: Snyk Open Source (all projects)
         if: env.SNYK_TOKEN != ''
-        continue-on-error: true
         run: |
           snyk test --all-projects --severity-threshold=high --sarif-file-output=snyk-oss.sarif
+      # always(): the OSS scan above fails the job on findings, and a red there
+      # must not silently skip the SAST scan — both report every run.
       - name: Snyk Code (SAST)
-        if: env.SNYK_TOKEN != ''
-        continue-on-error: true
+        if: always() && env.SNYK_TOKEN != ''
         run: |
           snyk code test --severity-threshold=high --sarif-file-output=snyk-code.sarif
       - name: Upload Snyk OSS SARIF
-        if: env.SNYK_TOKEN != '' && hashFiles('snyk-oss.sarif') != ''
+        if: always() && env.SNYK_TOKEN != '' && hashFiles('snyk-oss.sarif') != ''
         uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
         with:
           sarif_file: snyk-oss.sarif
           category: snyk-oss
-        continue-on-error: true
       - name: Upload Snyk Code SARIF
-        if: env.SNYK_TOKEN != '' && hashFiles('snyk-code.sarif') != ''
+        if: always() && env.SNYK_TOKEN != '' && hashFiles('snyk-code.sarif') != ''
         uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0
         with:
           sarif_file: snyk-code.sarif
           category: snyk-code
-        continue-on-error: true
