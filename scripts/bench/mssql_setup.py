@@ -46,6 +46,10 @@ def _connect(database: str = "master", tries: int = 60):
 def restore(bak: str) -> None:
     conn = _connect("master")
     cur = conn.cursor()
+    # The only interpolated value is the operator's own --bak path, aimed at a
+    # throwaway local benchmark container (see the module docstring). Bench
+    # tooling, no untrusted input, nothing shipped.
+    # nosemgrep: sqlalchemy-execute-raw-query,formatted-sql-query
     cur.execute(f"RESTORE FILELISTONLY FROM DISK = '{bak}'")
     files = cur.fetchall()  # (LogicalName, PhysicalName, Type, ...)
     moves = []
@@ -55,6 +59,9 @@ def restore(bak: str) -> None:
         moves.append(f"MOVE '{logical}' TO '/var/opt/mssql/data/{logical}.{ext}'")
     sql = f"RESTORE DATABASE [{DB}] FROM DISK = '{bak}' WITH " + ", ".join(moves) + ", REPLACE, RECOVERY"
     print("restoring (a minute or two for ~11M rows)...")
+    # Same throwaway container: `moves` is built from logical names the server
+    # itself just reported, and RESTORE ... MOVE takes no bind parameters.
+    # nosemgrep: sqlalchemy-execute-raw-query,formatted-sql-query
     cur.execute(sql)
     while cur.nextset():  # drain progress result sets
         pass

@@ -1,0 +1,50 @@
+Ultravin
+Copyright (c) 2026 Bryce Drennan
+
+The source code in this repository is licensed under the MIT License; see
+LICENSE for the full text.
+
+--------------------------------------------------------------------------
+Embedded NHTSA vPIC data
+--------------------------------------------------------------------------
+
+The following files are not original works of the Ultravin authors. They are
+derived, by mechanical transformation, from the NHTSA vPIC standalone database:
+
+    crates/ultravin-core/data/vpic.rkyv   reference tables, serialized
+    vpic/schema/                          table definitions
+    vpic/procs/                           decode stored procedures
+
+Upstream source
+    U.S. Department of Transportation, National Highway Traffic Safety
+    Administration (NHTSA), Vehicle Product Information Catalog and Vehicle
+    Listing (vPIC), https://vpic.nhtsa.dot.gov/
+
+    Distributed by NHTSA as a standalone database download:
+    https://vpic.nhtsa.dot.gov/Downloads/vPICList_lite_YYYY_MM.plain.zip
+    (a MS SQL .bak variant is published at the same location; see the Makefile
+    `download` and `download-bak` targets)
+
+    The exact release Ultravin currently embeds — its month, download URL, and
+    the SHA-256 of the dump it was built from — is recorded in
+    vpic/manifest.json.
+
+Copyright status
+    Works prepared by officers or employees of the United States Government as
+    part of their official duties are not subject to copyright protection
+    within the United States (17 U.S.C. section 105). NHTSA publishes vPIC for
+    public use and imposes no license terms on the download. Ultravin claims no
+    copyright over the vPIC data itself; the MIT grant above covers the code,
+    the schema/procedure translations, and the artifact build tooling.
+
+Modifications
+    The data is not shipped verbatim. The importer normalizes it into a
+    read-only columnar layout, interns strings into a shared arena, and drops
+    tables the decoder does not consult. The stored procedures under
+    vpic/procs/ are translations of NHTSA's T-SQL into PostgreSQL plpgsql,
+    kept for use as a parity oracle. Decode results are verified against the
+    unmodified upstream procedures; see docs/ACCEPTANCE.md.
+
+Endorsement
+    Ultravin is an independent project. NHTSA does not endorse, sponsor, or
+    certify it, and this notice is a statement of provenance only.

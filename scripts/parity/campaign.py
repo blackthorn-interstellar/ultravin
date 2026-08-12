@@ -234,6 +234,10 @@ def cmd_run(args: argparse.Namespace) -> int:
             else {"counter": 0, "since_new": 0, "saturated": False, "tested": 0, "failures": 0}
         )
         covf = d / "coverage.pkl"
+        # coverage.pkl is written and read only by this script, in the gitignored
+        # campaign/ dir on the operator's own box. It never crosses a trust
+        # boundary and is not shipped.
+        # nosemgrep: avoid-pickle
         cov = pickle.loads(covf.read_bytes()) if covf.exists() else {"seen": set(), "corpus": []}
         prod = covfuzz_producer(state, cov, deadline)
         done_fn = lambda: state["saturated"]  # noqa: E731
@@ -241,6 +245,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     def persist() -> None:
         statef.write_text(json.dumps(state))
         if cov is not None:
+            # Same private campaign/ cache the load above reads back.
+            # nosemgrep: avoid-pickle
             (d / "coverage.pkl").write_bytes(pickle.dumps(cov))
         (d / f"status-{eng}.json").write_text(json.dumps(_status(eng, state, cov, tested, time.time() - t0)))
 

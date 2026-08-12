@@ -141,4 +141,4 @@ reproduction: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 ## License
 
-MIT
+MIT. The embedded NHTSA vPIC data has its own provenance — see [NOTICE](NOTICE).

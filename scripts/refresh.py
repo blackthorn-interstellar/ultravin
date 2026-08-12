@@ -113,6 +113,9 @@ class Probe:
 def head(url: str, timeout: float = 30.0) -> Probe:
     req = urllib.request.Request(url, method="HEAD")
     try:
+        # Fixed https://vpic.nhtsa.dot.gov URL_TEMPLATE; only the YYYY_MM month
+        # varies. Scheme and host are not caller-controlled.
+        # nosemgrep: dynamic-urllib-use-detected
         resp = urllib.request.urlopen(req, timeout=timeout)
     except urllib.error.HTTPError as e:
         if e.code == 404:

@@ -100,6 +100,9 @@ def crates_io_ages(pairs: list[tuple[str, str]]) -> dict[tuple[str, str], dateti
         published: dict[str, str] = {}
         for attempt in (1, 2):
             try:
+                # Fixed https://crates.io registry endpoint; only the crate name,
+                # read from our own Cargo.lock, varies.
+                # nosemgrep: dynamic-urllib-use-detected
                 with urllib.request.urlopen(req, timeout=30) as resp:
                     published = {v["num"]: v["created_at"] for v in json.load(resp)["versions"]}
                 break
