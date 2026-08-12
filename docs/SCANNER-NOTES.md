@@ -9,7 +9,8 @@ been triaged — treat them as real.
 Two framing facts do most of the work here. First, Ultravin ships as a Rust
 library plus a Python wheel that embeds a data artifact; it opens no sockets,
 spawns no processes, and reads no files at runtime. Second, everything under
-`scripts/`, `docker-compose.yml`, and the `bench`/`oracle`/`campaign` targets is
+`scripts/` and `docker-compose.yml` — the benchmark scripts, plus the `oracle-*`
+and `campaign-*` Makefile targets that drive the containers they measure — is
 developer tooling for reproducing NHTSA parity locally. None of it is published
 to PyPI or crates.io, and none of it runs in CI against anything but disposable
 containers. The published wheel contains `python/ultravin/` and the compiled
@@ -21,14 +22,19 @@ The CI suite that produces most of these findings is
 ## a. Hard-coded MSSQL password `Ultravin!2026`
 
 `scripts/bench/mssql_setup.py:10` and `:23`, `scripts/bench/throughput.py:89`,
-`docs/BENCHMARKS.md:202`. Flagged by gitleaks, TruffleHog, Trivy secret mode,
-and most commercial secret scanners as a hard-coded credential. It is the SA
-password an operator sets on a throwaway local `azure-sql-edge` container
-started by hand to hold a public NHTSA `.bak`, on a port bound to their own
-machine, so the value is a fixed literal on purpose — it is a magic constant
-that has to match between the `docker run` line and the client, not a secret.
-No account anywhere accepts it. `throughput.py` reads `ULTRAVIN_MSSQL_DSN`
-first, so a real deployment never uses the literal.
+`docs/BENCHMARKS.md:202`. This repository's own secret scanners do **not** flag
+it: gitleaks' default ruleset has no rule that matches, and TruffleHog runs
+`--only-verified`, which an unverifiable fake credential can never satisfy
+(`.gitleaks.toml` records why we chose not to allowlist these strings — doing so
+would also mask a real leak that reused them). Commercial scanners matching on
+entropy or on keywords like `PASSWORD=` will flag it. It is the SA password an
+operator sets on a throwaway local SQL Server container started by hand to hold
+a public NHTSA `.bak`; the value is a fixed literal because the `docker run`
+line and the client have to agree on it, and no account anywhere accepts it.
+One caveat worth stating plainly: unlike the Postgres pool, the documented
+`docker run` publishes `-p 1433:1433` on all interfaces, not loopback — fine on
+a laptop, worth changing to `127.0.0.1:1433:1433` on a shared host.
+`throughput.py` prefers `ULTRAVIN_MSSQL_DSN` when it is set.
 
 ## b. Hard-coded Postgres credentials `postgres`/`postgres`
 
@@ -102,8 +108,10 @@ shipped Python wheel and has no in-repo caller.
 `install-uv` convenience target. Flagged as remote code execution / unpinned
 supply chain. It is a developer convenience for bootstrapping `uv` on a fresh
 checkout and runs only when someone invokes it interactively without `uv`
-already installed. CI never uses it: every workflow installs `uv` through
-`astral-sh/setup-uv@v6`, a pinned action.
+already installed. No workflow shells out to `make install-uv`, so it never runs
+in CI: the five workflows that need `uv` (`ci`, `security`, `answer-key`,
+`data-refresh`, `nightly`) install it through `astral-sh/setup-uv`, pinned to a
+commit SHA.
 
 *(Note: earlier internal notes described this line as `curl`-to-shell; the
 Makefile uses `wget`. Same finding, same reasoning.)*

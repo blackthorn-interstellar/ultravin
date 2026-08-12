@@ -24,10 +24,18 @@ offer. Credit in the advisory on request.
 
 Ultravin is an offline library: it decodes VIN strings against a data artifact
 baked into the binary. It opens no sockets, spawns no processes, and reads no
-files at runtime in its default configuration. The interesting attack surface is
-therefore memory safety in the decoder given a hostile 17-character input, and
-artifact parsing for embedders who enable the non-default `external-data`
-feature to load their own `.rkyv` file.
+files at runtime in its default configuration.
+
+Two areas are squarely in scope. First, memory safety in the decoder given a
+hostile 17-character input. Second, artifact parsing: `Db::from_bytes` is public
+in a default build — no cargo feature required — so an embedder can hand it
+attacker-controlled bytes. A crash, out-of-bounds read, or unsoundness reachable
+through either is a vulnerability worth reporting.
+
+The non-default `external-data` feature additionally exposes `Db::open`, whose
+mmap TOCTOU behaviour is documented, accepted, and out of scope; see
+[docs/SCANNER-NOTES.md](docs/SCANNER-NOTES.md) section (f) for the reasoning and
+for how the validated load path works.
 
 Everything under `scripts/` is development and benchmarking tooling. It is not
 published to PyPI or crates.io and is not part of the supported surface; see

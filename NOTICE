@@ -34,16 +34,28 @@ Copyright status
     part of their official duties are not subject to copyright protection
     within the United States (17 U.S.C. section 105). NHTSA publishes vPIC for
     public use and imposes no license terms on the download. Ultravin claims no
-    copyright over the vPIC data itself; the MIT grant above covers the code,
-    the schema/procedure translations, and the artifact build tooling.
+    copyright over the vPIC data.
 
-Modifications
-    The data is not shipped verbatim. The importer normalizes it into a
-    read-only columnar layout, interns strings into a shared arena, and drops
-    tables the decoder does not consult. The stored procedures under
-    vpic/procs/ are translations of NHTSA's T-SQL into PostgreSQL plpgsql,
-    kept for use as a parity oracle. Decode results are verified against the
-    unmodified upstream procedures; see docs/ACCEPTANCE.md.
+    The MIT grant in LICENSE covers this project's own code and build tooling.
+    It does not extend to vpic/schema/ and vpic/procs/. Those files are NHTSA's
+    own output reproduced here, so they are public-domain US-government works,
+    not material Ultravin is in a position to license to anyone.
+
+Relationship to the upstream files
+    NHTSA publishes vPIC as a PostgreSQL dump (pg_dump plain format), so the
+    schema and the stored procedures arrive as PostgreSQL already — nothing was
+    ported, translated, or rewritten. vpic-import (crates/ultravin-build) splits
+    that dump into one file per object and strips volatile pg_dump TOC/OID
+    comments so month-to-month upstream diffs stay readable. The SQL text itself
+    is NHTSA's, and a CI gate requires the importer to reproduce it
+    byte-identically. vpic/procs/spvindecode.sql is the decoder Ultravin is
+    checked against, run unmodified as the parity oracle; see
+    docs/ACCEPTANCE.md.
+
+    crates/ultravin-core/data/vpic.rkyv is a transformation rather than a copy.
+    The importer normalizes the reference tables into a read-only columnar
+    layout, interns strings into a shared arena, and drops tables the decoder
+    never consults. It carries the same facts, arranged for lookup.
 
 Endorsement
     Ultravin is an independent project. NHTSA does not endorse, sponsor, or
