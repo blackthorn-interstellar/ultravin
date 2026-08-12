@@ -101,7 +101,7 @@ jobs:
         with:
           tool: cargo-llvm-cov
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version-file: pyproject.toml
       - uses: astral-sh/setup-uv@v6
@@ -215,7 +215,7 @@ jobs:
         with:
           tool: cargo-llvm-cov
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version-file: pyproject.toml
       - uses: astral-sh/setup-uv@v6

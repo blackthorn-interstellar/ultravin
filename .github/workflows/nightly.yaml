@@ -68,7 +68,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version-file: pyproject.toml
       - uses: astral-sh/setup-uv@v6
@@ -205,7 +205,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version-file: pyproject.toml
       - uses: astral-sh/setup-uv@v6
@@ -444,7 +444,7 @@ jobs:
         if: steps.wait.outputs.failed == 'true'
       - uses: Swatinem/rust-cache@v2
         if: steps.wait.outputs.failed == 'true'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         if: steps.wait.outputs.failed == 'true'
         with:
           python-version-file: pyproject.toml
@@ -620,7 +620,7 @@ jobs:
         if: steps.gate.outputs.go == 'true'
       - uses: Swatinem/rust-cache@v2
         if: steps.gate.outputs.go == 'true'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         if: steps.gate.outputs.go == 'true'
         with:
           python-version-file: pyproject.toml

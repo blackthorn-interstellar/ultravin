@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version-file: pyproject.toml
     - uses: astral-sh/setup-uv@v6
@@ -25,7 +25,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version-file: pyproject.toml
     - uses: astral-sh/setup-uv@v6
@@ -39,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version-file: pyproject.toml
     - uses: astral-sh/setup-uv@v6
@@ -77,7 +77,7 @@ jobs:
     timeout-minutes: 40
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version-file: pyproject.toml
     - uses: astral-sh/setup-uv@v6
@@ -120,7 +120,7 @@ jobs:
     continue-on-error: ${{ matrix.python-version == '3.15' }}
     steps:
     - uses: actions/checkout@v4
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version: ${{ matrix.python-version }}
         allow-prereleases: true
@@ -148,7 +148,7 @@ jobs:
     - uses: actions/checkout@v4
     # clippy lints the whole workspace including the PyO3 crate, so pyo3 needs a
     # Python interpreter at build-config time.
-    - uses: actions/setup-python@v5
+    - uses: actions/setup-python@v7
       with:
         python-version-file: pyproject.toml
     - uses: dtolnay/rust-toolchain@stable
