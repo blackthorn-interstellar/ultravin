@@ -83,9 +83,10 @@ jobs:
       - name: Load the oracle
         env:
           ULTRAVIN_ORACLE_FAST_PROCS: 1
+          MONTH: ${{ steps.month.outputs.month }}
         run: |
           make oracle-up
-          make oracle-load DUMP="downloads/vPICList_lite_${{ steps.month.outputs.month }}.plain.zip"
+          make oracle-load DUMP="downloads/vPICList_lite_$MONTH.plain.zip"
 
       - name: Build the extension
         run: make build-dev
@@ -93,12 +94,13 @@ jobs:
       - name: Freeze this shard
         env:
           INPUT_LIMIT: ${{ inputs.limit || 0 }}
+          SHARD: ${{ matrix.shard }}
         run: |
           [[ "$INPUT_LIMIT" =~ ^[0-9]+$ ]] || { echo "::error::limit must be a non-negative integer"; exit 1; }
-          out="target/answerkey/shard-$(printf '%02d' ${{ matrix.shard }}).jsonl"
+          out="target/answerkey/shard-$(printf '%02d' "$SHARD").jsonl"
           uv run -- python -m scripts.parity.answerkey build \
             --out "$out" \
-            --shard ${{ matrix.shard }} --shards ${{ env.SHARDS }} --workers 4 \
+            --shard "$SHARD" --shards "$SHARDS" --workers 4 \
             --limit "$INPUT_LIMIT"
           # A header with no answers means the corpus came out empty — almost
           # always a missing data artifact. Say so here rather than letting the
@@ -154,19 +156,22 @@ jobs:
       - run: make build-dev
 
       - name: Freeze a slice from the untouched procedures
+        env:
+          MONTH: ${{ steps.month.outputs.month }}
         run: |
           make oracle-up
-          make oracle-load DUMP="downloads/vPICList_lite_${{ steps.month.outputs.month }}.plain.zip"
+          make oracle-load DUMP="downloads/vPICList_lite_$MONTH.plain.zip"
           uv run -- python -m scripts.parity.answerkey build \
             --out target/equiv/stock.jsonl --sample-mod 200 --workers 4
 
       - name: Freeze the same slice from the rewritten procedures
         env:
           ULTRAVIN_ORACLE_FAST_PROCS: 1
+          MONTH: ${{ steps.month.outputs.month }}
         run: |
           make oracle-down
           make oracle-up
-          make oracle-load DUMP="downloads/vPICList_lite_${{ steps.month.outputs.month }}.plain.zip"
+          make oracle-load DUMP="downloads/vPICList_lite_$MONTH.plain.zip"
           uv run -- python -m scripts.parity.answerkey build \
             --out target/equiv/fast.jsonl --sample-mod 200 --workers 4
 
@@ -219,17 +224,22 @@ jobs:
       - name: Attach to the month's release
         env:
           GH_TOKEN: ${{ github.token }}
+          MONTH: ${{ steps.pin.outputs.month }}
+          ASSET: ${{ steps.pin.outputs.asset }}
         run: |
-          tag="data-${{ steps.pin.outputs.month }}"
+          tag="data-$MONTH"
           gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" \
-            --title "vPIC ${{ steps.pin.outputs.month }}" --notes "Frozen oracle answer key."
-          gh release upload "$tag" "${{ steps.pin.outputs.asset }}" --clobber
+            --title "vPIC $MONTH" --notes "Frozen oracle answer key."
+          gh release upload "$tag" "$ASSET" --clobber
 
       # master is protected and GITHUB_TOKEN cannot push to it, so the pin goes
       # through a PR — the same route the data refresh already takes.
       - name: Open a PR for the pin
         env:
           GH_TOKEN: ${{ github.token }}
+          MONTH: ${{ steps.pin.outputs.month }}
+          ASSET: ${{ steps.pin.outputs.asset }}
+          COUNT: ${{ steps.pin.outputs.count }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -239,18 +249,18 @@ jobs:
           git diff --cached --quiet -- tests/answerkey.json && {
             echo "pin unchanged"; exit 0;
           }
-          branch="answerkey/${{ steps.pin.outputs.month }}"
+          branch="answerkey/$MONTH"
           git checkout -B "$branch"
-          git commit -m "test: pin the ${{ steps.pin.outputs.month }} answer key"
+          git commit -m "test: pin the $MONTH answer key"
           git push -f origin "$branch"
           if [ "$(gh pr list --head "$branch" --state open --json number --jq length)" = "0" ]; then
             # SC2016: the single quotes are printf's format string, and the
             # backticks in it are literal markdown for the PR body.
             # shellcheck disable=SC2016
             gh pr create --base master --head "$branch" \
-              --title "test: pin the ${{ steps.pin.outputs.month }} answer key" \
+              --title "test: pin the $MONTH answer key" \
               --body "$(printf '%s answers frozen from the oracle for %s.\n\nAsset `%s` is attached to release `data-%s`; this pins its checksum so `make answerkey-fetch` can verify what it downloads.' \
-                "${{ steps.pin.outputs.count }}" "${{ steps.pin.outputs.month }}" "${{ steps.pin.outputs.asset }}" "${{ steps.pin.outputs.month }}")"
+                "$COUNT" "$MONTH" "$ASSET" "$MONTH")"
           fi
           # GITHUB_TOKEN events don't trigger workflows; explicit dispatches do.
           gh workflow run ci.yaml --ref "$branch"

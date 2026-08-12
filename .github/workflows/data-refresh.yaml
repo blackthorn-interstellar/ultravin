@@ -338,8 +338,10 @@ jobs:
       # ride in the patch). fix-publish rebuilds the branch from these.
       - name: Bank the agent's fix for the publish job
         id: capture
+        env:
+          BASE_SHA: ${{ steps.base.outputs.sha }}
         run: |
-          base="${{ steps.base.outputs.sha }}"
+          base="$BASE_SHA"
           # fix runs only after refresh already FAILED, so an empty diff means the
           # refresh went unrepaired and no PR will open — fail LOUD rather than end
           # green-and-silent. The needs-human path still commits a marker, so this

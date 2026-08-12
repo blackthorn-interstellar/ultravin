@@ -34,6 +34,10 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0 # base repo @ master — never the PR's code
+          # This job only reads: it fetches the PR head SHA (same-repo PRs only —
+          # forks divert before that) and talks to the API via GH_TOKEN. It never
+          # pushes or merges, so the token has no reason to sit in .git/config.
+          persist-credentials: false
       - name: Resolve the PR
         id: pr
         env:

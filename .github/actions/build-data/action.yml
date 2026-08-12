@@ -29,21 +29,29 @@ runs:
     - name: Download pinned vPIC dump
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
-      run: curl -fSL --retry 3 "${{ steps.meta.outputs.url }}" -o "$RUNNER_TEMP/dump.zip"
+      env:
+        DUMP_URL: ${{ steps.meta.outputs.url }}
+      run: curl -fSL --retry 3 "$DUMP_URL" -o "$RUNNER_TEMP/dump.zip"
     - name: Verify dump sha256
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
-      run: echo "${{ steps.meta.outputs.dump_sha256 }}  $RUNNER_TEMP/dump.zip" | sha256sum -c -
+      env:
+        DUMP_SHA256: ${{ steps.meta.outputs.dump_sha256 }}
+      run: echo "$DUMP_SHA256  $RUNNER_TEMP/dump.zip" | sha256sum -c -
     - name: Build artifact (deterministic; emits crates/ultravin-core/data/vpic.rkyv)
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
-      run: cargo run -p ultravin-build --release --locked -- --dump "$RUNNER_TEMP/dump.zip" --month "${{ steps.meta.outputs.month }}" --out "$RUNNER_TEMP/vpic-verify"
+      env:
+        MONTH: ${{ steps.meta.outputs.month }}
+      run: cargo run -p ultravin-build --release --locked -- --dump "$RUNNER_TEMP/dump.zip" --month "$MONTH" --out "$RUNNER_TEMP/vpic-verify"
     - name: Verify emitted artifact blake3 matches manifest
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
+      env:
+        WANT_BLAKE3: ${{ steps.meta.outputs.artifact_blake3 }}
       run: |
         got=$(jq -r .artifact_blake3 "$RUNNER_TEMP/vpic-verify/manifest.json")
-        want="${{ steps.meta.outputs.artifact_blake3 }}"
+        want="$WANT_BLAKE3"
         if [ "$got" != "$want" ]; then
           echo "artifact blake3 mismatch: got $got, want $want" >&2
           exit 1
