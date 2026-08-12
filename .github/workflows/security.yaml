@@ -85,12 +85,19 @@ jobs:
       - uses: trufflesecurity/trufflehog@c8921694a53d95ce424af6ae76dbebf3b6a83aef # v3.88.30
         with:
           # Verified findings only — unverified is mostly noise for this purpose.
-          # lob is excluded: the action runs the floating :latest engine
-          # regardless of the pin above, and v3.96.0 widened the Lob key regex
-          # to (live|test)_[a-zA-Z0-9_]{35}, which matches 40-char snake_case
-          # pytest names in git history — and Lob's API "verifies" the garbage.
-          # Tightened upstream after 3.96.0; this repo will never hold a Lob
-          # (postal-mail API) key anyway.
+          #
+          # The engine floats by choice, not by accident: the action takes a
+          # `version:` input defaulting to latest and we deliberately don't pass
+          # it, same rationale as semgrep's --config auto below — this suite
+          # previews what a corporate scanner running today's detectors finds,
+          # so a new-detector red is triage signal. Pass `version:` if
+          # determinism ever needs to win over freshness.
+          #
+          # lob is excluded as the triage of one such event: v3.96.0 widened the
+          # Lob key regex to (live|test)_[a-zA-Z0-9_]{35}, which matches 40-char
+          # snake_case pytest names in git history — and Lob's API "verifies"
+          # the garbage. Tightened upstream after 3.96.0; this repo will never
+          # hold a Lob (postal-mail API) key anyway.
           extra_args: --only-verified --exclude-detectors=lob
 
   # ─── SCA: known CVEs in dependencies ───────────────────────────────────
