@@ -175,3 +175,48 @@ NHTSA's rules, the answer key hashes element 144 as a character *set*
 (`normalize.collation_agnostic`): its contents are compared, its byte order is
 not. That keeps the key from re-freezing one host's collation and from listing
 172 VINs that a data refresh would invalidate.
+
+### 3a. The differential runners did not apply that rule (fixed 2026-08-12)
+
+`collation_agnostic` was called by `answerkey.py` and by nothing else. The
+*differential* path — `sweep.py`, `campaign.py`, `brutal.py`, `freeze.py`, all of
+which compare through `normalize.diff_rows` — went straight from `from_oracle` to
+a byte comparison. So the answer key knew this deviation was expected and the
+parity campaign did not: every covfuzz VIN whose charset mixes `_` with
+alphanumerics was logged to `tests/parity_backlog.jsonl` as a fresh divergence,
+and re-logged on the next run, because there was no decoder change that could ever
+retire it. Four such entries had accumulated (WMI `1HD`, MY1999, position 7):
+
+```
+1HD2TW980XA084111  1HDCSM716XA084111  1HDCFPAP3XA084111  1HDCFG2P3XA084111
+
+oracle    (4:148)(5:BCDEFGRS)(6:ACDEFGHJKLMNPRST)(7:HJKLMNPRSTVWX_)(11:JKTY)
+ultravin  (4:148)(5:BCDEFGRS)(6:ACDEFGHJKLMNPRST)(7:_HJKLMNPRSTVWX)(11:JKTY)
+```
+
+Identical characters at identical positions; only the place of `_` differs, and
+only in the one charset that contains it. That the byte order is the *host's* and
+not the *data's* is directly demonstrable on the oracle itself — same rows, same
+server, two collations:
+
+```sql
+select string_agg(c,'' order by c collate "C")           -- HJKLMNPRSTVWX_  (the oracle)
+     , string_agg(c,'' order by c collate "en_US.utf8")  -- _HJKLMNPRSTVWX  (ultravin)
+from unnest(string_to_array('H,J,K,L,M,N,P,R,S,T,V,W,X,_', ',')) as c;
+```
+
+`spvindecode_errorcode` builds the payload with `ORDER BY c` over
+`tbl_spVinDecode_ErrorCode` (L79-86), so the sort happens at decode time on the
+oracle host — it is not a stored string that came from NHTSA.
+
+**Fix:** `diff_rows` now neutralizes element 144's within-charset order itself, so
+every comparison site inherits the one definition of semantic equality instead of
+each caller having to remember it. The neutralization is unchanged and still
+narrow — charset *contents*, the position each charset is bound to, and the group
+order are all still compared byte-for-byte, so a genuine element-144 regression
+still diverges (`tests/test_normalize.py` pins exactly that boundary). ultravin's
+own print order remains pinned by the `collation_tests` in `errors.rs`.
+
+These VINs are **not** listed in `KNOWN_DEVIATION_VINS`. That list is for
+individual upstream defects; this class is unbounded (any VIN reaching one of the
+95 mixed charsets), so enumerating tonight's four would only invite the next four.

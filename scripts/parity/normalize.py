@@ -229,7 +229,19 @@ def diff_rows(
 
     Returns a dict with: per-field mismatch list, missing rows (in oracle, not
     ours), extra rows (ours, not oracle's), an ordering flag, and feature tags.
+
+    Element 144's within-charset byte order is neutralized first, so that every
+    comparison site shares one definition of semantic equality. It used to be
+    applied by `answerkey.py` alone, which left the *differential* path (sweep,
+    campaign, brutal, freeze) comparing raw bytes: those runners then re-reported
+    the documented collation deviation (KNOWN_DEVIATIONS.md #3) as a fresh
+    divergence on every VIN whose charset mixes `_` with alphanumerics. This
+    neutralizes order only — charset *contents*, the position each charset is
+    attached to, and the group order all still compare, so a real element-144
+    regression still diverges here.
     """
+    oracle = collation_agnostic(oracle)
+    mine = collation_agnostic(mine)
     o_by = _by_element(oracle)
     m_by = _by_element(mine)
     field_diffs: list[dict[str, Any]] = []
