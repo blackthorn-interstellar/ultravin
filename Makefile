@@ -141,7 +141,7 @@ security-osv:  ## Google OSV-Scanner over the tree (needs `osv-scanner` on PATH)
 
 security-secrets:  ## gitleaks secret scan (needs `gitleaks` on PATH).
 	@command -v gitleaks >/dev/null || { echo "install: brew install gitleaks"; exit 1; }
-	@gitleaks detect --source . --redact --verbose
+	@gitleaks git . --redact --verbose
 
 help: ## Show this help message.
 	@## https://gist.github.com/prwhite/8168133#gistcomment-1716694

@@ -11,9 +11,10 @@
 # gitleaks: the MIT-licensed binary is free for everyone, but the official
 # gitleaks-action hard-fails on organization-owned repos without a paid
 # GITLEAKS_LICENSE — so the job below downloads and runs the binary directly.
-# Results land in the job summary and, where supported, GitHub Code Scanning
-# (Security tab). Every job here hard-fails on a finding — the tree is at zero
-# across all of them. Only Snyk soft-fails, since it no-ops without a token.
+# Trivy, CodeQL, Semgrep, Scorecard, and Snyk upload SARIF to GitHub Code
+# Scanning (Security tab); every other job — gitleaks included — reports in the
+# job log only. All of them hard-fail on a finding and the tree is at zero
+# across the board. Only Snyk soft-fails, since it no-ops without a token.
 name: Security
 
 on:
@@ -65,11 +66,13 @@ jobs:
           tar xzf gitleaks.tar.gz gitleaks
           echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
       # Rules and path allowlist come from the repo's .gitleaks.toml.
+      # `git` is the current spelling; `detect` still works but is hidden and
+      # deprecated as of 8.x.
       - name: Scan full history
         shell: bash
         run: |
           set -euo pipefail
-          gitleaks detect --source . --redact -v
+          gitleaks git . --redact -v
 
   trufflehog:
     name: secrets (trufflehog)
@@ -237,6 +240,10 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+      # --config auto resolves against Semgrep's registry at run time, so this
+      # job is deliberately not hermetic: it previews what a corporate scanner
+      # running today's rules would flag. A new upstream rule turning this red
+      # on an unchanged tree is signal to triage, not flake to retry away.
       - name: Semgrep community rules
         run: |
           semgrep scan \
@@ -273,12 +280,13 @@ jobs:
         with:
           enable-cache: false
       # A real gate: zizmor exits non-zero on findings, so no second pass is
-      # needed. Deliberate exceptions live in .github/zizmor.yml.
+      # needed. Deliberate exceptions live in .github/zizmor.yml. Scan all of
+      # .github/ rather than just workflows+actions so dependabot.yml is covered.
       - name: Audit workflows
         shell: bash
         run: |
           set -euo pipefail
-          uvx zizmor==1.29.0 --format plain .github/workflows .github/actions \
+          uvx zizmor==1.29.0 --format plain .github/ \
             | tee "$GITHUB_STEP_SUMMARY"
 
   actionlint:
@@ -336,8 +344,9 @@ jobs:
         if: env.SNYK_TOKEN != ''
         with:
           persist-credentials: false
-      # snyk/actions publishes no tags — master is the only ref upstream
-      # documents, so pin the commit master pointed at.
+      # snyk/actions does publish tags, but they're stale — v1.0.0 is from
+      # 2025-10-03 and every example in upstream's README still says @master.
+      # So pin the commit master pointed at rather than a tag nobody maintains.
       - uses: snyk/actions/setup@12140f4059e244892ae643824a95459a102120dd # master @ 2026-08-03
         if: env.SNYK_TOKEN != ''
       - name: Snyk Open Source (all projects)

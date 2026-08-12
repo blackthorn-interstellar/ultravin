@@ -16,8 +16,11 @@ rules:
     # L630+L768); porting it here is deferred, not rejected.
     #
     # Pinned to the checkout's line so a NEW job that persists credentials still
-    # fails the gate. Line drift will surface as a stale-ignore warning, not a
-    # silent pass — re-pin rather than widening these to bare filenames.
+    # fails the gate. These pins fail closed, but silently: zizmor does not warn
+    # that an ignore went stale, so a line that drifts simply stops matching and
+    # the original finding comes back. If Security goes red with an artipacked
+    # finding at one of the checkouts below after an unrelated edit, the pin
+    # drifted — re-pin it rather than widening these to bare filenames.
     ignore:
       - answer-key.yaml:192   # job `publish` — pushes the answer-key pin branch (L255)
       - data-refresh.yaml:96  # job `refresh` — pushes data/$MONTH (L127)
