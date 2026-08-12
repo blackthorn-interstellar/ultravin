@@ -5,10 +5,12 @@ unattended nightly bump should never be the first installer. `uv lock
 --exclude-newer` enforces the cooldown natively for Python, but cargo has no
 equivalent, so `cooldown` post-processes a `cargo update`: every crate whose
 new version was published inside the window is reverted to the version HEAD
-pins (`cargo update -p crate@<new> --precise <old>`). Anything the rule cannot
-decide — a crate new to the tree, a multi-version shuffle, a version crates.io
-does not report — fails closed: Cargo.lock is restored wholesale and the bump
-waits for a cleaner night.
+pins (`cargo update -p crate@<new> --precise <old>`), and so is any freshly
+bumped dependent that would just pin it forward again. Anything the rule
+cannot decide — a crate new to the tree with no bumped dependent to withdraw
+it, a multi-version shuffle, a version crates.io does not report — fails
+closed: Cargo.lock is restored wholesale and the bump waits for a cleaner
+night.
 
 The written report covers both ecosystems and becomes the PR body.
 """
@@ -70,9 +72,35 @@ def moves(old: dict[str, set[str]], new: dict[str, set[str]]) -> tuple[list[Move
     return clean, unclean
 
 
+def deps(lock_text: str) -> dict[str, set[str]]:
+    """name -> the names it depends on, from Cargo.lock's own `dependencies` lists.
+
+    An entry is `"name"`, or `"name version"` where the tree holds several
+    versions; the version is dropped and every version of a name shares one
+    edge set. That can only over-report an edge, and an over-reported edge
+    costs one extra revert — never a missed one.
+    """
+    out: dict[str, set[str]] = {}
+    for pkg in tomllib.loads(lock_text).get("package", []):
+        out.setdefault(pkg["name"], set()).update(d.split()[0] for d in pkg.get("dependencies", []))
+    return out
+
+
 def _young(key: tuple[str, str], ages: dict[tuple[str, str], datetime | None], cutoff: datetime) -> bool:
     ts = ages.get(key)
     return ts is None or ts > cutoff  # unknown age fails closed
+
+
+def _reaches(graph: dict[str, set[str]], name: str) -> set[str]:
+    """Every name `name` depends on, directly or transitively (cycle-safe)."""
+    seen: set[str] = set()
+    stack = list(graph.get(name, ()))
+    while stack:
+        n = stack.pop()
+        if n not in seen:
+            seen.add(n)
+            stack += graph.get(n, ())
+    return seen
 
 
 def plan(
@@ -80,15 +108,38 @@ def plan(
     unclean: list[tuple[str, set[str]]],
     ages: dict[tuple[str, str], datetime | None],
     cutoff: datetime,
-) -> tuple[list[Move], list[tuple[str, str]]]:
-    """Decide reverts (young or unknown-age clean moves) and name the blockers.
+    graph: dict[str, set[str]],
+) -> tuple[list[Move], dict[str, list[str]], list[tuple[str, str]]]:
+    """Decide the reverts, say which of them are dependents, and name the blockers.
 
-    A blocker is an unclean arrival that is young or of unknown age: it cannot
-    be individually reverted, so the whole Cargo.lock bump is abandoned tonight.
+    Young (or unknown-age) clean moves revert to HEAD's pin — but a young crate
+    that a freshly bumped dependent *requires* will not stay reverted, so every
+    eligible mover reaching a young crate in `graph` is reverted alongside it.
+    The returned map (mover -> the young pins that earned it a revert) is the
+    report's explanation. Only a mover can be at fault: an untouched pin
+    resolved against the old version at HEAD, so it still permits it.
+
+    A blocker is a young unclean arrival — new to the tree, or a multi-version
+    shuffle — that no revert reaches, so nothing can withdraw it and nothing
+    can revert it in place. The whole Cargo.lock bump is abandoned tonight.
     """
-    reverts = [m for m in clean if _young((m[0], m[2]), ages, cutoff)]
-    blockers = [(name, v) for name, added in unclean for v in sorted(added) if _young((name, v), ages, cutoff)]
-    return reverts, blockers
+    young_clean = [m for m in clean if _young((m[0], m[2]), ages, cutoff)]
+    young_unclean = [(n, v) for n, added in unclean for v in sorted(added) if _young((n, v), ages, cutoff)]
+    young = {n: f"{n} {v}" for n, _, v in young_clean} | {n: f"{n} {v}" for n, v in young_unclean}
+
+    reach = {name: _reaches(graph, name) for name, _, _ in clean}
+    pinned: dict[str, list[str]] = {}
+    for m in clean:
+        pins = sorted(young[n] for n in reach[m[0]] & young.keys())
+        if m not in young_clean and pins:
+            pinned[m[0]] = pins
+
+    # Dependents first: reverting one usually drags its young pin back down
+    # with it, leaving the young crate's own revert a no-op rather than a fight.
+    reverts = [m for m in clean if m[0] in pinned] + young_clean
+    withdrawn = {n for m in reverts for n in reach[m[0]]}
+    blockers = [(n, v) for n, v in young_unclean if n not in withdrawn]
+    return reverts, pinned, blockers
 
 
 def crates_io_ages(pairs: list[tuple[str, str]]) -> dict[tuple[str, str], datetime | None]:
@@ -151,22 +202,25 @@ def cmd_cooldown(args: argparse.Namespace) -> int:
     cargo_notes: list[str] = []
     last_young: list[str] = []
 
-    # Up to two passes: a precise revert can itself shuffle transitive pins.
-    for _ in range(2):
+    # Up to four passes: a precise revert shuffles transitive pins of its own,
+    # and a dependent revert can uncover the next young crate above it.
+    for _ in range(4):
         clean, unclean = lock_moves("Cargo.lock")
         if not clean and not unclean:
             break
         pairs = [(n, v) for n, _, v in clean] + [(n, v) for n, added in unclean for v in added]
-        reverts, blockers = plan(clean, unclean, crates_io_ages(pairs), cutoff)
-        last_young = [f"`{n} {v}`" for n, _, v in reverts] + [f"`{n} {v}`" for n, v in blockers]
+        graph = deps((ROOT / "Cargo.lock").read_text())
+        reverts, pinned, blockers = plan(clean, unclean, crates_io_ages(pairs), cutoff, graph)
+        last_young = [f"`{n} {v}`" for n, _, v in reverts if n not in pinned]
+        last_young += [f"`{n} {v}`" for n, v in blockers]
         if blockers:
             sh(["git", "checkout", "--", "Cargo.lock"])
             named = ", ".join(f"`{n} {v}`" for n, v in blockers)
             cargo_notes = [
                 (
                     f"**Cargo bumps abandoned tonight**: {named} arrived inside the {args.days}-day "
-                    "cooldown (or with unknown publish age) and has no safe revert target. "
-                    "Tomorrow's run retries."
+                    "cooldown (or with unknown publish age), with no safe revert target and no bumped "
+                    "dependent to withdraw it. Tomorrow's run retries."
                 )
             ]
             break
@@ -175,18 +229,24 @@ def cmd_cooldown(args: argparse.Namespace) -> int:
         for name, old_v, new_v in reverts:
             # Lockstep pairs (foo + foo_derive pinned `=`) refuse single-crate
             # reverts; reverting the parent drags the sibling back, so tolerate
-            # individual failures — pass 2 re-checks, and the for-else abandons
-            # wholesale if anything young survives both passes.
+            # individual failures — a later pass re-checks, and the for-else
+            # abandons wholesale if anything young survives all of them.
             try:
                 sh(["cargo", "update", "-p", f"{name}@{new_v}", "--precise", old_v])
             except subprocess.CalledProcessError:
                 log(f"could not revert {name} {new_v} -> {old_v} individually — will re-check after this pass")
                 continue
-            cargo_notes.append(f"reverted `{name}` {new_v} → {old_v}: published inside the {args.days}-day cooldown")
+            why = pinned.get(name)
+            reason = (
+                "pins young " + ", ".join(f"`{p}`" for p in why)
+                if why
+                else f"published inside the {args.days}-day cooldown"
+            )
+            cargo_notes.append(f"reverted `{name}` {new_v} → {old_v}: {reason}")
     else:
-        # Two passes did not converge — typically a young transitive dep whose
-        # kept parent requires it (unrevertable without solving the graph).
-        # The cooldown cannot be guaranteed piecemeal, so none of it ships.
+        # Even reverting the dependents did not converge — a young crate is
+        # held up by something the name-level graph cannot reach or cannot
+        # move. The cooldown cannot be guaranteed piecemeal, so none of it ships.
         sh(["git", "checkout", "--", "Cargo.lock"])
         cargo_notes = [
             "**Cargo bumps abandoned tonight**: "
