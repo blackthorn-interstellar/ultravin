@@ -88,7 +88,7 @@ max-string-length = 50
 
 [tool.pytest.ini_options]
 addopts = "-s --tb=short -v --durations=10"
-norecursedirs = ["build", "dist", "target", ".hypothesis"]
+norecursedirs = ["build", "dist", "target", ".hypothesis", ".claude"]
 
 [tool.ty.terminal]
 output-format = "concise"
