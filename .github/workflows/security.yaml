@@ -415,13 +415,13 @@ jobs:
         run: |
           snyk test --file=requirements-snyk.txt --package-manager=pip \
             --command=snyk-venv/bin/python \
-            --severity-threshold=high --sarif-file-output=snyk-oss.sarif
+            --severity-threshold=medium --sarif-file-output=snyk-oss.sarif
       # always(): the OSS scan above fails the job on findings, and a red there
       # must not silently skip the SAST scan — both report every run.
       - name: Snyk Code (SAST)
         if: always() && env.SNYK_TOKEN != ''
         run: |
-          snyk code test --severity-threshold=high --sarif-file-output=snyk-code.sarif
+          snyk code test --severity-threshold=medium --sarif-file-output=snyk-code.sarif
       - name: Upload Snyk OSS SARIF
         if: always() && env.SNYK_TOKEN != '' && hashFiles('snyk-oss.sarif') != ''
         uses: github/codeql-action/upload-sarif@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v4.37.0

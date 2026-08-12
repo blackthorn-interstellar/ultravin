@@ -165,3 +165,28 @@ The Rust closure has no Snyk equivalent at all (Snyk has no Cargo support), and
 is instead covered by cargo-audit, cargo-deny, OSV-Scanner, and Trivy — four
 scanners that do parse `Cargo.lock`, all of which hard-fail this repo's CI on a
 known CVE.
+
+## k. Snyk Code's 19 `scripts/`-only findings
+
+Snyk's Git-integration dashboard scans without a severity threshold, so it
+reported 19 SAST issues our CI never showed (the job gated at `high`). All 19
+are under `scripts/`, and all 19 are the same category error: the rules assume
+untrusted input where the only input is an operator's own command line.
+
+- **SQL injection and the hard-coded password** (`scripts/bench/mssql_setup.py`)
+  — the interpolated `--bak` path and the logical file names the server itself
+  just reported, aimed at the throwaway local container of (a) and (e).
+- **Deserialization of untrusted data** (`scripts/parity/campaign.py`) —
+  `coverage.pkl` is the tool's own resume state, written and read by that one
+  script in the gitignored `campaign/` dir. Already covered by (d).
+- **Path traversal** (`brutal.py`, `campaign.py`, `freeze.py`, `generator.py`,
+  `sweep.py`, `refresh.py`) — every "tainted" path is an argparse flag the
+  operator typed, except `refresh.py`'s two, which are `$GITHUB_OUTPUT` and
+  `$GITHUB_STEP_SUMMARY` set by the Actions runner. Nothing downloaded from
+  NHTSA reaches a path.
+
+Rather than annotate 19 lines, `.snyk` excludes `scripts/**` from Snyk Code:
+none of it is published (see the framing above), and it has no untrusted input
+to protect. With the noise gone, both Snyk steps in `security.yaml` now gate at
+`--severity-threshold=medium`, so a genuine medium finding in shipped code
+fails CI instead of sitting on a dashboard.

@@ -1,0 +1,5 @@
+# Snyk policy. See docs/SCANNER-NOTES.md entry (k) for the triage behind this.
+version: v1.5.0
+exclude:
+  code:
+    - scripts/**
