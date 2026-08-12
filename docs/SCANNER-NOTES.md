@@ -137,3 +137,19 @@ constant filler (`A` for the VDS, `1` for the serial), and computes a correct
 check digit. They correspond to no registration, no owner, and no
 manufactured vehicle — they are pattern coordinates that happen to be
 well-formed VINs.
+
+## j. Snyk Open Source cannot scan this repository directly
+
+`snyk test --all-projects` does not return a report here — it exits 3 with
+`SNYK-CLI-0008`, "No supported files found". Snyk parses neither `uv.lock` nor
+`Cargo.lock`, and this tree carries no `requirements.txt`, `setup.py`, or
+`poetry.lock` for it to fall back on, so it finds nothing to analyse. Read that
+error as a tooling gap, not a clean bill of health: it means Snyk never looked,
+and a customer pointing it at the repo will hit the same exit code. To get a
+real Python result, export the locked closure into a format Snyk understands —
+`uv export --frozen --format requirements-txt` — and scan that; it resolves to
+exactly what `uv.lock` pins, and it is how Snyk would surface the `psycopg`
+advisories described in (h). The Rust closure has no Snyk equivalent at all
+(Snyk has no Cargo support), and is instead covered by cargo-audit, cargo-deny,
+OSV-Scanner, and Trivy — four scanners that do parse `Cargo.lock`, all of which
+hard-fail this repo's CI on a known CVE.
