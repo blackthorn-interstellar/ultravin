@@ -44,7 +44,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
           persist-credentials: false
@@ -68,10 +68,10 @@ jobs:
     needs: authorize
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
         with:
           components: rustfmt, clippy
       # No Rust cache in the release lane. A tag build restores from the
@@ -94,14 +94,14 @@ jobs:
     needs: authorize
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
       # No Rust cache here either — same reason as the gate job above. This one
       # compiles the importer that emits the artifact embedded in every wheel.
       - uses: ./.github/actions/build-data
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: vpic-data
           path: crates/ultravin-core/data/vpic.rkyv
@@ -145,7 +145,7 @@ jobs:
           - { kind: macos,     runner: macos-15-intel, target: x86_64,  smoke: true }
           - { kind: macos,     runner: macos-14,       target: aarch64, smoke: true }
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
       - name: Stamp version from tag
@@ -154,7 +154,7 @@ jobs:
         run: ./.github/stamp-version.sh "$GITHUB_REF_NAME"
       # Drop the prebuilt artifact where include_bytes! expects it. build.rs only
       # writes its empty stub when the file is absent, so this real data is used.
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: vpic-data
           path: crates/ultravin-core/data
@@ -164,7 +164,7 @@ jobs:
       # host Python — both already have a usable interpreter.)
       - name: Set up Python (Windows)
         if: matrix.kind == 'windows'
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: '3.12'
           architecture: ${{ matrix.pyarch }}
@@ -205,7 +205,7 @@ jobs:
       # runners get one here (native arch — matches the wheel).
       - name: Set up Python for smoke
         if: ${{ matrix.smoke && runner.os != 'Windows' }}
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: '3.12'
       - name: Smoke test the built wheel
@@ -249,7 +249,7 @@ jobs:
         run: |
           set -euo pipefail
           sha256sum -c "${RUNNER_TEMP}/dist.sha256"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wheels-${{ matrix.kind }}-${{ matrix.target }}
           path: dist
@@ -260,7 +260,7 @@ jobs:
     needs: [authorize, build-data]
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false
       - name: Stamp version from tag
@@ -270,7 +270,7 @@ jobs:
       # The sdist embeds the artifact (pyproject [tool.maturin] include) so a
       # source install works offline — without it, build.rs would stub an empty
       # one and the decoder would return nothing.
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: vpic-data
           path: crates/ultravin-core/data
@@ -295,9 +295,9 @@ jobs:
       # vpic.rkyv — the exact "source install stubs empty data" failure the
       # pyproject include guards against. Needs the Rust toolchain the wheel jobs
       # get from maturin-action; the sdist build itself only packages source.
-      - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
+      - uses: dtolnay/rust-toolchain@4360b52568e2003a75bf9bc1d59f33a8e3fc893c # stable
       - name: Set up Python for smoke
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version: '3.12'
       - name: Smoke test the sdist (source build)
@@ -314,7 +314,7 @@ jobs:
         run: |
           set -euo pipefail
           sha256sum -c "${RUNNER_TEMP}/dist.sha256"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wheels-sdist
           path: dist
@@ -330,12 +330,12 @@ jobs:
       attestations: write   # build-provenance attestation
       contents: write       # create the GitHub release + data asset
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           pattern: wheels-*
           merge-multiple: true
           path: dist
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: vpic-data
           path: data
@@ -343,7 +343,7 @@ jobs:
       # private repo and reactivates automatically once the repo is public.
       - name: Generate artifact attestation
         if: ${{ !github.event.repository.private }}
-        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
           subject-path: 'dist/*'
       - name: Publish to PyPI
