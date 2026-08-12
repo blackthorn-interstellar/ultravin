@@ -9,6 +9,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
+use std::fmt::Write as _;
 use std::fs::{self, File};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::path::{Path, PathBuf};
@@ -116,7 +117,15 @@ fn sha256_file(path: &Path) -> Result<String, Box<dyn Error>> {
         }
         hasher.update(&buf[..n]);
     }
-    Ok(format!("{:x}", hasher.finalize()))
+    // Hex-encode the digest bytes ourselves: `{:x}` only worked because sha2 0.10
+    // returned a `GenericArray` (which impls `LowerHex`); 0.11 returns a
+    // `hybrid_array::Array`, which does not. Byte-wise is agnostic to both.
+    let digest = hasher.finalize();
+    let mut hex = String::with_capacity(digest.len() * 2);
+    for b in digest {
+        write!(hex, "{b:02x}")?;
+    }
+    Ok(hex)
 }
 
 /// Trim leading/trailing blank lines and return `None` if nothing remains.
@@ -343,5 +352,24 @@ fn main() {
     if let Err(e) = run(&cli) {
         eprintln!("vpic-import error: {e}");
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The manifest pins the dump by this string, so the hex encoding is load-bearing
+    /// (a sha2 major bump silently changing it would break every downstream check).
+    #[test]
+    fn sha256_file_is_lowercase_hex_of_the_contents() {
+        let p = std::env::temp_dir().join("ultravin-build-sha256-abc.txt");
+        fs::write(&p, b"abc").unwrap();
+        let got = sha256_file(&p).unwrap();
+        fs::remove_file(&p).unwrap();
+        assert_eq!(
+            got,
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
     }
 }
