@@ -65,35 +65,8 @@ runs:
     # them here loudly instead of letting this check silently drift.
     - name: Verify restored artifact integrity (independent re-hash)
       shell: bash
-      run: |
-        # blake3 isn't in the Python stdlib, and uv is NOT guaranteed on every
-        # caller's runner (release.yaml's build-data job sets up only Rust + jq;
-        # uv is not preinstalled on ubuntu-latest), so pull the prebuilt blake3
-        # wheel into a throwaway venv via the preinstalled python3 — a genuinely
-        # independent implementation, no compile, and no dependency on the caller.
-        python3 -m venv "$RUNNER_TEMP/b3venv"
-        "$RUNNER_TEMP/b3venv/bin/pip" install --quiet --disable-pip-version-check blake3
-        want="$(jq -r .artifact_blake3 vpic/manifest.json)"
-        export want
-        "$RUNNER_TEMP/b3venv/bin/python" - <<'PY'
-        import os
-        import blake3
-
-        want = os.environ["want"].strip().lower()
-        data = open("crates/ultravin-core/data/vpic.rkyv", "rb").read()
-        if data[:8] != b"ULTRAVIN":
-            print(f"::error::vpic.rkyv bad magic {data[:8]!r}; expected b'ULTRAVIN'")
-            raise SystemExit(1)
-        fmt = int.from_bytes(data[8:10], "little")
-        if fmt != 1:
-            print(
-                f"::error::vpic.rkyv format {fmt} != 1 — header/hash scheme changed; "
-                "update this step to match serialize_artifact in tables.rs"
-            )
-            raise SystemExit(1)
-        got = blake3.blake3(data[64:] + data[10:14]).hexdigest().lower()
-        if got != want:
-            print(f"::error::vpic.rkyv blake3 mismatch: got {got}, want {want}")
-            raise SystemExit(1)
-        print(f"artifact verified (independent re-hash): {got}")
-        PY
+      run: >-
+        cargo run --quiet --locked -p ultravin-build
+        --bin verify-artifact --
+        crates/ultravin-core/data/vpic.rkyv
+        "${{ steps.meta.outputs.artifact_blake3 }}"
