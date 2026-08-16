@@ -11,9 +11,8 @@ deps    lockfile bump (7-day cooldown) ──▶ make check ──▶ PR ─┐
                                               │ broken        │
                                               ▼               ▼
                                         agent fixes ──▶ PR ──▶ deps-checks: watch;
-                                                               red → agent works the
-                                                               checks green; then
-                                                               MERGE (end to end)
+                                                               red → human remediation
+                                                               green → MERGE (end to end)
 
 fixes   covfuzz probe tops up backlog ──▶ agent drains ONE cluster ──▶ PR,
                                           then the same agent kicks + watches its
@@ -44,11 +43,10 @@ The codebase is not a hostage to whatever ruff rolls out. What it may never
 do is weaken an existing check or edit the automation itself (`.github/**`,
 `Makefile` — such diffs are refused at merge).
 
-Whoever delivered the PR, the `deps-checks` job then owns its checks: it
-waits for the dispatched runs, and if any fail, an agent is checked out on
-the branch to work them green — read the failing log, fix, push, re-kick,
-wait (one blocking ~20-min call per CI cycle), repeat — until green or an
-honest give-up (diagnosis commented on the PR, job fails, human takes over).
+Whoever delivered the PR, the read-only `deps-checks` job waits for the
+dispatched runs. If any check fails, the job fails for human remediation; it
+does not expose untrusted logs or the dependency PR checkout to a secret-backed,
+write-capable agent.
 
 Once green, the deps PR **merges itself** — mechanical or agent-fixed alike,
 end to end with no human in the path. The single refusal: a diff touching
