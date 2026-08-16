@@ -12,8 +12,8 @@ rules:
     # These five jobs `git push -f` a bot branch using the credential checkout
     # persists into .git/config, so persist-credentials: false would break them.
     # The real fix is persist-credentials: false + `gh auth setup-git` (already
-    # the pattern in nightly.yaml's deps-checks/deps-fixes jobs, L472+L498 and
-    # L630+L768); porting it here is deferred, not rejected.
+    # the pattern in nightly.yaml's deps-checks/deps-fixes jobs, L482+L508 and
+    # L640+L778); porting it here is deferred, not rejected.
     #
     # Pinned to the checkout's line so a NEW job that persists credentials still
     # fails the gate. These pins fail closed, but silently: zizmor does not warn
@@ -24,6 +24,6 @@ rules:
     ignore:
       - answer-key.yaml:192   # job `publish` — pushes the answer-key pin branch (L255)
       - data-refresh.yaml:96  # job `refresh` — pushes data/$MONTH (L127)
-      - data-refresh.yaml:395 # job `fix-publish` — re-pushes data/$MONTH after an agent fix (L418)
+      - data-refresh.yaml:397 # job `fix-publish` — re-pushes data/$MONTH after an agent fix (L431)
       - nightly.yaml:137      # job `deps-publish` — pushes deps/nightly (L154)
-      - nightly.yaml:351      # job `deps-fix-publish` — re-pushes deps/nightly after a fix (L372)
+      - nightly.yaml:351      # job `deps-fix-publish` — re-pushes deps/nightly after a fix (L382)
