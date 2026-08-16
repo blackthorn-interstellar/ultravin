@@ -99,19 +99,40 @@ jobs:
         path: crates/ultravin-core/data
     - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
     - run: uv sync --frozen --all-extras
+    # Whether this job's parity check runs must not be the PR's decision, so on a
+    # pull_request the pin is read from the merge BASE as well as from the PR: a
+    # PR that deletes or rewrites tests/answerkey.json can no longer vote itself
+    # out of the gate (and if it did tamper with it, the verify step below fails
+    # on the tampered file rather than skipping). The PR's own pin still counts,
+    # because answer-key.yaml's `answerkey/$MONTH` PR is how a month's first key
+    # legitimately arrives. The manifest is always the PR's: a data-refresh PR
+    # bumps the month and has no key yet, and that skip is by design.
     - name: Is there a key for this data month?
       id: pin
+      env:
+        BASE_REF: ${{ github.base_ref }}
       run: |
-        if [ ! -f tests/answerkey.json ]; then
-          echo "::notice::no answer key pinned yet"; echo "have=false" >> "$GITHUB_OUTPUT"; exit 0
-        fi
-        pinned=$(python3 -c "import json;print(json.load(open('tests/answerkey.json'))['month'])")
+        set -euo pipefail
         current=$(python3 -c "import json;print(json.load(open('vpic/manifest.json'))['month'])")
-        if [ "$pinned" != "$current" ]; then
-          echo "::notice::key is for $pinned, data is $current — not built yet"
-          echo "have=false" >> "$GITHUB_OUTPUT"; exit 0
+        head_pin=""
+        base_pin=""
+        if [ -f tests/answerkey.json ]; then
+          head_pin=$(python3 -c "import json;print(json.load(open('tests/answerkey.json'))['month'])")
         fi
-        echo "have=true" >> "$GITHUB_OUTPUT"
+        if [ -n "$BASE_REF" ]; then
+          # Depth-1 PR checkout has no base history; fetch just the base tip.
+          git fetch --no-tags --depth=1 origin "+refs/heads/$BASE_REF"
+          if git cat-file -e FETCH_HEAD:tests/answerkey.json 2>/dev/null; then
+            base_pin=$(git show FETCH_HEAD:tests/answerkey.json | python3 -c "import json,sys;print(json.load(sys.stdin)['month'])")
+          fi
+        else
+          base_pin="$head_pin"  # push to master: the checkout is the base
+        fi
+        if [ "$base_pin" = "$current" ] || [ "$head_pin" = "$current" ]; then
+          echo "have=true" >> "$GITHUB_OUTPUT"; exit 0
+        fi
+        echo "::notice::no answer key for $current (base pin: ${base_pin:-none}, head pin: ${head_pin:-none}) — not built yet"
+        echo "have=false" >> "$GITHUB_OUTPUT"
     - name: Verify against the frozen answers
       if: steps.pin.outputs.have == 'true'
       env:
