@@ -12,9 +12,29 @@ runs:
       id: meta
       shell: bash
       run: |
+        month=$(jq -r .month vpic/manifest.json)
+        url=$(jq -r .source_url vpic/manifest.json)
+        # `month` is the one manifest field nothing else pins down. source_url,
+        # dump_sha256 and artifact_blake3 all verify each other below, but month
+        # only reaches `--month`, whose sole artifact effect is cover_year — so a
+        # same-year edit yields byte-identical artifact bytes, and on a cache HIT
+        # (key = artifact_blake3, which no month edit changes) the build steps
+        # that would notice even a cross-year edit never run. Assert it against
+        # the pinned dump's own filename here: first step, no cache-hit guard, so
+        # a PR cannot desync month from the dump it names. That desync is not
+        # cosmetic — ci.yaml's answerkey job decides whether to run the parity
+        # gate by comparing the answer-key pin against this month, so a bogus
+        # month skips the gate outright.
+        case "$url" in
+          *"/vPICList_lite_${month}.plain.zip") ;;
+          *)
+            echo "::error::vpic/manifest.json month '$month' does not match source_url '$url' (expected a URL ending in /vPICList_lite_${month}.plain.zip)"
+            exit 1
+            ;;
+        esac
         {
-          echo "month=$(jq -r .month vpic/manifest.json)"
-          echo "url=$(jq -r .source_url vpic/manifest.json)"
+          echo "month=$month"
+          echo "url=$url"
           echo "dump_sha256=$(jq -r .dump_sha256 vpic/manifest.json)"
           echo "artifact_blake3=$(jq -r .artifact_blake3 vpic/manifest.json)"
         } >> "$GITHUB_OUTPUT"
