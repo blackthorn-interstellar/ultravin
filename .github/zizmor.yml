@@ -29,5 +29,5 @@ rules:
       - data-refresh.yaml:397 # job `fix-publish` — re-pushes data/$MONTH after an agent fix (L431)
       - nightly.yaml:147      # job `deps-publish` — pushes deps/nightly (L164)
       - nightly.yaml:361      # job `deps-fix-publish` — re-pushes deps/nightly after a fix (L392)
-      - nightly.yaml:643      # job `deps-remedy-publish` — re-pushes deps/nightly after the check-remediation agent (L681)
-      - nightly.yaml:1115     # job `fixes-publish` — pushes the parity-fix branch (L1145)
+      - nightly.yaml:647      # job `deps-remedy-publish` — re-pushes deps/nightly after the check-remediation agent (L686)
+      - nightly.yaml:1203     # job `fixes-publish` — pushes the parity-fix branch (L1233)

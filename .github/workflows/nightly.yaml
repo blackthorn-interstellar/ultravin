@@ -637,6 +637,10 @@ jobs:
       pull-requests: write
       issues: write # gh label create
       actions: write # dispatch ci.yaml/data-review.yaml, approve gated runs
+    outputs:
+      # deps-merge judges the checks of THIS SHA, not of whatever `gh pr checks`
+      # resolves the PR head to seconds after a push.
+      head_sha: ${{ steps.publish.outputs.head_sha }}
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -650,6 +654,7 @@ jobs:
           name: nightly-deps-remedy-bundle
           path: fix/
       - name: Apply the fix, push, re-kick the checks
+        id: publish
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -679,6 +684,7 @@ jobs:
           { printf 'deps: nightly check fixes %s (agent-fixed)\n\n' "$(date -u +%F)"; cat fix/fix-notes.md; } > "$RUNNER_TEMP/msg.md"
           git commit -F "$RUNNER_TEMP/msg.md"
           git push origin HEAD:deps/nightly
+          echo "head_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
           gh label create agent-fixed --color B60205 --description "build repaired by the nightly agent" || true
           gh pr view deps/nightly --repo "${{ github.repository }}" --json body --jq .body > "$RUNNER_TEMP/pr-body.md"
           { printf '\n\n---\n\n### Check remediation %s\n\n' "$(date -u +%F)"; cat fix/fix-notes.md; } >> "$RUNNER_TEMP/pr-body.md"
@@ -734,14 +740,51 @@ jobs:
         id: rewait
         if: needs['deps-remedy-publish'].result == 'success'
         timeout-minutes: 50
+        env:
+          REPO: ${{ github.repository }}
+          SHA: ${{ needs['deps-remedy-publish'].outputs.head_sha }}
         run: |
-          sleep 60 # dispatched runs need a moment to register on the head SHA
-          if gh pr checks deps/nightly --repo "${{ github.repository }}" --watch --interval 30; then
-            echo "still_red=false" >> "$GITHUB_OUTPUT"
-            echo "all checks green on deps/nightly after remediation" >> "$GITHUB_STEP_SUMMARY"
-          else
+          # Judge the SHA deps-remedy-publish actually pushed. `gh pr checks
+          # --watch` resolves the PR head lazily: in the first seconds after a
+          # push it still reports the PRE-remediation SHA's already-concluded
+          # reds, which would end a successfully remediated night red. So wait
+          # until the re-dispatched runs EXIST and have COMPLETED on this SHA,
+          # then judge its check runs. Every timeout below is still_red — this
+          # step may block a merge on doubt, never wave one through.
+          deadline=$(( $(date +%s) + 2400 ))
+          while :; do
+            gh api "repos/$REPO/actions/runs?head_sha=$SHA&per_page=100" \
+              --jq '.workflow_runs[]
+                    | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml")
+                    | "\(.path) \(.status)"' > "$RUNNER_TEMP/runs.txt" || true
+            n_ci=$(grep -c 'ci\.yaml' "$RUNNER_TEMP/runs.txt" || true)
+            n_review=$(grep -c 'data-review\.yaml' "$RUNNER_TEMP/runs.txt" || true)
+            n_open=$(grep -vc ' completed$' "$RUNNER_TEMP/runs.txt" || true)
+            if [ "$n_ci" -gt 0 ] && [ "$n_review" -gt 0 ] && [ "$n_open" -eq 0 ]; then
+              break
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "still_red=true" >> "$GITHUB_OUTPUT"
+              echo "::error::the re-kicked runs never completed on $SHA (ci: $n_ci, data-review: $n_review, still open: $n_open)"
+              cat "$RUNNER_TEMP/runs.txt"
+              exit 0
+            fi
+            sleep 30
+          done
+          gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" --paginate \
+            --jq '.check_runs[] | "\(.status) \(.conclusion // "none") \(.name)"' \
+            | sort > "$RUNNER_TEMP/checks.txt"
+          cat "$RUNNER_TEMP/checks.txt"
+          # neutral/skipped are green to branch protection; everything else that
+          # is not a completed success — including a check still running after
+          # both workflows finished — is red.
+          bad=$(awk '$1 != "completed" || ($2 != "success" && $2 != "neutral" && $2 != "skipped")' "$RUNNER_TEMP/checks.txt")
+          if [ -n "$bad" ]; then
             echo "still_red=true" >> "$GITHUB_OUTPUT"
-            gh pr checks deps/nightly --repo "${{ github.repository }}" || true
+            { echo "checks not green on deps/nightly ($SHA):"; echo "$bad"; } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "still_red=false" >> "$GITHUB_OUTPUT"
+            echo "all checks green on deps/nightly ($SHA) after remediation" >> "$GITHUB_STEP_SUMMARY"
           fi
       # One remediation attempt per night is the budget. A second agent pass
       # would be an unattended loop editing the branch until CI relents.
@@ -787,6 +830,51 @@ jobs:
           echo "::error::deps/nightly green but not mergeable; last error:"
           cat /tmp/merge-err || true
           exit 1
+
+  # The catch-all label. deps-merge labels the PR on the two outcomes it decides
+  # itself (review rejection, still red after the one remediation attempt), but
+  # it is SKIPPED whenever the lane broke upstream of it — the agent banked
+  # nothing, deps/nightly moved under it, the automation guard refused its
+  # patch, deps-watch's wait timed out — and it can also fail at the merge step
+  # itself. Those nights left a red run and an unlabeled PR sitting open. This
+  # job closes that gap: whenever tonight's lane delivered a PR and did not
+  # merge it, the PR ends up labeled, whatever the reason.
+  #
+  # It cannot mask the red: a job that passes never changes a run whose other
+  # jobs failed, and by construction deps-merge is only skipped when deps-watch,
+  # deps-remedy, or deps-remedy-publish failed. It cannot fire on the merged
+  # path (deps-merge succeeded) or on a night with no deps PR (neither publish
+  # job succeeded), and it stays quiet when deps-merge already labeled.
+  deps-needs-human:
+    needs: [deps-publish, deps-fix-publish, deps-merge]
+    if: >-
+      always() &&
+      (needs['deps-publish'].result == 'success' || needs['deps-fix-publish'].result == 'success') &&
+      needs['deps-merge'].result != 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pull-requests: write # label, comment
+      issues: write # gh label create
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Label the PR the lane could not merge
+        run: |
+          state=$(gh pr view deps/nightly --repo "$REPO" --json state --jq .state 2>/dev/null || true)
+          if [ "$state" != "OPEN" ]; then
+            echo "no open deps/nightly PR (state: ${state:-<none>}) — nothing to label"
+            exit 0
+          fi
+          if gh pr view deps/nightly --repo "$REPO" --json labels --jq '.labels[].name' | grep -qx needs-human; then
+            echo "deps/nightly already labeled needs-human — the deciding job said why"
+            exit 0
+          fi
+          gh label create needs-human --color B60205 --description "automation stopped — needs a human" || true
+          gh pr edit deps/nightly --repo "$REPO" --add-label needs-human
+          gh pr comment deps/nightly --repo "$REPO" --body "The nightly deps lane ended without merging this PR — see the failing job in [run ${{ github.run_id }}](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}). The branch is as the pipeline left it: fix and merge, or close it and let tomorrow retry from master."
+          echo "labeled deps/nightly needs-human (lane ended without merging)" >> "$GITHUB_STEP_SUMMARY"
 
   # Parity lane, agent half. This VM downloads and loads the NHTSA dump, runs
   # the covfuzz probe against it, and hands the agent decode output derived from
