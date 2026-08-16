@@ -146,6 +146,42 @@ def test_sweep_gate_allows_a_documented_oracle_crash() -> None:
     assert refresh.sweep_gate(crashed).ok
 
 
+def test_sweep_gate_fails_when_a_crash_listed_vin_diverges() -> None:
+    """A crash allowance excuses no answer, not a wrong one: the oracle answered here."""
+    diverged = {
+        "total": 500,
+        "exact_parity": 499,
+        "diverged": 1,
+        "examples": [{"vin": "7T0AAAAA0SA111111"}],
+        "oracle_errors": [],
+    }
+    gate = refresh.sweep_gate(diverged)
+    assert not gate.ok
+    assert "7T0AAAAA0SA111111" in gate.detail
+
+
+def test_corpus_gate_fails_when_a_crash_listed_vin_diverges() -> None:
+    """Same split in the corpus gate: crash VINs are not documented deviations."""
+    corpus = {"entries": [{"vin": "7T0AAAAA0SA111111", "expected_diff": _fp(exact=False)}]}
+    gate = refresh.corpus_gate(corpus)
+    assert not gate.ok
+    assert "7T0AAAAA0SA111111" in gate.detail
+
+
+def test_sweep_gate_fails_when_the_divergence_vin_crashes_the_oracle() -> None:
+    """And the converse: a documented divergence does not excuse an undocumented crash."""
+    crashed = {
+        "total": 500,
+        "exact_parity": 499,
+        "diverged": 0,
+        "examples": [],
+        "oracle_errors": [{"vin": "W1LSB0L72VEJV2EPX", "error": "InvalidRegularExpression(...)"}],
+    }
+    gate = refresh.sweep_gate(crashed)
+    assert not gate.ok
+    assert "W1LSB0L72VEJV2EPX" in gate.detail
+
+
 def test_sweep_gate_fails_on_an_undocumented_crash_alongside_known_diffs() -> None:
     """The crash check must survive the diverging branch too, not just the clean one."""
     mixed = {
@@ -333,6 +369,41 @@ def test_render_report_includes_lookup_section() -> None:
     assert "## Lookup value changes" in md
     assert "- `bodystyle[7]`: “x (SUV)” → “x [SUV]”" in md
     assert md.index("Lookup value changes") < md.index("## Gates")
+
+
+def _report(lookups: LookupDiff | None = None, skipped: list[str] | None = None) -> refresh.Report:
+    return refresh.Report(
+        old_month="2026_06",
+        month="2026_07",
+        source=Probe(url="https://x/y.zip", exists=True),
+        sha256="abc",
+        classification=refresh.classify(
+            _manifest({"pattern": 10}, ["spvindecode"]),
+            _manifest({"pattern": 11}, ["spvindecode"]),
+            changed=[],
+        ),
+        gates=[],
+        lookups=lookups,
+        skipped_vins=skipped or [],
+    )
+
+
+def test_followups_flags_a_migrated_lookup_snapshot() -> None:
+    """render_lookups says so inside its own section; Follow-ups is where humans look."""
+    corpus = {"entries": [{"vin": "W1LSB0L72VEJV2EPX", "expected_diff": _fp(exact=False)}]}
+    migrated = refresh.followups(_report(lookups=LookupDiff(migrated=True)), corpus)
+    assert any("lookup value review unavailable" in f for f in migrated)
+    assert any("vpic/lookups.json" in f for f in migrated)
+    assert not any("lookup value review" in f for f in refresh.followups(_report(lookups=LookupDiff()), corpus))
+
+
+def test_followups_healed_never_lists_crash_vins() -> None:
+    """Crash VINs never enter the corpus (freeze skips them), so they never 'heal'."""
+    corpus = {"entries": [{"vin": "AAA", "expected_diff": _fp(exact=True)}]}
+    healed = [f for f in refresh.followups(_report(), corpus) if "no longer reproduce" in f]
+    assert len(healed) == 1
+    assert "W1LSB0L72VEJV2EPX" in healed[0]
+    assert "7T0" not in healed[0]
 
 
 def test_main_writes_failure_context_on_mechanical_crash(monkeypatch, tmp_path) -> None:

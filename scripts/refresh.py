@@ -61,11 +61,15 @@ SWEEP_LIMIT = 500
 LOOKUP_MAX_ROWS = 512  # tables above this aren't lookups; the parity gates still validate them
 LOOKUP_REPORT_CAP = 20
 
-# Documented, deliberate ultravin-vs-oracle deviations (docs/KNOWN_DEVIATIONS.md).
-# A diverging VIN outside this set fails the refresh, and so does a VIN the live
-# sweep saw the oracle *crash* on (KNOWN_DEVIATIONS.md #1). The two kinds are
-# listed together because both mean the same thing: the oracle cannot be used as
-# the answer for this VIN, and a human already signed off on why.
+# Documented, deliberate ultravin-vs-oracle deviations (docs/KNOWN_DEVIATIONS.md),
+# kept in two deliberately separate lists because they excuse two different
+# observations. ORACLE_CRASH_VINS excuses a *crash*: the oracle aborted and gave
+# no answer at all (KNOWN_DEVIATIONS.md #1). KNOWN_DEVIATION_VINS excuses a
+# *divergence*: the oracle answered and ultravin disagreed, for a documented
+# reason. Neither list excuses the other's condition — a crash-listed VIN that
+# suddenly diverges is new information (the oracle now answers, and we are wrong
+# about what it says), and a crash on the diverging VIN is an undocumented crash.
+# Both must fail their gate.
 #
 # The crash VINs below are the 62 WMI-7T0 VINs the 2026_07 campaign hit. They are
 # a *sample* of an unbounded class — any 7T0 VIN of model year 2023-2025 whose
@@ -141,7 +145,7 @@ ORACLE_CRASH_VINS = frozenset(
         "7T0TAAAAXSA111111",
     }
 )
-KNOWN_DEVIATION_VINS = frozenset({"W1LSB0L72VEJV2EPX"}) | ORACLE_CRASH_VINS
+KNOWN_DEVIATION_VINS = frozenset({"W1LSB0L72VEJV2EPX"})  # stale year cache (KNOWN_DEVIATIONS.md #2)
 
 
 # --------------------------------------------------------------------------- util
@@ -321,7 +325,7 @@ def sweep_gate(report: dict) -> Gate:
     # a diff. sweep.py used to die on the first one; now it reports them and the
     # verdict happens here, so an *undocumented* crash can never pass unnoticed.
     crashed = sorted({e["vin"] for e in report.get("oracle_errors", [])})
-    undocumented_crashes = [v for v in crashed if v not in KNOWN_DEVIATION_VINS]
+    undocumented_crashes = [v for v in crashed if v not in ORACLE_CRASH_VINS]
     crash_detail = ""
     if crashed:
         crash_detail = f"; oracle crashed on {len(crashed)} VIN(s) (documented: {not undocumented_crashes})"
@@ -588,6 +592,33 @@ def write_report(r: Report) -> None:
     print("\n" + md)
 
 
+def followups(r: Report, corpus: dict) -> list[str]:
+    """Human actions the report should surface. None of them fail a gate.
+
+    Pure (cmd_run does the reading) so every condition stays testable."""
+    out: list[str] = []
+    healed = sorted(KNOWN_DEVIATION_VINS - {e["vin"] for e in corpus["entries"] if not _exact(e["expected_diff"])})
+    if healed:
+        out.append(
+            f"known deviation(s) {healed} no longer reproduce — update docs/KNOWN_DEVIATIONS.md "
+            "and drop them from KNOWN_DEVIATION_VINS in scripts/refresh.py"
+        )
+    if r.skipped_vins:
+        out.append(
+            f"freeze skipped oracle-erroring VIN(s) {r.skipped_vins} — if new, document per docs/KNOWN_DEVIATIONS.md"
+        )
+    if r.classification.kind == "schema-change":
+        out.append("schema/proc text changed — diff vpic/ against the decoder before merging")
+    # render_lookups says so too, but only inside the lookup section — a reader who
+    # skims to Follow-ups would otherwise take an empty value diff as "nothing changed".
+    if r.lookups is not None and r.lookups.migrated:
+        out.append(
+            "lookup value review unavailable this cycle (snapshot format migrated) — "
+            "verify label changes in the vpic/lookups.json diff by hand"
+        )
+    return out
+
+
 # --------------------------------------------------------------------------- run
 
 
@@ -750,21 +781,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         lookups=lookups,
         skipped_vins=skipped,
     )
-    healed = sorted(
-        KNOWN_DEVIATION_VINS
-        - {e["vin"] for e in json.loads(CORPUS.read_text())["entries"] if not _exact(e["expected_diff"])}
-    )
-    if healed:
-        report.followups.append(
-            f"known deviation(s) {healed} no longer reproduce — update docs/KNOWN_DEVIATIONS.md "
-            "and drop them from KNOWN_DEVIATION_VINS in scripts/refresh.py"
-        )
-    if skipped:
-        report.followups.append(
-            f"freeze skipped oracle-erroring VIN(s) {skipped} — if new, document per docs/KNOWN_DEVIATIONS.md"
-        )
-    if classification.kind == "schema-change":
-        report.followups.append("schema/proc text changed — diff vpic/ against the decoder before merging")
+    report.followups = followups(report, json.loads(CORPUS.read_text()))
     write_report(report)
     gh_output(
         {
