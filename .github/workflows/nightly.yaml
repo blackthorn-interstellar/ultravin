@@ -50,18 +50,14 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     permissions:
-      contents: write
-      pull-requests: write
-      issues: write # gh label create
-      actions: write # dispatch ci.yaml/data-review.yaml, approve gated runs
+      contents: read
     outputs:
       changed: ${{ steps.bump.outputs.changed }}
-    env:
-      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-python@v5
@@ -98,9 +94,42 @@ jobs:
         run: |
           set -o pipefail
           make check 2>&1 | tee target/deps/check.log
+      - name: Capture failure context
+        if: failure() && steps.bump.outputs.changed == 'true'
+        run: git diff -- Cargo.lock uv.lock > target/deps/lock.diff || true
+      - name: Evidence artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-deps-evidence
+          path: target/deps/
+          if-no-files-found: ignore
+
+  # Upgraded packages are untrusted until the checks above complete. Keep all
+  # repository credentials out of that job and grant write access only here.
+  deps-publish:
+    needs: deps
+    if: needs.deps.result == 'success' && needs.deps.outputs.changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write # gh label create
+      actions: write # dispatch ci.yaml/data-review.yaml, approve gated runs
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Validated dependency bump
+        uses: actions/download-artifact@v4
+        with:
+          name: nightly-deps-evidence
+          path: target/deps/
       - name: Branch, push, pull request
-        if: steps.bump.outputs.changed == 'true'
         run: |
+          cp target/deps/Cargo.lock target/deps/uv.lock .
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B deps/nightly
@@ -124,16 +153,6 @@ jobs:
             gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
               || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
           done
-      - name: Capture failure context
-        if: failure() && steps.bump.outputs.changed == 'true'
-        run: git diff -- Cargo.lock uv.lock > target/deps/lock.diff || true
-      - name: Evidence artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: nightly-deps-evidence
-          path: target/deps/
-          if-no-files-found: ignore
 
   deps-fix:
     needs: deps
@@ -281,8 +300,8 @@ jobs:
   # on the branch until they are green. Automerge (mechanical bumps only)
   # happens here, after green, not before.
   deps-checks:
-    needs: [deps, deps-fix]
-    if: always() && needs.deps.outputs.changed == 'true' && (needs.deps.result == 'success' || needs['deps-fix'].result == 'success')
+    needs: [deps, deps-publish, deps-fix]
+    if: always() && needs.deps.outputs.changed == 'true' && (needs['deps-publish'].result == 'success' || needs['deps-fix'].result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 170
     environment: data-refresh
