@@ -44,7 +44,22 @@ runs:
         # (decoder code, scripts, packaging, .github). Only a clean data
         # regeneration is data-only. Fail closed — an unreadable or empty diff
         # is treated as schema-change, never merged.
-        files=$(gh pr diff "$pr" --name-only) || files=""
+        #
+        # The list must be rename-VISIBLE, which `gh pr diff --name-only` is
+        # not: GitHub's diff runs rename detection (`rename from`/`rename to`)
+        # and gh prints only the b/ side, so `git mv vpic/schema/tables.sql
+        # vpic/tables.sql` reads as a pure data change and would auto-merge.
+        # Diff the PR head against its merge base with --no-renames instead,
+        # which splits every rename back into a delete + an add so BOTH paths
+        # get classified. Callers check out with fetch-depth: 0, and the PR head
+        # is fetched explicitly so classification never depends on whatever the
+        # job happens to have in its working tree.
+        files=""
+        if git fetch -q origin "+refs/heads/master:refs/classify/base" \
+                               "+refs/pull/$pr/head:refs/classify/head"; then
+          base=$(git merge-base refs/classify/base refs/classify/head)
+          files=$(git diff --no-renames --name-only "$base" refs/classify/head)
+        fi
         if [ -z "$files" ]; then
           echo "::warning::empty or unreadable diff for PR #$pr — treating as schema-change"
           cls="schema-change"

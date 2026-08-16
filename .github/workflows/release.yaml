@@ -242,13 +242,18 @@ jobs:
       - name: Note wheel not smoked (cross-compiled / libc-incompatible)
         if: ${{ !matrix.smoke && !matrix.container_smoke }}
         run: echo "::notice::${{ matrix.kind }}/${{ matrix.target }} wheel is cross-compiled or libc-incompatible with this runner — built, not smoked"
-      # Fail loudly if any dist/ file changed since it was built, before it can
-      # be uploaded and (on a tag) trusted-published.
+      # Fail loudly if dist/ changed since it was built, before it can be
+      # uploaded and (on a tag) trusted-published. Re-listing and diffing rather
+      # than `sha256sum -c`: -c only re-checks the files it was given, so a wheel
+      # ADDED to dist/ after the record step passes it — and upload-artifact and
+      # the PyPI publish take the whole directory. The diff compares the exact
+      # same `sha256sum dist/*` listing, so additions, edits, and deletions all
+      # fail.
       - name: Verify dist unchanged since build
         shell: bash
         run: |
           set -euo pipefail
-          sha256sum -c "${RUNNER_TEMP}/dist.sha256"
+          sha256sum dist/* | diff - "${RUNNER_TEMP}/dist.sha256"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wheels-${{ matrix.kind }}-${{ matrix.target }}
@@ -308,12 +313,14 @@ jobs:
             export ULTRAVIN_EXPECT_VERSION="${GITHUB_REF_NAME#v}"
           fi
           python3 scripts/wheel_smoke.py dist/*.tar.gz
-      # Fail loudly if the sdist changed since it was built, before upload/publish.
+      # Fail loudly if dist/ changed since the sdist was built, before
+      # upload/publish. Same listing-diff as the wheels job — see the note there
+      # for why `sha256sum -c` is not enough.
       - name: Verify dist unchanged since build
         shell: bash
         run: |
           set -euo pipefail
-          sha256sum -c "${RUNNER_TEMP}/dist.sha256"
+          sha256sum dist/* | diff - "${RUNNER_TEMP}/dist.sha256"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wheels-sdist

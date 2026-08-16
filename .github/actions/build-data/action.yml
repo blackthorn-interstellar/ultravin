@@ -73,14 +73,20 @@ runs:
     # them here loudly instead of letting this check silently drift.
     - name: Verify restored artifact integrity (independent re-hash)
       shell: bash
+      env:
+        ACTION_PATH: ${{ github.action_path }}
       run: |
         # blake3 isn't in the Python stdlib, and uv is NOT guaranteed on every
         # caller's runner (release.yaml's build-data job sets up only Rust + jq;
         # uv is not preinstalled on ubuntu-latest), so pull the prebuilt blake3
         # wheel into a throwaway venv via the preinstalled python3 — a genuinely
         # independent implementation, no compile, and no dependency on the caller.
+        # Pinned by sha256 (blake3-requirements.txt): this hash decides whether a
+        # release ships, so a hijacked blake3 release must not be able to decide
+        # it. --require-hashes also forbids any unpinned transitive dependency.
         python3 -m venv "$RUNNER_TEMP/b3venv"
-        "$RUNNER_TEMP/b3venv/bin/pip" install --quiet --disable-pip-version-check blake3
+        "$RUNNER_TEMP/b3venv/bin/pip" install --quiet --disable-pip-version-check \
+          --require-hashes --only-binary=:all: -r "$ACTION_PATH/blake3-requirements.txt"
         want="$(jq -r .artifact_blake3 vpic/manifest.json)"
         export want
         "$RUNNER_TEMP/b3venv/bin/python" - <<'PY'
