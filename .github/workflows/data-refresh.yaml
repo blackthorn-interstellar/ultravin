@@ -336,10 +336,3 @@ jobs:
           automerge: ${{ vars.DATA_REFRESH_AUTOMERGE }}
           automerge-schema: ${{ vars.DATA_REFRESH_AUTOMERGE_SCHEMA }}
           autorelease: ${{ vars.DATA_REFRESH_AUTORELEASE }}
-      - name: Claude transcript artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: claude-fix-transcript
-          path: ${{ steps.claude.outputs.execution_file }}
-          if-no-files-found: ignore
