@@ -88,17 +88,29 @@ mechanically, `deps-remedy` gets **one** keyless attempt on the branch: read
 the failing log (`gh run view --log-failed`), fix, verify with a local `make
 check`, commit. `deps-remedy-publish` replays that patch onto `deps/nightly`,
 pushes, and re-kicks the checks; `deps-merge` waits for them once more and
-merges on green. Still red after that one attempt — the agent never sees the
-re-run — labels the PR `needs-human` and ends the run red; the agent's
-diagnosis is in its commit message and the full session in the
-`nightly-deps-remedy-transcript` artifact. The old fix→push→watch→repeat loop
-is gone with the agent's token: one attempt per night, local `make check` as
-its finish line.
+merges on green. That second wait is **pinned to the SHA the publish job
+pushed** — it waits until the re-dispatched `ci` and `data-review` runs exist
+and have completed on that commit before judging its check runs, because
+`gh pr checks` resolves the PR head lazily and would otherwise read the
+pre-remediation SHA's already-concluded reds. Every timeout in it counts as
+red: it may block a merge on doubt, never wave one through. Still red after
+that one attempt — the agent never sees the re-run — labels the PR
+`needs-human` and ends the run red; the agent's diagnosis is in its commit
+message and the full session in the `nightly-deps-remedy-transcript` artifact.
+The old fix→push→watch→repeat loop is gone with the agent's token: one attempt
+per night, local `make check` as its finish line.
 
 That agent handles **mechanical** failures only. If the failing check is
 `review-verdict`, no agent runs at all: `deps-merge` labels the PR
 `needs-human` and comments why. The reviewer's verdict is a human's call,
 never something for the pipeline to work around.
+
+Whenever the lane delivered a PR and then ended without merging it — for any
+reason, including the ones that skip `deps-merge` entirely (the agent banked
+nothing, the branch moved under it, the automation guard refused its patch,
+the first wait timed out) — `deps-needs-human` labels the PR `needs-human` and
+comments with a link to the failing run. **An open `deps/nightly` PR without
+that label always means the night is still in progress or ended merged.**
 
 Once CI is green **and** the review approved, `deps-merge` **merges the PR
 itself** — mechanical or agent-fixed alike, end to end with no human in the
@@ -160,6 +172,10 @@ fails the run for a human.
   its one attempt and the re-kicked checks are still red. Its diagnosis is the
   last commit message on `deps/nightly`; the session is the
   `nightly-deps-remedy-transcript` artifact on the failing run.
+- **deps PR labeled `needs-human` with a "ended without merging" comment** —
+  the lane broke before anything could judge the checks (agent banked nothing,
+  branch moved under the publish job, automation guard refused the patch, wait
+  timed out). The linked run's failing job says which.
 - **`fixes` PR is a `[needs-human]` draft** — the parity agent could not close
   the cluster honestly; `target/fixes/pr-body.md` (now the PR body) has the
   diagnosis.
