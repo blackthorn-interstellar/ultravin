@@ -67,16 +67,18 @@ LOOKUP_REPORT_CAP = 20
 # listed together because both mean the same thing: the oracle cannot be used as
 # the answer for this VIN, and a human already signed off on why.
 #
-# The crash VINs below are the 62 WMI-7T0 VINs the 2026_07 campaign hit. They are
-# a *sample* of an unbounded class — any 7T0 VIN of model year 2023-2025 whose
-# decode matches vinschema 24522 aborts the same way — so a future sweep may find
-# a 7T0 VIN that is not listed here and fail the gate. That failure is correct:
-# it should be re-verified against §1's evidence and then added, not assumed.
+# The crash VINs below are the 64 WMI-7T0 VINs the campaign has hit so far (62 from
+# 2026_07, plus 2 from the 2026-08-16 covfuzz probe). They are a *sample* of an
+# unbounded class — any 7T0 VIN of model year 2023-2025 whose decode matches
+# vinschema 24522 aborts the same way — so a future sweep may find a 7T0 VIN that
+# is not listed here and fail the gate. That failure is correct: it should be
+# re-verified against §1's evidence and then added, not assumed.
 # freeze.py needs none of this: it skips oracle-erroring VINs before they ever
 # reach the corpus, and surfaces new skips in the report as follow-ups.
 ORACLE_CRASH_VINS = frozenset(
     {
         "7T0M6TGCURDSNZTHF",  # the original 2026_06 report (KNOWN_DEVIATIONS.md #1)
+        "7T03ZWKM9RA111111",  # 2026-08-16 probe
         "7T0A1AAA0SA111111",
         "7T0A1AAA1PA111111",
         "7T0A1AAA8RA111111",
@@ -134,6 +136,7 @@ ORACLE_CRASH_VINS = frozenset(
         "7T0FAAAA0RA111111",
         "7T0FAAAA3SA111111",
         "7T0FAAAA4PA111111",
+        "7T0FRAYX7RA111111",  # 2026-08-16 probe
         "7T0TA##1?SA111111",
         "7T0TA#71?SA111111",
         "7T0TAAAA0PA111111",
