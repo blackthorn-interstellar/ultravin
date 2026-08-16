@@ -407,6 +407,13 @@ jobs:
           git checkout -B "data/$MONTH"
           git apply --binary fix-bundle/fix.patch
           git add -A
+          # The patch is agent-controlled. Refuse changes to the automation
+          # before pushing or resolving any local action from this checkout.
+          guarded=$(git diff --cached --name-only | grep -E '^(\.github/|Makefile$)' || true)
+          if [ -n "$guarded" ]; then
+            echo "::error::agent fix attempted to modify trusted automation: $guarded"
+            exit 1
+          fi
           # Classify from the TRUSTED applied diff, mirroring refresh.py: a
           # change under vpic/schema or vpic/procs is a schema-change.
           if git diff --cached --name-only | grep -qE '^vpic/(schema|procs)/'; then

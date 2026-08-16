@@ -368,6 +368,13 @@ jobs:
           git checkout -B deps/nightly
           git apply --binary fix/fix.patch
           git add -A
+          # Enforce the self-editing boundary before this branch is pushed or
+          # any later privileged job checks it out and resolves local actions.
+          guarded=$(git diff --cached --name-only | grep -E '^(\.github/|Makefile$)' || true)
+          if [ -n "$guarded" ]; then
+            echo "::error::agent fix attempted to modify trusted automation: $guarded"
+            exit 1
+          fi
           git commit -m "deps: nightly bump $(date -u +%F) (agent-fixed)"
           git push -f origin deps/nightly
           # PR body = the bump report plus the agent's own explanation, exactly
