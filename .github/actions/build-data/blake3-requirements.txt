@@ -1,0 +1,19 @@
+# Pinned + hashed blake3 for the independent artifact re-hash in action.yml.
+# That step is the ONLY integrity check that runs on a cache hit, so an
+# unpinned `pip install blake3` would let a hijacked release decide whether a
+# poisoned artifact ships. Installed with --require-hashes --only-binary=:all:,
+# so pip refuses anything whose sha256 isn't listed below.
+#
+# Hashes are PyPI's own, verbatim (pip download + pip hash / the PyPI JSON API).
+# Every caller runs ubuntu-latest x86_64, so only the manylinux x86_64 wheels
+# are listed; multiple --hash lines are OR'd, covering the CPython versions the
+# runner image may ship. 3.12+ only on purpose: below that blake3 pulls in
+# typing-extensions, which would need pinning too — a runner that old would
+# fail loudly here rather than install something unverified.
+#
+# Bump: pip download blake3 --only-binary=:all: -d /tmp/dl && pip hash /tmp/dl/*
+blake3==1.0.9 \
+    --hash=sha256:bcd56a7a972c4185070f7042ccc20166927eec3c0f98b8405f375d007b604a0b \
+    --hash=sha256:66c84dbc2a31eda88b55bbf5c5b711037bf0698eba0fd1faf06bdaf313c39048 \
+    --hash=sha256:f65d77eb05331495485048f6804f53885b192b998acb7e6fe1487d941bf08435 \
+    --hash=sha256:c7f648fa425138452d1e585ac625c7aefddb946d9765906c4c12d564a1523cd8

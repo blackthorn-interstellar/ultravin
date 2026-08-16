@@ -121,3 +121,8 @@ ENV/
 
 # Claude Code session state (local permissions, locks, saved workflows)
 /.claude/
+
+# Agent patch bundles downloaded into the checkout by the fix-publish jobs — CI
+# `git add -A`s after applying them, which would otherwise commit the artifact
+/fix-bundle/
+/fix/
