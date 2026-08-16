@@ -99,7 +99,7 @@ jobs:
           fi
       # A model review takes minutes; until it publishes, `review-verdict`
       # simply does not exist on the head SHA, and a watcher (branch
-      # protection's "expected" list, or the nightly deps-checks job's
+      # protection's "expected" list, or the nightly deps-watch job's
       # `gh pr checks --watch`) can read that absence as "nothing pending".
       # Open the run in_progress up front and have the publish step complete
       # THIS run, so the whole review window is visibly pending. The instant

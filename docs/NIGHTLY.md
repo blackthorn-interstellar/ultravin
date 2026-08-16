@@ -7,20 +7,43 @@ is real work, delivery as a PR through the same CI + `review-verdict` checks,
 and explicit dispatch of those checks (workflow-created PRs emit no events).
 
 ```
-deps    lockfile bump (7-day cooldown) ──▶ make check ──▶ PR ─┐
-                                              │ broken        │
-                                              ▼               ▼
-                                        agent fixes ──▶ PR ──▶ deps-checks: watch;
-                                                               review rejected → stop
-                                                               for a human; else red →
-                                                               agent works the checks
-                                                               green; then MERGE
-                                                               (end to end)
+deps    lockfile bump (7-day cooldown) ──▶ make check ──▶ deps-publish opens the PR
+                                              │ broken
+                                              ▼
+                                        deps-fix (agent, banks a patch)
+                                              ──▶ deps-fix-publish opens the PR
 
-fixes   covfuzz probe tops up backlog ──▶ agent drains ONE cluster ──▶ PR,
-                                          then the same agent kicks + watches its
-                                          checks and fixes failures (human merges)
+        whoever delivered it, deps-watch (no token) then waits for its checks:
+          green           ──▶ deps-merge: trusted-diff guard, MERGE (end to end)
+          review rejected ──▶ deps-merge: label needs-human, stop
+          red             ──▶ deps-remedy (agent, ONE attempt, banks a patch)
+                              ──▶ deps-remedy-publish pushes + re-kicks
+                              ──▶ deps-merge waits again: green MERGES,
+                                  still red → label needs-human, end red
+
+fixes   covfuzz probe tops up backlog ──▶ fixes (agent) drains ONE cluster and
+                                          banks a patch ──▶ fixes-publish opens
+                                          the PR and kicks its checks (human merges)
 ```
+
+## Token discipline
+
+No job both runs untrusted code and holds a write token, and step-scoping is
+not treated as a boundary: same-VM code can read another process's env. Every
+job that builds just-bumped dependencies, reads their CI logs, loads the NHTSA
+dump, or hosts an agent is **keyless** — `contents: read` at most, checked out
+with `persist-credentials: false`, no `GITHUB_TOKEN` write scope anywhere on
+the VM. Such a job delivers by **committing locally** and banking `git diff
+--binary` as an artifact.
+
+Each has a matching `*-publish` job that runs no repository code and resolves
+no local actions (`git` and `gh` only), holds the write token, and replays the
+patch. Before pushing, every publish job refuses a staged path under
+`.github/` or `Makefile` (`--no-renames`, so a rename cannot hide a deletion):
+the machinery is not self-editable, and that refusal is what lets a later
+privileged job check the branch out safely. The agents' transcripts are still
+uploaded as 30-day artifacts — with the write token gone, the only secret in
+reach is the Anthropic key.
 
 ## The deps lane
 
@@ -38,13 +61,15 @@ A green bump becomes a lockfile-only PR on the rolling `deps/nightly` branch
 (body = the bump report). A broken bump banks the evidence (bumped lockfiles,
 `check.log`, report) and hands it to the agent, whose contract is: fix the
 code for the new versions (or pin a genuinely broken package back, justified),
-and deliver the PR even when stuck (`[needs-human]` draft). The agent has
+and commit even when stuck — `deps-fix-publish` opens the PR either way, with
+the agent's own explanation in the body, and an empty session fails the run
+loudly instead of ending green and silent. The agent has
 **rule judgment**: a new lint/type rule arriving with a tool bump is a
 proposal, not law — it conforms where the rule genuinely improves the
 codebase and config-disables it (justified in the PR body) where it is churn.
 The codebase is not a hostage to whatever ruff rolls out. What it may never
 do is weaken an existing check or edit the automation itself (`.github/**`,
-`Makefile` — such diffs are refused at merge).
+`Makefile` — such diffs are refused at publish, and again at merge).
 
 The PR is also **content-reviewed**: `data-review.yaml` gates `deps/*` the
 same way it gates `data/*`, with an adversarial read-only Claude reviewer and
@@ -56,21 +81,31 @@ packages are plausible transitive dependencies, version moves match the bump
 report. Nothing in the diff or report may read like an instruction to the
 automation. Uncertainty is a rejection.
 
-Whoever delivered the PR, the `deps-checks` job then owns its checks: it
-waits for the dispatched runs, and if any fail, an agent is checked out on
-the branch to work them green — read the failing log, fix, push, re-kick,
-wait (one blocking ~20-min call per CI cycle), repeat — until green or an
-honest give-up (diagnosis commented on the PR, job fails, human takes over).
+Whoever delivered the PR, `deps-watch` then waits for the dispatched runs and
+classifies the outcome — it holds no token and checks nothing out, so a red
+branch cannot reach anything privileged from there. If checks failed
+mechanically, `deps-remedy` gets **one** keyless attempt on the branch: read
+the failing log (`gh run view --log-failed`), fix, verify with a local `make
+check`, commit. `deps-remedy-publish` replays that patch onto `deps/nightly`,
+pushes, and re-kicks the checks; `deps-merge` waits for them once more and
+merges on green. Still red after that one attempt — the agent never sees the
+re-run — labels the PR `needs-human` and ends the run red; the agent's
+diagnosis is in its commit message and the full session in the
+`nightly-deps-remedy-transcript` artifact. The old fix→push→watch→repeat loop
+is gone with the agent's token: one attempt per night, local `make check` as
+its finish line.
+
 That agent handles **mechanical** failures only. If the failing check is
-`review-verdict`, the job stops before the agent runs, labels the PR
-`needs-human`, and comments why: the reviewer's verdict is a human's call,
+`review-verdict`, no agent runs at all: `deps-merge` labels the PR
+`needs-human` and comments why. The reviewer's verdict is a human's call,
 never something for the pipeline to work around.
 
-Once CI is green **and** the review approved, the deps PR **merges itself** —
-mechanical or agent-fixed alike, end to end with no human in the path. The
-single refusal beyond the review: a diff touching `.github/**` or the
-`Makefile` fails the merge step for a human, because the machinery must not
-be able to edit its own judges.
+Once CI is green **and** the review approved, `deps-merge` **merges the PR
+itself** — mechanical or agent-fixed alike, end to end with no human in the
+path. That job runs no repository code and reads no CI logs, which is what
+lets it hold the write token. The single refusal beyond the review: a diff
+touching `.github/**` or the `Makefile` fails the merge step for a human,
+because the machinery must not be able to edit its own judges.
 
 ## The fixes lane
 
@@ -88,19 +123,23 @@ decoder change reopens coverage, so the probe never permanently retires.
 
 Each night the agent gets a loaded oracle and a built extension, and resolves
 **one root-cause cluster**: reproduce first (stale entries are deleted — that
-alone is a valid PR), then either fix the decoder or document a genuine
+alone is a valid delivery), then either fix the decoder or document a genuine
 oracle/dump defect in `docs/KNOWN_DEVIATIONS.md` + `KNOWN_DEVIATION_VINS`.
 Fixed clusters leave a representative VIN in `tests/brutal_repros.json`, which
 the monthly refresh freezes into the parity corpus as a permanent regression.
-The finish line is machine-checked: `scripts.parity.sweep --cases` over the
-resolved VINs must show zero undocumented divergence, and `make check` green.
+The finish line is machine-checked and **local**: `scripts.parity.sweep
+--cases` over the resolved VINs must show zero undocumented divergence, and
+`make check` green — the agent never sees this branch's CI run.
 
-After delivering, the same agent session kicks CI + the review gate itself,
-watches them in the foreground, and fixes any failures on the branch until
-everything is green (the workflow re-kicks as a fallback if the session died
-before kicking). Parity-fix PRs are **always merged by a human** — there is
-no automerge switch for decoder changes. One open `parity-backlog` PR blocks
-the next night's run (no stacking); merge or close it to resume draining.
+It commits that work locally, writing its PR title and body to
+`target/fixes/` (plus a `needs-human` marker if it could not finish honestly).
+`fixes-publish` recreates the branch from the banked patch, opens or updates
+the PR — draft and labeled `needs-human` when the marker is there — and
+dispatches CI and the review gate. Parity-fix PRs are **always merged by a
+human** — there is no automerge switch for decoder changes — so their checks
+land under the eyes of whoever merges them. One open `parity-backlog` PR
+blocks the next night's run (no stacking); merge or close it to resume
+draining.
 
 On demand: `gh workflow run nightly.yaml -f lane=fixes -f vins="VIN1 VIN2"`
 runs an RCA on exactly those VINs, skipping the probe and the backlog pick.
@@ -114,9 +153,16 @@ fails the run for a human.
 
 ## Failure playbook
 
-- **deps red, agent delivered a `[needs-human]` draft** — the bump genuinely
-  broke something the agent couldn't fix honestly; the draft has the
-  diagnosis. Fix, or close it and let tomorrow retry.
+- **deps red, PR opened with a diagnosis instead of a fix** — the bump
+  genuinely broke something the agent couldn't fix honestly; its explanation
+  is the PR body. Fix, or close it and let tomorrow retry.
+- **deps PR labeled `needs-human`, checks red** — the remediation agent had
+  its one attempt and the re-kicked checks are still red. Its diagnosis is the
+  last commit message on `deps/nightly`; the session is the
+  `nightly-deps-remedy-transcript` artifact on the failing run.
+- **`fixes` PR is a `[needs-human]` draft** — the parity agent could not close
+  the cluster honestly; `target/fixes/pr-body.md` (now the PR body) has the
+  diagnosis.
 - **deps PR labeled `needs-human`, `review-verdict` red** — the adversarial
   review gate rejected the bump's content; its findings comment says why. The
   pipeline deliberately stops rather than remediate a verdict. Address the
