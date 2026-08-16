@@ -1067,6 +1067,10 @@ jobs:
           mkdir -p "$RUNNER_TEMP/fix-bundle"
           git diff --binary --cached "$BASE" > "$RUNNER_TEMP/fix-bundle/fix.patch"
           git log --format='%B' "$BASE"..HEAD > "$RUNNER_TEMP/fix-bundle/fix-notes.md" || true
+          # The publish job branches from this exact commit: the deps lane can
+          # merge to master while this lane runs, and the patch belongs on the
+          # tree the agent actually worked from.
+          echo "$BASE" > "$RUNNER_TEMP/fix-bundle/fix-base.txt"
           cp -r target/fixes "$RUNNER_TEMP/fix-bundle/meta" 2>/dev/null || true
           echo "has_changes=true" >> "$GITHUB_OUTPUT"
           git diff --stat --cached "$BASE" >> "$GITHUB_STEP_SUMMARY" || true
@@ -1120,7 +1124,9 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B "$BRANCH"
+          # Branch from the agent's own base, not from whatever master is now:
+          # the deps lane may have merged while this lane was running.
+          git checkout -B "$BRANCH" "$(cat fix/fix-base.txt)"
           git apply --binary fix/fix.patch
           git add -A
           # The patch is agent-controlled. Refuse changes to the automation
@@ -1142,6 +1148,7 @@ jobs:
           [ -n "$title" ] || title="fix: nightly parity backlog drain $(date -u +%F)"
           body=fix/meta/pr-body.md
           [ -s "$body" ] || body=fix/fix-notes.md
+          [ -s "$body" ] || { printf 'Automated parity backlog drain; see the commit for details.\n' > "$RUNNER_TEMP/body.md"; body="$RUNNER_TEMP/body.md"; }
           draft=
           if [ -f fix/meta/needs-human ]; then
             draft=--draft
