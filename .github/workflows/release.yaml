@@ -124,7 +124,7 @@ jobs:
       # host Python — both already have a usable interpreter.)
       - name: Set up Python (Windows)
         if: matrix.kind == 'windows'
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
           architecture: ${{ matrix.pyarch }}
@@ -146,6 +146,14 @@ jobs:
           args: --release --locked --out dist
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
           manylinux: ${{ matrix.manylinux || 'auto' }}
+      # Stage the exact build output before the smoke install runs third-party
+      # package code. The job still gates release on every following smoke step,
+      # but that code can no longer modify the copy eventually published.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: wheels-${{ matrix.kind }}-${{ matrix.target }}
+          path: dist
+          if-no-files-found: error
       # Prove the wheel we just built actually decodes before it can be published
       # (build.rs can emit an import-clean, decode-nothing stub). Only matrix.smoke
       # rows run the wheel natively on their runner; cross-compiled and libc-
@@ -154,7 +162,7 @@ jobs:
       # runners get one here (native arch — matches the wheel).
       - name: Set up Python for smoke
         if: ${{ matrix.smoke && runner.os != 'Windows' }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
       - name: Smoke test the built wheel
@@ -186,11 +194,6 @@ jobs:
       - name: Note wheel not smoked (cross-compiled / libc-incompatible)
         if: ${{ !matrix.smoke && !matrix.container_smoke }}
         run: echo "::notice::${{ matrix.kind }}/${{ matrix.target }} wheel is cross-compiled or libc-incompatible with this runner — built, not smoked"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: wheels-${{ matrix.kind }}-${{ matrix.target }}
-          path: dist
-          if-no-files-found: error
 
   sdist:
     name: sdist
@@ -218,6 +221,13 @@ jobs:
         with:
           command: sdist
           args: --out dist
+      # Preserve the build output before pip executes the sdist's build backend.
+      # A smoke failure still fails this required job and blocks publication.
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: wheels-sdist
+          path: dist
+          if-no-files-found: error
       # Smoke the sdist as a real source build (pip install compiles it from
       # source), the one path that exercises build.rs picking up the embedded
       # vpic.rkyv — the exact "source install stubs empty data" failure the
@@ -225,7 +235,7 @@ jobs:
       # get from maturin-action; the sdist build itself only packages source.
       - uses: dtolnay/rust-toolchain@29eef336d9b2848a0b548edc03f92a220660cdb8 # stable
       - name: Set up Python for smoke
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.12'
       - name: Smoke test the sdist (source build)
@@ -236,11 +246,6 @@ jobs:
             export ULTRAVIN_EXPECT_VERSION="${GITHUB_REF_NAME#v}"
           fi
           python3 scripts/wheel_smoke.py dist/*.tar.gz
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: wheels-sdist
-          path: dist
-          if-no-files-found: error
 
   release:
     name: Publish to PyPI
