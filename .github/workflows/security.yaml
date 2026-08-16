@@ -403,13 +403,22 @@ jobs:
       #   for. The alternative, --skip-unresolved=true, is deliberately NOT used:
       #   it drops unresolved lines silently, so a scan that resolved nothing
       #   would still report green.
+      #
+      # Neither seed may be a bare name. `uv pip install` never reads uv.lock, so
+      # uv.lock's exclude-newer cooldown — provenance kept in its [options] table
+      # — does not cover this step, and `pip setuptools` resolved live against
+      # PyPI on every run (setuptools 84.0.0, released after the cooldown cutoff,
+      # was landing here). --seed takes pip from uv's own vendored wheel with no
+      # index resolution at all, and setuptools is pinned to the newest release
+      # at or before the cutoff. Bump the pin when the cooldown advances past a
+      # newer setuptools.
       - name: Install the closure for snyk to inspect
         if: env.SNYK_TOKEN != ''
         run: |
-          uv venv snyk-venv
+          uv venv --seed snyk-venv
           sed 's/ ;.*//' requirements-snyk.txt > requirements-snyk-install.txt
           uv pip install --python snyk-venv/bin/python \
-            pip setuptools -r requirements-snyk-install.txt
+            setuptools==83.0.0 -r requirements-snyk-install.txt
       - name: Snyk Open Source (Python closure)
         if: env.SNYK_TOKEN != ''
         run: |
