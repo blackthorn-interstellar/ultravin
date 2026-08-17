@@ -9,8 +9,13 @@ These are intentional, documented deviations where ultravin is *more correct*: t
 first two where the oracle contradicts its own sources, the third where the dump
 contradicts the SQL Server database NHTSA actually publishes from.
 
-All three are error/partial-VIN-only (they affect the error-correction outputs
-142/143/144/156/191); clean full-VIN decode is byte-identical to the oracle.
+Deviations #2 and #3 are error/partial-VIN-only (they affect the error-correction
+outputs 142/143/144/156/191); clean full-VIN decode is byte-identical to the oracle.
+Deviation #1 is a *crash*, so that framing does not apply to it: the oracle returns
+no rows at all, for clean and erroring VINs alike (demonstrated in §1), so there is
+no oracle output for a clean decode to be identical to or differ from. The
+`ACCEPTANCE.md` invariant is vacuous there rather than violated — which is why a
+crash VIN is excluded from the corpus instead of frozen into it.
 
 The policy that governs *how* a divergence earns a place on this list — the bar
 of evidence, the bounded scope, the freeze — is `docs/ACCEPTANCE.md`. This file
@@ -88,7 +93,7 @@ from the regression corpus: `freeze.py` skips any VIN the oracle errors on and
 surfaces new skips in the refresh report. `scripts/parity/sweep.py` records them
 under `oracle_errors` (it used to die on the first one), and `refresh.sweep_gate`
 **fails** on any crash VIN that is not in `ORACLE_CRASH_VINS` in `scripts/refresh.py`
-— the sample of 63 VINs observed so far. That list is a sample of an unbounded
+— the sample of 65 VINs observed so far. That list is a sample of an unbounded
 class, so a new 7T0 MY2023-2025 VIN will fail the gate until a human re-verifies
 it against this section. That is deliberate: a crash must never pass silently
 just because a similar one was once explained.
@@ -96,6 +101,86 @@ just because a similar one was once explained.
 `errors.rs` pins the tolerated expansion in a unit test, so if the class ever
 starts resolving to something else, that is a change in ultravin, not a rediscovery
 of this defect.
+
+### 1a. Re-verification of 2026-08-16 (`7T03ZWKM9RA111111`, `7T0FRAYX7RA111111`)
+
+The covfuzz probe logged two new crash VINs, which the gate above correctly
+refused to accept on resemblance alone. Both reproduce on the pinned 2026_07
+oracle with byte-identical context chains (`fvalidcharsinregex` line 22 →
+`fvalidcharsinkey` line 68 → `spvindecode_errorcode` line 165), and both are
+WMI `7T0`, model year code `R` = 2024, decoding against schema 24522. Two checks
+were added to this section's evidence rather than assuming the resemblance held.
+
+**The uncompilable class is now bounded by exhaustion, not by sampling.** Every
+distinct bracket group in the whole `pattern` table was extracted and compiled
+against Postgres' own regex engine. Of 9,087 distinct groups, 1,670 take
+`fValidCharsInRegEx`' regex path (they contain `-` or `^`), and **exactly one is
+uncompilable** — carried by exactly the two rows named above:
+
+```sql
+create temporary table bad_groups(grp text, err text);
+do $$ declare r record; ok boolean;
+begin
+  for r in with g as (select distinct (regexp_matches(keys,'\[[^\]]*\]','g'))[1] as grp
+                      from vpic.pattern)
+           select grp from g where grp like '%-%' or grp like '%^%'
+  loop begin ok := 'A' ~ ('^' || upper(r.grp) || '$');
+       exception when others then insert into bad_groups values (r.grp, sqlerrm); end;
+  end loop;
+end $$;
+
+   grp    |                         err
+----------+-----------------------------------------------------
+ [1-A-JT] | invalid regular expression: invalid character range
+(1 row)
+
+-- and the only schema carrying it:
+ vinschemaid |                         name                          | rows | wmis
+       24522 | BRINKLEY RV, LLC Trailer Schema for 7T0 MY(2023-2025) |    2 | 7T0
+```
+
+So in this dump an `invalid character range` abort out of `fValidCharsInRegEx`
+*cannot* come from any other datum. That is what makes these two VINs members of
+this deviation rather than a second, undiagnosed one — and it means a future
+re-verification only has to confirm the abort's identity, not re-derive the cause.
+It also confirms the blast radius is WMI `7T0` alone, by exhaustion over the table.
+
+**The abort is unconditional for a schema-24522 match — clean VINs included.**
+`spvindecode_core` (L381-388) calls `spvindecode_errorcode` on the `else` branch of
+"did any pattern match", i.e. for *every* VIN that matched a pattern, not only for
+VINs with errors. A synthesized, check-digit-valid 7T0 MY2024 VIN that ultravin
+decodes with error code `0` therefore aborts too:
+
+```
+7T0FR123XRA111111   ultravin: MY 2024, error codes [0], check digit valid
+                    oracle:   ERROR: invalid regular expression: invalid character range
+```
+
+Boundary control, same VIN moved to MY2026 (year code `T`, schema 28060):
+
+```
+7T0FR1230TA111111   oracle decodes normally (BRINKLEY RV, LLC / Trailer / 2026)
+                    sweep: exact parity with ultravin
+```
+
+That control is the useful positive result: where the oracle *can* answer for this
+WMI and manufacturer, ultravin matches it field-for-field. The two backlog VINs are
+not a decoder divergence being reclassified — there is no oracle answer to diverge
+from, and the one nearby VIN that does have an answer agrees.
+
+`7T0FR123XRA111111` and `7T0FR1230TA111111` were synthesized for these probes and
+are deliberately **not** added to `ORACLE_CRASH_VINS`: that list records VINs the
+campaign actually observed, and no generator or corpus emits these two, so listing
+them would only blur the list's provenance.
+
+**Not fixed, and not fixable here.** Nothing in `crates/ultravin-core` is wrong, so
+there is no decoder change to make and no entry for `tests/brutal_repros.json`
+(which is for fixed decoder bugs; `freeze.py` skips crash VINs regardless). New 7T0
+MY2023-2025 VINs will keep arriving in `tests/parity_backlog.jsonl`, because
+`campaign.py` logs every oracle exception without consulting `ORACLE_CRASH_VINS`.
+Unlike §3a — where re-logging was a bug, since no decoder change could ever retire
+those entries — that re-logging is the intended mechanism: it is how a human gets
+asked about each new crash VIN. The remaining cost is one adjudication per new VIN.
 
 ## 2. Stale `WMIYearValidChars` cache — `W1LSB0L72VEJV2EPX`
 
