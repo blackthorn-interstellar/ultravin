@@ -196,7 +196,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sha256sum dist/* > "${RUNNER_TEMP}/dist.sha256"
+          # shasum fallback: macOS arm64 runners ship no sha256sum (the Intel
+          # image only has one incidentally, via coreutils). Same output format.
+          if command -v sha256sum >/dev/null; then sha256sum dist/*; else shasum -a 256 dist/*; fi > "${RUNNER_TEMP}/dist.sha256"
       # Prove the wheel we just built actually decodes before it can be published
       # (build.rs can emit an import-clean, decode-nothing stub). Only matrix.smoke
       # rows run the wheel natively on their runner; cross-compiled and libc-
@@ -253,7 +255,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sha256sum dist/* | diff - "${RUNNER_TEMP}/dist.sha256"
+          if command -v sha256sum >/dev/null; then sha256sum dist/*; else shasum -a 256 dist/*; fi | diff - "${RUNNER_TEMP}/dist.sha256"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wheels-${{ matrix.kind }}-${{ matrix.target }}
@@ -294,7 +296,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sha256sum dist/* > "${RUNNER_TEMP}/dist.sha256"
+          if command -v sha256sum >/dev/null; then sha256sum dist/*; else shasum -a 256 dist/*; fi > "${RUNNER_TEMP}/dist.sha256"
       # Smoke the sdist as a real source build (pip install compiles it from
       # source), the one path that exercises build.rs picking up the embedded
       # vpic.rkyv — the exact "source install stubs empty data" failure the
@@ -320,7 +322,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sha256sum dist/* | diff - "${RUNNER_TEMP}/dist.sha256"
+          if command -v sha256sum >/dev/null; then sha256sum dist/*; else shasum -a 256 dist/*; fi | diff - "${RUNNER_TEMP}/dist.sha256"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: wheels-sdist
