@@ -20,23 +20,24 @@ jobs:
       contents: write
       pull-requests: write
     env:
-      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+      HAS_KEY: ${{ secrets.XAI_API_KEY != '' }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           persist-credentials: false # keep the write token out of .git/config so detect/key-check steps can't reach it
       - name: detect runs on a bare runner
         run: python3 scripts/refresh.py detect
-      - name: ANTHROPIC_API_KEY present and valid
+      - name: XAI_API_KEY present and valid
+        env:
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
         run: |
           if [ "$HAS_KEY" != "true" ]; then
-            echo "::error::ANTHROPIC_API_KEY missing from the data-refresh environment"
+            echo "::error::XAI_API_KEY missing from the data-refresh environment"
             exit 1
           fi
           code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 \
-            https://api.anthropic.com/v1/models \
-            -H "x-api-key: ${{ secrets.ANTHROPIC_API_KEY }}" \
-            -H "anthropic-version: 2023-06-01")
+            https://api.x.ai/v1/models \
+            -H "Authorization: Bearer $XAI_API_KEY")
           if [ "$code" != "200" ]; then
             echo "::error::API key check failed (HTTP $code)"
             exit 1

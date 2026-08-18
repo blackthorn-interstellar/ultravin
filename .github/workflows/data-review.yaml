@@ -4,7 +4,7 @@
 #   - PRs outside the gated branch prefixes: success in seconds, $0
 #   - data/* PRs touching only regenerated files: deterministic allowlist pass, $0
 #   - data/* PRs with code/doc changes (agent-fixed months): an adversarial
-#     Claude reviewer with a verdict-only contract must approve
+#     Grok reviewer with a verdict-only contract must approve
 #   - deps/* PRs (the nightly lockfile bump, which merges itself on green):
 #     always the adversarial reviewer, no allowlist — the content of the lock
 #     diff (sources, new packages, gate integrity) is exactly what needs eyes
@@ -117,20 +117,28 @@ jobs:
           echo "check_run_id=$id" >> "$GITHUB_OUTPUT"
           echo "review-verdict: in_progress @ $HEAD_SHA (run $id)" >> "$GITHUB_STEP_SUMMARY"
       - name: Adversarial review
-        id: claude
+        id: agent
         if: steps.scope.outputs.verdict == 'model-review'
-        uses: anthropics/claude-code-action@5ef2e550a465a721f4f45e4a7d3c340c873e1dcc # v1.0.190
+        uses: ./.github/actions/grok-agent
+        env:
+          # The prompt reads the PR through the API; the job is read-only.
+          GH_TOKEN: ${{ github.token }}
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ github.token }}
-          # The pipeline dispatches this workflow with GITHUB_TOKEN, so the
-          # initiating actor is the github-actions bot — allow it explicitly.
-          allowed_bots: "github-actions"
-          claude_args: |
-            --max-turns 30
-            --allowedTools "Read,Grep,Glob,Bash(git:*),Bash(gh pr view:*)"
-            --disallowedTools "Edit,Write,WebFetch,WebSearch"
-            --json-schema '{"type":"object","properties":{"approved":{"type":"boolean"},"summary":{"type":"string"},"blocking_findings":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"issue":{"type":"string"}},"required":["file","issue"]}}},"required":["approved","summary","blocking_findings"]}'
+          xai_api_key: ${{ secrets.XAI_API_KEY }}
+          max_turns: 30
+          # bypassPermissions would make the allow rules below moot and hand
+          # this reviewer an unscoped shell while it holds the key and a token.
+          # dontAsk is not airtight — grok still auto-approves its own
+          # read-only-classified commands (verified: `whoami` ran without
+          # matching a rule) — but it does refuse mutation outside the rules.
+          permission_mode: dontAsk
+          allowed_tools: read_file,grep,list_dir,run_terminal_command
+          allow_rules: |
+            Read
+            Grep
+            Bash(git:*)
+            Bash(gh pr view:*)
+          json_schema: '{"type":"object","properties":{"approved":{"type":"boolean"},"summary":{"type":"string"},"blocking_findings":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"issue":{"type":"string"}},"required":["file","issue"]}}},"required":["approved","summary","blocking_findings"]}'
           prompt: |
             You are the independent review gate for an automated monthly NHTSA
             data-refresh PR (#${{ steps.pr.outputs.number }}, branch
@@ -171,20 +179,26 @@ jobs:
             block costs a human five minutes; a wrong approve ships bad decodes.
             Report via the structured output only.
       - name: Adversarial review (dependency bump)
-        id: claude_deps
+        id: agent_deps
         if: steps.scope.outputs.verdict == 'deps-review'
-        uses: anthropics/claude-code-action@5ef2e550a465a721f4f45e4a7d3c340c873e1dcc # v1.0.190
+        uses: ./.github/actions/grok-agent
+        env:
+          # The prompt reads the PR through the API; the job is read-only.
+          GH_TOKEN: ${{ github.token }}
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ github.token }}
-          # The nightly pipeline dispatches this workflow with GITHUB_TOKEN, so
-          # the initiating actor is the github-actions bot — allow it explicitly.
-          allowed_bots: "github-actions"
-          claude_args: |
-            --max-turns 30
-            --allowedTools "Read,Grep,Glob,Bash(git:*),Bash(gh pr view:*)"
-            --disallowedTools "Edit,Write,WebFetch,WebSearch"
-            --json-schema '{"type":"object","properties":{"approved":{"type":"boolean"},"summary":{"type":"string"},"blocking_findings":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"issue":{"type":"string"}},"required":["file","issue"]}}},"required":["approved","summary","blocking_findings"]}'
+          xai_api_key: ${{ secrets.XAI_API_KEY }}
+          max_turns: 30
+          # As above: bypassPermissions would drop the shell scoping this
+          # reviewer relies on. dontAsk gates mutation, not grok's built-in
+          # read-only command set.
+          permission_mode: dontAsk
+          allowed_tools: read_file,grep,list_dir,run_terminal_command
+          allow_rules: |
+            Read
+            Grep
+            Bash(git:*)
+            Bash(gh pr view:*)
+          json_schema: '{"type":"object","properties":{"approved":{"type":"boolean"},"summary":{"type":"string"},"blocking_findings":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"issue":{"type":"string"}},"required":["file","issue"]}}},"required":["approved","summary","blocking_findings"]}'
           prompt: |
             You are the independent review gate for an automated nightly
             dependency-bump PR (#${{ steps.pr.outputs.number }}, branch
@@ -239,7 +253,7 @@ jobs:
           PR_NUM: ${{ steps.pr.outputs.number }}
           SCOPE: ${{ steps.scope.outputs.verdict }}
           CHECK_RUN_ID: ${{ steps.open.outputs.check_run_id }}
-          VERDICT: ${{ steps.claude.outputs.structured_output || steps.claude_deps.outputs.structured_output }}
+          VERDICT: ${{ steps.agent.outputs.structured_output || steps.agent_deps.outputs.structured_output }}
         run: |
           conclusion=failure
           note=""

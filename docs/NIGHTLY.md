@@ -2,7 +2,7 @@
 
 `.github/workflows/nightly.yaml` (08:41 UTC daily, or `gh workflow run
 nightly.yaml`) runs two independent lanes. Both follow the data-refresh
-pattern: a deterministic mechanical path first, a Claude agent only when there
+pattern: a deterministic mechanical path first, a Grok agent only when there
 is real work, delivery as a PR through the same CI + `review-verdict` checks,
 and explicit dispatch of those checks (workflow-created PRs emit no events).
 
@@ -72,7 +72,7 @@ do is weaken an existing check or edit the automation itself (`.github/**`,
 `Makefile` — such diffs are refused at publish, and again at merge).
 
 The PR is also **content-reviewed**: `data-review.yaml` gates `deps/*` the
-same way it gates `data/*`, with an adversarial read-only Claude reviewer and
+same way it gates `data/*`, with an adversarial read-only Grok reviewer and
 no allowlist shortcut, publishing the required `review-verdict` check. It
 approves only a diff that is lockfiles (plus fallout fixes the PR body
 justifies), leaves every existing test/lint/type/parity gate intact, and
@@ -159,7 +159,7 @@ runs an RCA on exactly those VINs, skipping the probe and the backlog pick.
 ## Quiet nights
 
 No lockfile movement and an empty backlog cost $0 in API spend: the agent
-steps are gated behind real work. Without `ANTHROPIC_API_KEY` (data-refresh
+steps are gated behind real work. Without `XAI_API_KEY` (data-refresh
 environment) the fixes lane skips with a summary note, and a broken deps bump
 fails the run for a human.
 

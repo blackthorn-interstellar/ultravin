@@ -3,7 +3,7 @@
 #   deps   mechanical dependency bump inside a 7-day publication cooldown
 #          (uv --exclude-newer natively; scripts/bump_deps.py enforces it for
 #          cargo against crates.io publish dates, failing closed). Green ->
-#          lockfile PR; broken -> a Claude agent fixes the fallout (with
+#          lockfile PR; broken -> a Grok agent fixes the fallout (with
 #          judgment: new tool rules may be config-disabled rather than
 #          obeyed). deps-watch then waits on the PR's checks, deps-remedy gets
 #          ONE attempt at a red one, and deps-merge MERGES on green — fully
@@ -12,7 +12,7 @@
 #   fixes  drain the parity backlog (tests/parity_backlog.jsonl — VINs where
 #          ultravin and the vPIC oracle disagreed, found by the local
 #          campaign). A covfuzz probe chunk tops the backlog up each night
-#          (state resumes via actions/cache); a Claude agent resolves ONE
+#          (state resumes via actions/cache); a Grok agent resolves ONE
 #          root-cause cluster per night against the live pinned oracle and
 #          fixes-publish delivers it as a PR. Humans merge decoder changes —
 #          always.
@@ -25,7 +25,7 @@
 # applies that patch behind the .github/|Makefile guard and does the pushing.
 # Step-scoping a token is not enough: same-VM code can read another process's
 # env.
-# Secrets: ANTHROPIC_API_KEY in the data-refresh environment (master-pinned);
+# Secrets: XAI_API_KEY in the data-refresh environment (master-pinned);
 # without it the fixes lane skips and a broken deps bump fails for a human.
 # Merge policy: deps PRs merge themselves once CI is green AND the adversarial
 # gate in data-review.yaml has approved the lock diff; a review rejection stops
@@ -180,7 +180,7 @@ jobs:
               || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
           done
 
-  # Repair lane, agent half: when the bump broke the build, a Claude agent
+  # Repair lane, agent half: when the bump broke the build, a Grok agent
   # fixes the code to work with the bumped versions. This job BUILDS AND RUNS
   # the just-bumped untrusted dependency code (make check) AND reads
   # attacker-influenceable evidence (release notes, package metadata,
@@ -188,14 +188,14 @@ jobs:
   # token and checks out WITHOUT persisted credentials. The agent commits its
   # fix locally and stops; deps-fix-publish (a separate, clean-VM job that runs
   # no bumped/agent-touched code) carries the write token and opens the PR from
-  # the patch this job banks. ANTHROPIC_API_KEY still mounts here (read-only
+  # the patch this job banks. XAI_API_KEY still mounts here (read-only
   # token, master-pinned environment); that is the intended residual.
   deps-fix:
     needs: deps
     if: always() && needs.deps.result == 'failure' && needs.deps.outputs.changed == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    # ANTHROPIC_API_KEY lives in this environment, whose deployment branch
+    # XAI_API_KEY lives in this environment, whose deployment branch
     # policy is master-only: no job on any other ref can ever mount it.
     environment: data-refresh
     permissions:
@@ -204,12 +204,12 @@ jobs:
     outputs:
       has_changes: ${{ steps.capture.outputs.has_changes }}
     env:
-      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+      HAS_KEY: ${{ secrets.XAI_API_KEY != '' }}
     steps:
-      - name: Require ANTHROPIC_API_KEY
+      - name: Require XAI_API_KEY
         if: env.HAS_KEY != 'true'
         run: |
-          echo "the nightly deps bump broke make check and no ANTHROPIC_API_KEY is configured — fix manually (docs/NIGHTLY.md)" >> "$GITHUB_STEP_SUMMARY"
+          echo "the nightly deps bump broke make check and no XAI_API_KEY is configured — fix manually (docs/NIGHTLY.md)" >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -235,25 +235,18 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           echo "BASE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-      - name: Claude fixes the fallout
-        id: claude
-        uses: anthropics/claude-code-action@5ef2e550a465a721f4f45e4a7d3c340c873e1dcc # v1.0.190
+      - name: The agent fixes the fallout
+        id: agent
+        uses: ./.github/actions/grok-agent
         env:
           # Read-only token (job permissions are read-only): the agent may read
           # logs, but it cannot push — deps-fix-publish carries the write token.
           GH_TOKEN: ${{ github.token }}
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ github.token }}
-          # Cron-initiated runs carry a bot actor; the action refuses
-          # non-human initiators unless allowed.
-          allowed_bots: "github-actions"
-          settings: |
-            {"env": {"BASH_DEFAULT_TIMEOUT_MS": "2400000", "BASH_MAX_TIMEOUT_MS": "3600000"}}
-          claude_args: |
-            --max-turns 75
-            --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
-            --disallowedTools "WebFetch,WebSearch"
+          xai_api_key: ${{ secrets.XAI_API_KEY }}
+          max_turns: 75
+          bash_timeout_secs: 2400
+          allowed_tools: run_terminal_command,read_file,search_replace,write,list_dir,grep
           prompt: |
             Tonight's automated dependency bump for ultravin broke the build.
             Make the code work with the bumped dependencies and COMMIT your fix
@@ -310,6 +303,10 @@ jobs:
             the commit message. An uncommitted session delivers nothing.
       - name: Capture the fix as a patch
         id: capture
+        # Runs even when the agent step FAILED: grok exits 1 on --max-turns
+        # exhaustion, and the prompt orders it to commit its best attempt
+        # anyway, which the default success() would silently discard.
+        if: ${{ !cancelled() && steps.agent.outcome != 'skipped' }}
         run: |
           # deps-fix only runs when the bump ALREADY broke the build, so an
           # empty change set means the break went unfixed — fail loudly (red
@@ -324,7 +321,7 @@ jobs:
           git log --format='%B' "$BASE"..HEAD > "$RUNNER_TEMP/fix-notes.md" || true
           echo "has_changes=true" >> "$GITHUB_OUTPUT"
       - name: Bank the fix for the publish job
-        if: steps.capture.outputs.has_changes == 'true'
+        if: ${{ !cancelled() && steps.capture.outputs.has_changes == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: nightly-deps-fix-bundle
@@ -332,12 +329,15 @@ jobs:
             ${{ runner.temp }}/fix.patch
             ${{ runner.temp }}/fix-notes.md
           if-no-files-found: error
-      - name: Claude transcript artifact
+      - name: Agent transcript artifact
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: nightly-deps-fix-transcript
-          path: ${{ steps.claude.outputs.execution_file }}
+          # The literal path, not steps.agent.outputs.execution_file: a failed
+          # composite step's outputs may not propagate, and a lost session is
+          # exactly when the transcript matters most.
+          path: ${{ runner.temp }}/grok-transcript.jsonl
           if-no-files-found: ignore
           retention-days: 30
 
@@ -347,7 +347,11 @@ jobs:
   # write token lives. Runs only when the agent actually produced a change.
   deps-fix-publish:
     needs: deps-fix
-    if: needs['deps-fix'].outputs.has_changes == 'true'
+    # !cancelled() rather than the implicit success(): the agent job goes red
+    # when it exhausts its turns, but it still banked a patch that must reach
+    # a PR. has_changes stays the real gate, so an agent that committed
+    # nothing still ends loud-red with nothing published.
+    if: ${{ !cancelled() && needs['deps-fix'].outputs.has_changes == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -484,7 +488,7 @@ jobs:
     if: needs['deps-watch'].outputs.failed == 'true' && needs['deps-watch'].outputs.rejected != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    # ANTHROPIC_API_KEY lives in this environment, whose deployment branch
+    # XAI_API_KEY lives in this environment, whose deployment branch
     # policy is master-only: no job on any other ref can ever mount it.
     environment: data-refresh
     permissions:
@@ -495,12 +499,12 @@ jobs:
     outputs:
       has_changes: ${{ steps.capture.outputs.has_changes }}
     env:
-      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+      HAS_KEY: ${{ secrets.XAI_API_KEY != '' }}
     steps:
-      - name: Require ANTHROPIC_API_KEY
+      - name: Require XAI_API_KEY
         if: env.HAS_KEY != 'true'
         run: |
-          echo "::error::checks failed on deps/nightly and no ANTHROPIC_API_KEY is configured — fix by hand (docs/NIGHTLY.md)"
+          echo "::error::checks failed on deps/nightly and no XAI_API_KEY is configured — fix by hand (docs/NIGHTLY.md)"
           exit 1
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -524,24 +528,19 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           echo "BASE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
-      - name: Claude works the checks green
-        id: claude
-        uses: anthropics/claude-code-action@5ef2e550a465a721f4f45e4a7d3c340c873e1dcc # v1.0.190
+      - name: The agent works the checks green
+        id: agent
+        uses: ./.github/actions/grok-agent
         env:
           # Read-only token (job permissions are read-only): the agent may read
           # the failing runs' logs, but it cannot push — deps-remedy-publish
           # carries the write token.
           GH_TOKEN: ${{ github.token }}
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ github.token }}
-          allowed_bots: "github-actions"
-          settings: |
-            {"env": {"BASH_DEFAULT_TIMEOUT_MS": "2400000", "BASH_MAX_TIMEOUT_MS": "3600000"}}
-          claude_args: |
-            --max-turns 75
-            --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
-            --disallowedTools "WebFetch,WebSearch"
+          xai_api_key: ${{ secrets.XAI_API_KEY }}
+          max_turns: 75
+          bash_timeout_secs: 2400
+          allowed_tools: run_terminal_command,read_file,search_replace,write,list_dir,grep
           prompt: |
             The nightly deps PR for ultravin (branch deps/nightly) has failing
             checks. You are checked out ON that branch with the toolchain and
@@ -588,6 +587,10 @@ jobs:
             an uncommitted session delivers nothing.
       - name: Capture the fix as a patch
         id: capture
+        # Runs even when the agent step FAILED: grok exits 1 on --max-turns
+        # exhaustion, and the prompt orders it to commit its best attempt
+        # anyway, which the default success() would silently discard.
+        if: ${{ !cancelled() && steps.agent.outcome != 'skipped' }}
         run: |
           # deps-remedy only runs when the checks were ALREADY red, so an empty
           # change set means the failure went unfixed — fail loudly (red run,
@@ -607,18 +610,21 @@ jobs:
           echo "has_changes=true" >> "$GITHUB_OUTPUT"
           git diff --stat --cached "$BASE" >> "$GITHUB_STEP_SUMMARY" || true
       - name: Bank the fix for the publish job
-        if: steps.capture.outputs.has_changes == 'true'
+        if: ${{ !cancelled() && steps.capture.outputs.has_changes == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: nightly-deps-remedy-bundle
           path: ${{ runner.temp }}/remedy/
           if-no-files-found: error
-      - name: Claude transcript artifact
+      - name: Agent transcript artifact
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: nightly-deps-remedy-transcript
-          path: ${{ steps.claude.outputs.execution_file }}
+          # The literal path, not steps.agent.outputs.execution_file: a failed
+          # composite step's outputs may not propagate, and a lost session is
+          # exactly when the transcript matters most.
+          path: ${{ runner.temp }}/grok-transcript.jsonl
           if-no-files-found: ignore
           retention-days: 30
 
@@ -629,7 +635,11 @@ jobs:
   # re-kicks the checks the agent no longer has the token to dispatch.
   deps-remedy-publish:
     needs: deps-remedy
-    if: needs['deps-remedy'].outputs.has_changes == 'true'
+    # !cancelled() rather than the implicit success(): the agent job goes red
+    # when it exhausts its turns, but it still banked a patch that must reach
+    # a PR. has_changes stays the real gate, so an agent that committed
+    # nothing still ends loud-red with nothing published.
+    if: ${{ !cancelled() && needs['deps-remedy'].outputs.has_changes == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -893,7 +903,7 @@ jobs:
       has_changes: ${{ steps.capture.outputs.has_changes }}
       branch: ${{ steps.gate.outputs.branch }}
     env:
-      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+      HAS_KEY: ${{ secrets.XAI_API_KEY != '' }}
       VINS: ${{ inputs.vins }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -907,7 +917,7 @@ jobs:
         run: |
           if [ "$HAS_KEY" != "true" ]; then
             echo "go=false" >> "$GITHUB_OUTPUT"
-            echo "no ANTHROPIC_API_KEY in the data-refresh environment — the fixes lane needs the agent, skipping" >> "$GITHUB_STEP_SUMMARY"
+            echo "no XAI_API_KEY in the data-refresh environment — the fixes lane needs the agent, skipping" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           if [ -z "$VINS" ] && [ "$(gh pr list --label parity-backlog --state open --json number --jq length)" != "0" ]; then
@@ -1036,23 +1046,20 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           echo "BASE=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
       # No GH_TOKEN in this step's env: the agent has nothing to read from the
-      # API and nothing to push — fixes-publish does all of that.
-      - name: Claude drains one cluster
-        id: claude
+      # API and nothing to push — fixes-publish does all of that. (The old
+      # action took a github_token for its own actor gating, never for the
+      # agent's shell; grok has no such harness, so nothing replaces it.)
+      - name: The agent drains one cluster
+        id: agent
         if: steps.count.outputs.agent == 'true'
-        uses: anthropics/claude-code-action@5ef2e550a465a721f4f45e4a7d3c340c873e1dcc # v1.0.190
+        uses: ./.github/actions/grok-agent
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ github.token }}
-          allowed_bots: "github-actions"
-          # Oracle loads, sweeps, and make check run 10+ minutes; the Bash
-          # tool's 2-minute default would kill them mid-flight.
-          settings: |
-            {"env": {"BASH_DEFAULT_TIMEOUT_MS": "2400000", "BASH_MAX_TIMEOUT_MS": "3600000"}}
-          claude_args: |
-            --max-turns 75
-            --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
-            --disallowedTools "WebFetch,WebSearch"
+          xai_api_key: ${{ secrets.XAI_API_KEY }}
+          max_turns: 75
+          # Oracle loads, sweeps, and make check run 10+ minutes; grok's
+          # 2-minute shell default would kill them mid-flight.
+          bash_timeout_secs: 2400
+          allowed_tools: run_terminal_command,read_file,search_replace,write,list_dir,grep
           prompt: |
             You are the nightly parity agent for ultravin.
             tests/parity_backlog.jsonl holds VINs where ultravin and the NHTSA
@@ -1142,7 +1149,11 @@ jobs:
       # cannot ride in the patch). fixes-publish rebuilds the branch from these.
       - name: Bank the agent's delivery for the publish job
         id: capture
-        if: steps.count.outputs.agent == 'true'
+        # Runs even when the agent step FAILED: grok exits 1 on --max-turns
+        # exhaustion, and the prompt orders it to deliver anyway, which the
+        # default success() would silently discard. Still skipped when there was
+        # no work to drain, since the agent step never ran.
+        if: ${{ !cancelled() && steps.agent.outcome != 'skipped' }}
         run: |
           # The agent only runs when there is real work, so an empty change set
           # means it delivered nothing — fail loudly rather than end
@@ -1163,7 +1174,7 @@ jobs:
           echo "has_changes=true" >> "$GITHUB_OUTPUT"
           git diff --stat --cached "$BASE" >> "$GITHUB_STEP_SUMMARY" || true
       - name: Fix bundle artifact
-        if: steps.capture.outputs.has_changes == 'true'
+        if: ${{ !cancelled() && steps.capture.outputs.has_changes == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: nightly-fixes-bundle
@@ -1177,7 +1188,7 @@ jobs:
           path: |
             campaign/status-covfuzz.json
             campaign/fails-covfuzz.jsonl
-            ${{ steps.claude.outputs.execution_file }}
+            ${{ runner.temp }}/grok-transcript.jsonl
           if-no-files-found: ignore
           retention-days: 30
 
@@ -1188,7 +1199,11 @@ jobs:
   # updates the PR, and kicks the checks. A human still merges decoder changes.
   fixes-publish:
     needs: fixes
-    if: needs.fixes.outputs.has_changes == 'true'
+    # !cancelled() rather than the implicit success(): the agent job goes red
+    # when it exhausts its turns, but it still banked a patch that must reach
+    # a PR. has_changes stays the real gate, so an agent that committed
+    # nothing still ends loud-red with nothing published.
+    if: ${{ !cancelled() && needs.fixes.outputs.has_changes == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

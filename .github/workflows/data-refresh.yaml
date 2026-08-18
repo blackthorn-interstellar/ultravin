@@ -3,14 +3,14 @@
 #   detect   daily probe for a dump newer than the vpic/manifest.json pin
 #   refresh  mechanical integration + parity gates (scripts/refresh.py run),
 #            then a `data/<month>` branch and a classified pull request
-#   fix      on refresh failure, a KEYLESS Claude agent (no write token, no
+#   fix      on refresh failure, a KEYLESS Grok agent (no write token, no
 #            persisted git creds — it reads the untrusted NHTSA diff + CI logs)
 #            debugs the integration and commits an honest fix locally
 #   fix-publish  a clean job holding the write token recreates the branch from
 #            the agent's committed fix, opens/updates the PR, and merges per policy
 #
-# Secrets/variables (all optional except ANTHROPIC_API_KEY for the fix job):
-#   ANTHROPIC_API_KEY                  enables the agent fix job
+# Secrets/variables (all optional except XAI_API_KEY for the fix job):
+#   XAI_API_KEY                        enables the agent fix job
 #   vars.DATA_REFRESH_AUTOMERGE        "true" merges data-only PRs once checks pass
 #   vars.DATA_REFRESH_AUTOMERGE_SCHEMA "true" extends merging to schema-change months
 #   vars.DATA_REFRESH_AUTORELEASE      "true" also tags the next patch version and
@@ -180,14 +180,14 @@ jobs:
   # persisted git credentials (same-VM code can read another process's env, so
   # step-scoping is not enough). It commits its fix locally; fix-publish (a
   # clean VM running no untrusted code) carries the token and opens the PR. The
-  # only secrets here are ANTHROPIC_API_KEY (required to run the agent) and a
+  # only secrets here are XAI_API_KEY (required to run the agent) and a
   # READ-only GITHUB_TOKEN for reading logs — neither can push or reach write.
   fix:
     needs: [detect, refresh]
     if: always() && needs.detect.outputs.month != '' && needs.refresh.result == 'failure'
     runs-on: ubuntu-latest
     timeout-minutes: 150
-    # ANTHROPIC_API_KEY lives in this environment, whose deployment branch
+    # XAI_API_KEY lives in this environment, whose deployment branch
     # policy is master-only: no job on any other ref can ever mount it, even if
     # a future workflow grows an unsafe trigger.
     environment: data-refresh
@@ -197,13 +197,13 @@ jobs:
     outputs:
       has_changes: ${{ steps.capture.outputs.has_changes }}
     env:
-      HAS_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+      HAS_KEY: ${{ secrets.XAI_API_KEY != '' }}
       MONTH: ${{ needs.detect.outputs.month }}
     steps:
-      - name: Require ANTHROPIC_API_KEY
+      - name: Require XAI_API_KEY
         if: env.HAS_KEY != 'true'
         run: |
-          echo "refresh for $MONTH failed and no ANTHROPIC_API_KEY is configured — fix manually:" >> "$GITHUB_STEP_SUMMARY"
+          echo "refresh for $MONTH failed and no XAI_API_KEY is configured — fix manually:" >> "$GITHUB_STEP_SUMMARY"
           echo '`make refresh MONTH='"$MONTH"'` (see docs/DATA_REFRESH.md)' >> "$GITHUB_STEP_SUMMARY"
           exit 1
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -238,28 +238,21 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-      - name: Claude fixes the integration
-        id: claude
-        uses: anthropics/claude-code-action@5ef2e550a465a721f4f45e4a7d3c340c873e1dcc # v1.0.190
+      - name: The agent fixes the integration
+        id: agent
+        uses: ./.github/actions/grok-agent
         env:
           # Read-only (the job's permissions are read-only): the agent uses it
           # only to read the failed job's CI logs, never to push.
           GH_TOKEN: ${{ github.token }}
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          github_token: ${{ github.token }}
-          # Cron-initiated runs can carry a bot actor; the action refuses
-          # non-human initiators unless allowed.
-          allowed_bots: "github-actions"
+          xai_api_key: ${{ secrets.XAI_API_KEY }}
+          max_turns: 75
           # The refresh pipeline runs 10+ minute commands (oracle load, freeze,
-          # make check); without these the Bash tool's 2-minute default timeout
-          # kills them and the agent concludes it cannot do the job.
-          settings: |
-            {"env": {"BASH_DEFAULT_TIMEOUT_MS": "2400000", "BASH_MAX_TIMEOUT_MS": "3600000"}}
-          claude_args: |
-            --max-turns 75
-            --allowedTools "Bash,Read,Edit,Write,Glob,Grep"
-            --disallowedTools "WebFetch,WebSearch"
+          # make check); on grok's 2-minute shell default they would be killed
+          # and the agent would conclude it cannot do the job.
+          bash_timeout_secs: 2400
+          allowed_tools: run_terminal_command,read_file,search_replace,write,list_dir,grep
           prompt: |
             You are running the monthly NHTSA vPIC data refresh for ultravin. The
             mechanical attempt for month ${{ needs.detect.outputs.month }} failed in this
@@ -275,6 +268,9 @@ jobs:
             - ./target/refresh/ holds the failed attempt's evidence — read it FIRST,
               before re-running anything: report.md / report.json (gate verdicts,
               diverging VINs), sweep.json (per-VIN live-sweep diffs),
+              known_problems.json (every documented ORACLE_CRASH_VINS /
+              KNOWN_DEVIATION_VINS entry re-probed against the new oracle — an
+              excuse that stopped reproducing fails its gate),
               vpic-schema.diff (git diff of vpic/schema + vpic/procs — this IS the
               upstream change NHTSA shipped), vpic-diff.stat, git-status.txt. Most
               breakage is diagnosable from vpic-schema.diff alone.
@@ -338,8 +334,13 @@ jobs:
       # Bank the agent's committed fix as a portable patch plus the out-of-band
       # PR metadata (target/ is gitignored, so pr-body.md / needs-human can't
       # ride in the patch). fix-publish rebuilds the branch from these.
+      #
+      # Runs even when the agent step FAILED. grok exits 1 when it exhausts
+      # --max-turns, and the prompt orders it to commit its best attempt anyway,
+      # so on the default success() this step would skip and throw that fix away.
       - name: Bank the agent's fix for the publish job
         id: capture
+        if: ${{ !cancelled() && steps.agent.outcome != 'skipped' }}
         env:
           BASE_SHA: ${{ steps.base.outputs.sha }}
         run: |
@@ -358,18 +359,21 @@ jobs:
           echo "has_changes=true" >> "$GITHUB_OUTPUT"
           git diff --stat "$base"..HEAD >> "$GITHUB_STEP_SUMMARY" || true
       - name: Fix bundle artifact
-        if: steps.capture.outputs.has_changes == 'true'
+        if: ${{ !cancelled() && steps.capture.outputs.has_changes == 'true' }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: data-refresh-fix-bundle
           path: ${{ runner.temp }}/fix-bundle/
           if-no-files-found: error
-      - name: Claude transcript artifact
+      - name: Agent transcript artifact
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: claude-fix-transcript
-          path: ${{ steps.claude.outputs.execution_file }}
+          name: agent-fix-transcript
+          # The literal path, not steps.agent.outputs.execution_file: a failed
+          # composite step's outputs may not propagate, and a lost session is
+          # exactly when the transcript matters most.
+          path: ${{ runner.temp }}/grok-transcript.jsonl
           if-no-files-found: ignore
           retention-days: 30
 
@@ -379,7 +383,11 @@ jobs:
   # opens/updates the PR, kicks the checks, and merges per policy.
   fix-publish:
     needs: [detect, fix]
-    if: needs.fix.outputs.has_changes == 'true'
+    # !cancelled() rather than the implicit success(): the fix job goes red when
+    # the agent exhausts its turns, but it still banked a patch, and that fix
+    # must still reach a PR. has_changes stays the real gate — an agent that
+    # committed nothing never sets it, so that path stays loud-red and unpublished.
+    if: ${{ !cancelled() && needs.fix.outputs.has_changes == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 40 # merge-data-pr retries the merge for ~22 min
     # Same master-pinned environment; merge-data-pr may dispatch the answer-key
