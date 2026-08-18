@@ -16,6 +16,15 @@ The policy that governs *how* a divergence earns a place on this list — the ba
 of evidence, the bounded scope, the freeze — is `docs/ACCEPTANCE.md`. This file
 is the list it refers to.
 
+**Entries expire.** Every data refresh re-decodes every VIN named here against
+the new oracle (`scripts/parity/known_problems.py`) and the **known-problems**
+gate fails the run if one stopped reproducing — a crash VIN the oracle now
+answers, or a deviation VIN ultravin now matches. Upstream does fix things, and
+a stale excuse is worse than no excuse: it silently forgives the next real
+regression on that VIN. When the gate names one, verify it against the section's
+evidence below, then drop it from `ORACLE_CRASH_VINS` / `KNOWN_DEVIATION_VINS`
+in `scripts/refresh.py` and retire the section here once its last VIN is gone.
+
 ---
 
 ## 1. Oracle crashes on a malformed pattern regex — WMI `7T0`, MY 2023-2025

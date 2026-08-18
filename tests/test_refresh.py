@@ -194,6 +194,92 @@ def test_sweep_gate_fails_on_an_undocumented_crash_alongside_known_diffs() -> No
     assert not refresh.sweep_gate(mixed).ok
 
 
+_CRASH = frozenset({"7T0AAAAA0SA111111"})
+_DEV = frozenset({"W1LSB0L72VEJV2EPX"})
+
+
+def _kp(probe: dict) -> refresh.Gate:
+    return refresh.known_problems_gate(probe, _CRASH, _DEV)
+
+
+def test_known_problems_gate_passes_when_every_problem_reproduces() -> None:
+    gate = _kp(
+        {
+            "7T0AAAAA0SA111111": {"outcome": "crash", "error": "InvalidRegularExpression(...)"},
+            "W1LSB0L72VEJV2EPX": {"outcome": "diverged", "fingerprint": {}},
+        }
+    )
+    assert gate.ok
+    assert "2/2 documented problems still reproduce" in gate.detail
+
+
+def test_known_problems_gate_fails_on_a_healed_crash_vin() -> None:
+    """The oracle answering is the whole point of the gate: the excuse expired."""
+    gate = _kp(
+        {
+            "7T0AAAAA0SA111111": {"outcome": "exact"},
+            "W1LSB0L72VEJV2EPX": {"outcome": "diverged"},
+        }
+    )
+    assert not gate.ok
+    assert "7T0AAAAA0SA111111 (now exact)" in gate.detail
+    assert "ORACLE_CRASH_VINS" in gate.detail
+    assert "docs/KNOWN_DEVIATIONS.md" in gate.detail
+
+
+def test_known_problems_gate_fails_on_a_healed_deviation_vin() -> None:
+    gate = _kp(
+        {
+            "7T0AAAAA0SA111111": {"outcome": "crash"},
+            "W1LSB0L72VEJV2EPX": {"outcome": "exact"},
+        }
+    )
+    assert not gate.ok
+    assert "W1LSB0L72VEJV2EPX (now exact)" in gate.detail
+    assert "KNOWN_DEVIATION_VINS" in gate.detail
+    assert "ORACLE_CRASH_VINS" not in gate.detail  # the healthy list is not implicated
+
+
+def test_known_problems_gate_fails_when_a_deviation_vin_starts_crashing() -> None:
+    """Still a problem, but not the documented one — the entry no longer describes reality."""
+    gate = _kp({"7T0AAAAA0SA111111": {"outcome": "crash"}, "W1LSB0L72VEJV2EPX": {"outcome": "crash"}})
+    assert not gate.ok
+    assert "W1LSB0L72VEJV2EPX (now crash)" in gate.detail
+
+
+def test_known_problems_gate_reports_infra_errors_as_unverifiable_not_healed() -> None:
+    """A dead socket proves nothing either way, so it must not read as 'still crashes'
+    (a silent pass) nor as 'healed' (a wrong remedy)."""
+    gate = _kp(
+        {
+            "7T0AAAAA0SA111111": {"outcome": "infra-error", "error": "connection is closed"},
+            "W1LSB0L72VEJV2EPX": {"outcome": "diverged"},
+        }
+    )
+    assert not gate.ok
+    assert "UNVERIFIABLE" in gate.detail
+    assert "7T0AAAAA0SA111111 (infra-error)" in gate.detail
+    assert "no longer reproduce" not in gate.detail
+    assert "1/2 documented problems still reproduce" in gate.detail
+
+
+def test_known_problems_gate_fails_when_a_vin_was_never_probed() -> None:
+    """No record is not a pass. A probe that dies writes nothing at all, so cmd_run
+    hands the gate `{}` and every VIN lands here."""
+    gate = _kp({"W1LSB0L72VEJV2EPX": {"outcome": "diverged"}})
+    assert not gate.ok
+    assert "7T0AAAAA0SA111111 (not probed)" in gate.detail
+
+
+def test_known_problems_gate_defaults_to_the_documented_lists() -> None:
+    """cmd_run calls it bare; an empty report (no probe ran) must fail loudly."""
+    gate = refresh.known_problems_gate({})
+    assert not gate.ok
+    assert gate.name == "known-problems"
+    assert "W1LSB0L72VEJV2EPX (not probed)" in gate.detail
+    assert f"0/{len(refresh.ORACLE_CRASH_VINS) + len(refresh.KNOWN_DEVIATION_VINS)} documented" in gate.detail
+
+
 def _manifest(tables: dict[str, int], functions: list[str], rows: int = 100) -> dict:
     return {
         "month": "x",
@@ -390,20 +476,16 @@ def _report(lookups: LookupDiff | None = None, skipped: list[str] | None = None)
 
 def test_followups_flags_a_migrated_lookup_snapshot() -> None:
     """render_lookups says so inside its own section; Follow-ups is where humans look."""
-    corpus = {"entries": [{"vin": "W1LSB0L72VEJV2EPX", "expected_diff": _fp(exact=False)}]}
-    migrated = refresh.followups(_report(lookups=LookupDiff(migrated=True)), corpus)
+    migrated = refresh.followups(_report(lookups=LookupDiff(migrated=True)))
     assert any("lookup value review unavailable" in f for f in migrated)
     assert any("vpic/lookups.json" in f for f in migrated)
-    assert not any("lookup value review" in f for f in refresh.followups(_report(lookups=LookupDiff()), corpus))
+    assert not any("lookup value review" in f for f in refresh.followups(_report(lookups=LookupDiff())))
 
 
-def test_followups_healed_never_lists_crash_vins() -> None:
-    """Crash VINs never enter the corpus (freeze skips them), so they never 'heal'."""
-    corpus = {"entries": [{"vin": "AAA", "expected_diff": _fp(exact=True)}]}
-    healed = [f for f in refresh.followups(_report(), corpus) if "no longer reproduce" in f]
-    assert len(healed) == 1
-    assert "W1LSB0L72VEJV2EPX" in healed[0]
-    assert "7T0" not in healed[0]
+def test_followups_no_longer_warns_about_healed_deviations() -> None:
+    """A healed deviation fails the known-problems gate now — a warning too would
+    be a second, weaker signal for the same fact."""
+    assert not any("no longer reproduce" in f for f in refresh.followups(_report(skipped=["7T0M6TGCURDSNZTHF"])))
 
 
 def test_main_writes_failure_context_on_mechanical_crash(monkeypatch, tmp_path) -> None:

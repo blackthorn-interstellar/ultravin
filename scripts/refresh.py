@@ -19,6 +19,9 @@ hand-edited; the gates then decide:
   corpus    every diverging re-frozen VIN is a documented known deviation
   sweep     a fresh live sweep diverges only on known deviations, and the oracle
             crashed only on VINs documented as crashing it
+  known-problems
+            every documented oracle problem still reproduces — the converse of
+            the two above, which only ever *excuse* those VINs
   coverage  the decode path still reaches 100% of its reachable regions, and no
             allowance went stale (a stale one means this month's data reaches a
             branch the old data could not)
@@ -69,12 +72,14 @@ LOOKUP_REPORT_CAP = 20
 # reason. Neither list excuses the other's condition — a crash-listed VIN that
 # suddenly diverges is new information (the oracle now answers, and we are wrong
 # about what it says), and a crash on the diverging VIN is an undocumented crash.
-# Both must fail their gate.
+# Both must fail their gate. Both lists are also re-probed every refresh
+# (known_problems_gate): an excuse that stopped reproducing is stale and fails too.
 #
-# The crash VINs below are the 62 WMI-7T0 VINs the 2026_07 campaign hit. They are
-# a *sample* of an unbounded class — any 7T0 VIN of model year 2023-2025 whose
-# decode matches vinschema 24522 aborts the same way — so a future sweep may find
-# a 7T0 VIN that is not listed here and fail the gate. That failure is correct:
+# The 63 crash VINs below are the original 2026_06 report plus the 62 more the
+# 2026_07 campaign hit; all 63 are WMI 7T0. They are a *sample* of an unbounded class —
+# any 7T0 VIN of model year 2023-2025 whose decode matches vinschema 24522 aborts
+# the same way — so a future sweep may find a 7T0 VIN that is not listed here and
+# fail the gate. That failure is correct:
 # it should be re-verified against §1's evidence and then added, not assumed.
 # freeze.py needs none of this: it skips oracle-erroring VINs before they ever
 # reach the corpus, and surfaces new skips in the report as follow-ups.
@@ -343,6 +348,50 @@ def sweep_gate(report: dict) -> Gate:
     return Gate("sweep", ok, detail)
 
 
+def known_problems_gate(
+    probe: dict,
+    crash_vins: frozenset[str] = ORACLE_CRASH_VINS,
+    deviation_vins: frozenset[str] = KNOWN_DEVIATION_VINS,
+) -> Gate:
+    """Every documented oracle problem must still reproduce on the new dump.
+
+    The other gates only *excuse* these VINs, so a healed one keeps passing
+    forever — 2026_08 fixed the stale-year-cache deviation and nothing noticed.
+    scripts/parity/known_problems.py decodes each of them against the new oracle;
+    this judges the report, in the same spirit as the coverage gate failing on a
+    stale allowance: an expired excuse is a gate failure, not a footnote.
+
+    An infra error (dead socket) is not evidence of either outcome, so it neither
+    passes nor fails an entry on the merits — it fails the gate as *unverifiable*,
+    because a run that could not check is not a run that confirmed."""
+    healed: dict[str, list[str]] = {"ORACLE_CRASH_VINS": [], "KNOWN_DEVIATION_VINS": []}
+    unverifiable: list[str] = []
+    for vins, name, expected in (
+        (crash_vins, "ORACLE_CRASH_VINS", "crash"),
+        (deviation_vins, "KNOWN_DEVIATION_VINS", "diverged"),
+    ):
+        for vin in sorted(vins):
+            outcome = probe.get(vin, {}).get("outcome", "not probed")
+            if outcome == expected:
+                continue
+            if outcome in ("infra-error", "not probed"):
+                unverifiable.append(f"{vin} ({outcome})")
+            else:
+                healed[name].append(f"{vin} (now {outcome})")
+    total = len(crash_vins) + len(deviation_vins)
+    stale = sum(len(v) for v in healed.values())
+    detail = f"{total - stale - len(unverifiable)}/{total} documented problems still reproduce"
+    for name, stale_vins in healed.items():
+        if stale_vins:
+            detail += (
+                "; no longer reproduce — re-verify against docs/KNOWN_DEVIATIONS.md, then drop from "
+                f"{name} in scripts/refresh.py: {stale_vins}"
+            )
+    if unverifiable:
+        detail += f"; UNVERIFIABLE (oracle unreachable, so nothing was confirmed — re-run): {unverifiable}"
+    return Gate("known-problems", not stale and not unverifiable, detail)
+
+
 # --------------------------------------------------------------------------- classify
 
 
@@ -592,17 +641,14 @@ def write_report(r: Report) -> None:
     print("\n" + md)
 
 
-def followups(r: Report, corpus: dict) -> list[str]:
+def followups(r: Report) -> list[str]:
     """Human actions the report should surface. None of them fail a gate.
+
+    A healed known deviation used to be reported here; the known-problems gate
+    fails on it now, and one signal beats a warning next to a verdict.
 
     Pure (cmd_run does the reading) so every condition stays testable."""
     out: list[str] = []
-    healed = sorted(KNOWN_DEVIATION_VINS - {e["vin"] for e in corpus["entries"] if not _exact(e["expected_diff"])})
-    if healed:
-        out.append(
-            f"known deviation(s) {healed} no longer reproduce — update docs/KNOWN_DEVIATIONS.md "
-            "and drop them from KNOWN_DEVIATION_VINS in scripts/refresh.py"
-        )
     if r.skipped_vins:
         out.append(
             f"freeze skipped oracle-erroring VIN(s) {r.skipped_vins} — if new, document per docs/KNOWN_DEVIATIONS.md"
@@ -737,6 +783,29 @@ def cmd_run(args: argparse.Namespace) -> int:
     )
     gates.append(sweep_gate(json.loads(sweep_path.read_text())))
 
+    # Re-probe the documented problems themselves. The gates above only excuse
+    # these VINs, and freeze's sample and the sweep almost never contain a crash
+    # VIN, so without this a fixed upstream defect keeps buying an excuse forever.
+    # Soft-run: a probe that dies leaves no report, which the gate reads as
+    # "nothing confirmed" and fails on — more useful than a mechanical exit 1.
+    known_path = REPORT_DIR / "known_problems.json"
+    known_path.unlink(missing_ok=True)  # never judge this month by a stale local report
+    sh(
+        [
+            "uv",
+            "run",
+            "--frozen",
+            "--",
+            "python",
+            "-m",
+            "scripts.parity.known_problems",
+            "--out",
+            str(known_path),
+        ],
+        check=False,
+    )
+    gates.append(known_problems_gate(json.loads(known_path.read_text()) if known_path.exists() else {}))
+
     pytest = sh(["uv", "run", "--frozen", "--", "pytest", "-q"], check=False, capture=True)
     print(pytest.stdout[-4000:], pytest.stderr[-2000:])
     gates.append(
@@ -781,7 +850,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         lookups=lookups,
         skipped_vins=skipped,
     )
-    report.followups = followups(report, json.loads(CORPUS.read_text()))
+    report.followups = followups(report)
     write_report(report)
     gh_output(
         {

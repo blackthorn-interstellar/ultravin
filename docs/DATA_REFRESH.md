@@ -9,7 +9,7 @@ integrates each release with no human in the loop until PR review:
 daily cron ──▶ detect ──▶ refresh (mechanical + gates) ──▶ PR: data/YYYY_MM
                               │ failure
                               ▼
-                          Claude agent fixes on the runner ──▶ same PR
+                          Grok agent fixes on the runner ──▶ same PR
 ```
 
 ## The mechanical path
@@ -33,6 +33,9 @@ oracle onto the new dump, re-freezes `tests/parity_corpus.json`, and gates:
   laundered into a green test suite.
 - **sweep** — 500 freshly generated VINs decoded live against the new oracle,
   zero undocumented divergence.
+- **known-problems** — the converse of the two above: every VIN in
+  `ORACLE_CRASH_VINS` and `KNOWN_DEVIATION_VINS` still *reproduces* its
+  documented problem. See below.
 - **coverage** — `make coverage`: the decode path still reaches 100% of the
   regions a VIN can reach, and no allowance in
   `scripts/coverage_allowances.json` went **stale**. A stale one is the
@@ -55,7 +58,34 @@ Exit 0 = integrated and green; exit 2 = gates failed (report still written to
 is the report: data-only vs schema-change classification (`git status` on
 `vpic/schema` + `vpic/procs` — the importer strips volatile dump noise, so a
 data-only month diffs clean there), manifest row/table/function deltas, lookup
-value changes, gate results, and follow-ups (e.g. a healed known deviation).
+value changes, gate results, and follow-ups (e.g. a new oracle-crash VIN freeze
+had to skip).
+
+## Documented problems must keep reproducing
+
+Every other gate uses `docs/KNOWN_DEVIATIONS.md` — via `ORACLE_CRASH_VINS` and
+`KNOWN_DEVIATION_VINS` — to *excuse* an observation, so nothing ever made an
+excuse prove it was still true. Upstream fixes things: 2026_08 healed the
+stale-year-cache deviation and the refresh stayed green on that axis, because the
+gates only ever ask "is this divergence forgiven?". Worse, the 63 crash VINs land
+in neither freeze's sample nor the 500-VIN sweep, so most months they were never
+decoded at all.
+
+`scripts/parity/known_problems.py` therefore decodes every listed VIN against the
+new oracle and writes `target/refresh/known_problems.json`
+(`{vin: {"outcome": "crash"|"diverged"|"exact"|"infra-error"}}`); the
+**known-problems** gate requires each crash VIN to still crash and each deviation
+VIN to still diverge. A stale excuse fails the run and the gate detail names the
+VIN, what it does now, and which list to drop it from — the same house rule as
+the coverage gate failing on a stale allowance.
+
+A connection error is *not* evidence in either direction: it is reported as
+`infra-error` and fails the gate as **unverifiable** rather than quietly
+re-certifying the whole list, so an oracle outage can never be mistaken for
+confirmation. A VIN with no record at all is treated the same way — the probe
+writes its report in one go at the end, so a probe that dies (or an oracle it
+could not connect to) leaves no file, the gate is handed nothing, and all of
+them come back unverifiable rather than silently passing.
 
 Row counts can't show an in-place label edit (2026_07 silently renamed
 `bodystyle` 7 from `...(SUV)...` to `...[SUV]...` — 71 rows before and after),
@@ -66,15 +96,14 @@ against the committed freeze.
 ## The agent path
 
 If `refresh` fails — schema drift, a proc change, bad data, a new oracle
-defect — the `fix` job runs [claude-code-action][cca] on the same runner with
-the full toolchain (rust, uv, docker) and a strict contract: never hand-edit
-generated files, parity is the spec, genuine upstream defects get documented in
+defect — the `fix` job runs xAI's Grok Build CLI (the
+`.github/actions/grok-agent` composite action) on the same runner with the full
+toolchain (rust, uv, docker) and a strict contract: never hand-edit generated
+files, parity is the spec, genuine upstream defects get documented in
 `docs/KNOWN_DEVIATIONS.md` + `KNOWN_DEVIATION_VINS`, done only when
 `refresh.py run` exits 0 and `make check` is green. It pushes to the same
 `data/YYYY_MM` branch and opens/updates the PR (label `agent-fixed`, or a draft
 with `needs-human` + diagnosis if it can't get there honestly).
-
-[cca]: https://github.com/anthropics/claude-code-action
 
 ## The review gate
 
@@ -84,7 +113,7 @@ the two branch prefixes the automation merges by itself, `data/*` and
 `deps/*`; every other PR passes in seconds for $0. Data PRs whose diff is pure
 regeneration (`vpic/**` + the corpus) pass a deterministic allowlist, also
 $0; any data PR carrying code or doc changes — i.e. agent-fixed months — must
-be approved by an adversarial Claude reviewer (read-only, verdict-only) that
+be approved by an adversarial Grok reviewer (read-only, verdict-only) that
 checks diff scope, that every decoder edit is justified by an upstream `vpic/`
 hunk, gate integrity (a new `KNOWN_DEVIATION_VINS` entry needs documented
 evidence of an upstream defect), and injection artifacts. `deps/*` PRs — the
@@ -105,7 +134,7 @@ a PR comment.
 
 | what | why |
 |---|---|
-| secret `ANTHROPIC_API_KEY` | enables the agent fix job and the model leg of the review gate (without it, failures land in the job summary for a human) |
+| secret `XAI_API_KEY` | enables the agent fix job and the model leg of the review gate (without it, failures land in the job summary for a human) |
 | var `DATA_REFRESH_AUTOMERGE=true` | merge **data-only** PRs: the workflow waits for the required checks (CI + `review-verdict`) and squash-merges synchronously, then tags `data-YYYY_MM` on the merge commit |
 | var `DATA_REFRESH_AUTOMERGE_SCHEMA=true` | extend merging to **schema-change** PRs too, including agent-fixed ones — the full-autonomy switch; leave off to keep a human on the merge button when decoder code changed |
 | var `DATA_REFRESH_AUTORELEASE=true` | after merging, also push the next patch `v` tag and dispatch `release.yaml` on it to ship PyPI |
@@ -130,7 +159,7 @@ exactly this (the agent escalated via issue, as designed).
 
 **Selfcheck:** `gh workflow run data-refresh-selfcheck.yaml` proves the agent's
 prerequisites in under a minute with zero API spend — `detect` runs on a bare
-runner, the environment mounts a valid `ANTHROPIC_API_KEY`, and `GITHUB_TOKEN`
+runner, the environment mounts a valid `XAI_API_KEY`, and `GITHUB_TOKEN`
 can create a PR (via a `[skip ci]` canary that is closed and deleted
 immediately). Run it after changing the settings above or rotating the key.
 
@@ -144,6 +173,12 @@ immediately). Run it after changing the settings above or rotating the key.
   matches the new data (fix Rust) or the dump itself is defective (oracle
   crash, stale cache table — precedent in `docs/KNOWN_DEVIATIONS.md`). The
   agent triages; the gate only accepts VINs that are documented deviations.
+- **known-problems gate names a healed VIN** — upstream fixed the defect (or the
+  dump stopped carrying it). Confirm against §-evidence in
+  `docs/KNOWN_DEVIATIONS.md`, drop the VIN from the list the detail names, and
+  retire the section if its last VIN went. Never re-green it by widening a list.
+  If instead the detail says **UNVERIFIABLE**, the oracle was unreachable and
+  nothing was proven either way — fix the oracle and re-run.
 - **freeze skips new oracle-crash VINs** — reported as a follow-up, not a
   failure: those are upstream defects (malformed `Pattern.keys` regexes). If a
   crash VIN lands inside freeze's *sampled* corpus or the sweep (not just the
