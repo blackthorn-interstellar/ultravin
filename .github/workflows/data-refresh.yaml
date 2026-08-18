@@ -121,7 +121,18 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B "data/$MONTH"
+          # Root at LIVE master, not this run's pinned checkout. This job takes
+          # up to 90 minutes; a .github/workflows/** commit landing on master in
+          # that window would leave the pushed branch holding an older copy of
+          # the automation, and GitHub refuses that as a workflow update the
+          # GITHUB_TOKEN has no `workflows` scope for. Nothing is committed
+          # before this point — refresh.py only writes the working tree — so the
+          # regenerated vpic/ and corpus ride across the switch untouched.
+          git fetch origin master
+          if ! git checkout -B "data/$MONTH" FETCH_HEAD; then
+            echo "::error::master moved onto files this refresh regenerated — rerun the refresh against current master"
+            exit 1
+          fi
           git add -A vpic tests/parity_corpus.json
           git commit -m "data: NHTSA vPIC $MONTH ($CLASSIFICATION)"
           git push -f origin "data/$MONTH"
@@ -414,8 +425,25 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B "data/$MONTH"
-          git apply --binary fix-bundle/fix.patch
+          # Root the branch at LIVE master, not this run's pinned checkout. A
+          # .github/workflows/** commit landing on master mid-run leaves the
+          # pinned base holding an older copy of the automation, and GitHub
+          # reads the resulting branch push as a workflow update it must refuse
+          # ("refusing to allow a GitHub App to create or update workflow ...
+          # without `workflows` permission"). Granting that scope is not the
+          # fix — a verified-green agent fix was thrown away this way.
+          # FETCH_HEAD, not origin/master: checkout may configure a narrow
+          # refspec, so the remote-tracking ref is not reliably the live tip.
+          git fetch origin master
+          git checkout -B "data/$MONTH" FETCH_HEAD
+          # --3way because the patch was generated against the older base and
+          # that base has moved. A real conflict stops here: pushing a
+          # half-applied tree would publish conflict markers as a data refresh.
+          if ! git apply --3way --binary fix-bundle/fix.patch; then
+            conflicts=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
+            echo "::error::the agent's fix does not apply onto current master — conflicting files: ${conflicts:-unknown}"
+            exit 1
+          fi
           git add -A
           # The patch is agent-controlled. Refuse changes to the automation
           # before pushing or resolving any local action from this checkout.

@@ -25,9 +25,9 @@ rules:
     # drifted — re-pin it rather than widening these to bare filenames.
     ignore:
       - answer-key.yaml:192   # job `publish` — pushes the answer-key pin branch (L255)
-      - data-refresh.yaml:96  # job `refresh` — pushes data/$MONTH (L127)
-      - data-refresh.yaml:405 # job `fix-publish` — re-pushes data/$MONTH after an agent fix (L439)
-      - nightly.yaml:147      # job `deps-publish` — pushes deps/nightly (L164)
-      - nightly.yaml:365      # job `deps-fix-publish` — re-pushes deps/nightly after a fix (L396)
-      - nightly.yaml:657      # job `deps-remedy-publish` — re-pushes deps/nightly after the check-remediation agent (L696)
-      - nightly.yaml:1218     # job `fixes-publish` — pushes the parity-fix branch (L1248)
+      - data-refresh.yaml:96  # job `refresh` — pushes data/$MONTH (L138)
+      - data-refresh.yaml:416 # job `fix-publish` — re-pushes data/$MONTH after an agent fix (L467)
+      - nightly.yaml:147      # job `deps-publish` — pushes deps/nightly (L173)
+      - nightly.yaml:374      # job `deps-fix-publish` — re-pushes deps/nightly after a fix (L420)
+      - nightly.yaml:681      # job `deps-remedy-publish` — re-pushes deps/nightly after the check-remediation agent (L720)
+      - nightly.yaml:1242     # job `fixes-publish` — pushes the parity-fix branch (L1285)

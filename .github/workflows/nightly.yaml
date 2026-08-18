@@ -152,13 +152,22 @@ jobs:
         with:
           name: nightly-deps-evidence
           path: target/deps/
-      - name: Apply the bumped lockfiles
-        run: cp target/deps/Cargo.lock target/deps/uv.lock .
-      - name: Branch, push, pull request
+      - name: Branch, apply the bumped lockfiles, push, pull request
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B deps/nightly
+          # Root at LIVE master, not this run's pinned checkout: a
+          # .github/workflows/** commit landing on master mid-run would leave
+          # this branch holding an older copy of the automation, and GitHub
+          # refuses that push as a workflow update the GITHUB_TOKEN has no
+          # `workflows` scope for. Nothing is committed before this point.
+          git fetch origin master
+          git checkout -B deps/nightly FETCH_HEAD
+          # Copy AFTER the switch (this used to be its own step, before it):
+          # the lockfiles are whole-file replacements from the artifact, and
+          # copying first would make the branch switch refuse outright if
+          # master's own lockfiles had moved in the meantime.
+          cp target/deps/Cargo.lock target/deps/uv.lock .
           git add Cargo.lock uv.lock
           git commit -m "deps: nightly bump $(date -u +%F)"
           git push -f origin deps/nightly
@@ -379,8 +388,23 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git checkout -B deps/nightly
-          git apply --binary fix/fix.patch
+          # Root the branch at LIVE master, not this run's pinned checkout. A
+          # .github/workflows/** commit landing on master mid-run leaves the
+          # pinned base holding an older copy of the automation, and GitHub
+          # refuses the resulting branch push as a workflow update the
+          # GITHUB_TOKEN has no `workflows` scope for. Granting that scope is
+          # not the fix. FETCH_HEAD, not origin/master: checkout may configure
+          # a narrow refspec, so the tracking ref is not reliably the live tip.
+          git fetch origin master
+          git checkout -B deps/nightly FETCH_HEAD
+          # --3way because the patch was generated against the older base and
+          # that base has moved. A real conflict stops here rather than pushing
+          # a half-applied tree.
+          if ! git apply --3way --binary fix/fix.patch; then
+            conflicts=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
+            echo "::error::the agent's fix does not apply onto current master — conflicting files: ${conflicts:-unknown}"
+            exit 1
+          fi
           git add -A
           # Enforce the self-editing boundary before this branch is pushed or
           # any later privileged job checks it out and resolves local actions.
@@ -1227,10 +1251,23 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # Branch from the agent's own base, not from whatever master is now:
-          # the deps lane may have merged while this lane was running.
-          git checkout -B "$BRANCH" "$(cat fix/fix-base.txt)"
-          git apply --binary fix/fix.patch
+          # Root the branch at LIVE master. Branching from the agent's own base
+          # (fix/fix-base.txt) used to guard against the deps lane merging
+          # mid-run, but a pinned base also carries an older .github/workflows/
+          # whenever master moved there, and GitHub refuses that branch push as
+          # a workflow update the GITHUB_TOKEN has no `workflows` scope for.
+          # The --3way apply below handles the moved base the base pin was
+          # protecting against, and fails loudly instead of silently branching
+          # from a stale tree. FETCH_HEAD, not origin/master: checkout may
+          # configure a narrow refspec, so the tracking ref is not reliably the
+          # live tip.
+          git fetch origin master
+          git checkout -B "$BRANCH" FETCH_HEAD
+          if ! git apply --3way --binary fix/fix.patch; then
+            conflicts=$(git diff --name-only --diff-filter=U | tr '\n' ' ')
+            echo "::error::the agent's fix does not apply onto current master — conflicting files: ${conflicts:-unknown}"
+            exit 1
+          fi
           git add -A
           # The patch is agent-controlled. Refuse changes to the automation
           # before this branch is pushed or any later privileged job checks it
