@@ -244,7 +244,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         with:
           xai_api_key: ${{ secrets.XAI_API_KEY }}
-          max_turns: 75
+          max_turns: 150
           bash_timeout_secs: 2400
           allowed_tools: run_terminal_command,read_file,search_replace,write,list_dir,grep
           prompt: |
@@ -538,7 +538,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         with:
           xai_api_key: ${{ secrets.XAI_API_KEY }}
-          max_turns: 75
+          max_turns: 150
           bash_timeout_secs: 2400
           allowed_tools: run_terminal_command,read_file,search_replace,write,list_dir,grep
           prompt: |
@@ -1055,7 +1055,7 @@ jobs:
         uses: ./.github/actions/grok-agent
         with:
           xai_api_key: ${{ secrets.XAI_API_KEY }}
-          max_turns: 75
+          max_turns: 150
           # Oracle loads, sweeps, and make check run 10+ minutes; grok's
           # 2-minute shell default would kill them mid-flight.
           bash_timeout_secs: 2400

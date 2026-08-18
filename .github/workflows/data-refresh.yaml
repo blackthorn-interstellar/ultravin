@@ -247,7 +247,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         with:
           xai_api_key: ${{ secrets.XAI_API_KEY }}
-          max_turns: 75
+          max_turns: 150
           # The refresh pipeline runs 10+ minute commands (oracle load, freeze,
           # make check); on grok's 2-minute shell default they would be killed
           # and the agent would conclude it cannot do the job.
