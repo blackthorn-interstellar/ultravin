@@ -76,11 +76,30 @@ runs:
         fi
         # Branch protection arbitrates: merge succeeds only once every required
         # check (CI + review-verdict) is green on the head SHA. Retry until then.
+        head=$(gh pr view "$pr" --json headRefOid --jq .headRefOid)
+        verdict_runs() {
+          gh api "repos/$GITHUB_REPOSITORY/commits/$head/check-runs?check_name=review-verdict" \
+            --jq '.check_runs[] | "\(.status) \(.conclusion // "none")"' 2>/dev/null || true
+        }
         merged=""
         for _ in $(seq 1 45); do
           if gh pr merge "$pr" --squash --delete-branch 2>/tmp/merge-err; then
             merged=1
             break
+          fi
+          # A rejected review-verdict never self-heals — the gate publishes one
+          # completed conclusion per head SHA and nothing re-runs it — so waiting
+          # out the full window only delays the report by 22 minutes. Keep
+          # waiting while it is queued, in_progress, or absent (the reviewer
+          # takes minutes to publish, and its absence is not a verdict); bail the
+          # moment a failure is final with nothing newer pending for this SHA.
+          runs=$(verdict_runs)
+          if printf '%s\n' "$runs" | grep -q '^completed failure$' &&
+             ! printf '%s\n' "$runs" | grep -qE '^(queued|in_progress) '; then
+            echo "::error::review-verdict rejected $head — a red required gate does not self-heal, so not waiting out the merge window"
+            gh api "repos/$GITHUB_REPOSITORY/commits/$head/check-runs?check_name=review-verdict" \
+              --jq '.check_runs[] | "review-verdict \(.conclusion): \(.output.summary // .output.title // "no summary published")"' || true
+            exit 1
           fi
           sleep 30
         done

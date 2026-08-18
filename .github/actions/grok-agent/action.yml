@@ -149,6 +149,10 @@ runs:
         MODEL: ${{ inputs.model }}
       run: |
         set -uo pipefail
+        # `shell: bash` runs with -e; turn it off deliberately. Every failure
+        # below is handled explicitly, and aborting on the first one would skip
+        # writing $GITHUB_OUTPUT and swallow the diagnosis.
+        set +e
         transcript="$RUNNER_TEMP/grok-transcript.jsonl"
         prompt_file="$RUNNER_TEMP/grok-prompt.txt"
         printf '%s' "$PROMPT" > "$prompt_file"
@@ -173,9 +177,17 @@ runs:
         "$HOME/.grok/bin/grok" "${args[@]}" | tee "$transcript"
         rc="${PIPESTATUS[0]}"
 
+        # With a schema, "exited 0 but delivered no verdict" must be impossible:
+        # grok can treat a stray line of assistant text as its terminal answer,
+        # cancel its own pending tool calls, and still exit 0. Downstream that
+        # looked like a healthy run with an empty verdict, and the fail-closed
+        # gate then retried a check that was never coming.
         structured=""
+        schema_rc=0
+        schema_err="$RUNNER_TEMP/grok-schema-error.txt"
         if [ -n "$JSON_SCHEMA" ]; then
-          structured=$(python3 "$GITHUB_ACTION_PATH/structured_output.py" "$transcript")
+          structured=$(python3 "$GITHUB_ACTION_PATH/structured_output.py" "$transcript" 2>"$schema_err")
+          schema_rc=$?
         fi
 
         {
@@ -189,4 +201,9 @@ runs:
           143) echo "::error::grok was terminated (SIGTERM)" ;;
           *)   echo "::error::grok exited $rc" ;;
         esac
+
+        if [ "$schema_rc" != 0 ]; then
+          echo "::error::grok produced no usable structured output: $(cat "$schema_err")"
+          if [ "$rc" = 0 ]; then rc=1; fi
+        fi
         exit "$rc"
