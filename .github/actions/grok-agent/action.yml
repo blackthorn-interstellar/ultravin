@@ -9,12 +9,14 @@
 #     `--deny` (whose compat aliases are spelled --allowedTools /
 #     --disallowedTools) are permission RULES: they gate execution of tools that
 #     remain available. Passing the old `--allowedTools "Read,..."` string here
-#     would advertise the full 26-tool set and gate nothing, which is why
-#     allowed_tools and allow_rules are separate inputs. A deny list is not
-#     offered: with a hard allowlist it can only remove tools already gone.
-#  2. Under `bypassPermissions` every allow rule is moot. A lane that wants its
-#     shell scoped must run `permission_mode: dontAsk` plus allow_rules — but
-#     see that input's note on what dontAsk does and does not gate.
+#     would advertise the full 26-tool set and gate nothing, so `allowed_tools`
+#     maps to --tools and nothing maps to the rule flags. A deny list is not
+#     offered either: with a hard allowlist it can only remove tools already gone.
+#  2. allowed_tools is the ONLY usable scoping mechanism. Permission rules
+#     (--allow/--deny with a deny-by-default mode) are unusable in 1.0.4: a
+#     rule denial cancels the whole session instead of failing one tool call,
+#     so a scoped session dies on its first unmatched command. Hence no
+#     allow_rules input and bypassPermissions everywhere.
 #
 # The `[toolset.bash]` limits must live in $HOME/.grok/config.toml: a project
 # .grok/config.toml only contributes [mcp_servers], [plugins] and [permission],
@@ -39,18 +41,13 @@ inputs:
       "read_file,grep"). A hard allowlist. Empty means grok's default toolset.
     required: false
     default: ""
-  allow_rules:
-    description: >-
-      Newline-separated permission allow rules (e.g. "Bash(git:*)"). Only
-      meaningful when permission_mode gates execution, i.e. not bypassPermissions.
-    required: false
-    default: ""
   permission_mode:
     description: >-
-      bypassPermissions (approve everything) or dontAsk (pair with allow_rules).
-      dontAsk is not strictly deny-by-default: grok also auto-approves its own
-      read-only-classified commands, so the effective shell is allow_rules plus
-      that built-in set. Mutation outside the allow rules is refused.
+      Permission mode. Keep bypassPermissions: grok 1.0.4 treats a permission
+      RULE denial as a session cancellation rather than a recoverable tool
+      error, so deny-by-default modes (dontAsk) kill a session on its first
+      unmatched command. Scope a session with allowed_tools, which removes
+      tools outright, not with permission rules.
     required: false
     default: bypassPermissions
   json_schema:
@@ -143,7 +140,6 @@ runs:
         PROMPT: ${{ inputs.prompt }}
         MAX_TURNS: ${{ inputs.max_turns }}
         ALLOWED_TOOLS: ${{ inputs.allowed_tools }}
-        ALLOW_RULES: ${{ inputs.allow_rules }}
         PERMISSION_MODE: ${{ inputs.permission_mode }}
         JSON_SCHEMA: ${{ inputs.json_schema }}
         MODEL: ${{ inputs.model }}
@@ -167,9 +163,6 @@ runs:
         )
         if [ -n "$ALLOWED_TOOLS" ]; then args+=(--tools "$ALLOWED_TOOLS"); fi
         if [ -n "$JSON_SCHEMA" ]; then args+=(--json-schema "$JSON_SCHEMA"); fi
-        while IFS= read -r rule; do
-          if [ -n "$rule" ]; then args+=(--allow "$rule"); fi
-        done <<< "$ALLOW_RULES"
 
         # Tee so a two-hour session is visible live in the job log while the
         # JSONL lands on disk for the transcript artifact. PIPESTATUS, not $?,

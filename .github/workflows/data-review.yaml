@@ -127,18 +127,20 @@ jobs:
         with:
           xai_api_key: ${{ secrets.XAI_API_KEY }}
           max_turns: 30
-          # bypassPermissions would make the allow rules below moot and hand
-          # this reviewer an unscoped shell while it holds the key and a token.
-          # dontAsk is not airtight — grok still auto-approves its own
-          # read-only-classified commands (verified: `whoami` ran without
-          # matching a rule) — but it does refuse mutation outside the rules.
-          permission_mode: dontAsk
+          # allowed_tools IS the enforcement boundary: --tools is a hard
+          # allowlist, so search_replace/write/web_fetch/web_search are absent
+          # from the session rather than merely denied. Scoping the shell
+          # further (dontAsk + Bash(git:*) rules) is NOT available: grok 1.0.4
+          # treats a rule denial as a session CANCELLATION rather than a
+          # recoverable tool error, so the first command falling outside the
+          # rules killed the review mid-flight and returned an empty verdict.
+          # Probed 2026-08-18 on this exact prompt: dontAsk died at 2 turns
+          # every time; bypassPermissions ran 28-30 tool calls and returned a
+          # real verdict. The residual risk is bounded — fork PRs divert to
+          # human-review above and never reach this step, so the diff under
+          # review is pipeline-generated, not attacker-authored.
+          permission_mode: bypassPermissions
           allowed_tools: read_file,grep,list_dir,run_terminal_command
-          allow_rules: |
-            Read
-            Grep
-            Bash(git:*)
-            Bash(gh pr view:*)
           json_schema: '{"type":"object","properties":{"approved":{"type":"boolean"},"summary":{"type":"string"},"blocking_findings":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"issue":{"type":"string"}},"required":["file","issue"]}}},"required":["approved","summary","blocking_findings"]}'
           prompt: |
             You are the independent review gate for an automated monthly NHTSA
@@ -200,18 +202,20 @@ jobs:
         with:
           xai_api_key: ${{ secrets.XAI_API_KEY }}
           max_turns: 30
-          # bypassPermissions would make the allow rules below moot and hand
-          # this reviewer an unscoped shell while it holds the key and a token.
-          # dontAsk is not airtight — grok still auto-approves its own
-          # read-only-classified commands (verified: `whoami` ran without
-          # matching a rule) — but it does refuse mutation outside the rules.
-          permission_mode: dontAsk
+          # allowed_tools IS the enforcement boundary: --tools is a hard
+          # allowlist, so search_replace/write/web_fetch/web_search are absent
+          # from the session rather than merely denied. Scoping the shell
+          # further (dontAsk + Bash(git:*) rules) is NOT available: grok 1.0.4
+          # treats a rule denial as a session CANCELLATION rather than a
+          # recoverable tool error, so the first command falling outside the
+          # rules killed the review mid-flight and returned an empty verdict.
+          # Probed 2026-08-18 on this exact prompt: dontAsk died at 2 turns
+          # every time; bypassPermissions ran 28-30 tool calls and returned a
+          # real verdict. The residual risk is bounded — fork PRs divert to
+          # human-review above and never reach this step, so the diff under
+          # review is pipeline-generated, not attacker-authored.
+          permission_mode: bypassPermissions
           allowed_tools: read_file,grep,list_dir,run_terminal_command
-          allow_rules: |
-            Read
-            Grep
-            Bash(git:*)
-            Bash(gh pr view:*)
           json_schema: '{"type":"object","properties":{"approved":{"type":"boolean"},"summary":{"type":"string"},"blocking_findings":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"issue":{"type":"string"}},"required":["file","issue"]}}},"required":["approved","summary","blocking_findings"]}'
           prompt: |
             You are the independent review gate for an automated monthly NHTSA
@@ -269,16 +273,12 @@ jobs:
         with:
           xai_api_key: ${{ secrets.XAI_API_KEY }}
           max_turns: 30
-          # As above: bypassPermissions would drop the shell scoping this
-          # reviewer relies on. dontAsk gates mutation, not grok's built-in
-          # read-only command set.
-          permission_mode: dontAsk
+          # As above: allowed_tools is the enforcement boundary, and
+          # dontAsk-based shell scoping is unusable because grok 1.0.4 turns a
+          # rule denial into a session cancellation, which silently killed this
+          # review (probed 2026-08-18). Fork PRs never reach this step.
+          permission_mode: bypassPermissions
           allowed_tools: read_file,grep,list_dir,run_terminal_command
-          allow_rules: |
-            Read
-            Grep
-            Bash(git:*)
-            Bash(gh pr view:*)
           json_schema: '{"type":"object","properties":{"approved":{"type":"boolean"},"summary":{"type":"string"},"blocking_findings":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"issue":{"type":"string"}},"required":["file","issue"]}}},"required":["approved","summary","blocking_findings"]}'
           prompt: |
             You are the independent review gate for an automated nightly
@@ -346,16 +346,12 @@ jobs:
         with:
           xai_api_key: ${{ secrets.XAI_API_KEY }}
           max_turns: 30
-          # As above: bypassPermissions would drop the shell scoping this
-          # reviewer relies on. dontAsk gates mutation, not grok's built-in
-          # read-only command set.
-          permission_mode: dontAsk
+          # As above: allowed_tools is the enforcement boundary, and
+          # dontAsk-based shell scoping is unusable because grok 1.0.4 turns a
+          # rule denial into a session cancellation, which silently killed this
+          # review (probed 2026-08-18). Fork PRs never reach this step.
+          permission_mode: bypassPermissions
           allowed_tools: read_file,grep,list_dir,run_terminal_command
-          allow_rules: |
-            Read
-            Grep
-            Bash(git:*)
-            Bash(gh pr view:*)
           json_schema: '{"type":"object","properties":{"approved":{"type":"boolean"},"summary":{"type":"string"},"blocking_findings":{"type":"array","items":{"type":"object","properties":{"file":{"type":"string"},"issue":{"type":"string"}},"required":["file","issue"]}}},"required":["approved","summary","blocking_findings"]}'
           prompt: |
             You are the independent review gate for an automated nightly
