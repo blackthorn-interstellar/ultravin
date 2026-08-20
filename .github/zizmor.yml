@@ -26,8 +26,8 @@ rules:
     ignore:
       - answer-key.yaml:192   # job `publish` — pushes the answer-key pin branch (L255)
       - data-refresh.yaml:96  # job `refresh` — pushes data/$MONTH (L138)
-      - data-refresh.yaml:427 # job `fix-publish` — re-pushes data/$MONTH after an agent fix (L478)
+      - data-refresh.yaml:436 # job `fix-publish` — re-pushes data/$MONTH after an agent fix (L487)
       - nightly.yaml:147      # job `deps-publish` — pushes deps/nightly (L173)
       - nightly.yaml:374      # job `deps-fix-publish` — re-pushes deps/nightly after a fix (L420)
       - nightly.yaml:681      # job `deps-remedy-publish` — re-pushes deps/nightly after the check-remediation agent (L720)
-      - nightly.yaml:1251     # job `fixes-publish` — pushes the parity-fix branch (L1294)
+      - nightly.yaml:1265     # job `fixes-publish` — pushes the parity-fix branch (L1308)

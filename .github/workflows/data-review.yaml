@@ -8,6 +8,9 @@
 #   - deps/* PRs (the nightly lockfile bump, which merges itself on green):
 #     always the adversarial reviewer, no allowlist — the content of the lock
 #     diff (sources, new packages, gate integrity) is exactly what needs eyes
+#   - fix/* PRs (the nightly parity-fix lane): the adversarial reviewer, held
+#     hardest to the known-problems evidence bar — that lane edits the decoder
+#     and the registry, so it is where a bug could be excused rather than fixed
 # Two triggers: pull_request_target for human-created PRs (runs THIS master
 # copy of the gate — a PR cannot edit its own judge — and never executes PR
 # code), and workflow_dispatch for PRs created by the pipeline itself, whose
@@ -61,13 +64,19 @@ jobs:
           HEAD_REPO: ${{ steps.pr.outputs.head_repo }}
           THIS_REPO: ${{ github.repository }}
         run: |
-          # Only the branch prefixes the automation merges by itself are gated.
+          # Only the branch prefixes the automation merges by itself are gated:
+          # data/* (monthly refresh), deps/* (nightly lock bump) and fix/*
+          # (nightly parity-fix lane — ondemand and backlog-drain runs). fix/*
+          # used to fall through to `pass`, which is precisely backwards: that
+          # lane is the one that edits the decoder and the known-problems
+          # registry, so an unreviewed fix/* PR could excuse a divergence
+          # instead of fixing it.
           # Fork PRs on those prefixes never reach the model reviewer (no key
           # mount) and never auto-pass — the untrusted head could carry a
           # prompt-injection or a crafted diff. Route to human-review; the
           # publish step fails closed.
           case "$HEAD_REF" in
-            data/* | deps/*)
+            data/* | deps/* | fix/*)
               if [ "$HEAD_REPO" != "$THIS_REPO" ]; then
                 echo "verdict=human-review" >> "$GITHUB_OUTPUT"
                 echo "$HEAD_REF from fork ($HEAD_REPO) — automated review disabled; a maintainer must review" >> "$GITHUB_STEP_SUMMARY"
@@ -76,7 +85,7 @@ jobs:
               ;;
             *)
               echo "verdict=pass" >> "$GITHUB_OUTPUT"
-              echo "not a data-refresh or deps-bump PR — nothing to gate" >> "$GITHUB_STEP_SUMMARY"
+              echo "not a data-refresh, deps-bump or parity-fix PR — nothing to gate" >> "$GITHUB_STEP_SUMMARY"
               exit 0
               ;;
           esac
@@ -149,6 +158,17 @@ jobs:
             It was produced by another agent or the mechanical pipeline; your
             verdict alone decides whether it merges with no human involved. Be
             adversarial.
+
+            A `fix/*` branch is the nightly parity-fix lane, not a monthly
+            refresh: an agent picked a cluster of diverging VINs and either
+            fixed the decoder or argued the oracle is defective. Judge it by the
+            same rules below, reading rule 1's scope as that lane's remit —
+            crates/ultravin-core/**, scripts/known_problems.json,
+            docs/KNOWN_DEVIATIONS.md, tests/parity_backlog.jsonl,
+            tests/brutal_repros.json — and hold rule 3 hardest. That lane is
+            exactly where a decoder bug can be laundered into a "documented
+            deviation", so an entry whose evidence does not name a defective
+            upstream artifact is a rejection, not a style note.
 
             Your checkout is master. Inspect the PR without executing its code:
             `git diff ${{ steps.pr.outputs.base_sha }} ${{ steps.pr.outputs.head_sha }}`
@@ -233,6 +253,17 @@ jobs:
             It was produced by another agent or the mechanical pipeline; your
             verdict alone decides whether it merges with no human involved. Be
             adversarial.
+
+            A `fix/*` branch is the nightly parity-fix lane, not a monthly
+            refresh: an agent picked a cluster of diverging VINs and either
+            fixed the decoder or argued the oracle is defective. Judge it by the
+            same rules below, reading rule 1's scope as that lane's remit —
+            crates/ultravin-core/**, scripts/known_problems.json,
+            docs/KNOWN_DEVIATIONS.md, tests/parity_backlog.jsonl,
+            tests/brutal_repros.json — and hold rule 3 hardest. That lane is
+            exactly where a decoder bug can be laundered into a "documented
+            deviation", so an entry whose evidence does not name a defective
+            upstream artifact is a rejection, not a style note.
 
             Your checkout is master. Inspect the PR without executing its code:
             `git diff ${{ steps.pr.outputs.base_sha }} ${{ steps.pr.outputs.head_sha }}`

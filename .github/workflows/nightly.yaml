@@ -1130,6 +1130,20 @@ jobs:
                Divergence on a clean full-VIN decode is admissible on exactly
                those terms. The oracle is the source of truth for everything
                you cannot root-cause that way.
+               The field VALUES are a contract, not free text, and each of
+               these is fatal if wrong: `kind` is exactly `oracle-crash` or
+               `deviation` — a VIN the oracle RAISED on (no rows at all, the
+               regex-helper case above) is `oracle-crash`, one it answered
+               where ultravin disagrees is `deviation`, and the two are not
+               interchangeable because each gate forgives only its own
+               observation; `scope` is exactly `error-fields` or
+               `clean-decode`; `first_observed` is YYYY_MM; `class` is a
+               lower-kebab slug shared by every VIN of that defect; and `doc`
+               is written exactly as `KNOWN_DEVIATIONS.md#anchor` — no `docs/`
+               prefix — where the section it names carries a literal
+               `<a id="anchor"></a>` line of its own. The full contract is
+               enforced by tests/test_known_problems.py; read it before
+               writing an entry.
             4. Remove the resolved cluster's lines from
                tests/parity_backlog.jsonl. For a FIXED decoder bug (not a
                documented deviation), append one representative VIN per
