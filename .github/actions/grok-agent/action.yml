@@ -17,6 +17,14 @@
 #     rule denial cancels the whole session instead of failing one tool call,
 #     so a scoped session dies on its first unmatched command. Hence no
 #     allow_rules input and bypassPermissions everywhere.
+#  3. `--json-schema` poisons the investigation it is supposed to describe.
+#     grok-4.6 handed a schema stochastically satisfies it on turn 1 — a
+#     schema-valid placeholder, clean end_turn, zero tool calls (3 of 4 review
+#     runs in CI). So a json_schema run is split in two: stage A investigates
+#     with no schema (nothing to short-circuit into) and must make at least one
+#     tool call; stage B is a fresh two-turn session that gets the schema plus
+#     stage A's own findings and only transcribes them. Zero tool calls is a
+#     failure in A and the expectation in B.
 #
 # The `[toolset.bash]` limits must live in $HOME/.grok/config.toml: a project
 # .grok/config.toml only contributes [mcp_servers], [plugins] and [permission],
@@ -51,7 +59,10 @@ inputs:
     required: false
     default: bypassPermissions
   json_schema:
-    description: JSON Schema constraining the reply. When set, structured_output carries the payload.
+    description: >-
+      JSON Schema constraining the reply. When set, structured_output carries
+      the payload and the run splits into an unconstrained investigation plus a
+      two-turn formalization (see the header note).
     required: false
     default: ""
   model:
@@ -79,7 +90,9 @@ inputs:
 
 outputs:
   execution_file:
-    description: Path to the session transcript (streaming-json JSONL).
+    description: >-
+      Path to the session transcript (streaming-json JSONL). With a schema it is
+      the investigation transcript with the formalization's events appended.
     value: ${{ steps.run.outputs.execution_file }}
   structured_output:
     description: Compact JSON matching json_schema, or empty when no schema was given.
@@ -162,8 +175,11 @@ runs:
           --no-auto-update
         )
         if [ -n "$ALLOWED_TOOLS" ]; then args+=(--tools "$ALLOWED_TOOLS"); fi
-        if [ -n "$JSON_SCHEMA" ]; then args+=(--json-schema "$JSON_SCHEMA"); fi
 
+        # Stage A. Identical to the whole run when no schema was asked for: the
+        # schema is deliberately absent here even when one was given, because a
+        # session that can end by emitting JSON tends to do exactly that before
+        # investigating anything.
         # Tee so a two-hour session is visible live in the job log while the
         # JSONL lands on disk for the transcript artifact. PIPESTATUS, not $?,
         # because $? would report tee.
@@ -178,9 +194,46 @@ runs:
         structured=""
         schema_rc=0
         schema_err="$RUNNER_TEMP/grok-schema-error.txt"
+        findings="$RUNNER_TEMP/grok-findings.txt"
+        schema_stage=investigation
         if [ -n "$JSON_SCHEMA" ]; then
-          structured=$(python3 "$GITHUB_ACTION_PATH/structured_output.py" "$transcript" 2>"$schema_err")
+          python3 "$GITHUB_ACTION_PATH/structured_output.py" --mode investigation "$transcript" \
+            >"$findings" 2>"$schema_err"
           schema_rc=$?
+        fi
+
+        # Stage B. A fresh session whose only job is transcription: two turns,
+        # the schema, and stage A's own findings via a FILE — never argv, which
+        # would put model output on a command line. --tools takes the narrowest
+        # read-only tool rather than "": an empty value is a no-op that
+        # advertises the full 25-tool set (measured), not an empty allowlist.
+        if [ -n "$JSON_SCHEMA" ] && [ "$schema_rc" = 0 ]; then
+          schema_stage=verdict
+          verdict_prompt="$RUNNER_TEMP/grok-verdict-prompt.txt"
+          verdict_transcript="$RUNNER_TEMP/grok-verdict-transcript.jsonl"
+          {
+            printf '%s\n\n' "You already completed the investigation below. Emit ONLY the verdict as structured output conforming to the schema; no further investigation is possible."
+            cat "$findings"
+          } > "$verdict_prompt"
+
+          "$HOME/.grok/bin/grok" \
+            --prompt-file "$verdict_prompt" \
+            --output-format streaming-json \
+            --permission-mode "$PERMISSION_MODE" \
+            --max-turns 2 \
+            --model "$MODEL" \
+            --no-auto-update \
+            --tools read_file \
+            --json-schema "$JSON_SCHEMA" | tee "$verdict_transcript"
+          verdict_rc="${PIPESTATUS[0]}"
+
+          # One artifact for the pair: stage A's transcript with stage B's
+          # events appended.
+          cat "$verdict_transcript" >> "$transcript"
+          structured=$(python3 "$GITHUB_ACTION_PATH/structured_output.py" --mode verdict \
+            "$verdict_transcript" 2>"$schema_err")
+          schema_rc=$?
+          if [ "$rc" = 0 ]; then rc="$verdict_rc"; fi
         fi
 
         {
@@ -196,7 +249,7 @@ runs:
         esac
 
         if [ "$schema_rc" != 0 ]; then
-          echo "::error::grok produced no usable structured output: $(cat "$schema_err")"
+          echo "::error::grok's $schema_stage stage produced nothing usable: $(cat "$schema_err")"
           if [ "$rc" = 0 ]; then rc=1; fi
         fi
         exit "$rc"
