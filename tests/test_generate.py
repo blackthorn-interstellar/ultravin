@@ -57,8 +57,17 @@ def test_generate_filters_by_make() -> None:
 
 def test_generate_filters_by_year() -> None:
     vins = ultravin.generate(10, seed=5, year=2020)
-    assert vins
+    assert len(vins) == 10
     assert {r["model_year"] for r in ultravin.decode_batch(vins)} == {2020}
+
+
+def test_generate_gives_up_on_a_year_no_vin_can_decode_to() -> None:
+    # Position 10 cannot express a year past current+2: `fVinModelYear2` pulls
+    # anything above that back 30 years, so a 2039 request decodes to 2009 and no
+    # candidate can ever satisfy the filter. Schemas covering 2039 exist (open-ended
+    # `yearto`), so the WMI/schema filters cannot rule it out first — this is the
+    # starvation path, and the contract is an empty list, not a wrong VIN.
+    assert ultravin.generate(10, seed=5, year=2039) == []
 
 
 def test_generate_returns_nothing_for_an_impossible_filter() -> None:

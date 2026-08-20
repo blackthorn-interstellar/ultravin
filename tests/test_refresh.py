@@ -10,6 +10,12 @@ import zipfile
 from scripts import refresh
 from scripts.refresh import LookupDiff, Probe
 
+# A VIN the registry currently documents as a deviation. Derived rather than
+# written out, because the corpus and sweep gates read the live registry: the
+# 2026_08 refresh retired the entry this file used to name, and a literal here
+# turns that ordinary retirement into a test failure.
+DEVIATION_VIN = min(refresh.KNOWN_DEVIATION_VINS)
+
 
 def test_month_candidates_newest_first() -> None:
     assert refresh.month_candidates("2026_06", dt.date(2026, 7, 23)) == ["2026_07"]
@@ -80,7 +86,7 @@ def test_corpus_gate_allows_only_known_deviations() -> None:
     corpus = {
         "entries": [
             {"vin": "AAA", "expected_diff": _fp(exact=True)},
-            {"vin": "W1LSB0L72VEJV2EPX", "expected_diff": _fp(exact=False)},
+            {"vin": DEVIATION_VIN, "expected_diff": _fp(exact=False)},
         ]
     }
     assert refresh.corpus_gate(corpus).ok
@@ -115,7 +121,7 @@ def test_sweep_gate_allows_duplicate_known_deviation_cases() -> None:
         "total": 500,
         "exact_parity": 498,
         "diverged": 2,
-        "examples": [{"vin": "W1LSB0L72VEJV2EPX"}, {"vin": "W1LSB0L72VEJV2EPX"}],
+        "examples": [{"vin": DEVIATION_VIN}, {"vin": DEVIATION_VIN}],
     }
     assert refresh.sweep_gate(dup).ok
 
@@ -175,11 +181,11 @@ def test_sweep_gate_fails_when_the_divergence_vin_crashes_the_oracle() -> None:
         "exact_parity": 499,
         "diverged": 0,
         "examples": [],
-        "oracle_errors": [{"vin": "W1LSB0L72VEJV2EPX", "error": "InvalidRegularExpression(...)"}],
+        "oracle_errors": [{"vin": DEVIATION_VIN, "error": "InvalidRegularExpression(...)"}],
     }
     gate = refresh.sweep_gate(crashed)
     assert not gate.ok
-    assert "W1LSB0L72VEJV2EPX" in gate.detail
+    assert DEVIATION_VIN in gate.detail
 
 
 def test_sweep_gate_fails_on_an_undocumented_crash_alongside_known_diffs() -> None:
@@ -188,14 +194,14 @@ def test_sweep_gate_fails_on_an_undocumented_crash_alongside_known_diffs() -> No
         "total": 500,
         "exact_parity": 498,
         "diverged": 1,
-        "examples": [{"vin": "W1LSB0L72VEJV2EPX"}],
+        "examples": [{"vin": DEVIATION_VIN}],
         "oracle_errors": [{"vin": "DDD", "error": "InvalidRegularExpression(...)"}],
     }
     assert not refresh.sweep_gate(mixed).ok
 
 
 _CRASH = frozenset({"7T0AAAAA0SA111111"})
-_DEV = frozenset({"W1LSB0L72VEJV2EPX"})
+_DEV = frozenset({DEVIATION_VIN})
 
 
 def _kp(probe: dict) -> refresh.Gate:
@@ -206,7 +212,7 @@ def test_known_problems_gate_passes_when_every_problem_reproduces() -> None:
     gate = _kp(
         {
             "7T0AAAAA0SA111111": {"outcome": "crash", "error": "InvalidRegularExpression(...)"},
-            "W1LSB0L72VEJV2EPX": {"outcome": "diverged", "fingerprint": {}},
+            DEVIATION_VIN: {"outcome": "diverged", "fingerprint": {}},
         }
     )
     assert gate.ok
@@ -218,7 +224,7 @@ def test_known_problems_gate_fails_on_a_healed_crash_vin() -> None:
     gate = _kp(
         {
             "7T0AAAAA0SA111111": {"outcome": "exact"},
-            "W1LSB0L72VEJV2EPX": {"outcome": "diverged"},
+            DEVIATION_VIN: {"outcome": "diverged"},
         }
     )
     assert not gate.ok
@@ -232,20 +238,20 @@ def test_known_problems_gate_fails_on_a_healed_deviation_vin() -> None:
     gate = _kp(
         {
             "7T0AAAAA0SA111111": {"outcome": "crash"},
-            "W1LSB0L72VEJV2EPX": {"outcome": "exact"},
+            DEVIATION_VIN: {"outcome": "exact"},
         }
     )
     assert not gate.ok
-    assert "W1LSB0L72VEJV2EPX (now exact)" in gate.detail
+    assert f"{DEVIATION_VIN} (now exact)" in gate.detail
     assert "deviation entries no longer reproduce" in gate.detail
     assert "oracle-crash" not in gate.detail  # the healthy kind is not implicated
 
 
 def test_known_problems_gate_fails_when_a_deviation_vin_starts_crashing() -> None:
     """Still a problem, but not the documented one — the entry no longer describes reality."""
-    gate = _kp({"7T0AAAAA0SA111111": {"outcome": "crash"}, "W1LSB0L72VEJV2EPX": {"outcome": "crash"}})
+    gate = _kp({"7T0AAAAA0SA111111": {"outcome": "crash"}, DEVIATION_VIN: {"outcome": "crash"}})
     assert not gate.ok
-    assert "W1LSB0L72VEJV2EPX (now crash)" in gate.detail
+    assert f"{DEVIATION_VIN} (now crash)" in gate.detail
 
 
 def test_known_problems_gate_reports_infra_errors_as_unverifiable_not_healed() -> None:
@@ -254,7 +260,7 @@ def test_known_problems_gate_reports_infra_errors_as_unverifiable_not_healed() -
     gate = _kp(
         {
             "7T0AAAAA0SA111111": {"outcome": "infra-error", "error": "connection is closed"},
-            "W1LSB0L72VEJV2EPX": {"outcome": "diverged"},
+            DEVIATION_VIN: {"outcome": "diverged"},
         }
     )
     assert not gate.ok
@@ -267,7 +273,7 @@ def test_known_problems_gate_reports_infra_errors_as_unverifiable_not_healed() -
 def test_known_problems_gate_fails_when_a_vin_was_never_probed() -> None:
     """No record is not a pass. A probe that dies writes nothing at all, so cmd_run
     hands the gate `{}` and every VIN lands here."""
-    gate = _kp({"W1LSB0L72VEJV2EPX": {"outcome": "diverged"}})
+    gate = _kp({DEVIATION_VIN: {"outcome": "diverged"}})
     assert not gate.ok
     assert "7T0AAAAA0SA111111 (not probed)" in gate.detail
 
@@ -277,8 +283,97 @@ def test_known_problems_gate_defaults_to_the_documented_lists() -> None:
     gate = refresh.known_problems_gate({})
     assert not gate.ok
     assert gate.name == "known-problems"
-    assert "W1LSB0L72VEJV2EPX (not probed)" in gate.detail
+    assert f"{DEVIATION_VIN} (not probed)" in gate.detail
     assert f"0/{len(refresh.ORACLE_CRASH_VINS) + len(refresh.KNOWN_DEVIATION_VINS)} documented" in gate.detail
+
+
+# --- the frozen-shape lock (docs/ACCEPTANCE.md item 3) ---------------------- #
+#
+# Literal fixtures rather than the live registry: these pin the *rule*, and the
+# rule has to keep holding when the real registry changes underneath it.
+
+_HEAD_REG = [
+    {"vin": "AAA", "kind": "deviation"},
+    {"vin": "BBB", "kind": "deviation"},
+    {"vin": "CCC", "kind": "oracle-crash"},
+]
+
+
+def _corpus(**shapes: dict) -> dict:
+    return {"entries": [{"vin": v, "expected_diff": fp} for v, fp in shapes.items()]}
+
+
+def test_a_deviation_that_still_diverges_the_same_way_passes() -> None:
+    same = _corpus(AAA=_fp(exact=False))
+    assert refresh.deviation_shape_changes(same, _HEAD_REG, same, _HEAD_REG) == []
+
+
+def test_a_deviation_that_changed_shape_is_named() -> None:
+    """The whole point: freeze.py would happily re-baseline the new shape."""
+    head = _corpus(AAA=_fp(exact=False), BBB=_fp(exact=False))
+    now = _corpus(AAA={"field_diffs": [{"f": 2}], "missing": [], "extra": [], "order_ok": True}, BBB=_fp(exact=False))
+    assert refresh.deviation_shape_changes(head, _HEAD_REG, now, _HEAD_REG) == ["AAA"]
+
+
+def test_a_deviation_registered_this_cycle_has_no_baseline_to_change_from() -> None:
+    """This run is what establishes its shape, so it cannot be a shape *change*."""
+    head = _corpus(AAA=_fp(exact=False))
+    now = _corpus(AAA=_fp(exact=False), NEW=_fp(exact=False))
+    now_reg = [*_HEAD_REG, {"vin": "NEW", "kind": "deviation"}]
+    assert refresh.deviation_shape_changes(head, _HEAD_REG, now, now_reg) == []
+
+
+def test_a_retired_deviation_is_not_held_to_its_old_shape() -> None:
+    """It healed (or was removed on purpose); the known-problems gate covers that."""
+    head = _corpus(AAA=_fp(exact=False))
+    now = _corpus(AAA=_fp(exact=True))  # healed to exact parity
+    now_reg = [e for e in _HEAD_REG if e["vin"] != "AAA"]
+    assert refresh.deviation_shape_changes(head, _HEAD_REG, now, now_reg) == []
+
+
+def test_a_crash_entry_is_never_shape_compared() -> None:
+    """A crash has no answer to freeze, so its corpus row is not a baseline."""
+    head = _corpus(CCC=_fp(exact=False))
+    now = _corpus(CCC=_fp(exact=True))
+    assert refresh.deviation_shape_changes(head, _HEAD_REG, now, _HEAD_REG) == []
+
+
+def test_nothing_committed_at_head_means_nothing_to_compare() -> None:
+    """First refresh ever, or not a git checkout: head_json returns None."""
+    now = _corpus(AAA=_fp(exact=False))
+    assert refresh.deviation_shape_changes(None, _HEAD_REG, now, _HEAD_REG) == []
+    assert refresh.deviation_shape_changes(_corpus(AAA=_fp(exact=True)), None, now, _HEAD_REG) == []
+
+
+def test_a_deviation_missing_from_either_corpus_is_not_a_shape_change() -> None:
+    """freeze skips a VIN the oracle now crashes on; the probe fails that on the
+    merits (outcome `crash`, not `diverged`) rather than as a changed shape."""
+    head = _corpus(AAA=_fp(exact=False))
+    assert refresh.deviation_shape_changes(head, _HEAD_REG, _corpus(), _HEAD_REG) == []
+    assert refresh.deviation_shape_changes(_corpus(), _HEAD_REG, head, _HEAD_REG) == []
+
+
+def test_known_problems_gate_fails_on_a_changed_shape() -> None:
+    gate = _kp_shapes(["AAA"])
+    assert not gate.ok
+    assert "documented deviation changed shape" in gate.detail
+    assert "AAA" in gate.detail
+    assert "docs/KNOWN_DEVIATIONS.md" in gate.detail
+    assert "no longer reproduce" not in gate.detail  # not a *healed* entry
+
+
+def test_known_problems_gate_passes_with_no_shape_changes() -> None:
+    assert _kp_shapes([]).ok
+    assert _kp_shapes(None).ok
+
+
+def _kp_shapes(shape_changes: list[str] | None) -> refresh.Gate:
+    return refresh.known_problems_gate(
+        {"7T0AAAAA0SA111111": {"outcome": "crash"}, DEVIATION_VIN: {"outcome": "diverged"}},
+        _CRASH,
+        _DEV,
+        shape_changes=shape_changes,
+    )
 
 
 def _manifest(tables: dict[str, int], functions: list[str], rows: int = 100) -> dict:
@@ -494,7 +589,19 @@ def test_corpus_vins_file_writes_the_committed_corpus_vin_list(tmp_path) -> None
     corpus.write_text(json.dumps({"entries": [{"vin": "AAA"}, {"vin": "BBB"}]}))
     out = refresh.corpus_vins_file(corpus, tmp_path / "vins.txt")
     assert out is not None
-    assert out.read_text() == "AAA\nBBB\n"
+    written = out.read_text().splitlines()
+    assert written[:2] == ["AAA", "BBB"]
+    # docs/ACCEPTANCE.md: a registered deviation is frozen in the corpus, so the
+    # re-freeze must ask for every one of them whether or not it is in the file.
+    assert set(written[2:]) == refresh.KNOWN_DEVIATION_VINS
+
+
+def test_corpus_vins_file_does_not_duplicate_a_deviation_already_in_the_corpus(tmp_path) -> None:
+    corpus = tmp_path / "parity_corpus.json"
+    corpus.write_text(json.dumps({"entries": [{"vin": DEVIATION_VIN}]}))
+    out = refresh.corpus_vins_file(corpus, tmp_path / "vins.txt")
+    assert out is not None
+    assert out.read_text().splitlines().count(DEVIATION_VIN) == 1
 
 
 def test_corpus_vins_file_is_none_without_a_corpus(tmp_path) -> None:

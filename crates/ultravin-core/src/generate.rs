@@ -215,7 +215,20 @@ impl Rng {
 /// that schema's patterns, so it decodes to real vehicle attributes rather than
 /// to an unknown-manufacturer error. Returns fewer than `n` only when the filter
 /// matches nothing.
-pub fn generate(db: &Db, n: usize, seed: u64, filter: &Filter, current_year: i32) -> Vec<String> {
+///
+/// The clock is an argument, not a reading: the result is a pure function of
+/// (`n`, `seed`, `filter`, `now_micros`, `current_year`) over a given artifact,
+/// so a fixture repeats exactly. `now_micros` and `current_year` are the same
+/// pair [`crate::decode_full`] takes, and must be, because a `filter.year` is
+/// checked by decoding the candidate (see below).
+pub fn generate(
+    db: &Db,
+    n: usize,
+    seed: u64,
+    filter: &Filter,
+    now_micros: i64,
+    current_year: i32,
+) -> Vec<String> {
     let makeids = filter
         .make
         .as_deref()
@@ -249,11 +262,19 @@ pub fn generate(db: &Db, n: usize, seed: u64, filter: &Filter, current_year: i32
     // attempt bound can limit the work. The Vec grows as needed, so only cap the
     // starting capacity. The Python boundary rejects absurd `n` outright.
     let mut out = Vec::with_capacity(n.min(65_536));
-    // Bounded: a filtered WMI set can contain WMIs with no usable schema, and we
-    // must not spin forever looking for one.
+    // Bounded twice over. The attempt cap stops a filtered WMI set whose WMIs have
+    // no usable schema from spinning forever. `misses` stops the other shape: a
+    // filter that is satisfiable in principle and essentially never in practice —
+    // `year` costs a decode per candidate, so at the documented 10M ceiling the
+    // attempt cap alone is hours of work to hand back an empty Vec. A run this long
+    // with no hit since means the filter is starving, and returning early says the
+    // same thing sooner: fewer than `n` because the filter matched nothing.
+    const STARVATION: usize = 4096;
     let mut attempts = 0usize;
-    while out.len() < n && attempts < n.saturating_mul(64).max(4096) {
+    let mut misses = 0usize;
+    while out.len() < n && attempts < n.saturating_mul(64).max(4096) && misses < STARVATION {
         attempts += 1;
+        misses += 1; // cleared by the push below; every `continue` is a miss
         let w = candidates[rng.below(candidates.len())];
         let links: Vec<_> = db
             .wmi_vinschema_for(w.id.to_native())
@@ -278,7 +299,26 @@ pub fn generate(db: &Db, n: usize, seed: u64, filter: &Filter, current_year: i32
             db.s(patterns[rng.below(patterns.len())].keys.to_native())
                 .to_string()
         };
-        out.extend(build_vin(db.s(w.wmi.to_native()), &keys, year));
+        let Some(vin) = build_vin(db.s(w.wmi.to_native()), &keys, year) else {
+            continue;
+        };
+        // `year` is a promise about the decoded model year, and position 10 alone
+        // cannot keep it: the character is a 30-year cycle, so `L` is both 2020 and
+        // 1990. `fVinModelYear2` only resolves that from the VIN when the WMI is a
+        // car/MPV/light truck (position 7 then picks the half). Everywhere else the
+        // year is *inconclusive*, both halves get a decode pass, and the best-of
+        // scoring — not this function — decides which one the caller sees. So the
+        // only honest filter is to decode the candidate and keep it when it really
+        // resolves to the year asked for; the schema band it was drawn from is a
+        // necessary condition, not a sufficient one.
+        if let Some(want) = filter.year {
+            if crate::decode_full(db, &vin, now_micros, current_year, None).model_year != Some(want)
+            {
+                continue;
+            }
+        }
+        out.push(vin);
+        misses = 0;
     }
     out
 }

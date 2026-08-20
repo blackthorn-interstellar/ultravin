@@ -21,7 +21,8 @@ hand-edited; the gates then decide:
             crashed only on VINs documented as crashing it
   known-problems
             every documented oracle problem still reproduces — the converse of
-            the two above, which only ever *excuse* those VINs
+            the two above, which only ever *excuse* those VINs — and each
+            registered deviation still diverges the *same way* HEAD froze it
   coverage  the decode path still reaches 100% of its reachable regions, and no
             allowance went stale (a stale one means this month's data reaches a
             branch the old data could not)
@@ -111,6 +112,19 @@ def log(msg: str) -> None:
 def sh(cmd: list[str], *, check: bool = True, capture: bool = False) -> subprocess.CompletedProcess[str]:
     log("$ " + " ".join(cmd))
     return subprocess.run(cmd, cwd=ROOT, check=check, capture_output=capture, text=True)
+
+
+def head_json(path: str) -> dict | None:
+    """`git show HEAD:<path>` parsed, or None when HEAD has no such file.
+
+    The *committed* copy, never the working tree: a refresh rewrites its inputs
+    in place, so anything comparing "before" against "after" has to read before
+    from git. None also covers "not a git checkout at all", where there is no
+    before to compare with."""
+    p = sh(["git", "show", f"HEAD:{path}"], check=False, capture=True)
+    if p.returncode == 0 and (p.stdout or "").strip():
+        return json.loads(p.stdout)
+    return None
 
 
 def gh_output(pairs: dict[str, str]) -> None:
@@ -296,10 +310,47 @@ def sweep_gate(report: dict) -> Gate:
     return Gate("sweep", ok, detail)
 
 
+def registered_deviations(entries: list[dict[str, str]]) -> frozenset[str]:
+    """The `deviation` VINs of a registry snapshot (HEAD's or the current one)."""
+    return frozenset(e["vin"] for e in entries if e.get("kind") == "deviation")
+
+
+def deviation_shape_changes(
+    head_corpus: dict | None,
+    head_registry: list[dict[str, str]] | None,
+    corpus: dict,
+    registry: list[dict[str, str]],
+) -> list[str]:
+    """Registered deviations whose *expected difference* is not the one HEAD froze.
+
+    docs/ACCEPTANCE.md requires a deviation to be frozen in the corpus so the
+    difference is locked and an unexpected change to it fails a gate. The
+    known-problems probe only asks whether the VIN still diverges *at all*, and
+    `freeze.py` will happily snapshot a new shape as the new baseline — so
+    without this, a documented deviation that quietly started diverging some
+    other way is laundered green by the very file that is supposed to pin it.
+
+    Compared only for VINs that are deviations in **both** registries: a
+    registration added this cycle has no baseline to differ from (this run is
+    what establishes its shape), and a retired one is no longer ours to hold
+    still. When HEAD carries no corpus or no registry — the first refresh ever,
+    or not a git checkout — there is nothing to compare and nothing to fail on.
+
+    HEAD moves when the refresh PR merges, so a deliberate change fires this
+    once, gets re-investigated, and becomes the new baseline."""
+    if head_corpus is None or head_registry is None:
+        return []
+    both = registered_deviations(registry) & registered_deviations(head_registry)
+    was = {e["vin"]: e["expected_diff"] for e in head_corpus.get("entries", [])}
+    now = {e["vin"]: e["expected_diff"] for e in corpus.get("entries", [])}
+    return sorted(v for v in both if v in was and v in now and was[v] != now[v])
+
+
 def known_problems_gate(
     probe: dict,
     crash_vins: frozenset[str] = ORACLE_CRASH_VINS,
     deviation_vins: frozenset[str] = KNOWN_DEVIATION_VINS,
+    shape_changes: list[str] | None = None,
 ) -> Gate:
     """Every documented oracle problem must still reproduce on the new dump.
 
@@ -337,7 +388,12 @@ def known_problems_gate(
             )
     if unverifiable:
         detail += f"; UNVERIFIABLE (oracle unreachable, so nothing was confirmed — re-run): {unverifiable}"
-    return Gate("known-problems", not stale and not unverifiable, detail)
+    if shape_changes:
+        detail += (
+            "; documented deviation changed shape — re-investigate and update the evidence "
+            f"deliberately (docs/KNOWN_DEVIATIONS.md), then re-freeze: {shape_changes}"
+        )
+    return Gate("known-problems", not stale and not unverifiable and not shape_changes, detail)
 
 
 # --------------------------------------------------------------------------- classify
@@ -427,10 +483,7 @@ def freeze_lookups(dump: Path) -> dict[str, list[list[str]]]:
 
 def pinned_lookups() -> dict | None:
     """The committed freeze, or None before the first refresh ships one."""
-    p = sh(["git", "show", "HEAD:vpic/lookups.json"], check=False, capture=True)
-    if p.returncode == 0 and (p.stdout or "").strip():
-        return json.loads(p.stdout)
-    return None
+    return head_json("vpic/lookups.json")
 
 
 @dataclass
@@ -649,12 +702,23 @@ def corpus_vins_file(corpus: Path = CORPUS, out: Path | None = None) -> Path | N
     unreadable. Re-freezing the *existing* set keeps the curation and makes the
     monthly diff mean "same VINs, new expectations" — which is what the corpus
     gate is written to judge. Returns None before the first corpus exists, where
-    a fresh sample is the only option."""
+    a fresh sample is the only option.
+
+    Every registered `deviation` VIN is unioned in, because docs/ACCEPTANCE.md
+    puts one in the corpus so its expected difference is *frozen*. Being in the
+    corpus is what makes that lock checkable: `deviation_shape_changes` compares
+    each one against the shape HEAD committed, and the known-problems gate fails
+    on a difference — the probe alone only asks whether the VIN still diverges at
+    all, which a changed shape still satisfies. Crash VINs are deliberately left
+    out: freeze skips whatever the oracle errors on, so listing them would buy a
+    skipped-VIN follow-up every month and nothing else.
+    """
     if not corpus.exists():
         return None
     vins = [e["vin"] for e in json.loads(corpus.read_text())["entries"]]
     if not vins:
         return None
+    vins += sorted(KNOWN_DEVIATION_VINS.difference(vins))
     out = out or REPORT_DIR / "corpus_vins.txt"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(vins) + "\n")
@@ -717,11 +781,16 @@ def cmd_run(args: argparse.Namespace) -> int:
     sh(["bash", "scripts/oracle.sh", "load", str(dump)])
 
     # Re-freeze the regression corpus from the new oracle, then gate everything.
-    # Read the corpus's VIN list *before* freeze overwrites the file.
+    # Read the corpus's VIN list — and HEAD's frozen shapes — *before* freeze
+    # overwrites the file.
+    head_corpus = head_json("tests/parity_corpus.json")
+    head_registry = (head_json("scripts/known_problems.json") or {}).get("entries")
     freeze = sh(freeze_command(corpus_vins_file()), capture=True)
     print(freeze.stdout, end="")
     skipped = parse_freeze_skips(freeze.stdout)
-    gates = [corpus_gate(json.loads(CORPUS.read_text()))]
+    corpus = json.loads(CORPUS.read_text())
+    gates = [corpus_gate(corpus)]
+    shape_changes = deviation_shape_changes(head_corpus, head_registry, corpus, _KNOWN_PROBLEMS)
 
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     sweep_path = REPORT_DIR / "sweep.json"
@@ -767,7 +836,12 @@ def cmd_run(args: argparse.Namespace) -> int:
         ],
         check=False,
     )
-    gates.append(known_problems_gate(json.loads(known_path.read_text()) if known_path.exists() else {}))
+    gates.append(
+        known_problems_gate(
+            json.loads(known_path.read_text()) if known_path.exists() else {},
+            shape_changes=shape_changes,
+        )
+    )
 
     pytest = sh(["uv", "run", "--frozen", "--", "pytest", "-q"], check=False, capture=True)
     print(pytest.stdout[-4000:], pytest.stderr[-2000:])

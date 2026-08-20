@@ -91,10 +91,22 @@ def generate(
     network: everything comes from the embedded artifact.
 
     Filters are conjunctive. ``vehicle_type`` is a VehicleType row id (2 =
-    passenger car, 7 = MPV). Returns fewer than ``n`` only when nothing matches.
+    passenger car, 7 = MPV). ``year`` is the year the VIN *decodes to*, which
+    position 10 alone cannot pin down (its character is a 30-year cycle, so ``L``
+    is both 2020 and 1990); candidates are decoded and kept only if they resolve
+    to it. Returns fewer than ``n`` only when nothing matches.
+
+    Same seed, same VINs — within one data month and one clock reading. The
+    clock is read once per call and reaches the result twice: it caps the model
+    year picked inside a schema's band, and under ``year`` it decides which
+    years a VIN can resolve to at all (a year past the current one + 2 is pulled
+    back 30, so no VIN can decode to it). A fixture that must outlive the year
+    should pin the VINs it got, not the call that made them.
 
     ``n`` may not exceed 10,000,000; a larger request raises ``ValueError``
-    rather than attempting a multi-terabyte allocation.
+    rather than attempting a multi-terabyte allocation. A filter that is
+    satisfiable in principle but effectively never — ``year=2039`` today — gives
+    up after a long run of misses and returns what it found.
     """
 
 def sweep(dimensions: list[str] | None = None) -> list[str]:

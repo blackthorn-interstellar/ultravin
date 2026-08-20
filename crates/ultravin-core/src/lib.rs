@@ -240,6 +240,15 @@ pub fn current_year() -> i32 {
     epoch_to_year(secs)
 }
 
+/// "Now" in the units [`decode_with`], [`decode_full`] and [`generate`] take.
+///
+/// Those take the clock as an argument so their output is a pure function of
+/// their inputs; this is the one place that reads it, for callers who do want
+/// the system clock.
+pub fn now_micros() -> i64 {
+    now_secs() * 1_000_000
+}
+
 /// Decode a VIN using the embedded database and the system clock.
 ///
 /// `year` is the optional caller-supplied model year (the proc's `@year`): when

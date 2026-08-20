@@ -17,7 +17,7 @@
 - 🦀 Pure Rust core, shipped as a Python library
 - 📦 The entire vPIC vehicle database baked into the wheel
 - 🔌 Fully offline — no network, no database, no data files at runtime
-- 🎯 Byte-for-byte parity with vPIC's `spVinDecode`, verified across every decodable VIN
+- 🎯 Byte-for-byte parity with vPIC's `spVinDecode`, verified across every decodable VIN — except documented vPIC defects, which ultravin deliberately does not reproduce ([the registry](scripts/known_problems.json), [evidence](docs/KNOWN_DEVIATIONS.md))
 - 🐍 Installable via `pip`, with a CLI and a library API
 - 🧵 Batches in parallel to ~82,000 VIN/s on 4 cores
 

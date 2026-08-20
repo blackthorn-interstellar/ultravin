@@ -280,9 +280,10 @@ const GENERATE_MAX: usize = 10_000_000;
 /// Each VIN comes from a real WMI, a schema that WMI uses, and one of that
 /// schema's patterns, so it decodes to real attributes rather than to an
 /// unknown-manufacturer error. Filters are conjunctive; `vehicle_type` is a
-/// VehicleType row id (2 = passenger car, 7 = MPV). Returns fewer than `n` only
-/// when the filter matches nothing. Raises `ValueError` when `n` exceeds
-/// `GENERATE_MAX`.
+/// VehicleType row id (2 = passenger car, 7 = MPV) and `year` is the year the
+/// VIN decodes to, not merely the character in position 10. Returns fewer than
+/// `n` only when the filter matches nothing. Raises `ValueError` when `n`
+/// exceeds `GENERATE_MAX`.
 #[pyfunction]
 #[pyo3(signature = (n, *, seed = 0, wmi = None, make = None, year = None, vehicle_type = None))]
 fn generate(
@@ -311,6 +312,7 @@ fn generate(
             n,
             seed,
             &filter,
+            ultravin_core::now_micros(),
             ultravin_core::current_year(),
         )
     }))

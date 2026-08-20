@@ -14,7 +14,7 @@ parts live elsewhere:
   section per class. This doc says *how* an entry earns its place; the registry
   *is* the list and that doc is the proof.
 - **`docs/DATA_REFRESH.md`** — the monthly runbook and the gate mechanics
-  (corpus / sweep / coverage / pytest / cargo).
+  (corpus / sweep / known-problems / coverage / pytest / cargo).
 - **`scripts/parity/normalize.py`** — the executable form of "what counts as
   passing" below.
 
@@ -100,8 +100,15 @@ An entry is accepted only when all of these hold:
    the explanation.
 3. **Registered and frozen.** The VIN goes in `scripts/known_problems.json`
    (every field populated) and, where the oracle answers at all, into the parity
-   corpus, so the expected difference is locked and any *unexpected* change to it
-   fails the gate.
+   corpus, so the expected difference is locked. Both halves are mechanical:
+   `refresh.corpus_vins_file` unions every registered `deviation` into the VIN
+   list the monthly re-freeze asks for, and `refresh.deviation_shape_changes`
+   compares each one's re-frozen `expected_diff` against the shape committed at
+   `HEAD` — a difference fails the **known-problems** gate naming the VIN. Only
+   VINs registered as deviations in *both* HEAD's registry and the current one
+   are compared: a registration added this cycle is establishing its shape, and
+   a retired entry is no longer held still. HEAD moves when the refresh merges,
+   so a deliberate change fires the gate once and then becomes the baseline.
 4. **Re-verified every refresh.** `scripts/parity/known_problems.py` re-probes
    every registered VIN against each new dump and the **known-problems** gate
    fails the run when one heals or cannot be verified. An entry that stopped

@@ -36,6 +36,18 @@ def select(target: int) -> list[generator.VinCase]:
     return sample + errs
 
 
+def _recover(conn: Any) -> None:
+    """Clear a failed decode off the connection, as sweep.py and known_problems.py do.
+
+    A raised decode poisons its transaction: on a batched (autocommit-off) oracle
+    every later decode then fails with `InFailedSqlTransaction` and the whole
+    corpus would come back "skipped" from one crash VIN. Autocommit connections —
+    the default — end the transaction themselves and need nothing."""
+    if not conn.autocommit:
+        conn.rollback()
+        conn.uv_pending = 0
+
+
 def _entry(conn: Any, vin: str, kind: str, note: str | None) -> dict[str, Any]:
     oracle_rows = [normalize.from_oracle(r) for r in oracle.decode(conn, vin)]
     mine = normalize.ultravin_rows(uv.decode(vin))
@@ -80,6 +92,7 @@ def build(
                 # reversed bracket range and spvindecode returns nothing, so
                 # there is no oracle answer to snapshot. See KNOWN_DEVIATIONS.md.
                 skipped.append((c.vin, repr(e)[:90]))
+                _recover(conn)
         if add_vins:
             data = json.loads(Path(add_vins).read_text())
             vins = [v["vin"] for v in data["vins"]] if isinstance(data, dict) else list(data)
@@ -90,6 +103,7 @@ def build(
                     entries[vin] = _entry(conn, vin, "brutal-repro", "brutal")
                 except psycopg.Error as e:  # oracle crashes on some malformed-regex VINs
                     skipped.append((vin, repr(e)[:90]))
+                    _recover(conn)
     corpus = {
         "_about": "Frozen oracle snapshot + current ultravin-diff baseline. Regenerate with "
         "`uv run python -m scripts.parity.freeze` after intentional decode changes.",

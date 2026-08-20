@@ -24,7 +24,6 @@
     {"file": "decode.rs", "function": "decode::formula_value", "reason": "no-# and past-end returns; the caller pre-filters for '#', and 0 keys place one past position 6", "regions": 2},
     {"file": "decode.rs", "function": "decode::pick_element18", "reason": "the equal-priority equal-CreatedOn insertion-order arm", "regions": 1},
     {"file": "errors.rs", "function": "errors::_10V::Cq::core::fmt::Display::fmt", "reason": "the write! error-propagation arm in ValidChars::Display; it is only rendered via to_string() into a String, whose fmt::Write never fails", "regions": 1},
-    {"file": "errors.rs", "function": "errors::class_cd", "reason": "check-digit class arm for positions the corpus does not corrupt", "regions": 1},
     {"file": "errors.rs", "function": "errors::compute_errors", "reason": "correction arms for VIN shapes the corpus does not construct", "regions": 4},
     {"file": "errors.rs", "function": "errors::contains_ci", "reason": "case-insensitive miss arm", "regions": 1},
     {"file": "errors.rs", "function": "errors::errorcode", "reason": "multi-error combinations not reachable together", "regions": 4},

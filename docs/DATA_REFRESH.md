@@ -33,7 +33,10 @@ oracle onto the new dump, re-freezes `tests/parity_corpus.json`, and gates:
   current diff as the new baseline, so this gate is what stops a regression from
   being laundered into a green test suite. The re-freeze re-freezes the
   *existing* corpus VIN set (`--vins`), so the diff always reads "same VINs, new
-  expectations" rather than a fresh sample replacing the curated one.
+  expectations" rather than a fresh sample replacing the curated one — plus
+  every registered `deviation` VIN, which belongs in the corpus so its expected
+  difference is frozen too (the known-problems gate only asks whether it still
+  diverges, not whether it still diverges the *same way*).
 - **sweep** — 500 freshly generated VINs decoded live against the new oracle,
   zero undocumented divergence.
 - **known-problems** — the converse of the two above: every registered VIN still
@@ -187,12 +190,23 @@ immediately). Run it after changing the settings above or rotating the key.
   Never re-green it by widening the registry.
   If instead the detail says **UNVERIFIABLE**, the oracle was unreachable and
   nothing was proven either way — fix the oracle and re-run.
-- **freeze skips new oracle-crash VINs** — reported as a follow-up, not a
-  failure: those are upstream defects (malformed `Pattern.keys` regexes). If a
-  crash VIN lands inside freeze's *sampled* corpus or the sweep (not just the
-  `--add-vins` list), the run fails mechanically with a psycopg traceback
-  naming the VIN — the agent documents it per `KNOWN_DEVIATIONS.md` and
-  excludes it.
+- **known-problems gate says a deviation "changed shape"** — the VIN still
+  diverges, but not the way `HEAD`'s corpus froze it, so the evidence in
+  `docs/KNOWN_DEVIATIONS.md` now describes something other than what happens.
+  Re-investigate it as a fresh divergence: if the upstream defect moved, update
+  the entry *and* its evidence section deliberately; if ultravin's side moved,
+  that is a decoder regression wearing an old excuse. Never re-freeze it away —
+  the re-freeze is what proposes the new shape, not what justifies it.
+- **freeze skips oracle-crash VINs** — reported as a follow-up, not a failure:
+  those are upstream defects (malformed `Pattern.keys` regexes) and a crash has
+  no answer to snapshot. `freeze.py` catches the `psycopg.Error`, records the
+  skip and carries on, wherever the VIN came from — including the `--vins` list,
+  which in the refresh path is the committed corpus plus every registered
+  deviation (that path no longer samples a fresh corpus at all). A crash the
+  *sweep* hits is the one that bites: it lands in `oracle_errors` and **fails**
+  the sweep gate unless the VIN is registered as `oracle-crash`. Neither path
+  produces a mechanical traceback; either way the agent documents the VIN per
+  `KNOWN_DEVIATIONS.md` before it can go green.
 - **re-issued pin detection** — `detect` compares the pinned URL's
   `Content-Length` against `dump_bytes` in the manifest (recorded since
   2026_07); a same-size re-issue is invisible to HEAD probes and surfaces as a

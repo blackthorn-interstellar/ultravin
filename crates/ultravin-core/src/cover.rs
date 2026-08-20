@@ -164,11 +164,7 @@ pub fn candidates(db: &Db, current_year: i32) -> Vec<(String, Option<Token>)> {
             .map(|v| (v, Some("vspec|noyear".to_string()))),
     );
     out.extend(year_candidates(db).into_iter().map(|v| (v, None)));
-    out.extend(
-        error_candidates(db, current_year)
-            .into_iter()
-            .map(|v| (v, None)),
-    );
+    out.extend(error_candidates(db, current_year));
     out
 }
 
@@ -437,7 +433,16 @@ fn year_candidates(db: &Db) -> Vec<String> {
 
 /// VINs aimed at each reachable error code. Code 12 needs a caller-supplied
 /// model year, which the decode API has no way to accept, so it is unreachable.
-fn error_candidates(db: &Db, current_year: i32) -> Vec<String> {
+///
+/// The two invalid-character VINs carry a construction token because the
+/// invalid-char scan splits its alphabet by *position* — the check digit accepts
+/// `X`, the body does not, the numeric tail takes digits only — while nothing in
+/// a decode result says which position was bad: both corruptions decode to the
+/// same codes, the same `check_digit`, the same `corrected`. Untokenized, the
+/// greedy sees one of them as adding nothing and drops it, and which class
+/// survives then depends on whether the lowest-sorted WMI happens to contain an
+/// I/O/Q that month.
+fn error_candidates(db: &Db, current_year: i32) -> Vec<(String, Option<Token>)> {
     let Some(w) = db
         .wmis()
         .iter()
@@ -463,7 +468,6 @@ fn error_candidates(db: &Db, current_year: i32) -> Vec<String> {
         real.to_string(),                                            // no descriptor at all
         format!("ZZZ{}", &base[3..]),                                // unknown WMI
         format!("{real}00000000000000"),                             // valid WMI, no pattern
-        swap(8, 'I'),                                                // invalid character
         swap(9, 'U'),                                                // invalid year character
     ];
     // One-position corruptions drive the suggested-VIN correction ladder.
@@ -477,6 +481,9 @@ fn error_candidates(db: &Db, current_year: i32) -> Vec<String> {
             },
         ));
     }
+    let mut out: Vec<(String, Option<Token>)> = out.into_iter().map(|v| (v, None)).collect();
+    out.push((swap(8, 'I'), Some("invalid|checkdigit".to_string())));
+    out.push((swap(3, 'O'), Some("invalid|body".to_string())));
     out
 }
 
