@@ -1,31 +1,41 @@
 # Known deviations from the oracle
 
-ultravin targets **byte-for-byte parity** with the official Postgres `vpic.spvindecode`.
-The brutal multi-approach campaign (random + full systematic + coverage-guided
-covfuzz, 134,661 divergences → 35 signatures) drove that to **exact parity on every
-case except three signatures — and in all three, the Postgres reference itself is
-defective.**
-These are intentional, documented deviations where ultravin is *more correct*: the
-first two where the oracle contradicts its own sources, the third where the dump
-contradicts the SQL Server database NHTSA actually publishes from.
+ultravin is **byte-for-byte identical** to the official Postgres
+`vpic.spvindecode` **except on the VINs registered in
+`scripts/known_problems.json`**, where the reference itself is defective and
+ultravin deliberately does not reproduce the defect. The brutal multi-approach
+campaign (random + full systematic + coverage-guided covfuzz, 134,661
+divergences → 35 signatures) drove everything else to exact parity.
 
-All three are error/partial-VIN-only (they affect the error-correction outputs
-142/143/144/156/191); clean full-VIN decode is byte-identical to the oracle.
+**This file is the evidence companion to that registry, and both halves are
+mandatory.** `scripts/known_problems.json` says which VINs and why, one line
+each; the section here that an entry's `doc` anchor names carries the proof —
+the defective upstream artifact, named, and how it was shown to be defective. A
+registry entry with no section, or a section no entry points at, is a defect in
+the list itself, and `tests/test_known_problems.py` fails on either. An output
+diff is never evidence: it is the observation being explained, not the
+explanation.
 
-The policy that governs *how* a divergence earns a place on this list — the bar
-of evidence, the bounded scope, the freeze — is `docs/ACCEPTANCE.md`. This file
-is the list it refers to.
+Each entry records a `scope`: `error-fields` when the defect only reaches the
+error-correction outputs (142/143/144/156/191), `clean-decode` when it reaches a
+clean full-VIN decode. Both are admissible. Scope is recorded so the blast
+radius is visible, not as a bar to clear — the bar is the evidence.
 
-**Entries expire.** Every data refresh re-decodes every VIN named here against
+The policy that governs *how* a divergence earns a place here is
+`docs/ACCEPTANCE.md`.
+
+**Entries expire.** Every data refresh re-decodes every registered VIN against
 the new oracle (`scripts/parity/known_problems.py`) and the **known-problems**
 gate fails the run if one stopped reproducing — a crash VIN the oracle now
 answers, or a deviation VIN ultravin now matches. Upstream does fix things, and
 a stale excuse is worse than no excuse: it silently forgives the next real
 regression on that VIN. When the gate names one, verify it against the section's
-evidence below, then drop it from `ORACLE_CRASH_VINS` / `KNOWN_DEVIATION_VINS`
-in `scripts/refresh.py` and retire the section here once its last VIN is gone.
+evidence below, then retire it from `scripts/known_problems.json` and retire the
+section here once its last VIN is gone.
 
 ---
+
+<a id="regex-crash-7t0"></a>
 
 ## 1. Oracle crashes on a malformed pattern regex — WMI `7T0`, MY 2023-2025
 
@@ -96,8 +106,8 @@ ultravin therefore decodes and returns an answer where the oracle returns none.
 from the regression corpus: `freeze.py` skips any VIN the oracle errors on and
 surfaces new skips in the refresh report. `scripts/parity/sweep.py` records them
 under `oracle_errors` (it used to die on the first one), and `refresh.sweep_gate`
-**fails** on any crash VIN that is not in `ORACLE_CRASH_VINS` in `scripts/refresh.py`
-— the sample of 63 VINs observed so far. That list is a sample of an unbounded
+**fails** on any crash VIN not registered in `scripts/known_problems.json` under
+kind `oracle-crash` — the sample of 63 VINs observed so far. That list is a sample of an unbounded
 class, so a new 7T0 MY2023-2025 VIN will fail the gate until a human re-verifies
 it against this section. That is deliberate: a crash must never pass silently
 just because a similar one was once explained.
@@ -105,6 +115,8 @@ just because a similar one was once explained.
 `errors.rs` pins the tolerated expansion in a unit test, so if the class ever
 starts resolving to something else, that is a change in ultravin, not a rediscovery
 of this defect.
+
+<a id="stale-wmiyearvalidchars-cache"></a>
 
 ## 2. Stale `WMIYearValidChars` cache — `W1LSB0L72VEJV2EPX`
 
@@ -226,6 +238,9 @@ order are all still compared byte-for-byte, so a genuine element-144 regression
 still diverges (`tests/test_normalize.py` pins exactly that boundary). ultravin's
 own print order remains pinned by the `collation_tests` in `errors.rs`.
 
-These VINs are **not** listed in `KNOWN_DEVIATION_VINS`. That list is for
-individual upstream defects; this class is unbounded (any VIN reaching one of the
-95 mixed charsets), so enumerating tonight's four would only invite the next four.
+These VINs are **not** in `scripts/known_problems.json`, and this section
+carries no anchor for one to point at. The registry names individual VINs whose
+defect is re-probed one VIN at a time; this class is unbounded (any VIN reaching
+one of the 95 mixed charsets) and is neutralized structurally in
+`normalize.diff_rows` instead, so enumerating tonight's four would only invite
+the next four.

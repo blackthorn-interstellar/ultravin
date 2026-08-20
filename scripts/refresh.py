@@ -64,93 +64,41 @@ SWEEP_LIMIT = 500
 LOOKUP_MAX_ROWS = 512  # tables above this aren't lookups; the parity gates still validate them
 LOOKUP_REPORT_CAP = 20
 
-# Documented, deliberate ultravin-vs-oracle deviations (docs/KNOWN_DEVIATIONS.md),
-# kept in two deliberately separate lists because they excuse two different
-# observations. ORACLE_CRASH_VINS excuses a *crash*: the oracle aborted and gave
-# no answer at all (KNOWN_DEVIATIONS.md #1). KNOWN_DEVIATION_VINS excuses a
-# *divergence*: the oracle answered and ultravin disagreed, for a documented
-# reason. Neither list excuses the other's condition — a crash-listed VIN that
-# suddenly diverges is new information (the oracle now answers, and we are wrong
-# about what it says), and a crash on the diverging VIN is an undocumented crash.
-# Both must fail their gate. Both lists are also re-probed every refresh
-# (known_problems_gate): an excuse that stopped reproducing is stale and fails too.
+# The documented vPIC defects ultravin deliberately does not reproduce live in
+# one registry, scripts/known_problems.json — one entry per VIN, each carrying
+# the upstream root cause, the reproducible evidence, and the
+# docs/KNOWN_DEVIATIONS.md section that argues it. The registry is split here
+# into two frozensets because its two kinds excuse two different observations.
+# `oracle-crash` excuses a *crash*: the oracle aborted and gave no answer at all.
+# `deviation` excuses a *divergence*: the oracle answered and ultravin disagreed,
+# for a documented reason. Neither kind excuses the other's condition — a
+# crash-listed VIN that suddenly diverges is new information (the oracle now
+# answers, and we are wrong about what it says), and a crash on a deviation VIN
+# is an undocumented crash. Both must fail their gate. Every entry is also
+# re-probed each refresh (known_problems_gate): an excuse that stopped
+# reproducing is stale and fails too.
 #
-# The 63 crash VINs below are the original 2026_06 report plus the 62 more the
-# 2026_07 campaign hit; all 63 are WMI 7T0. They are a *sample* of an unbounded class —
+# The 63 crash VINs are the original 2026_06 report plus the 62 more the 2026_07
+# campaign hit; all 63 are WMI 7T0. They are a *sample* of an unbounded class —
 # any 7T0 VIN of model year 2023-2025 whose decode matches vinschema 24522 aborts
-# the same way — so a future sweep may find a 7T0 VIN that is not listed here and
-# fail the gate. That failure is correct:
-# it should be re-verified against §1's evidence and then added, not assumed.
+# the same way — so a future sweep may find a 7T0 VIN that is not registered and
+# fail the gate. That failure is correct: it should be re-verified against the
+# entry's evidence and then added, not assumed.
 # freeze.py needs none of this: it skips oracle-erroring VINs before they ever
 # reach the corpus, and surfaces new skips in the report as follow-ups.
-ORACLE_CRASH_VINS = frozenset(
-    {
-        "7T0M6TGCURDSNZTHF",  # the original 2026_06 report (KNOWN_DEVIATIONS.md #1)
-        "7T0A1AAA0SA111111",
-        "7T0A1AAA1PA111111",
-        "7T0A1AAA8RA111111",
-        "7T0AA##A?PA111111",
-        "7T0AA##A?RA111111",
-        "7T0AA##A?SA111111",
-        "7T0AAAA#?PA111111",
-        "7T0AAAA#?RA111111",
-        "7T0AAAA#?SA111111",
-        "7T0AAAAA0PE111111",
-        "7T0AAAAA0S1111111",
-        "7T0AAAAA0SA111111",
-        "7T0AAAAA0SJ111111",
-        "7T0AAAAA1P1111111",
-        "7T0AAAAA1PA111111",
-        "7T0AAAAA1PJ111111",
-        "7T0AAAAA1RG111111",
-        "7T0AAAAA1SH111111",
-        "7T0AAAAA2PH111111",
-        "7T0AAAAA2RC111111",
-        "7T0AAAAA2RT111111",
-        "7T0AAAAA2SD111111",
-        "7T0AAAAA3PD111111",
-        "7T0AAAAA4RF111111",
-        "7T0AAAAA4SG111111",
-        "7T0AAAAA5PG111111",
-        "7T0AAAAA5RB111111",
-        "7T0AAAAA5SC111111",
-        "7T0AAAAA5ST111111",
-        "7T0AAAAA6PC111111",
-        "7T0AAAAA6PT111111",
-        "7T0AAAAA7RE111111",
-        "7T0AAAAA7SF111111",
-        "7T0AAAAA8PF111111",
-        "7T0AAAAA8R1111111",
-        "7T0AAAAA8RA111111",
-        "7T0AAAAA8RJ111111",
-        "7T0AAAAA8SB111111",
-        "7T0AAAAA9PB111111",
-        "7T0AAAAA9RH111111",
-        "7T0AAAAAXRD111111",
-        "7T0AAAAAXSE111111",
-        "7T0AAF#0?SA111111",
-        "7T0AAL#A?SA111111",
-        "7T0AGAAA2SA111111",
-        "7T0AGAAA3PA111111",
-        "7T0AGAAAXRA111111",
-        "7T0AH##A?SA111111",
-        "7T0ARAAA0PA111111",
-        "7T0ARAAA7RA111111",
-        "7T0ARAAAXSA111111",
-        "7T0AZAAA0PA111111",
-        "7T0AZAAA7RA111111",
-        "7T0AZAAAXSA111111",
-        "7T0FAAAA0RA111111",
-        "7T0FAAAA3SA111111",
-        "7T0FAAAA4PA111111",
-        "7T0TA##1?SA111111",
-        "7T0TA#71?SA111111",
-        "7T0TAAAA0PA111111",
-        "7T0TAAAA7RA111111",
-        "7T0TAAAAXSA111111",
-    }
-)
-KNOWN_DEVIATION_VINS = frozenset({"W1LSB0L72VEJV2EPX"})  # stale year cache (KNOWN_DEVIATIONS.md #2)
+KNOWN_PROBLEMS = ROOT / "scripts" / "known_problems.json"
+PROBLEM_KINDS = ("oracle-crash", "deviation")
+PROBLEM_SCOPES = ("error-fields", "clean-decode")
+
+
+def load_known_problems(path: Path = KNOWN_PROBLEMS) -> list[dict[str, str]]:
+    """Every registry entry, in file order."""
+    return json.loads(path.read_text())["entries"]
+
+
+_KNOWN_PROBLEMS = load_known_problems()
+ORACLE_CRASH_VINS = frozenset(e["vin"] for e in _KNOWN_PROBLEMS if e["kind"] == "oracle-crash")
+KNOWN_DEVIATION_VINS = frozenset(e["vin"] for e in _KNOWN_PROBLEMS if e["kind"] == "deviation")
 
 
 # --------------------------------------------------------------------------- util
@@ -364,11 +312,11 @@ def known_problems_gate(
     An infra error (dead socket) is not evidence of either outcome, so it neither
     passes nor fails an entry on the merits — it fails the gate as *unverifiable*,
     because a run that could not check is not a run that confirmed."""
-    healed: dict[str, list[str]] = {"ORACLE_CRASH_VINS": [], "KNOWN_DEVIATION_VINS": []}
+    healed: dict[str, list[str]] = {"oracle-crash": [], "deviation": []}
     unverifiable: list[str] = []
     for vins, name, expected in (
-        (crash_vins, "ORACLE_CRASH_VINS", "crash"),
-        (deviation_vins, "KNOWN_DEVIATION_VINS", "diverged"),
+        (crash_vins, "oracle-crash", "crash"),
+        (deviation_vins, "deviation", "diverged"),
     ):
         for vin in sorted(vins):
             outcome = probe.get(vin, {}).get("outcome", "not probed")
@@ -384,8 +332,8 @@ def known_problems_gate(
     for name, stale_vins in healed.items():
         if stale_vins:
             detail += (
-                "; no longer reproduce — re-verify against docs/KNOWN_DEVIATIONS.md, then drop from "
-                f"{name} in scripts/refresh.py: {stale_vins}"
+                f"; {name} entries no longer reproduce — re-verify against docs/KNOWN_DEVIATIONS.md, "
+                f"then retire them from scripts/known_problems.json: {stale_vins}"
             )
     if unverifiable:
         detail += f"; UNVERIFIABLE (oracle unreachable, so nothing was confirmed — re-run): {unverifiable}"
@@ -691,6 +639,35 @@ def parse_freeze_skips(stdout: str) -> list[str]:
     return re.findall(r"skipped \(oracle error[^)]*\): (\S+):", stdout)
 
 
+def corpus_vins_file(corpus: Path = CORPUS, out: Path | None = None) -> Path | None:
+    """The committed corpus's VIN list, written out for freeze.py's `--vins`.
+
+    freeze.py's default is a *fresh* manufacturer-diverse sample, so an unpinned
+    monthly re-freeze silently replaces the curated corpus rather than updating
+    it: master's 399 coverage-union VINs would come back as ~272 mostly-different
+    ones, retiring 342 VINs someone chose on purpose and making the PR diff
+    unreadable. Re-freezing the *existing* set keeps the curation and makes the
+    monthly diff mean "same VINs, new expectations" — which is what the corpus
+    gate is written to judge. Returns None before the first corpus exists, where
+    a fresh sample is the only option."""
+    if not corpus.exists():
+        return None
+    vins = [e["vin"] for e in json.loads(corpus.read_text())["entries"]]
+    if not vins:
+        return None
+    out = out or REPORT_DIR / "corpus_vins.txt"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text("\n".join(vins) + "\n")
+    return out
+
+
+def freeze_command(vins_file: Path | None) -> list[str]:
+    """`scripts.parity.freeze` argv: re-freeze the existing corpus, or sample a new one."""
+    cmd = ["uv", "run", "--frozen", "--", "python", "-m", "scripts.parity.freeze"]
+    cmd += ["--vins", str(vins_file)] if vins_file else ["--target", "220"]
+    return [*cmd, "--add-vins", "tests/brutal_repros.json"]
+
+
 def cmd_run(args: argparse.Namespace) -> int:
     month = args.month
     if not MONTH_RE.match(month):
@@ -740,22 +717,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     sh(["bash", "scripts/oracle.sh", "load", str(dump)])
 
     # Re-freeze the regression corpus from the new oracle, then gate everything.
-    freeze = sh(
-        [
-            "uv",
-            "run",
-            "--frozen",
-            "--",
-            "python",
-            "-m",
-            "scripts.parity.freeze",
-            "--target",
-            "220",
-            "--add-vins",
-            "tests/brutal_repros.json",
-        ],
-        capture=True,
-    )
+    # Read the corpus's VIN list *before* freeze overwrites the file.
+    freeze = sh(freeze_command(corpus_vins_file()), capture=True)
     print(freeze.stdout, end="")
     skipped = parse_freeze_skips(freeze.stdout)
     gates = [corpus_gate(json.loads(CORPUS.read_text()))]

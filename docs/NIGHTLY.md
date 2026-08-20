@@ -136,7 +136,7 @@ decoder change reopens coverage, so the probe never permanently retires.
 Each night the agent gets a loaded oracle and a built extension, and resolves
 **one root-cause cluster**: reproduce first (stale entries are deleted — that
 alone is a valid delivery), then either fix the decoder or document a genuine
-oracle/dump defect in `docs/KNOWN_DEVIATIONS.md` + `KNOWN_DEVIATION_VINS`.
+oracle/dump defect in `scripts/known_problems.json` + its `docs/KNOWN_DEVIATIONS.md` section.
 Fixed clusters leave a representative VIN in `tests/brutal_repros.json`, which
 the monthly refresh freezes into the parity corpus as a permanent regression.
 The finish line is machine-checked and **local**: `scripts.parity.sweep

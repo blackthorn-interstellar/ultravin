@@ -1,7 +1,7 @@
 """Re-probe every documented oracle problem against the live oracle.
 
-`ORACLE_CRASH_VINS` and `KNOWN_DEVIATION_VINS` (scripts/refresh.py, the
-machine-readable face of docs/KNOWN_DEVIATIONS.md) are *excuses*: the corpus and
+`ORACLE_CRASH_VINS` and `KNOWN_DEVIATION_VINS` (scripts/refresh.py, derived
+from the scripts/known_problems.json registry) are *excuses*: the corpus and
 sweep gates use them to forgive an observation. Nothing made an excuse prove
 itself still true, and the 62 crash VINs are in neither freeze's sampled corpus
 nor the 500-VIN sweep, so most months they are never decoded at all — the

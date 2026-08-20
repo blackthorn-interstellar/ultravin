@@ -1,0 +1,645 @@
+{
+  "_about": "The single registry of documented vPIC defects ultravin deliberately does not reproduce. Every entry is re-probed against the new oracle on every data refresh (scripts/parity/known_problems.py + the known-problems gate); an entry that stops reproducing is stale and fails the refresh. Evidence for each `class` lives in the docs/KNOWN_DEVIATIONS.md section its `doc` anchor names. Policy: docs/ACCEPTANCE.md.",
+  "entries": [
+    {
+      "vin": "7T0A1AAA0SA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0A1AAA1PA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0A1AAA8RA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AA##A?PA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AA##A?RA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AA##A?SA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAA#?PA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAA#?RA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAA#?SA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA0PE111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA0S1111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA0SA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA0SJ111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA1P1111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA1PA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA1PJ111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA1RG111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA1SH111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA2PH111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA2RC111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA2RT111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA2SD111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA3PD111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA4RF111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA4SG111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA5PG111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA5RB111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA5SC111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA5ST111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA6PC111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA6PT111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA7RE111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA7SF111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA8PF111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA8R1111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA8RA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA8RJ111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA8SB111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA9PB111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAA9RH111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAAXRD111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAAAAXSE111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAF#0?SA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AAL#A?SA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AGAAA2SA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AGAAA3PA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AGAAAXRA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AH##A?SA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0ARAAA0PA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0ARAAA7RA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0ARAAAXSA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AZAAA0PA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AZAAA7RA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0AZAAAXSA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0FAAAA0RA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0FAAAA3SA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0FAAAA4PA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0M6TGCURDSNZTHF",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_06",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0TA##1?SA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0TA#71?SA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0TAAAA0PA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0TAAAA7RA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "7T0TAAAAXSA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_07",
+      "evidence": "pattern rows 1827685/1827686 carry keys='*****|*[1-A-JT]'; `select '1' ~ '^[1-A-JT]$'` errors on the oracle, while vpic.sqlwild_to_regex patches that exact key with REPLACE(out,'1-A','1A') — the dump's two compile sites contradict each other.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
+      "vin": "W1LSB0L72VEJV2EPX",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "The dump's precomputed WMIYearValidChars cache was frozen mid-edit, between W1L schema 29239 (updated 14:53) and 29240 (created 15:15), so its valid-character positions omit position 8 that the same dump's pattern table constrains.",
+      "first_observed": "2026_06",
+      "evidence": "cache cell (wmiyearvalidchars, W1L, 2027) = positions {9,11} vs {8,9,11} recomputed from the pattern table in the same dump; schema 29240 (which constrains position 8) was created 2026-05-01 15:15, after the cache's 14:53 freeze.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    }
+  ]
+}

@@ -26,16 +26,18 @@ make refresh MONTH=2026_08     # integrate it (wipes + reloads the docker oracle
 (`vpic-import`), rebuilds the Python extension, cycles the docker Postgres
 oracle onto the new dump, re-freezes `tests/parity_corpus.json`, and gates:
 
-- **corpus** — every diverging re-frozen VIN is in `KNOWN_DEVIATION_VINS`
-  (`scripts/refresh.py`), the machine-readable face of
-  `docs/KNOWN_DEVIATIONS.md`. `freeze.py` happily snapshots *any* current diff
-  as the new baseline, so this gate is what stops a regression from being
-  laundered into a green test suite.
+- **corpus** — every diverging re-frozen VIN is registered in
+  `scripts/known_problems.json` (kind `deviation`), the single source of truth
+  for the defects ultravin deliberately does not reproduce; the evidence for
+  each is in `docs/KNOWN_DEVIATIONS.md`. `freeze.py` happily snapshots *any*
+  current diff as the new baseline, so this gate is what stops a regression from
+  being laundered into a green test suite. The re-freeze re-freezes the
+  *existing* corpus VIN set (`--vins`), so the diff always reads "same VINs, new
+  expectations" rather than a fresh sample replacing the curated one.
 - **sweep** — 500 freshly generated VINs decoded live against the new oracle,
   zero undocumented divergence.
-- **known-problems** — the converse of the two above: every VIN in
-  `ORACLE_CRASH_VINS` and `KNOWN_DEVIATION_VINS` still *reproduces* its
-  documented problem. See below.
+- **known-problems** — the converse of the two above: every registered VIN still
+  *reproduces* its documented problem. See below.
 - **coverage** — `make coverage`: the decode path still reaches 100% of the
   regions a VIN can reach, and no allowance in
   `scripts/coverage_allowances.json` went **stale**. A stale one is the
@@ -63,8 +65,8 @@ had to skip).
 
 ## Documented problems must keep reproducing
 
-Every other gate uses `docs/KNOWN_DEVIATIONS.md` — via `ORACLE_CRASH_VINS` and
-`KNOWN_DEVIATION_VINS` — to *excuse* an observation, so nothing ever made an
+Every other gate uses `scripts/known_problems.json` to *excuse* an observation,
+so nothing ever made an
 excuse prove it was still true. Upstream fixes things: 2026_08 healed the
 stale-year-cache deviation and the refresh stayed green on that axis, because the
 gates only ever ask "is this divergence forgiven?". Worse, the 63 crash VINs land
@@ -74,10 +76,11 @@ decoded at all.
 `scripts/parity/known_problems.py` therefore decodes every listed VIN against the
 new oracle and writes `target/refresh/known_problems.json`
 (`{vin: {"outcome": "crash"|"diverged"|"exact"|"infra-error"}}`); the
-**known-problems** gate requires each crash VIN to still crash and each deviation
-VIN to still diverge. A stale excuse fails the run and the gate detail names the
-VIN, what it does now, and which list to drop it from — the same house rule as
-the coverage gate failing on a stale allowance.
+**known-problems** gate requires each `oracle-crash` VIN to still crash and each
+`deviation` VIN to still diverge. A stale excuse fails the run and the gate
+detail names the VIN, what it does now, and its registry kind — retire the entry
+from `scripts/known_problems.json`, the same house rule as the coverage gate
+failing on a stale allowance.
 
 A connection error is *not* evidence in either direction: it is reported as
 `infra-error` and fails the gate as **unverifiable** rather than quietly
@@ -99,8 +102,9 @@ If `refresh` fails — schema drift, a proc change, bad data, a new oracle
 defect — the `fix` job runs xAI's Grok Build CLI (the
 `.github/actions/grok-agent` composite action) on the same runner with the full
 toolchain (rust, uv, docker) and a strict contract: never hand-edit generated
-files, parity is the spec, genuine upstream defects get documented in
-`docs/KNOWN_DEVIATIONS.md` + `KNOWN_DEVIATION_VINS`, done only when
+files, parity is the spec, a genuine upstream defect gets a
+`scripts/known_problems.json` entry plus its evidence section in
+`docs/KNOWN_DEVIATIONS.md`, done only when
 `refresh.py run` exits 0 and `make check` is green. It pushes to the same
 `data/YYYY_MM` branch and opens/updates the PR (label `agent-fixed`, or a draft
 with `needs-human` + diagnosis if it can't get there honestly).
@@ -115,8 +119,9 @@ regeneration (`vpic/**` + the corpus) pass a deterministic allowlist, also
 $0; any data PR carrying code or doc changes — i.e. agent-fixed months — must
 be approved by an adversarial Grok reviewer (read-only, verdict-only) that
 checks diff scope, that every decoder edit is justified by an upstream `vpic/`
-hunk, gate integrity (a new `KNOWN_DEVIATION_VINS` entry needs documented
-evidence of an upstream defect), and injection artifacts. `deps/*` PRs — the
+hunk, gate integrity (a new `scripts/known_problems.json` entry must name the
+defective upstream artifact, not merely an output diff), and injection
+artifacts. `deps/*` PRs — the
 nightly lockfile bump, which merges itself — get a second adversarial
 reviewer with no allowlist shortcut, judging scope, gate integrity,
 supply-chain sanity of the lock diff (sources stay on crates.io/PyPI, new
@@ -172,11 +177,14 @@ immediately). Run it after changing the settings above or rotating the key.
 - **corpus/sweep gate names an unknown VIN** — either the decoder no longer
   matches the new data (fix Rust) or the dump itself is defective (oracle
   crash, stale cache table — precedent in `docs/KNOWN_DEVIATIONS.md`). The
-  agent triages; the gate only accepts VINs that are documented deviations.
+  agent triages; the gate only accepts VINs registered in
+  `scripts/known_problems.json`, and registering one needs a named defective
+  upstream artifact, not just the diff.
 - **known-problems gate names a healed VIN** — upstream fixed the defect (or the
   dump stopped carrying it). Confirm against §-evidence in
-  `docs/KNOWN_DEVIATIONS.md`, drop the VIN from the list the detail names, and
-  retire the section if its last VIN went. Never re-green it by widening a list.
+  `docs/KNOWN_DEVIATIONS.md`, retire the entry from
+  `scripts/known_problems.json`, and retire the section if its last VIN went.
+  Never re-green it by widening the registry.
   If instead the detail says **UNVERIFIABLE**, the oracle was unreachable and
   nothing was proven either way — fix the oracle and re-run.
 - **freeze skips new oracle-crash VINs** — reported as a follow-up, not a

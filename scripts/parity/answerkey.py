@@ -38,13 +38,16 @@ import typer
 import ultravin
 
 from scripts.parity import normalize, oracle
+from scripts.refresh import KNOWN_DEVIATION_VINS, ORACLE_CRASH_VINS
 
 REPO = Path(__file__).resolve().parents[2]
 MANIFEST = REPO / "vpic" / "manifest.json"
 PIN = REPO / "tests" / "answerkey.json"
-# The oracle is defective on these two and ultravin is deliberately more correct;
-# see docs/KNOWN_DEVIATIONS.md. They are recorded, not compared.
-KNOWN_DEVIATIONS = {"7T0M6TGCURDSNZTHF", "W1LSB0L72VEJV2EPX"}
+# The oracle is defective on every VIN in scripts/known_problems.json and ultravin
+# is deliberately more correct (docs/KNOWN_DEVIATIONS.md), whether the oracle
+# crashed or merely answered wrongly — the key records those VINs, it does not
+# compare them. Both kinds, because a key built here must not re-freeze either.
+KNOWN_DEVIATIONS = ORACLE_CRASH_VINS | KNOWN_DEVIATION_VINS
 
 app = typer.Typer(add_completion=False, help="Build and check the frozen oracle answer key.")
 

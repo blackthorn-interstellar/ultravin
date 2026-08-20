@@ -223,8 +223,9 @@ def test_known_problems_gate_fails_on_a_healed_crash_vin() -> None:
     )
     assert not gate.ok
     assert "7T0AAAAA0SA111111 (now exact)" in gate.detail
-    assert "ORACLE_CRASH_VINS" in gate.detail
+    assert "oracle-crash" in gate.detail
     assert "docs/KNOWN_DEVIATIONS.md" in gate.detail
+    assert "scripts/known_problems.json" in gate.detail  # where the entry is retired
 
 
 def test_known_problems_gate_fails_on_a_healed_deviation_vin() -> None:
@@ -236,8 +237,8 @@ def test_known_problems_gate_fails_on_a_healed_deviation_vin() -> None:
     )
     assert not gate.ok
     assert "W1LSB0L72VEJV2EPX (now exact)" in gate.detail
-    assert "KNOWN_DEVIATION_VINS" in gate.detail
-    assert "ORACLE_CRASH_VINS" not in gate.detail  # the healthy list is not implicated
+    assert "deviation entries no longer reproduce" in gate.detail
+    assert "oracle-crash" not in gate.detail  # the healthy kind is not implicated
 
 
 def test_known_problems_gate_fails_when_a_deviation_vin_starts_crashing() -> None:
@@ -486,6 +487,39 @@ def test_followups_no_longer_warns_about_healed_deviations() -> None:
     """A healed deviation fails the known-problems gate now — a warning too would
     be a second, weaker signal for the same fact."""
     assert not any("no longer reproduce" in f for f in refresh.followups(_report(skipped=["7T0M6TGCURDSNZTHF"])))
+
+
+def test_corpus_vins_file_writes_the_committed_corpus_vin_list(tmp_path) -> None:
+    corpus = tmp_path / "parity_corpus.json"
+    corpus.write_text(json.dumps({"entries": [{"vin": "AAA"}, {"vin": "BBB"}]}))
+    out = refresh.corpus_vins_file(corpus, tmp_path / "vins.txt")
+    assert out is not None
+    assert out.read_text() == "AAA\nBBB\n"
+
+
+def test_corpus_vins_file_is_none_without_a_corpus(tmp_path) -> None:
+    """First-ever refresh: there is nothing to preserve, so sampling is correct."""
+    assert refresh.corpus_vins_file(tmp_path / "missing.json", tmp_path / "vins.txt") is None
+    empty = tmp_path / "parity_corpus.json"
+    empty.write_text(json.dumps({"entries": []}))
+    assert refresh.corpus_vins_file(empty, tmp_path / "vins.txt") is None
+
+
+def test_freeze_command_refreezes_the_existing_corpus_not_a_new_sample(tmp_path) -> None:
+    """The whole point: `--target` re-samples and would retire the curated VINs,
+    so a refresh with a corpus in hand must pass `--vins` instead."""
+    cmd = refresh.freeze_command(tmp_path / "vins.txt")
+    assert "--vins" in cmd
+    assert cmd[cmd.index("--vins") + 1] == str(tmp_path / "vins.txt")
+    assert "--target" not in cmd
+    assert cmd[-2:] == ["--add-vins", "tests/brutal_repros.json"]
+
+
+def test_freeze_command_samples_when_there_is_no_corpus() -> None:
+    cmd = refresh.freeze_command(None)
+    assert "--vins" not in cmd
+    assert cmd[cmd.index("--target") + 1] == "220"
+    assert cmd[-2:] == ["--add-vins", "tests/brutal_repros.json"]
 
 
 def test_main_writes_failure_context_on_mechanical_crash(monkeypatch, tmp_path) -> None:
