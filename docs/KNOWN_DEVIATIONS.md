@@ -55,7 +55,7 @@ all — so there is no oracle answer to have parity *with*. ultravin decodes the
 VIN normally. This was first reported for one VIN in 2026_06; the 2026_07 parity
 campaign hit it 62 more times, which was enough data to name the exact cause.
 
-**The offending datum.** Exactly two rows in the 1,667,711-row `pattern` table
+**The offending datum.** Exactly two rows in the 1,674,161-row `pattern` table
 carry a character class Postgres cannot compile:
 
 ```
@@ -118,43 +118,135 @@ of this defect.
 
 <a id="stale-wmiyearvalidchars-cache"></a>
 
-## 2. Stale `WMIYearValidChars` cache — `W1LSB0L72VEJV2EPX`
+## 2. Stale `WMIYearValidChars` cache — the dump contradicts itself
 
-`spvindecode_errorcode` reads the precomputed `WMIYearValidChars` **cache** for the
-per-position valid characters used in suggested-VIN / error-byte / unused-position
-logic. That cache is a *derived snapshot* of the `pattern` source — and in the
-2026_06 dump it is **stale**: it was built mid-edit, before a schema was added to
-the same dump.
+`spvindecode_errorcode` does not compute the per-position valid characters that
+drive its suggested-VIN / error-byte / unused-position logic. It **reads them from
+the precomputed `WMIYearValidChars` cache**, and computes them only when the cache
+has no row at all for that WMI-year:
 
-Proof (W1L / model year 2027):
+```sql
+INSERT INTO tbl_spVinDecode_ErrorCode(p, c)
+    SELECT DISTINCT position, "char" FROM vpic.WMIYearValidChars
+    WHERE wmi = var_wmi AND year = modelYear ...;
+
+SELECT COUNT(*) INTO tmpRowCount FROM tbl_spVinDecode_ErrorCode;
+if tmpRowCount = 0 then
+    insert into tbl_spVinDecode_ErrorCode(p, c)
+        select distinct p, c from vpic.fExtractValidCharsPerWmiYear(var_wmi, ...);
+end if;
+```
+
+The two branches are supposed to be the same answer: the cache *is* a materialised
+`fExtractValidCharsPerWmiYear`, which is itself `SELECT DISTINCT p.Keys` over the
+`pattern` rows of every schema covering that WMI-year, expanded through
+`fValidCharsInKey`. ultravin computes the second (`errors.rs::valid_charset`, a
+port verified byte-equal to that function); the oracle reads the first. **When
+they disagree, the dump contradicts itself** — and only one of the two answers is
+consistent with the `pattern` rows the same file ships.
+
+**What happened in 2026_08.** The refresh moved `pattern` +6,450 rows and
+`wmiyearvalidchars` −3,318. The cache was rebuilt, but not from the `pattern`
+table this dump ships: nine WMI-year cells still carry characters that no key of
+any schema covering that year allows. (The 2026_06 entry in this section was the
+same defect in the opposite direction — a cache frozen mid-edit, missing a schema
+the dump already contained. It healed in 2026_08 and is retired below.)
+
+| cell (`wmi`, `year`) | position | cache | recomputed from `pattern` | stale extras |
+|---|---:|---|---|---|
+| `3GN`, 2023 | 4 | `AFK` | `AK` | `F` |
+| `3GN`, 2023 | 5 | `BLX` | `BX` | `L` |
+| `3GN`, 2023 | 6 | `5789BCDEFGHJKLMNSTUVWX` | `589BCDEFGHJKLMNSTUVWX` | `7` |
+| `3GN`, 2023 | 8 | `45GJKSV` | `4GJSV` | `5K` |
+| `JM1`, 2025 | 4, 5, 8 | `BDN`, `DPR`, `7BMY` | `BN`, `DP`, `7MY` | `D`, `R`, `B` |
+| `1V2`, 2025 | 11 | `CEMPW` | `C` | `EMPW` |
+| `YV4`, 2024 | 11 | `12BJP` | `12BP` | `J` |
+| `SCF`, 2025 | 7 | `EFGKL` | `EFGL` | `K` |
+| `SCF`, 2026 | 7 | `DEFGHJKLMN` | `DEFGHJLMN` | `K` |
+| `1ZV`, 2014 | 4, 8 | `BH`, `FHMNSZ` | `B`, `FMZ` | `H`, `HNS` |
+| `JH2`, 2024 | 11 | `1345ACDEFJKMRY` | `345EJKRY` | `1ACDFM` |
+| `MLH`, 2019 | 11 | `1345ACDFKMRY` | `5KY` | `134ACDFMR` |
+
+Both columns come out of the same loaded dump, one query apart:
+
+```sql
+select position, string_agg("char", '' order by "char")
+  from vpic.wmiyearvalidchars where wmi = 'MLH' and year = 2019 group by position;
+select p, string_agg(distinct c, '' order by c)
+  from vpic.fextractvalidcharsperwmiyear('MLH', 2019::smallint) group by p;
+```
+
+**The cache is what makes the oracle's answer, demonstrably.** Deleting a stale
+cell inside a transaction takes `tmpRowCount` to 0, so the proc runs its own
+`fExtractValidCharsPerWmiYear` fallback over the same dump — and the oracle then
+reproduces ultravin **byte-for-byte** on all ten VINs, including the two whose
+whole decode changes. Rolled back afterwards; the cache is left at its shipped
+8,809,229 rows.
 
 ```
-cache (wmiyearvalidchars):    positions {9, 11}
-computed from pattern source: positions {8, 9, 11}
-
-W1L schemas applicable to 2027:
-  29239  created 2026-05-01 14:41  updated 14:53   ← in the cache
-  29240  created 2026-05-01 15:15                  ← position 8; NOT in the cache
+MLHAE041XKA111111  delete 81 cache rows for (MLH,2019) -> oracle MY=1989 codes='0,14'  parity_now=True
+JH2RD1613RA111111  delete 80 cache rows for (JH2,2024) -> oracle MY=1994 codes='0,14'  parity_now=True
+JH2SC7752RA111111  delete 80 cache rows for (JH2,2024) -> oracle MY=2024 codes='3,14'  parity_now=True
+3GNAAAAA2PS111111  delete 41 cache rows for (3GN,2023) -> oracle MY=2023 codes='5,14'  parity_now=True
+JM1AAAAA1S0111111  delete 27 cache rows for (JM1,2025) -> oracle MY=2025 codes='5,14'  parity_now=True
+1V2AAAE81SA111111  delete 51 cache rows for (1V2,2025) -> oracle MY=2025 codes='5,14'  parity_now=True
+YV4AAABE8RA111111  delete 40 cache rows for (YV4,2024) -> oracle MY=2024 codes='5,14'  parity_now=True
+SCFAAAAA0SG111111  delete 17 cache rows for (SCF,2025) -> oracle MY=2025 codes='5,14'  parity_now=True
+SCFAAAAA9TG111111  delete 25 cache rows for (SCF,2026) -> oracle MY=2026 codes='5,14'  parity_now=True
+1ZVAAAAA6E5111111  delete 18 cache rows for (1ZV,2014) -> oracle MY=2014 codes='5,14'  parity_now=True
 ```
 
-The cache was frozen between 14:53 and 15:15; schema 29240 (which constrains
-position 8) landed at 15:15. **The same dump's `pattern` table contains both
-schemas.** So the oracle's *decode* matches schema 29240's patterns, but its
-*error-correction* valid-chars (from the stale cache) don't know 29240 exists —
-the oracle contradicts itself. ultravin computes valid-chars from `pattern` (the
-source of truth), so it is **self-consistent** and reflects the dump's actual data:
-it flags position 8 and emits error code 4 + possible-values where the oracle
-(stale) emits code 14.
+**How far the defect reaches** depends on which position the stale characters sit
+at, and the registry records it as each entry's `scope`:
 
-**Decision: keep ultravin's fresh, source-consistent computation.** Matching the
-oracle here would mean embedding the stale cache (or its delta) purely to
-reproduce a defect that self-heals the next time NHTSA rebuilds the cache. We do
-not import the 8.8M-row `WMIYearValidChars` table. This deviation is frozen in the
-parity corpus as a documented expectation so any *unexpected* change to it is caught.
+1. **Element 144 only** (`error-fields`, seven VINs). The position is already in
+   error for another reason, so the only difference is the possible-values list
+   printed for it — the oracle offers characters the data no longer allows, e.g.
+   `(7:EFGKL)` against ultravin's `(7:EFGL)` for `SCFAAAAA0SG111111`.
+
+2. **The correction ladder** (`error-fields`, `JH2SC7752RA111111`). Position 11
+   of that VIN is `A`. The cache lists `A`, so the oracle sees nothing wrong and
+   returns codes `0,14` with no SuggestedVIN; the pattern source does not, so
+   ultravin flags one error, lets the check digit pick the single surviving
+   candidate `J`, and returns codes `3,14` with error bytes `(11:J)`.
+
+3. **The whole decode** (`clean-decode`, `MLHAE041XKA111111` and
+   `JH2RD1613RA111111`). Same cell, but these VINs have an *inconclusive* model
+   year — `fVinModelYear2` cannot choose between the two halves of position 10's
+   30-year cycle, so both years get a decode pass and the best-of scoring picks
+   one. Running the oracle's own `spvindecode_errorcode` per candidate year shows
+   the cache deciding that race:
+
+   ```
+   MLHAE041XKA111111  year 2019: cache present -> codes='14'     bytes=''
+                      year 2019: cell removed  -> codes='4 14'   bytes='(11:5KY)'
+                      year 1989: either way    -> codes='14'     bytes=''
+   ```
+
+   With the stale cache the 2019 pass carries no correction code, so it ties the
+   1989 pass on `ErrorValue` and takes the tiebreakers below it (elements weight,
+   matched patterns, then the higher model year): the oracle answers *2019 Honda
+   CRF50F*, schema 22155. With the pattern source's charset that same pass takes
+   code 4 — weight −200 against the 1989 pass's −30 — and loses outright, which
+   is why ultravin answers the 1989-schema vehicle (schema 4005).
+   `JH2RD1613RA111111` is the same story one cell over (code 3, 2024 → 1994).
+   Note what is *not* different: both engines consider exactly the same two
+   candidate years and run a pass for each. Only the error code one of those
+   passes earns differs, and that comes from the charset.
+
+**Decision: keep ultravin's source-consistent computation.** Matching the oracle
+here would mean shipping the 8.8M-row cache — or its delta — purely to reproduce
+characters the dump's own `pattern` table contradicts, on a defect that
+self-heals the next time NHTSA rebuilds the cache (as the 2026_06 one did). The
+registered VINs are a *sample* of an unbounded class: any VIN reaching one of
+these cells, and any cell the next rebuild leaves stale, diverges the same way.
+A new one therefore fails the corpus or sweep gate until a human re-verifies it
+against this section and registers it — deliberately, so a fresh divergence is
+never waved through on the strength of an old explanation.
 
 ---
 
-## 3. The Postgres dump mis-collates element 144 — 172 VINs in the 2026_07 corpus
+## 3. The Postgres dump mis-collates element 144 — 95 charsets, 16 WMIs
 
 Element 144 ("possible values") prints a position's valid-character set as a
 string, e.g. `(6:_123456789)`. That string is a *sort*, so its order is decided by
@@ -181,8 +273,12 @@ SQL Server and C. ultravin then emits SQL Server's order at both sites, so it
 matches NHTSA and differs from our own Postgres oracle on element 144 alone.
 
 **Scope is small and bounded.** The order only differs when a charset mixes `_`
-with alphanumerics: **95 of 1,682,382** `(wmi, year, position)` charsets do, across
+with alphanumerics: **95 of 1,681,352** `(wmi, year, position)` charsets do, across
 **16 WMIs**. Everything else is alphanumeric-only, where C and SQL Server agree.
+How many *corpus* VINs reach one is a property of that month's corpus and not of
+the defect — it was 172 when this section was written and is 0 in the current
+403-VIN corpus — which is the argument for neutralizing the class structurally
+instead of enumerating today's members.
 
 **How it is enforced, structurally.** The fix is not a call site — it is a type.
 `errors.rs` holds valid-character sets in `ValidChars`, whose inner `BTreeSet` is
@@ -244,3 +340,28 @@ defect is re-probed one VIN at a time; this class is unbounded (any VIN reaching
 one of the 95 mixed charsets) and is neutralized structurally in
 `normalize.diff_rows` instead, so enumerating tonight's four would only invite
 the next four.
+
+---
+
+## 4. Retired entries
+
+An entry that stopped reproducing is retired, not kept — a stale excuse silently
+forgives the next real regression on that VIN. The **known-problems** gate is
+what catches one: it re-decodes every registered VIN against each new dump and
+fails the refresh when one heals. This section is the log, so a reader who finds
+a VIN missing from the registry can see it was checked rather than lost.
+
+Retired sections carry no anchor: `scripts/known_problems.json` has no entry left
+to point at one, and `tests/test_known_problems.py` requires every anchor to be
+claimed.
+
+- **W1LSB0L72VEJV2EPX** — stale `WMIYearValidChars` cache, registered 2026_06,
+  **retired 2026-08-20 (dump 2026_08)**. The 2026_06 cache had been frozen
+  mid-edit, between W1L schema 29239 (created 2026-05-01 14:41, updated 14:53)
+  and schema 29240 (created 15:15), so its valid-character positions were
+  `{9, 11}` where the same dump's `pattern` table gave `{8, 9, 11}`: the oracle
+  missed position 8 and emitted code 14 where ultravin emitted code 4 with
+  possible-values. The
+  2026_08 rebuild picked schema 29240 up, the cell now agrees with the pattern
+  source, and ultravin decodes the VIN **exactly**. The class itself did not go
+  away — see section 2, where the same table is stale in the other direction.
