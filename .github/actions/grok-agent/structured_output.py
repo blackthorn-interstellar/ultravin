@@ -18,9 +18,10 @@ import json
 import sys
 
 
-def last_end_event(path: str) -> dict | None:
-    """The session's terminal `end` event, or None if it never emitted one."""
+def scan_transcript(path: str) -> tuple[dict | None, int]:
+    """The terminal `end` event (None if never emitted) and the tool-call count."""
     end = None
+    tool_calls = 0
     with open(path) as transcript:
         for line in transcript:
             try:
@@ -29,11 +30,13 @@ def last_end_event(path: str) -> dict | None:
                 continue
             if event.get("type") == "end":
                 end = event
-    return end
+            elif event.get("type") == "tool_call":
+                tool_calls += 1
+    return end, tool_calls
 
 
 def main() -> int:
-    end = last_end_event(sys.argv[1])
+    end, tool_calls = scan_transcript(sys.argv[1])
     if end is None:
         print("the session emitted no `end` event (transcript truncated, or grok died)", file=sys.stderr)
         return 1
@@ -45,6 +48,13 @@ def main() -> int:
         problems.append("structuredOutput was null")
     if end.get("stopReason") != "end_turn":
         problems.append(f"stopReason was {end.get('stopReason')!r}, expected 'end_turn'")
+    if tool_calls == 0 and end.get("structuredOutput") is not None:
+        # grok-4.6 sometimes satisfies the schema instantly on turn 1 without
+        # running a single tool (observed twice on the review gate: a
+        # schema-valid "Review in progress" placeholder with a clean end_turn).
+        # A verdict produced without reading anything is not a verdict; failing
+        # here makes the caller's retry step fire.
+        problems.append("session made 0 tool calls — a schema payload produced without any investigation is invalid")
     if problems:
         print("; ".join(problems), file=sys.stderr)
         return 1
