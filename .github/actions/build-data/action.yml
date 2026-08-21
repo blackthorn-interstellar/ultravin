@@ -2,8 +2,9 @@ name: Build vPIC data artifact
 description: >
   Materialize and verify the embedded crates/ultravin-core/data/vpic.rkyv from the
   dump pinned in vpic/manifest.json. Self-verifying (dump sha256 + artifact blake3)
-  and cached by the artifact's blake3, so an unchanged pin skips the download and
-  import entirely. Requires a Rust toolchain, jq, and python3 (preinstalled on GH runners).
+  and cached by that blake3 plus a hash of the crate sources that produce it, so an
+  unchanged pin *and* unchanged importer skips the download and import entirely.
+  Requires a Rust toolchain, jq, and python3 (preinstalled on GH runners).
 
 runs:
   using: composite
@@ -11,20 +12,36 @@ runs:
     - name: Read pinned dump metadata
       id: meta
       shell: bash
+      env:
+        # Every input that decides the artifact's bytes besides the dump itself:
+        # the importer, the core crate it links (serialize_artifact, cover), the
+        # build scripts, and the exact dependency versions. Folded into the cache
+        # key below — see the comment there for why the manifest alone is not
+        # enough. Deliberately broad (`crates/**`, so a crate added later is
+        # covered for free): a needless rebuild costs minutes, a missed one
+        # costs correctness.
+        SRC_HASH: ${{ hashFiles('Cargo.toml', 'Cargo.lock', 'crates/**/Cargo.toml', 'crates/**/build.rs', 'crates/**/src/**') }}
       run: |
+        # hashFiles yields "" when nothing matches (typo'd glob, no checkout).
+        # An empty component would quietly reduce the key back to the manifest
+        # digest — the exact hole this closes — so refuse rather than degrade.
+        if [ -z "$SRC_HASH" ]; then
+          echo "::error::hashFiles matched no crate sources; the vpic-artifact cache key would stop tracking artifact-affecting code"
+          exit 1
+        fi
         month=$(jq -r .month vpic/manifest.json)
         url=$(jq -r .source_url vpic/manifest.json)
         # `month` is the one manifest field nothing else pins down. source_url,
         # dump_sha256 and artifact_blake3 all verify each other below, but month
         # only reaches `--month`, whose sole artifact effect is cover_year — so a
         # same-year edit yields byte-identical artifact bytes, and on a cache HIT
-        # (key = artifact_blake3, which no month edit changes) the build steps
-        # that would notice even a cross-year edit never run. Assert it against
-        # the pinned dump's own filename here: first step, no cache-hit guard, so
-        # a PR cannot desync month from the dump it names. That desync is not
-        # cosmetic — ci.yaml's answerkey job decides whether to run the parity
-        # gate by comparing the answer-key pin against this month, so a bogus
-        # month skips the gate outright.
+        # (no month edit moves either key component: artifact_blake3 or the
+        # source hash) the build steps that would notice even a cross-year edit
+        # never run. Assert it against the pinned dump's own filename here: first
+        # step, no cache-hit guard, so a PR cannot desync month from the dump it
+        # names. That desync is not cosmetic — ci.yaml's answerkey job decides
+        # whether to run the parity gate by comparing the answer-key pin against
+        # this month, so a bogus month skips the gate outright.
         case "$url" in
           *"/vPICList_lite_${month}.plain.zip") ;;
           *)
@@ -37,15 +54,26 @@ runs:
           echo "url=$url"
           echo "dump_sha256=$(jq -r .dump_sha256 vpic/manifest.json)"
           echo "artifact_blake3=$(jq -r .artifact_blake3 vpic/manifest.json)"
+          echo "src_hash=$SRC_HASH"
         } >> "$GITHUB_OUTPUT"
-    # The artifact is a pure function of the pinned dump, so its blake3 is a sound
-    # cache key: it changes only when the dump (or importer output) changes.
+    # The artifact is a pure function of (pinned dump, importer code), so the key
+    # must name BOTH. artifact_blake3 covers the dump: it moves whenever the pin
+    # does, and keeps two data months from colliding. src_hash covers the code —
+    # and it is load-bearing, not belt-and-braces. On a keyed-by-manifest-only
+    # hit, every download/build/verify step below is skipped and the surviving
+    # re-hash compares the restored OLD bytes against the OLD digest the same
+    # manifest supplies: green, forever. So a commit that changed artifact-
+    # affecting Rust (cover.rs is baked in at build time) without refreshing
+    # vpic/manifest.json would never rebuild, master's manifest would rot
+    # silently, and the eventual cache eviction — not the offending commit —
+    # would be what turned CI red. Keying on the sources makes that commit miss
+    # the cache, rebuild for real, and fail its own verification.
     - name: Cache built artifact
       id: cache
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
         path: crates/ultravin-core/data/vpic.rkyv
-        key: vpic-artifact-${{ steps.meta.outputs.artifact_blake3 }}
+        key: vpic-artifact-${{ steps.meta.outputs.artifact_blake3 }}-${{ steps.meta.outputs.src_hash }}
     - name: Download pinned vPIC dump
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
