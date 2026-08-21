@@ -18,8 +18,10 @@ mod decode;
 mod errors;
 pub mod generate;
 mod hash;
+mod ids;
 mod keyspec;
 mod matcher;
+pub mod parquet_io;
 mod resolve;
 pub mod tables;
 mod wmi;
@@ -32,6 +34,9 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub use checkdigit::check_digit;
 pub use db::Db;
 pub use generate::{generate, pairwise, seeded, sweep, Dimension, Filter};
+pub use ids::{
+    all_public_ids, decode_batch_ids, resolve_ids, ColumnValues, IdMeta, IdsBatch, IdsDType,
+};
 pub use matcher::sqlwild_to_regex;
 pub use wmi::{vin_descriptor, vin_wmi};
 

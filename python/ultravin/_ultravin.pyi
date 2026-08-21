@@ -1,5 +1,6 @@
 """Type stubs for the compiled `ultravin._ultravin` extension module."""
 
+from pathlib import Path
 from typing import Any
 
 __version__: str
@@ -146,3 +147,55 @@ def seeded(*, limit: int = 0) -> list[str]:
     knock out outstanding class pairs. ``limit`` caps the result at that many
     VINs (0 = all ~1.7M).
     """
+
+def decode_parquet(
+    src: str | Path,
+    dst: str | Path | None = None,
+    *,
+    vin: str | None = None,
+    year: str | None = None,
+    ids: list[int] | None = None,
+    batch_size: int = 65_536,
+    sample_rows: int = 100,
+) -> int | dict[str, list[Any]]:
+    """Decode a parquet file (or directory of them), projecting the named elements.
+
+    ``ids`` are vPIC ``element_id``s; omit it for every publicly decodable
+    element. The library wrapper (:func:`ultravin.decode_parquet`) adds a
+    ``codes=`` alternative that takes variable names.
+
+    The VIN column and the optional caller-year column are resolved from the
+    footer schema by name, then by sniffing the first ``sample_rows`` values;
+    ``vin=``/``year=`` name them outright and skip that. Output columns are the
+    passthrough VIN (and year), ``decoded_model_year``, then one ``Utf8``/
+    ``Int64``/``Float64`` column per projected element.
+
+    With ``dst`` the rows are written there as parquet and the row count is
+    returned — the decode never leaves Rust and peak memory is O(``batch_size``).
+    Without ``dst`` the columns come back as one ``{name: [values]}`` dict, which
+    holds the whole source in memory; use :class:`ParquetBatchIter` to stream.
+
+    Raises ``ValueError`` for a caller mistake (unknown column or element id,
+    ambiguous autodetect) and ``OSError`` for an unreadable file.
+    """
+
+class ParquetBatchIter:
+    """Chunk-at-a-time :func:`decode_parquet`, yielding ``{name: [values]}`` dicts.
+
+    Each chunk is at most ``batch_size`` rows, decoded with the GIL released, so
+    a source far larger than memory streams through at O(chunk) cost. Arguments
+    are :func:`decode_parquet`'s, minus ``dst``.
+    """
+
+    def __init__(
+        self,
+        src: str | Path,
+        *,
+        vin: str | None = None,
+        year: str | None = None,
+        ids: list[int] | None = None,
+        batch_size: int = 65_536,
+        sample_rows: int = 100,
+    ) -> None: ...
+    def __iter__(self) -> ParquetBatchIter: ...
+    def __next__(self) -> dict[str, list[Any]]: ...

@@ -2,12 +2,21 @@
 //! All logic lives in `ultravin-core`; this layer only marshals to Python.
 
 use std::cell::RefCell;
+use std::path::PathBuf;
 
-use pyo3::exceptions::PyValueError;
+use arrow_array::cast::AsArray;
+use arrow_array::types::{Float64Type, Int32Type, Int64Type};
+use arrow_array::{Array, ArrayRef, RecordBatch};
+use arrow_schema::{DataType, SchemaRef};
+use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyString};
+use pyo3::IntoPyObjectExt;
 
+use ultravin_core::parquet_io::{
+    decode_parquet_to_file, open_chunks, ParquetChunkIter, ParquetError, ParquetOpts,
+};
 use ultravin_core::{DecodeResult, DecodedElement, FlatResult, FlatValue};
 
 // The decode engine is allocation-bound; a sharded allocator both speeds the
@@ -399,6 +408,192 @@ fn seeded(py: Python<'_>, limit: usize) -> Vec<String> {
     })
 }
 
+/// `Config` is a caller mistake (unknown column, bad element id) and `Io` is the
+/// filesystem talking, so they get the two exceptions Python callers already
+/// catch for those things.
+fn parquet_err(e: ParquetError) -> PyErr {
+    match e {
+        ParquetError::Io(m) => PyOSError::new_err(m),
+        ParquetError::Config(m) => PyValueError::new_err(m),
+    }
+}
+
+/// `ids = None` means the wide default: every publicly decodable element.
+fn parquet_opts(
+    vin: Option<String>,
+    year: Option<String>,
+    ids: Option<Vec<i32>>,
+    batch_size: usize,
+    sample_rows: usize,
+) -> ParquetOpts {
+    ParquetOpts {
+        vin,
+        year,
+        ids: ids.unwrap_or_else(|| ultravin_core::all_public_ids(ultravin_core::Db::embedded())),
+        batch_size,
+        sample_rows,
+    }
+}
+
+/// Append one arrow column to `list`, nulls as `None`. The dataset output schema
+/// only ever holds these four types (see `parquet_io::build_out_schema`).
+fn append_column(list: &Bound<'_, PyList>, arr: &ArrayRef) -> PyResult<()> {
+    macro_rules! append_all {
+        ($a:expr) => {{
+            let a = $a;
+            for i in 0..a.len() {
+                list.append((!a.is_null(i)).then(|| a.value(i)))?;
+            }
+        }};
+    }
+    match arr.data_type() {
+        DataType::Utf8 => append_all!(arr.as_string::<i32>()),
+        DataType::Int32 => append_all!(arr.as_primitive::<Int32Type>()),
+        DataType::Int64 => append_all!(arr.as_primitive::<Int64Type>()),
+        DataType::Float64 => append_all!(arr.as_primitive::<Float64Type>()),
+        other => {
+            return Err(PyValueError::new_err(format!(
+                "unsupported output column type {other}"
+            )))
+        }
+    }
+    Ok(())
+}
+
+/// One chunk as `{column_name: [values]}`.
+fn batch_to_dict<'py>(py: Python<'py>, batch: &RecordBatch) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    for (i, field) in batch.schema().fields().iter().enumerate() {
+        let list = PyList::empty(py);
+        append_column(&list, batch.column(i))?;
+        d.set_item(field.name(), list)?;
+    }
+    Ok(d)
+}
+
+/// Every chunk concatenated into one `{column_name: [values]}`. Every chunk of a
+/// source shares one schema — `open_chunks` refuses a directory whose files
+/// disagree — so appending by position is safe.
+fn batches_to_dict<'py>(
+    py: Python<'py>,
+    schema: &SchemaRef,
+    batches: &[RecordBatch],
+) -> PyResult<Bound<'py, PyDict>> {
+    let lists: Vec<Bound<'py, PyList>> =
+        schema.fields().iter().map(|_| PyList::empty(py)).collect();
+    for b in batches {
+        for (i, list) in lists.iter().enumerate() {
+            append_column(list, b.column(i))?;
+        }
+    }
+    let d = PyDict::new(py);
+    for (field, list) in schema.fields().iter().zip(lists) {
+        d.set_item(field.name(), list)?;
+    }
+    Ok(d)
+}
+
+/// Decode a parquet file (or directory of them), projecting each row to the
+/// requested vPIC element ids.
+///
+/// With `dst`, the whole job stays in Rust — rows are never Python objects — and
+/// the row count comes back. Without it, the decoded columns are collected into
+/// a dict, which is O(source) memory and so is for small inputs only.
+#[pyfunction]
+#[pyo3(signature = (src, dst = None, *, vin = None, year = None, ids = None, batch_size = 65_536, sample_rows = 100))]
+// One parameter per documented keyword; collapsing them into a struct would only
+// move the argument list into Python.
+#[allow(clippy::too_many_arguments)]
+fn decode_parquet(
+    py: Python<'_>,
+    src: PathBuf,
+    dst: Option<PathBuf>,
+    vin: Option<String>,
+    year: Option<String>,
+    ids: Option<Vec<i32>>,
+    batch_size: usize,
+    sample_rows: usize,
+) -> PyResult<Py<PyAny>> {
+    let opts = parquet_opts(vin, year, ids, batch_size, sample_rows);
+    if let Some(dst) = dst {
+        let rows = py
+            .detach(|| decode_parquet_to_file(&src, &dst, opts))
+            .map_err(parquet_err)?;
+        return rows.into_py_any(py);
+    }
+    let (schema, batches) = py
+        .detach(|| -> Result<_, ParquetError> {
+            let mut iter = open_chunks(&src, opts)?;
+            let schema = iter.out_schema.clone();
+            let mut batches = Vec::new();
+            while let Some(b) = iter.next_chunk()? {
+                batches.push(b);
+            }
+            Ok((schema, batches))
+        })
+        .map_err(parquet_err)?;
+    let schema =
+        schema.ok_or_else(|| PyValueError::new_err("source expanded to no parquet files"))?;
+    Ok(batches_to_dict(py, &schema, &batches)?.into_any().unbind())
+}
+
+/// Streaming form of [`decode_parquet`]: one `{column: [values]}` dict per chunk,
+/// so a source larger than memory can be consumed a chunk at a time.
+#[pyclass(module = "ultravin._ultravin")]
+struct ParquetBatchIter {
+    /// A `#[pyclass]` must be `Sync`, and the parquet row-group reader inside is
+    /// `Send` but not — the lock is what makes handing the iterator to another
+    /// thread legal. Uncontended, and taken once per chunk of `batch_size` rows.
+    inner: std::sync::Mutex<ParquetChunkIter>,
+}
+
+#[pymethods]
+impl ParquetBatchIter {
+    #[new]
+    #[pyo3(signature = (src, *, vin = None, year = None, ids = None, batch_size = 65_536, sample_rows = 100))]
+    fn new(
+        py: Python<'_>,
+        src: PathBuf,
+        vin: Option<String>,
+        year: Option<String>,
+        ids: Option<Vec<i32>>,
+        batch_size: usize,
+        sample_rows: usize,
+    ) -> PyResult<Self> {
+        let opts = parquet_opts(vin, year, ids, batch_size, sample_rows);
+        let inner = py.detach(|| open_chunks(&src, opts)).map_err(parquet_err)?;
+        Ok(ParquetBatchIter {
+            inner: std::sync::Mutex::new(inner),
+        })
+    }
+
+    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
+        slf
+    }
+
+    fn __next__(&self, py: Python<'_>) -> PyResult<Option<Py<PyDict>>> {
+        // The lock is taken *inside* `detach`. Taking it first would let a second
+        // thread sharing this iterator block on it while holding the GIL, which
+        // the holder needs back to return — deadlocking the interpreter.
+        let batch = py
+            .detach(|| {
+                self.inner
+                    .lock()
+                    .map_err(|_| {
+                        ParquetError::Io(
+                            "this iterator was left unusable by an earlier panic".to_string(),
+                        )
+                    })
+                    .and_then(|mut it| it.next_chunk())
+            })
+            .map_err(parquet_err)?;
+        match batch {
+            Some(b) => Ok(Some(batch_to_dict(py, &b)?.unbind())),
+            None => Ok(None),
+        }
+    }
+}
+
 #[pymodule]
 fn _ultravin(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(decode, m)?)?;
@@ -412,6 +607,8 @@ fn _ultravin(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cover_vins, m)?)?;
     m.add_function(wrap_pyfunction!(pairwise, m)?)?;
     m.add_function(wrap_pyfunction!(seeded, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_parquet, m)?)?;
+    m.add_class::<ParquetBatchIter>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

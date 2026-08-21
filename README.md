@@ -20,6 +20,7 @@
 - 🎯 Byte-for-byte parity with vPIC's `spVinDecode`, verified across every decodable VIN — except documented vPIC defects, which ultravin deliberately does not reproduce ([the registry](scripts/known_problems.json), [evidence](docs/KNOWN_DEVIATIONS.md))
 - 🐍 Installable via `pip`, with a CLI and a library API
 - 🧵 Batches in parallel to ~82,000 VIN/s on 4 cores
+- 🗃️ Parquet in, parquet out — decodes a dataset of any size in the memory of one chunk
 
 ultravin is a faithful port of NHTSA's `spVinDecode` — the SQL procedure behind
 vPIC — reimplemented in Rust and verified against the reference Postgres
@@ -111,6 +112,51 @@ ultravin decode 1HGCM82633A004352 --json   # full JSON
 ultravin decode 1HGCM82633A004352 --flat   # values only, no provenance
 ultravin decode-batch vins.txt --json      # one VIN per line
 ultravin version
+```
+
+## Datasets
+
+For bulk work there is a parquet door — parquet in, parquet out, without a
+single row ever becoming a Python object:
+
+```python
+import ultravin
+
+rows = ultravin.decode_parquet("registrations.parquet", "decoded.parquet", codes=["Make", "Model"])
+
+rows  # 4812004 — the rows written, not the rows themselves
+```
+
+The VIN column is found by name (`vin`, case-insensitively) and then by sniffing
+the leading rows, as is the optional caller-year column (`year`, `model_year`,
+…); pass `vin=`/`year=` to name them outright. Pick the projection with `codes=`
+(vPIC variable names) or `ids=` (`element_id`s, the key that survives NHTSA
+renaming a variable), or omit both for every publicly decodable element. The
+output holds the VIN and caller year passed through, then `decoded_model_year`
+(named so it cannot collide with an input column called `model_year`), then one
+column per projected element — string, `int64` or `float64` following vPIC's own
+`data_type`, with an empty value written as null. A source that is a directory
+works wherever a file does: every `*.parquet` in it is read in sorted order as
+one stream.
+
+Rows stream through in `batch_size` chunks with the GIL released, so peak memory
+is one chunk no matter how large the source is. Leave the destination out to get
+the whole decode back as `{column: [values]}` (small inputs only), or iterate
+`ParquetBatchIter` to stream it a chunk at a time:
+
+```python
+for chunk in ultravin.ParquetBatchIter("registrations.parquet", ids=[26], batch_size=100_000):
+    chunk["Make"][:2]  # ['HONDA', 'FORD']
+```
+
+Reading and writing parquet is the same Rust as the decoding, so this needs no
+pyarrow and no other install.
+
+From the command line:
+
+```bash
+ultravin decode-parquet registrations.parquet decoded.parquet --codes Make,Model
+ultravin decode-parquet parts/ decoded.parquet --ids 26,28 --vin chassis_no
 ```
 
 ## Benchmarks

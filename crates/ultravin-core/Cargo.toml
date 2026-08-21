@@ -34,6 +34,13 @@ rkyv = "0.8"
 # crates are pure Rust, so the cross-compile matrix is unaffected.
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Dataset path (decode-parquet): parquet row-group streaming in Rust so no row
+# ever becomes a Python object. arrow/parquet are pure Rust — the exotic
+# cross-compile targets stay plain-gcc buildable, same as serde above.
+arrow-array = "59.2"
+arrow-cast = "59.2"
+arrow-schema = "59.2"
+parquet = { version = "59.2", default-features = false, features = ["arrow", "snap"] }
 
 [build-dependencies]
 blake3 = { version = "1.8.5", features = ["pure"] }

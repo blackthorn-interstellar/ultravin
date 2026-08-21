@@ -13,6 +13,12 @@ crate-type = ["cdylib"]
 
 [dependencies]
 ultravin-core = { path = "../ultravin-core" }
+# The dataset door hands back arrow `RecordBatch`es from ultravin-core; these two
+# crates are only for reading them back out (schema field names, typed column
+# downcasts) when marshalling to Python dicts. Same versions the core pins, so
+# they resolve to the one already-locked copy.
+arrow-array = "59.2"
+arrow-schema = "59.2"
 # Windows links python3.dll via raw-dylib (pyo3 0.29+), so no import lib is
 # needed even for the aarch64 cross-build — the old generate-import-lib
 # feature is an inert no-op now and deliberately dropped.

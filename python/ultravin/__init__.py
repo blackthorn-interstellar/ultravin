@@ -7,7 +7,9 @@ package only re-exports it. No logic here.
 from typing import Any
 
 from ultravin import _ultravin
+from ultravin._dataset import decode_parquet
 from ultravin._ultravin import (
+    ParquetBatchIter,
     __version__,
     cover_vins,
     decode,
@@ -31,12 +33,14 @@ ELEMENTS: dict[str, dict[str, Any]]
 __all__ = [
     "ELEMENTS",
     "MULTI_VALUED",
+    "ParquetBatchIter",
     "__version__",
     "cover_vins",
     "decode",
     "decode_batch",
     "decode_batch_json",
     "decode_json",
+    "decode_parquet",
     "generate",
     "pairwise",
     "seeded",

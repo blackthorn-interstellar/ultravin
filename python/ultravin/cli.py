@@ -64,6 +64,46 @@ def decode_batch(
     typer.echo(uv.decode_batch_json(vins, years=hints, flat=flat))
 
 
+@app.command(name="decode-parquet")
+def decode_parquet(
+    src: Path,
+    dst: Path,
+    vin: str | None = typer.Option(None, "--vin", help="VIN column name (default: autodetect)."),
+    year: str | None = typer.Option(None, "--year", help="Caller model-year column name (default: autodetect)."),
+    ids: str | None = typer.Option(None, "--ids", help="Comma-separated vPIC element ids to project (default: all)."),
+    codes: str | None = typer.Option(None, "--codes", help="Comma-separated vPIC variable names to project."),
+    batch_size: int = typer.Option(65_536, "--batch-size", min=1, help="Rows per chunk — memory, not throughput."),
+    sample_rows: int = typer.Option(100, "--sample-rows", min=1, help="Rows sniffed when autodetecting columns."),
+) -> None:
+    """Decode SRC (a parquet file or directory of them) into projected parquet at DST.
+
+    Output columns: the passthrough VIN (and caller year), `decoded_model_year`,
+    then one typed column per projected element. Rows never become Python objects.
+    """
+    try:
+        id_list = [int(part) for part in ids.split(",") if part.strip()] if ids else None
+    except ValueError:
+        msg = f"--ids takes comma-separated element ids, got {ids!r}"
+        raise typer.BadParameter(msg) from None
+    code_list = [part.strip() for part in codes.split(",") if part.strip()] if codes else None
+    try:
+        rows = uv.decode_parquet(
+            src,
+            dst,
+            vin=vin,
+            year=year,
+            ids=id_list,
+            codes=code_list,
+            batch_size=batch_size,
+            sample_rows=sample_rows,
+        )
+    except ValueError as exc:
+        # Every ValueError out of the dataset door is a caller mistake (unknown
+        # column, bad element id, ambiguous autodetect) — say so, don't traceback.
+        raise typer.BadParameter(str(exc)) from None
+    typer.echo(f"wrote {rows} rows to {dst}", err=True)
+
+
 @app.command()
 def version() -> None:
     """Print the ultravin version."""

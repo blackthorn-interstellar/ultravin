@@ -23,6 +23,7 @@ dev = [
     # It is absent on those rows, so nothing the tests import may need psycopg at
     # import time — only at connect time. test_import guards that.
     "psycopg[binary]>=3.3.4; python_version < '3.15'",
+    "pyarrow>=25.0.0",
     "pytest",
     "pytest-randomly",
     "pytest-sugar",
