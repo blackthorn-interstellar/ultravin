@@ -15,6 +15,7 @@ the expected values would be checking arrow against arrow.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -25,7 +26,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 import ultravin as uv
-from typer.testing import CliRunner
+from typer.testing import CliRunner, Result
 from ultravin.cli import app
 
 from tests.vin_samples import VINS
@@ -354,34 +355,60 @@ def test_a_bad_projection_is_a_value_error(tmp_path: Path) -> None:
         columns(src, ids=[MAKE], codes=["Make"])
 
 
+STYLING = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def cli(*args: str) -> Result:
+    """`decode-parquet` under a console wide enough not to wrap an error message.
+
+    typer renders parameter errors through rich, which wraps them in a panel
+    sized to the console. `COLUMNS` is the one knob still live at call time —
+    the rest of typer's console setup is snapshotted at import.
+    """
+    return CliRunner(env={"COLUMNS": "200"}).invoke(app, ["decode-parquet", *args])
+
+
+def plain(text: str) -> str:
+    """stderr as a human reads it, with rich's styling taken back out.
+
+    Seeing `GITHUB_ACTIONS` in the environment, typer force-enables color, and
+    the highlighter then opens a style run per flag fragment — `--batch-size`
+    arrives as `-`, `-batch`, `-size` with escape codes between them, which is
+    why a substring assert that passes locally failed on CI. The decision is
+    made when `typer.rich_utils` is imported, so no environment the runner sets
+    can undo it; the message is the contract, the styling is not.
+    """
+    return STYLING.sub("", text)
+
+
 def test_cli_writes_parquet_and_reports_the_rows_on_stderr(tmp_path: Path) -> None:
     src = corpus_file(tmp_path / "in.parquet")
     dst = tmp_path / "out.parquet"
-    result = CliRunner().invoke(app, ["decode-parquet", str(src), str(dst), "--codes", "Make,Model"])
+    result = cli(str(src), str(dst), "--codes", "Make,Model")
 
     assert result.exit_code == 0, result.output
     # Nothing on stdout: the summary is progress, not data a pipe should swallow.
     assert result.stdout == ""
-    assert result.stderr == f"wrote {len(CORPUS)} rows to {dst}\n"
+    assert plain(result.stderr) == f"wrote {len(CORPUS)} rows to {dst}\n"
     assert pq.read_table(dst).column("Make")[0].as_py() == "HONDA"
 
 
 def test_cli_rejects_ids_that_are_not_numbers(tmp_path: Path) -> None:
     src = corpus_file(tmp_path / "in.parquet")
-    result = CliRunner().invoke(app, ["decode-parquet", str(src), str(tmp_path / "out.parquet"), "--ids", "Make"])
+    result = cli(str(src), str(tmp_path / "out.parquet"), "--ids", "Make")
 
     assert result.exit_code == 2
-    assert "--ids takes comma-separated element ids" in result.stderr
+    assert "--ids takes comma-separated element ids" in plain(result.stderr)
 
 
 @pytest.mark.parametrize("flag", ["--batch-size", "--sample-rows"])
 def test_cli_rejects_a_row_count_below_one(tmp_path: Path, flag: str) -> None:
     """Both are row counts: 0 or negative reached Rust as a huge usize."""
     src = corpus_file(tmp_path / "in.parquet")
-    result = CliRunner().invoke(app, ["decode-parquet", str(src), str(tmp_path / "out.parquet"), flag, "0"])
+    result = cli(str(src), str(tmp_path / "out.parquet"), flag, "0")
 
     assert result.exit_code == 2
-    assert f"Invalid value for '{flag}'" in result.stderr
+    assert f"Invalid value for '{flag}'" in plain(result.stderr)
 
 
 def test_sharing_one_iterator_across_threads_does_not_deadlock(tmp_path: Path) -> None:
@@ -420,10 +447,11 @@ def test_peak_memory_is_bounded_by_the_batch_size(tmp_path: Path) -> None:
 
     100_000 rows under the default (every public element) projection, which
     materializes ~8.5KB per row. Both ends were measured on this fixture: the
-    same decode taking the file as one chunk peaks at 845MB, and streaming it in
-    4_096-row chunks peaks at 114MB, so the cap sits between them with room on
-    either side. More rows would be a wider trap, but these tests run against an
-    unoptimized build where 100_000 rows already costs ~15s.
+    same decode taking the file as one chunk peaks at ~845MB, and streaming it in
+    4_096-row chunks peaks at 115-150MB (macOS/arm64 to Linux/x86_64), so the cap
+    sits between them with room on either side. More rows would be a wider trap,
+    but these tests run against an unoptimized build where 100_000 rows already
+    costs ~15s.
     """
     rows = 100_000
     batch_size = 4_096
@@ -433,17 +461,30 @@ def test_peak_memory_is_bounded_by_the_batch_size(tmp_path: Path) -> None:
     tiled = (VINS * (rows // len(VINS) + 1))[:rows]
     pq.write_table(pa.table({"vin": text(tiled)}), src, row_group_size=batch_size)
 
-    # A subprocess so the measurement is this decode's peak and not the suite's.
+    # A subprocess so the measurement is this decode's peak and not the suite's —
+    # and on Linux `ru_maxrss` is not that measurement. `fork` hands the child
+    # the parent's page tables, so its RSS starts at the parent's, and `execve`
+    # folds that pre-exec high-water mark into the new process's `ru_maxrss`
+    # (`setmax_mm_hiwater_rss` in `exec_mmap`). The child therefore reports
+    # whatever pytest had peaked at across the whole session, which is how this
+    # read 849-865MB on CI while the decode itself stayed near 150MB. `VmHWM` is
+    # the post-exec mm's own mark and carries none of it. macOS spawns without
+    # the inheritance, so `ru_maxrss` — already bytes there — is the child's
+    # alone. Either way the child prints bytes.
+    peak_bytes = (
+        "resource.getrusage(resource.RUSAGE_SELF).ru_maxrss"
+        if sys.platform == "darwin"
+        else "1024 * int(re.search(r'VmHWM:\\s+(\\d+)', open('/proc/self/status').read()).group(1))"
+    )
     code = (
-        "import resource, ultravin\n"
+        "import re, resource, ultravin\n"
         f"rows = ultravin.decode_parquet({str(src)!r}, {str(tmp_path / 'out.parquet')!r}, batch_size={batch_size})\n"
-        "print(rows, resource.getrusage(resource.RUSAGE_SELF).ru_maxrss)\n"
+        f"print(rows, {peak_bytes})\n"
     )
     proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
     assert proc.returncode == 0, proc.stderr
 
-    written, maxrss = proc.stdout.split()
+    written, measured = proc.stdout.split()
     assert int(written) == rows
-    # ru_maxrss is bytes on macOS and kilobytes on Linux.
-    peak = int(maxrss) * (1 if sys.platform == "darwin" else 1024)
+    peak = int(measured)
     assert peak < cap, f"peak RSS {peak / 1e6:.0f}MB decoding {rows} rows"
