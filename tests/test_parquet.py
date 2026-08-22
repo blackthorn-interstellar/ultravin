@@ -22,17 +22,14 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
+import pyarrow as pa
+import pyarrow.parquet as pq
 import pytest
 import ultravin as uv
 from typer.testing import CliRunner, Result
 from ultravin.cli import app
 
 from tests.vin_samples import VINS
-
-# Absent on prerelease-Python CI rows (no cp315 wheels — see the marker in
-# pyproject); ultravin itself never needs it.
-pa = pytest.importorskip("pyarrow")
-pq = pytest.importorskip("pyarrow.parquet")
 
 # Projected elements, pinned by `element_id` — the key NHTSA does not rename
 # between releases — with the vPIC `data_type` each one exercises.

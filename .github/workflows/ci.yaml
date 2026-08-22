@@ -159,7 +159,25 @@ jobs:
         allow-prereleases: true
     - uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
       with:
-        enable-cache: false
+        # Cache only where it pays: 3.15 builds pyarrow from sdist (~minutes),
+        # and setup-uv's `uv cache prune --ci` keeps source-built wheels, so
+        # the build is paid once per uv.lock change. Wheel-only rows stay
+        # cacheless.
+        enable-cache: ${{ matrix.python-version == '3.15' }}
+    # pyarrow publishes no cp315 wheels yet, so on 3.15 uv builds it from
+    # sdist, which needs an Arrow C++ whose major version matches pyarrow's.
+    # apt installs the repo's newest; when Arrow's next major lands there ahead
+    # of the locked pyarrow, this row goes red (it doesn't block merges) — pin
+    # libarrow-dev to the locked major if that gap ever matters. Drop this
+    # step, the cache exception above, and allow-prereleases once 3.15.0 final
+    # is out and cp315 wheels ship.
+    - name: Install Arrow C++ (pyarrow sdist build)
+      if: matrix.python-version == '3.15'
+      run: |
+        wget -q "https://packages.apache.org/artifactory/arrow/$(lsb_release --id --short | tr '[:upper:]' '[:lower:]')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb"
+        sudo apt-get install -y -V ./apache-arrow-apt-source-latest-*.deb
+        sudo apt-get update
+        sudo apt-get install -y -V libarrow-dev libarrow-dataset-dev libparquet-dev
     # Place the artifact where include_bytes! expects it, before uv sync builds
     # the extension (build.rs leaves an existing file untouched).
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1

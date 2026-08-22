@@ -23,9 +23,10 @@ dev = [
     # It is absent on those rows, so nothing the tests import may need psycopg at
     # import time — only at connect time. test_import guards that.
     "psycopg[binary]>=3.3.4; python_version < '3.15'",
-    # pyarrow: same story — no cp315 wheels yet, and the sdist needs Arrow C++.
-    # tests/test_parquet.py importorskips it. Lift when cp315 wheels ship.
-    "pyarrow>=25.0.0; python_version < '3.15'",
+    # No cp315 wheels yet; the 3.15 CI row builds it from sdist against an
+    # apt-installed Arrow C++ (see ci.yaml). Locally, prerelease Pythons need
+    # the same — or just test on a released Python.
+    "pyarrow>=25.0.0",
     "pytest",
     "pytest-randomly",
     "pytest-sugar",
