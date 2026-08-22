@@ -468,7 +468,7 @@ dependencies = [
 dev = [
     { name = "maturin" },
     { name = "psycopg", extra = ["binary"], marker = "python_full_version < '3.15'" },
-    { name = "pyarrow" },
+    { name = "pyarrow", marker = "python_full_version < '3.15'" },
     { name = "pytest" },
     { name = "pytest-randomly" },
     { name = "pytest-sugar" },
@@ -483,7 +483,7 @@ requires-dist = [{ name = "typer" }]
 dev = [
     { name = "maturin", specifier = ">=1.7,<2" },
     { name = "psycopg", extras = ["binary"], marker = "python_full_version < '3.15'", specifier = ">=3.3.4" },
-    { name = "pyarrow", specifier = ">=25.0.0" },
+    { name = "pyarrow", marker = "python_full_version < '3.15'", specifier = ">=25.0.0" },
     { name = "pytest" },
     { name = "pytest-randomly" },
     { name = "pytest-sugar" },
