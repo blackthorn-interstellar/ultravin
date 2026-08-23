@@ -752,6 +752,7 @@ jobs:
       pull-requests: write # merge, comment
       issues: write # gh label create / --add-label needs-human
       checks: read
+      actions: read # poll re-dispatched workflow runs by head SHA (re-wait step)
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
