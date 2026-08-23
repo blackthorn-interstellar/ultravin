@@ -178,12 +178,21 @@ jobs:
         sudo apt-get install -y -V ./apache-arrow-apt-source-latest-*.deb
         sudo apt-get update
         sudo apt-get install -y -V libarrow-dev libarrow-dataset-dev libparquet-dev
-        # pyarrow's AUTO component options follow the installed Arrow C++'s
-        # config, and apt's Arrow is built with ARROW_FLIGHT=ON — so the sdist
-        # build tries Flight and dies in find_package(ArrowFlight) because
-        # libarrow-flight-dev isn't installed. We never use Flight; turn it
-        # off rather than dragging in gRPC.
-        echo "PYARROW_WITH_FLIGHT=0" >> "$GITHUB_ENV"
+        # pyarrow's AUTO component options inherit the flags of apt's
+        # kitchen-sink Arrow build, and every inherited component whose
+        # separate -dev package is missing dies in find_package (first
+        # Flight, then CUDA). Pin all of them so apt's Arrow flags can't
+        # steer the build: on for what the tests import (pyarrow.parquet)
+        # plus the dataset/acero configs libarrow-dev already provides,
+        # off for the rest.
+        {
+          echo "PYARROW_WITH_PARQUET=1"
+          echo "PYARROW_WITH_DATASET=1"
+          echo "PYARROW_WITH_ACERO=1"
+          for c in AZURE CUDA FLIGHT GANDIVA GCS HDFS ORC PARQUET_ENCRYPTION S3 SUBSTRAIT; do
+            echo "PYARROW_WITH_$c=0"
+          done
+        } >> "$GITHUB_ENV"
     # Place the artifact where include_bytes! expects it, before uv sync builds
     # the extension (build.rs leaves an existing file untouched).
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
