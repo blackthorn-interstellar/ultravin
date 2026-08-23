@@ -178,6 +178,12 @@ jobs:
         sudo apt-get install -y -V ./apache-arrow-apt-source-latest-*.deb
         sudo apt-get update
         sudo apt-get install -y -V libarrow-dev libarrow-dataset-dev libparquet-dev
+        # pyarrow's AUTO component options follow the installed Arrow C++'s
+        # config, and apt's Arrow is built with ARROW_FLIGHT=ON — so the sdist
+        # build tries Flight and dies in find_package(ArrowFlight) because
+        # libarrow-flight-dev isn't installed. We never use Flight; turn it
+        # off rather than dragging in gRPC.
+        echo "PYARROW_WITH_FLIGHT=0" >> "$GITHUB_ENV"
     # Place the artifact where include_bytes! expects it, before uv sync builds
     # the extension (build.rs leaves an existing file untouched).
     - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
