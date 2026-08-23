@@ -56,11 +56,16 @@ does the opposite: `actions/checkout` takes the base repo at `master` with no
 `ref:` override, so it always runs the trusted copy of the gate — a PR cannot
 edit its own judge — and it never executes PR code, only diffs it via `git` and
 `gh`. PRs from forks are diverted to `human-review` before any credential is
-mounted, and the model reviewer is confined to
-`Read,Grep,Glob,Bash(git:*),Bash(gh pr view:*)` with `Edit`, `Write`,
-`WebFetch`, and `WebSearch` explicitly denied. The publish step fails closed:
-anything short of an explicit approval leaves the required `review-verdict`
-check red.
+mounted. The gate is split three ways so no job both judges untrusted content
+and can write: the adversarial reviewer runs in a `contents: read`-only job with
+no write token and no file-write or network tools (a hard Grok `--tools`
+allowlist of `read_file,grep,list_dir,run_terminal_command`), working from a
+pre-fetched head SHA and the PR body on disk rather than the API, and nothing
+runs after it in that job. The `checks: write` token that publishes
+`review-verdict` lives in a separate job that reads the verdict as data and
+checks out nothing the reviewer produced — so a prompt-injected reviewer cannot
+forge its own required check. The publish step fails closed: anything short of
+an explicit approval leaves the required `review-verdict` check red.
 
 ## d. `pickle` load and dump
 
