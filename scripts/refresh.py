@@ -79,8 +79,9 @@ LOOKUP_REPORT_CAP = 20
 # re-probed each refresh (known_problems_gate): an excuse that stopped
 # reproducing is stale and fails too.
 #
-# The 63 crash VINs are the original 2026_06 report plus the 62 more the 2026_07
-# campaign hit; all 63 are WMI 7T0. They are a *sample* of an unbounded class —
+# The 65 crash VINs are the original 2026_06 report, the 62 more the 2026_07
+# campaign hit, and the two the 2026-08-16 backlog probe hit; all 65 are WMI
+# 7T0. They are a *sample* of an unbounded class —
 # any 7T0 VIN of model year 2023-2025 whose decode matches vinschema 24522 aborts
 # the same way — so a future sweep may find a 7T0 VIN that is not registered and
 # fail the gate. That failure is correct: it should be re-verified against the

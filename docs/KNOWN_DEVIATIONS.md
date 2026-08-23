@@ -53,7 +53,10 @@ CONTEXT:  PL/pgSQL function vpic.fvalidcharsinregex(character varying) line 22 a
 `spvindecode` raises and returns **nothing** — not a partial row set, no rows at
 all — so there is no oracle answer to have parity *with*. ultravin decodes the
 VIN normally. This was first reported for one VIN in 2026_06; the 2026_07 parity
-campaign hit it 62 more times, which was enough data to name the exact cause.
+campaign hit it 62 more times, which was enough data to name the exact cause. The
+2026-08-16 backlog probe hit two more (`7T03ZWKM9RA111111`, `7T0FRAYX7RA111111`,
+both MY code `R` = 2024), which were accepted by exhaustion rather than
+resemblance — see below.
 
 **The offending datum.** Exactly two rows in the 1,674,161-row `pattern` table
 carry a character class Postgres cannot compile:
@@ -94,6 +97,20 @@ and patched it in one of the two places the key is compiled. `fValidCharsInRegEx
 never got the same treatment, so half the proc tolerates the key and the other
 half aborts the entire decode.
 
+**The class is closed — verified by exhaustion, not sampling.** Registering a
+new crash VIN on resemblance would defeat the gate, so for the 2026_08 pair the
+resemblance was checked instead of assumed. Every distinct bracket group in the
+2026_07 dump's 1,667,711-row `pattern` table was compiled against Postgres' own
+regex engine: of 9,087 distinct groups, 1,670 take the regex path and exactly
+**one** is uncompilable — `[1-A-JT]`, carried by exactly the two rows above. An
+`invalid character range` abort out of `fValidCharsInRegEx` therefore cannot
+come from any other datum in that dump. Two boundary checks pin the blast
+radius: the abort is unconditional for a schema-24522 match — a synthesized
+check-digit-valid 7T0 MY2024 VIN that ultravin decodes with error code 0 aborts
+the oracle just the same, so clean decodes are lost too, not only the error
+path's outputs — and the same VIN moved to MY2026 (schema 28060) decodes on the
+oracle in exact field-for-field parity with ultravin.
+
 **What ultravin does.** `errors.rs::valid_chars_in_regex` compiles the class with
 the Rust `regex` crate, which accepts it — `1-A` is an ascending range, and the
 trailing `-` before `J` is a literal — and yields the valid characters
@@ -107,7 +124,7 @@ from the regression corpus: `freeze.py` skips any VIN the oracle errors on and
 surfaces new skips in the refresh report. `scripts/parity/sweep.py` records them
 under `oracle_errors` (it used to die on the first one), and `refresh.sweep_gate`
 **fails** on any crash VIN not registered in `scripts/known_problems.json` under
-kind `oracle-crash` — the sample of 63 VINs observed so far. That list is a sample of an unbounded
+kind `oracle-crash` — the sample of 65 VINs observed so far. That list is a sample of an unbounded
 class, so a new 7T0 MY2023-2025 VIN will fail the gate until a human re-verifies
 it against this section. That is deliberate: a crash must never pass silently
 just because a similar one was once explained.

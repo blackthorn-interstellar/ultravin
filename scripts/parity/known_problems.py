@@ -3,7 +3,7 @@
 `ORACLE_CRASH_VINS` and `KNOWN_DEVIATION_VINS` (scripts/refresh.py, derived
 from the scripts/known_problems.json registry) are *excuses*: the corpus and
 sweep gates use them to forgive an observation. Nothing made an excuse prove
-itself still true, and the 63 crash VINs are in neither the re-frozen corpus
+itself still true, and the 65 crash VINs are in neither the re-frozen corpus
 nor the 500-VIN sweep, so most months they are never decoded at all — the
 2026_08 dump healed W1LSB0L72VEJV2EPX and the refresh stayed green.
 
