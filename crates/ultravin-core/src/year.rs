@@ -62,7 +62,7 @@ pub struct YearPlan {
 
 /// Port of the wrapper's year computation: `rmy`/`omy`/`conclusive`, including
 /// the `altMY` ±30 schema-count swap (only when conclusive). The dead descriptor
-/// pass is skipped (it never runs in the proc — see docs/PLAN.md).
+/// pass is skipped (it never runs in the proc — see vpic/procs/spvindecode.sql).
 pub fn resolve_years(vin: &str, var_wmi: &str, db: &Db, current_year: i32) -> YearPlan {
     let v_limit = current_year + 2;
     match vin_model_year_raw(vin, var_wmi, db, current_year) {

@@ -200,3 +200,34 @@ none of it is published (see the framing above), and it has no untrusted input
 to protect. With the noise gone, both Snyk steps in `security.yaml` now gate at
 `--severity-threshold=medium`, so a genuine medium finding in shipped code
 fails CI instead of sitting on a dashboard.
+
+## l. Codex cloud-scan batch, 2026-08-23 (five findings)
+
+Codex's per-commit scans read one commit in isolation, so two of the five were
+stale by the time they were triaged:
+
+- **Deps re-wait lacks `actions: read`** — real when scanned, already fixed:
+  the nightly deps-merge job was granted `actions: read` (commit `dadbb73`,
+  PR #54) before the finding was read.
+- **Deleted docs leave dangling policy references** — mostly false positive:
+  `docs/ACCEPTANCE.md` was deleted in `7b70555` and restored the next day in
+  `d21d0df`; every reference to it resolves. The one genuinely dangling
+  reference (`docs/PLAN.md` in a `year.rs` doc comment) now points at
+  `vpic/procs/spvindecode.sql` instead.
+- **Parquet decode loads unused columns** — valid; fixed by applying a
+  `ProjectionMask` in `FileState::open` so only the vin/year columns are
+  decoded (autodetect sniffs one full-width batch, then re-reads projected).
+- **Coverage gate can miss within-function region swaps** — accurate and
+  already accepted: the count-keyed allowance design and its exact blind spot
+  are annotated in `scripts/coverage.py` (see the docstring there). Spans are
+  available in the coverage JSON; counts were chosen because line-keyed
+  allowances would need re-baselining on most decode-path edits, and blind
+  re-baselining launders regressions more easily than the count does.
+- **Thread-local `PyString` cache crosses subinterpreters** — half right. The
+  UB variant (per-interpreter GIL) is unreachable: the module does not declare
+  `Py_mod_multiple_interpreters`, so CPython refuses the import (verified by
+  execution). Legacy shared-GIL subinterpreters do import it and do share
+  cached strings — an isolation-contract violation accepted knowingly, since
+  the GIL serializes refcounting, the strings are immutable, and pyo3's own
+  `intern!` shares strings process-wide the same way. The `META_CACHE`
+  annotation in `crates/ultravin-py/src/lib.rs` records the full reasoning.

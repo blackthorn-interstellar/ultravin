@@ -37,15 +37,19 @@ thread_local! {
     /// the batch bottleneck; caching turns ~5×(elements) `PyString` allocations
     /// per VIN into one-time-per-element-id creation plus refcount bumps.
     ///
-    /// Subinterpreter safety (do not flag): the cached `Py<PyString>` are keyed
-    /// per-thread, not per-interpreter, which would be UB under CPython's
-    /// per-interpreter GIL. It is SAFE anyway because this is a plain abi3
-    /// `#[pymodule]` that does NOT declare `Py_mod_multiple_interpreters`, so CPython
-    /// REFUSES to import it under a per-interpreter GIL — the only mode where
-    /// cross-interpreter PyObject reuse could bite. `fork()` gets a fresh process +
-    /// thread-local, and the batch pool already re-keys on pid (see
-    /// `ultravin-core::lib`). If this module ever opts into multiple-interpreters,
-    /// this cache MUST be reworked to key by interpreter.
+    /// Subinterpreter safety: the cached `Py<PyString>` are keyed per-thread, not
+    /// per-interpreter. This module does NOT declare `Py_mod_multiple_interpreters`,
+    /// so CPython refuses to import it under a per-interpreter GIL — the mode where
+    /// unsynchronized cross-interpreter refcounting would be UB. Legacy shared-GIL
+    /// subinterpreters (`Py_NewInterpreter()`, mod_wsgi) DO import it, and there the
+    /// cache hands one interpreter's strings to another: an isolation-contract
+    /// violation, accepted knowingly — the GIL serializes the refcounting and the
+    /// strings are immutable, so it cannot corrupt memory, and pyo3's own `intern!`
+    /// (used throughout `elem_to_dict`) shares strings process-wide the same way,
+    /// so keying this cache by interpreter would not make the module clean.
+    /// `fork()` gets a fresh process + thread-local, and the batch pool already
+    /// re-keys on pid (see `ultravin-core::lib`). If this module ever opts into
+    /// multiple-interpreters, this cache MUST be reworked to key by interpreter.
     static META_CACHE: RefCell<Vec<Option<[Py<PyString>; 5]>>> = const { RefCell::new(Vec::new()) };
 }
 

@@ -6,7 +6,8 @@ reading its output alone — the contract is that row *i* of the output equals
 to the type its vPIC `data_type` declares and an empty value written as null.
 Assert that equivalence rather than the values, so the tests survive a vPIC data
 refresh. The other half of the contract is a cost, not a value: peak memory is
-O(`batch_size`), not O(rows), which the last test measures in a subprocess.
+O(`batch_size`), not O(rows) and not O(input columns), which the last two tests
+measure in a subprocess.
 
 pyarrow appears here only to write fixtures and read results back — ultravin
 itself carries no pyarrow dependency, and a test that used its writer to produce
@@ -442,6 +443,37 @@ def test_sharing_one_iterator_across_threads_does_not_deadlock(tmp_path: Path) -
     assert proc.stdout.strip() == str(rows)
 
 
+def decode_peak(src: Path, dst: Path, **kwargs: Any) -> tuple[int, int]:
+    """Decode `src` in a subprocess; return the rows written and its peak RSS.
+
+    A subprocess so the measurement is that decode's peak and not the suite's —
+    and on Linux `ru_maxrss` is not that measurement. `fork` hands the child
+    the parent's page tables, so its RSS starts at the parent's, and `execve`
+    folds that pre-exec high-water mark into the new process's `ru_maxrss`
+    (`setmax_mm_hiwater_rss` in `exec_mmap`). The child therefore reports
+    whatever pytest had peaked at across the whole session, which is how this
+    read 849-865MB on CI while the decode itself stayed near 150MB. `VmHWM` is
+    the post-exec mm's own mark and carries none of it. macOS spawns without
+    the inheritance, so `ru_maxrss` — already bytes there — is the child's
+    alone. Either way the child prints bytes.
+    """
+    peak_bytes = (
+        "resource.getrusage(resource.RUSAGE_SELF).ru_maxrss"
+        if sys.platform == "darwin"
+        else "1024 * int(re.search(r'VmHWM:\\s+(\\d+)', open('/proc/self/status').read()).group(1))"
+    )
+    opts = "".join(f", {name}={value!r}" for name, value in kwargs.items())
+    code = (
+        "import re, resource, ultravin\n"
+        f"rows = ultravin.decode_parquet({str(src)!r}, {str(dst)!r}{opts})\n"
+        f"print(rows, {peak_bytes})\n"
+    )
+    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
+    assert proc.returncode == 0, proc.stderr
+    written, measured = proc.stdout.split()
+    return int(written), int(measured)
+
+
 def test_peak_memory_is_bounded_by_the_batch_size(tmp_path: Path) -> None:
     """Decoding must never hold the source in memory.
 
@@ -461,30 +493,33 @@ def test_peak_memory_is_bounded_by_the_batch_size(tmp_path: Path) -> None:
     tiled = (VINS * (rows // len(VINS) + 1))[:rows]
     pq.write_table(pa.table({"vin": text(tiled)}), src, row_group_size=batch_size)
 
-    # A subprocess so the measurement is this decode's peak and not the suite's —
-    # and on Linux `ru_maxrss` is not that measurement. `fork` hands the child
-    # the parent's page tables, so its RSS starts at the parent's, and `execve`
-    # folds that pre-exec high-water mark into the new process's `ru_maxrss`
-    # (`setmax_mm_hiwater_rss` in `exec_mmap`). The child therefore reports
-    # whatever pytest had peaked at across the whole session, which is how this
-    # read 849-865MB on CI while the decode itself stayed near 150MB. `VmHWM` is
-    # the post-exec mm's own mark and carries none of it. macOS spawns without
-    # the inheritance, so `ru_maxrss` — already bytes there — is the child's
-    # alone. Either way the child prints bytes.
-    peak_bytes = (
-        "resource.getrusage(resource.RUSAGE_SELF).ru_maxrss"
-        if sys.platform == "darwin"
-        else "1024 * int(re.search(r'VmHWM:\\s+(\\d+)', open('/proc/self/status').read()).group(1))"
-    )
-    code = (
-        "import re, resource, ultravin\n"
-        f"rows = ultravin.decode_parquet({str(src)!r}, {str(tmp_path / 'out.parquet')!r}, batch_size={batch_size})\n"
-        f"print(rows, {peak_bytes})\n"
-    )
-    proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=False)
-    assert proc.returncode == 0, proc.stderr
-
-    written, measured = proc.stdout.split()
-    assert int(written) == rows
-    peak = int(measured)
+    written, peak = decode_peak(src, tmp_path / "out.parquet", batch_size=batch_size)
+    assert written == rows
     assert peak < cap, f"peak RSS {peak / 1e6:.0f}MB decoding {rows} rows"
+
+
+def test_peak_memory_is_bounded_by_the_columns_the_decode_reads(tmp_path: Path) -> None:
+    """A wide source costs what its VIN column costs, not what its width does.
+
+    Only the VIN (and any caller-year) column is ever read, so the reader is
+    projected down to it and the other 400 never get materialized. Measured on
+    this fixture: decoding every column peaks at ~470MB — each 8_192-row chunk
+    holds 400 x 8_192 strings — against ~80MB projected, which is what the same
+    16_384 rows cost as a two-column file. The cap sits between.
+    """
+    rows = 16_384
+    batch_size = 8_192
+    cap = 250 * 1024 * 1024
+
+    src = tmp_path / "wide.parquet"
+    tiled = (VINS * (rows // len(VINS) + 1))[:rows]
+    # One filler array referenced 400 times: pyarrow shares the buffers, so the
+    # width this measures costs nothing to build here.
+    filler = text(["x" * 96] * rows)
+    cols = {f"pad{i}": filler for i in range(400)}
+    cols["vin"] = text(tiled)
+    pq.write_table(pa.table(cols), src, row_group_size=batch_size)
+
+    written, peak = decode_peak(src, tmp_path / "out.parquet", ids=[MAKE], batch_size=batch_size)
+    assert written == rows
+    assert peak < cap, f"peak RSS {peak / 1e6:.0f}MB decoding {rows} rows of 401 columns"
