@@ -102,6 +102,8 @@ def gen_systematic(shard: int, shards: int, years: int) -> Iterator[dict[str, An
                 for kr in keyrows:
                     for y in yrs:
                         vin = generator.build_vin(w["wmi"], kr["keys"], y)
+                        if vin is None:  # the WMI or keys force an I/O/Q: not a VIN
+                            continue
                         yield {
                             "vin": vin,
                             "mode": "systematic",
@@ -183,7 +185,9 @@ def _seed_corpus(n_seeds: int) -> list[str]:
             if pr is None:
                 continue
             y = generator.choose_year(link["yearfrom"], link["yearto"], cur_year)
-            seeds.append(generator.build_vin(w["wmi"], pr["keys"], y))
+            vin = generator.build_vin(w["wmi"], pr["keys"], y)
+            if vin is not None:  # the WMI or keys force an I/O/Q: not a VIN
+                seeds.append(vin)
     return seeds
 
 

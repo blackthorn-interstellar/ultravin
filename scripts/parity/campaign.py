@@ -132,7 +132,10 @@ def systematic_producer(state: dict[str, Any], enum_conn: Any, deadline: float):
                 continue
             row = r[a["offset"]]
             a["offset"] += 1
-            yield {"vin": generator.build_vin(row["wmi"], row["keys"], a["year"]), "engine": "systematic"}
+            vin = generator.build_vin(row["wmi"], row["keys"], a["year"])
+            if vin is None:  # the WMI or keys force an I/O/Q: not a VIN
+                continue
+            yield {"vin": vin, "engine": "systematic"}
 
 
 # --------------------------------------------------------------------------- #

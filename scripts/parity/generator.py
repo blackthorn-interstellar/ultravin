@@ -18,15 +18,17 @@ from typing import Any
 
 from scripts.parity import oracle
 
-# Model-year char for years 2010..2039 (I/O/Q excluded; 30-year cycle).
+# Model-year char for years 2010..2039 (I/O/Q excluded; 30-year cycle). Doubles as
+# fVINCheckDigit2's `patternMY` class ([A-H,J-N,P,R-T,V-Y,1-9]) — the same set.
 _MY_CHARS = "ABCDEFGHJKLMNPRSTVWXY123456789"
+_DIGITS = "0123456789"
 # Default fill: VDS/plant get a benign letter; the serial gets digits so the
 # computed check digit lands on an otherwise valid VIN.
 _FILL_VDS = "A"
 _FILL_SERIAL = "1"
 
 # Check-digit transliteration (I/O/Q excluded) and position weights.
-_TRANSLIT = {c: (ord(c) - ord("0")) for c in "0123456789"}
+_TRANSLIT = {c: (ord(c) - ord("0")) for c in _DIGITS}
 for _grp, _val in [
     ("AJ", 1),
     ("BKS", 2),
@@ -41,6 +43,9 @@ for _grp, _val in [
     for _ch in _grp:
         _TRANSLIT[_ch] = _val
 _WEIGHTS = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2]
+# I, O and Q are not legal VIN characters and have no check-digit
+# transliteration; a VIN must never contain one.
+_IOQ = "IOQ"
 
 
 @dataclass
@@ -70,6 +75,41 @@ def choose_year(year_from: int, year_to: int | None, current_year: int) -> int:
     return year_from
 
 
+def _class_ranges(body: str) -> list[tuple[str, str]]:
+    """The inclusive (lo, hi) pairs of a bracket-class body (what sits between the
+    brackets): `a-b` is a range only when a body char follows the `-`, so a trailing
+    `-` is a literal; anything else is a singleton. A reversed range is returned
+    verbatim — it accepts nothing, and every caller drops it the same way."""
+    out: list[tuple[str, str]] = []
+    i = 0
+    while i < len(body):
+        if i + 2 < len(body) and body[i + 1] == "-":
+            out.append((body[i], body[i + 2]))
+            i += 3
+        else:
+            out.append((body[i], body[i]))
+            i += 1
+    return out
+
+
+def _first_class_member(body: str) -> str | None:
+    """The char a bracket class contributes: its lowest member that is legal in a
+    VIN (I/O/Q excluded). If every member is I/O/Q, returns that illegal member so
+    `build_vin` drops the candidate rather than silently mismatching the pattern;
+    None only when the class has no members at all (e.g. a reversed range), which
+    leaves the position at its fill."""
+    legal: str | None = None
+    lowest: str | None = None
+    for lo, hi in _class_ranges(body):
+        if lo > hi:
+            continue  # a reversed range contributes nothing
+        lowest = lo if lowest is None else min(lowest, lo)
+        c = next((chr(o) for o in range(ord(lo), ord(hi) + 1) if chr(o) not in _IOQ), None)
+        if c is not None:
+            legal = c if legal is None else min(legal, c)
+    return legal if legal is not None else lowest
+
+
 def _parse_keys(spec: str) -> list[str | None]:
     """A keys segment -> per-position concrete chars (None = wildcard/unconstrained)."""
     out: list[str | None] = []
@@ -79,11 +119,19 @@ def _parse_keys(spec: str) -> list[str | None]:
         if c in "*_":
             out.append(None)
             i += 1
+        elif c == "#":
+            # A Formula Pattern digit slot: any digit will do, and leaving it
+            # literal would emit a character that is not legal in a VIN.
+            out.append("1")
+            i += 1
         elif c == "[":
-            j = spec.index("]", i)
-            members = spec[i + 1 : j].replace("-", "")
-            out.append(members[0] if members else None)
-            i = j + 1
+            j = spec.find("]", i)
+            if j < 0:  # unterminated: the '[' is just a literal
+                out.append(c)
+                i += 1
+            else:
+                out.append(_first_class_member(spec[i + 1 : j]))
+                i = j + 1
         else:
             out.append(c)
             i += 1
@@ -91,8 +139,23 @@ def _parse_keys(spec: str) -> list[str | None]:
 
 
 def check_digit(vin: list[str]) -> str:
+    """The position-9 check digit per `fVINCheckDigit2` (canonical:
+    vpic/procs/fvincheckdigit2.sql), with is_car_mpv_lt false — the flag gates only
+    position 13, and the Rust `check_digit` wrapper this mirrors leaves it false.
+
+    A character invalid *at its position* makes the whole function return '?', which
+    is what the oracle returns and so what parity requires: position 10 takes the
+    model-year class, and the trailing serial positions are numeric only. The
+    remaining positions take the default class [A-H,J-N,P,R-Z,0-9], which is exactly
+    the set of keys in _TRANSLIT, so the lookup below is that check."""
+    pos3 = vin[2] if len(vin) > 2 else ""
     total = 0
     for idx, ch in enumerate(vin):
+        pos = idx + 1  # 1-based, matching the SQL
+        if pos == 10 and ch not in _MY_CHARS:
+            return "?"
+        if (pos >= 15 or (pos == 14 and pos3 != "9")) and ch not in _DIGITS:
+            return "?"
         v = _TRANSLIT.get(ch)
         if v is None:
             return "?"
@@ -101,8 +164,11 @@ def check_digit(vin: list[str]) -> str:
     return "X" if r == 10 else str(r)
 
 
-def build_vin(wmi: str, keys: str, year: int) -> str:
-    """Materialize a 17-char VIN satisfying `keys` for `wmi` at model year `year`."""
+def build_vin(wmi: str, keys: str, year: int) -> str | None:
+    """Materialize a 17-char VIN satisfying `keys` for `wmi` at model year `year`,
+    or None when the WMI or a key would force an I/O/Q character into it. Those are
+    illegal in a VIN and have no check-digit transliteration, so such a candidate is
+    skipped rather than emitted malformed."""
     vin = [_FILL_VDS] * 17
     for k in range(11, 17):  # serial positions 12-17 (0-based 11..16)
         vin[k] = _FILL_SERIAL
@@ -121,8 +187,17 @@ def build_vin(wmi: str, keys: str, year: int) -> str:
         for k, ch in enumerate(_parse_keys(parts[1])):  # positions 10-17
             if ch is not None and 9 + k < 17:
                 vin[9 + k] = ch
+    # I/O/Q reached here only from the WMI chars or a key literal/class; either way
+    # this is not a VIN we can emit, so skip the candidate.
+    if any(ch in _IOQ for ch in vin):
+        return None
     vin[8] = "0"  # placeholder; check digit computed next
-    vin[8] = check_digit(vin)
+    # A key can pin a character that is legal in a VIN but not *at its position* — a
+    # letter in the numeric-only serial, or a non-model-year char at position 10.
+    # fVINCheckDigit2 answers '?' for those, so there is no digit to stamp and the
+    # VIN keeps the placeholder. This is reached in practice, not a theoretical guard.
+    cd = check_digit(vin)
+    vin[8] = cd if cd != "?" else "0"
     return "".join(vin)
 
 
@@ -148,7 +223,7 @@ def _fetch_schema_patterns(conn: Any, shard: int, shards: int, sample: int) -> l
                 seen: set[str] = set()
                 for prow in cur.fetchall():
                     vin = build_vin(w["wmi"], prow["keys"], year)
-                    if vin in seen:
+                    if vin is None or vin in seen:
                         continue
                     seen.add(vin)
                     cases.append(
@@ -171,6 +246,10 @@ def error_cases(conn: Any) -> list[VinCase]:
         row = cur.fetchone()
     real = row["wmi"] if row else "1HG"
     base = build_vin(real, "*****", 2020)
+    if base is None:  # an I/O/Q-carrying WMI builds no VIN; any well-formed base will do
+        real = "1HG"
+        base = build_vin(real, "*****", 2020)
+        assert base is not None, "the fallback WMI must build a VIN"
     cases.append(VinCase(vin=base[:11], kind="error", note="short-vin"))
     cases.append(VinCase(vin=base[:8] + "I" + base[9:], kind="error", note="bad-char-I"))
     cases.append(VinCase(vin="ZZZ" + base[3:], kind="error", note="unknown-wmi"))
