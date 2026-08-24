@@ -40,7 +40,7 @@ Either supply the file yourself — the build script validates and embeds it and
 attempts no download:
 
 ```bash
-gh release download v1.2.0 --repo blackthorn-interstellar/ultravin --pattern vpic.rkyv
+gh release download v2.0.0 --repo blackthorn-interstellar/ultravin --pattern vpic.rkyv
 ULTRAVIN_DATA=/abs/path/to/vpic.rkyv cargo build --release
 ```
 
@@ -49,7 +49,7 @@ ULTRAVIN_DATA=/abs/path/to/vpic.rkyv cargo build --release
 download off and load the file at runtime instead:
 
 ```toml
-ultravin = { version = "1", default-features = false, features = ["external-data"] }
+ultravin = { version = "2", default-features = false, features = ["external-data"] }
 ```
 
 ```rust
@@ -85,7 +85,8 @@ when it contradicts the VIN.
 |---|---|---|
 | `download-data` | **on** | build.rs fetches, verifies and embeds this version's `vpic.rkyv` when none is supplied (pulls in `ureq` as a build dependency) |
 | `external-data` | off | `Db::open` (mmap an artifact at runtime; pulls in `memmap2`) |
-| `parquet` | off | `parquet_io`: decode a parquet dataset to parquet, streaming by row group (pulls in `arrow`/`parquet`) |
+| `arrow` | off | `arrow_io`: `RecordBatch` in, `RecordBatch` out, no file I/O — the door every Arrow source enters through (pulls in `arrow-array`/`arrow-cast`/`arrow-schema`) |
+| `parquet` | off | `parquet_io`: decode a parquet file or directory to parquet, streaming by row group (implies `arrow`; pulls in `parquet`) |
 
 ## License
 
