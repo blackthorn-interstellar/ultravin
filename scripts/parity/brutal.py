@@ -147,9 +147,9 @@ def ultravin_coverage(vin: str) -> set[tuple]:
     """Decode features a VIN exercises (ultravin only, ~200us): each
     (vin_schema, pattern) matched, each (element, normalized source) resolved, and
     the error-code combination. The union of these across VINs is 'coverage'."""
-    r: Any = ultravin.decode(vin)
+    r: Any = ultravin.decode(vin, full=True)
     edges: set[tuple] = set()
-    for e in r.get("elements", []):
+    for e in r["elements"]:
         pid = e.get("pattern_id")
         if pid:
             edges.add(("p", e.get("vin_schema_id"), pid))
@@ -249,7 +249,7 @@ def _check(case: dict[str, Any]) -> dict[str, Any] | None:
     vin = case["vin"]
     try:
         o_rows = [normalize.from_oracle(r) for r in oracle.decode(_conn, vin)]
-        mine = normalize.ultravin_rows(ultravin.decode(vin))
+        mine = normalize.ultravin_rows(ultravin.decode(vin, full=True))
         d = normalize.diff_rows(o_rows, mine)
     except Exception as e:  # noqa: BLE001 — a failing VIN must not kill the campaign
         return {"vin": vin, "mode": case["mode"], "note": case.get("note"), "error": repr(e)[:300]}
@@ -355,7 +355,7 @@ def cmd_check(args: argparse.Namespace) -> int:
         for vin in vins:
             try:
                 o = [normalize.from_oracle(r) for r in oracle.decode(conn, vin)]
-                m = normalize.ultravin_rows(ultravin.decode(vin))
+                m = normalize.ultravin_rows(ultravin.decode(vin, full=True))
                 d = normalize.diff_rows(o, m)
             except Exception as e:  # noqa: BLE001
                 fails.append((vin, f"error:{e!r}"[:90]))

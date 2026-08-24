@@ -45,7 +45,7 @@ def probe(conn: Any, vin: str) -> dict[str, Any]:
         # let an oracle outage silently re-certify every documented problem, so it
         # gets its own outcome and the gate treats it as unverifiable.
         return {"outcome": "infra-error" if campaign.is_infra_error(record) else "crash", **record}
-    d = normalize.diff_rows(oracle_rows, normalize.ultravin_rows(uv.decode(vin)))
+    d = normalize.diff_rows(oracle_rows, normalize.ultravin_rows(uv.decode(vin, full=True)))
     if d["ok"]:
         return {"outcome": "exact"}
     return {"outcome": "diverged", "fingerprint": normalize.fingerprint(d)}

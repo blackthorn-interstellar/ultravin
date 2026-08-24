@@ -34,7 +34,7 @@ def test_generated_vins_are_well_formed(seed: int) -> None:
 def test_generated_vins_decode_to_real_vehicles() -> None:
     # The point of generating from the data rather than at random: these decode
     # to attributes, not to "manufacturer not registered".
-    for result in ultravin.decode_batch(ultravin.generate(25, seed=2)):
+    for result in ultravin.decode_batch(ultravin.generate(25, seed=2), full=True):
         assert 7 not in result["error_codes"], result["vin"]
         assert result["elements"]
 
@@ -85,7 +85,7 @@ def test_generate_filters_by_make() -> None:
     assert vins
     makes = {
         e["value"].upper()
-        for r in ultravin.decode_batch(vins)
+        for r in ultravin.decode_batch(vins, full=True)
         for e in r["elements"]
         if e["element_id"] == 26 and e["value"]
     }
@@ -168,7 +168,11 @@ def test_cover_is_small_and_decodes() -> None:
 
 
 def test_cover_spans_every_source_rung() -> None:
-    sources = {e["source"].split(":")[0] for r in ultravin.decode_batch(ultravin.cover_vins()) for e in r["elements"]}
+    sources = {
+        e["source"].split(":")[0]
+        for r in ultravin.decode_batch(ultravin.cover_vins(), full=True)
+        for e in r["elements"]
+    }
     for rung in ("Pattern", "Default", "VehType", "ModelYear", "Vehicle Specs", "Manu. Name"):
         assert rung in sources, rung
 
@@ -184,7 +188,7 @@ def test_pairwise_vins_are_valid_and_match_patterns() -> None:
     # letters. That yields error 400 on nearly every VIN — a corpus of malformed
     # input dressed up as coverage, and it is invisible unless you look.
     sample = ultravin.pairwise(limit=5000)
-    results = ultravin.decode_batch(sample)
+    results = ultravin.decode_batch(sample, full=True)
     assert not [r for r in results if 400 in r["error_codes"]]
     matched = sum(1 for r in results if any(e.get("pattern_id") for e in r["elements"]))
     assert matched > len(sample) * 0.9, f"only {matched}/{len(sample)} matched a pattern"

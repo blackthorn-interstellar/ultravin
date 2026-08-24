@@ -46,7 +46,7 @@ def test_corpus_year_not_stale() -> None:
 )
 @pytest.mark.parametrize("entry", _ENTRIES, ids=[e["vin"] for e in _ENTRIES])
 def test_parity_unchanged(entry: dict) -> None:
-    mine = normalize.ultravin_rows(uv.decode(entry["vin"]))
+    mine = normalize.ultravin_rows(uv.decode(entry["vin"], full=True))
     diff = normalize.diff_rows(entry["oracle_rows"], mine)
     got = normalize.fingerprint(diff)
     assert got == entry["expected_diff"], (

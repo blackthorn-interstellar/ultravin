@@ -7,22 +7,22 @@ package only re-exports it. No logic here.
 from typing import Any
 
 from ultravin import _ultravin
-from ultravin._dataset import decode_parquet
 from ultravin._ultravin import (
-    ParquetBatchIter,
+    DecodeStream,
     __version__,
     cover_vins,
     decode,
     decode_batch,
     decode_batch_json,
     decode_json,
+    decode_stream,
     generate,
     pairwise,
     seeded,
     sweep,
 )
 
-#: Variable names whose `flat=True` value is always a list, even at length one —
+#: Variable names whose `attributes` value is always a list, even at length one —
 #: the vPIC elements allowed to repeat within one decode (free-text notes).
 MULTI_VALUED: frozenset[str]
 #: Static element metadata keyed by variable name: `element_id`, `group_name`,
@@ -33,14 +33,14 @@ ELEMENTS: dict[str, dict[str, Any]]
 __all__ = [
     "ELEMENTS",
     "MULTI_VALUED",
-    "ParquetBatchIter",
+    "DecodeStream",
     "__version__",
     "cover_vins",
     "decode",
     "decode_batch",
     "decode_batch_json",
     "decode_json",
-    "decode_parquet",
+    "decode_stream",
     "generate",
     "pairwise",
     "seeded",

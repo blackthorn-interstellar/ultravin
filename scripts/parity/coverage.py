@@ -61,7 +61,7 @@ def coverage_report(vins: list[str], conn: Any, batch: int = 20_000) -> dict[str
 
     seen: dict[str, set[Any]] = {k: set() for k in _TOTALS_SQL}
     for i in range(0, len(vins), batch):
-        results: Any = ultravin.decode_batch(vins[i : i + batch])
+        results: Any = ultravin.decode_batch(vins[i : i + batch], full=True)
         for r in results:
             if r["wmi"] in known_wmis:  # a made-up WMI is not coverage
                 seen["wmis"].add(r["wmi"])

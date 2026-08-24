@@ -1,23 +1,31 @@
 //! PyO3 bindings: exposes `ultravin._ultravin` with `decode`/`decode_batch`.
 //! All logic lives in `ultravin`; this layer only marshals to Python.
 
+use std::any::Any;
 use std::cell::RefCell;
+use std::ffi::CStr;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
-use arrow_array::cast::AsArray;
-use arrow_array::types::{Float64Type, Int32Type, Int64Type};
-use arrow_array::{Array, ArrayRef, RecordBatch};
-use arrow_schema::{DataType, SchemaRef};
-use pyo3::exceptions::{PyOSError, PyValueError};
+use arrow_array::array::make_array;
+use arrow_array::ffi::{from_ffi, FFI_ArrowArray};
+use arrow_array::ffi_stream::{ArrowArrayStreamReader, FFI_ArrowArrayStream};
+use arrow_array::{Array, RecordBatch, RecordBatchIterator, RecordBatchReader, StructArray};
+use arrow_schema::ffi::FFI_ArrowSchema;
+use arrow_schema::{ArrowError as ArrowRsError, Field, Schema, SchemaRef};
+use pyo3::exceptions::{PyImportError, PyOSError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
-use pyo3::types::{PyDateTime, PyDict, PyList, PyString};
-use pyo3::IntoPyObjectExt;
+use pyo3::types::{PyBool, PyCapsule, PyDateTime, PyDict, PyList, PyString};
 
 use ultravin::parquet_io::{
-    decode_parquet_to_file, open_chunks, ParquetChunkIter, ParquetError, ParquetOpts,
+    check_dst_outside_src, open_chunks, write_parquet, ParquetChunkIter, ParquetOpts,
 };
-use ultravin::{DecodeResult, DecodedElement, FlatResult, FlatValue};
+use ultravin::{
+    ArrowDecoder, ArrowError, ArrowOpts, ColumnNames, ColumnSpec, DecodeResult, DecodedElement,
+    FlatResult, FlatValue,
+};
 
 // The decode engine is allocation-bound; a sharded allocator both speeds the
 // single-stream malloc path and removes the global-heap-lock contention that was
@@ -134,7 +142,7 @@ fn result_to_dict<'py>(py: Python<'py>, r: &DecodeResult<'_>) -> PyResult<Bound<
     Ok(d)
 }
 
-/// The `flat=True` shape: header fields, then one `attributes` dict of
+/// The default shape: header fields, then one `attributes` dict of
 /// `variable -> value`. That is ~41 dict stores per VIN instead of the ~615 the
 /// `elements` list costs (one 15-key dict per element), which is the bulk of the
 /// GIL-serial marshalling — see `docs/BENCHMARKS.md`.
@@ -176,19 +184,22 @@ fn check_years(vins: &[String], years: &Option<Vec<Option<i32>>>) -> PyResult<()
 }
 
 /// Decode a single VIN to a dict.
+///
+/// The default is the attributes shape; `full=True` swaps in the per-element
+/// provenance list, which costs ~615 dict stores per VIN instead of ~41.
 #[pyfunction]
-#[pyo3(signature = (vin, *, year = None, flat = false))]
+#[pyo3(signature = (vin, *, year = None, full = false))]
 fn decode<'py>(
     py: Python<'py>,
     vin: &str,
     year: Option<i32>,
-    flat: bool,
+    full: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
     let r = ultravin::decode(vin, year);
-    if flat {
-        flat_to_dict(py, &r.into())
-    } else {
+    if full {
         result_to_dict(py, &r)
+    } else {
+        flat_to_dict(py, &r.into())
     }
 }
 
@@ -197,37 +208,37 @@ fn decode<'py>(
 /// The decode work runs in parallel with the GIL released; only the final
 /// marshalling of results into Python dicts holds the GIL.
 #[pyfunction]
-#[pyo3(signature = (vins, *, years = None, flat = false))]
+#[pyo3(signature = (vins, *, years = None, full = false))]
 fn decode_batch<'py>(
     py: Python<'py>,
     vins: Vec<String>,
     years: Option<Vec<Option<i32>>>,
-    flat: bool,
+    full: bool,
 ) -> PyResult<Vec<Bound<'py, PyDict>>> {
     check_years(&vins, &years)?;
     let years = years.as_deref();
-    if flat {
-        // Flattening happens inside the parallel region, so the GIL-held part is
-        // only the (much smaller) dict build.
-        let results = py.detach(|| ultravin::decode_batch_flat(&vins, years));
-        return results.iter().map(|r| flat_to_dict(py, r)).collect();
+    if full {
+        let results = py.detach(|| ultravin::decode_batch(&vins, years));
+        return results.iter().map(|r| result_to_dict(py, r)).collect();
     }
-    let results = py.detach(|| ultravin::decode_batch(&vins, years));
-    results.iter().map(|r| result_to_dict(py, r)).collect()
+    // Flattening happens inside the parallel region, so the GIL-held part is only
+    // the (much smaller) dict build.
+    let results = py.detach(|| ultravin::decode_batch_flat(&vins, years));
+    results.iter().map(|r| flat_to_dict(py, r)).collect()
 }
 
 /// Decode a single VIN to a JSON object string (same shape as `decode`).
 #[pyfunction]
-#[pyo3(signature = (vin, *, year = None, flat = false))]
-fn decode_json(vin: &str, year: Option<i32>, flat: bool) -> String {
-    if flat {
-        ultravin::decode_json_flat(vin, year)
-    } else {
+#[pyo3(signature = (vin, *, year = None, full = false))]
+fn decode_json(vin: &str, year: Option<i32>, full: bool) -> String {
+    if full {
         ultravin::decode_json(vin, year)
+    } else {
+        ultravin::decode_json_flat(vin, year)
     }
 }
 
-/// The variable names whose `flat=True` value is always a list.
+/// The variable names whose `attributes` value is always a list.
 #[pyfunction]
 fn multi_valued() -> Vec<&'static str> {
     ultravin::multi_valued_variables(ultravin::Db::embedded())
@@ -264,20 +275,20 @@ fn elements(py: Python<'_>) -> PyResult<Vec<Bound<'_, PyDict>>> {
 /// `decode_batch`). For large batches this is several times faster than
 /// `decode_batch`, which must build a ~15-key dict per element under the GIL.
 #[pyfunction]
-#[pyo3(signature = (vins, *, years = None, flat = false))]
+#[pyo3(signature = (vins, *, years = None, full = false))]
 fn decode_batch_json(
     py: Python<'_>,
     vins: Vec<String>,
     years: Option<Vec<Option<i32>>>,
-    flat: bool,
+    full: bool,
 ) -> PyResult<String> {
     check_years(&vins, &years)?;
     Ok(py.detach(|| {
         let years = years.as_deref();
-        if flat {
-            ultravin::decode_batch_json_flat(&vins, years)
-        } else {
+        if full {
             ultravin::decode_batch_json(&vins, years)
+        } else {
+            ultravin::decode_batch_json_flat(&vins, years)
         }
     }))
 }
@@ -450,187 +461,410 @@ fn seeded(py: Python<'_>, limit: usize) -> Vec<String> {
 /// `Config` is a caller mistake (unknown column, bad element id) and `Io` is the
 /// filesystem talking, so they get the two exceptions Python callers already
 /// catch for those things.
-fn parquet_err(e: ParquetError) -> PyErr {
+fn arrow_err(e: ArrowError) -> PyErr {
     match e {
-        ParquetError::Io(m) => PyOSError::new_err(m),
-        ParquetError::Config(m) => PyValueError::new_err(m),
+        ArrowError::Io(m) => PyOSError::new_err(m),
+        ArrowError::Config(m) => PyValueError::new_err(m),
     }
 }
 
-/// `ids = None` means the wide default: every publicly decodable element.
-fn parquet_opts(
-    vin: Option<String>,
-    year: Option<String>,
-    ids: Option<Vec<i32>>,
-    batch_size: usize,
-    sample_rows: usize,
-) -> ParquetOpts {
-    ParquetOpts {
-        vin,
-        year,
-        ids: ids.unwrap_or_else(|| ultravin::all_public_ids(ultravin::Db::embedded())),
-        batch_size,
-        sample_rows,
-    }
-}
+/// The two Arrow C data interface capsule names, spelled as the protocol does.
+const STREAM_CAPSULE: &CStr = c"arrow_array_stream";
+const SCHEMA_CAPSULE: &CStr = c"arrow_schema";
+const ARRAY_CAPSULE: &CStr = c"arrow_array";
 
-/// Append one arrow column to `list`, nulls as `None`. The dataset output schema
-/// only ever holds these four types (see `parquet_io::build_out_schema`).
-fn append_column(list: &Bound<'_, PyList>, arr: &ArrayRef) -> PyResult<()> {
-    macro_rules! append_all {
-        ($a:expr) => {{
-            let a = $a;
-            for i in 0..a.len() {
-                list.append((!a.is_null(i)).then(|| a.value(i)))?;
-            }
-        }};
-    }
-    match arr.data_type() {
-        DataType::Utf8 => append_all!(arr.as_string::<i32>()),
-        DataType::Int32 => append_all!(arr.as_primitive::<Int32Type>()),
-        DataType::Int64 => append_all!(arr.as_primitive::<Int64Type>()),
-        DataType::Float64 => append_all!(arr.as_primitive::<Float64Type>()),
-        other => {
-            return Err(PyValueError::new_err(format!(
-                "unsupported output column type {other}"
-            )))
-        }
-    }
-    Ok(())
-}
+/// The column an unnamed one-array Arrow source is understood as. A bare string
+/// array carries no field name, and a VIN column is the only thing this decoder
+/// could be being handed.
+const BARE_ARRAY_COLUMN: &str = "vin";
 
-/// One chunk as `{column_name: [values]}`.
-fn batch_to_dict<'py>(py: Python<'py>, batch: &RecordBatch) -> PyResult<Bound<'py, PyDict>> {
-    let d = PyDict::new(py);
-    for (i, field) in batch.schema().fields().iter().enumerate() {
-        let list = PyList::empty(py);
-        append_column(&list, batch.column(i))?;
-        d.set_item(field.name(), list)?;
-    }
-    Ok(d)
-}
-
-/// Every chunk concatenated into one `{column_name: [values]}`. Every chunk of a
-/// source shares one schema — `open_chunks` refuses a directory whose files
-/// disagree — so appending by position is safe.
-fn batches_to_dict<'py>(
-    py: Python<'py>,
-    schema: &SchemaRef,
-    batches: &[RecordBatch],
-) -> PyResult<Bound<'py, PyDict>> {
-    let lists: Vec<Bound<'py, PyList>> =
-        schema.fields().iter().map(|_| PyList::empty(py)).collect();
-    for b in batches {
-        for (i, list) in lists.iter().enumerate() {
-            append_column(list, b.column(i))?;
-        }
-    }
-    let d = PyDict::new(py);
-    for (field, list) in schema.fields().iter().zip(lists) {
-        d.set_item(field.name(), list)?;
-    }
-    Ok(d)
-}
-
-/// Decode a parquet file (or directory of them), projecting each row to the
-/// requested vPIC element ids.
+/// `columns = None` means the wide default: every publicly decodable element.
 ///
-/// With `dst`, the whole job stays in Rust — rows are never Python objects — and
-/// the row count comes back. Without it, the decoded columns are collected into
-/// a dict, which is O(source) memory and so is for small inputs only.
-#[pyfunction]
-#[pyo3(signature = (src, dst = None, *, vin = None, year = None, ids = None, batch_size = 65_536, sample_rows = 100))]
-// One parameter per documented keyword; collapsing them into a struct would only
-// move the argument list into Python.
-#[allow(clippy::too_many_arguments)]
-fn decode_parquet(
-    py: Python<'_>,
-    src: PathBuf,
-    dst: Option<PathBuf>,
-    vin: Option<String>,
-    year: Option<String>,
-    ids: Option<Vec<i32>>,
-    batch_size: usize,
-    sample_rows: usize,
-) -> PyResult<Py<PyAny>> {
-    let opts = parquet_opts(vin, year, ids, batch_size, sample_rows);
-    if let Some(dst) = dst {
-        let rows = py
-            .detach(|| decode_parquet_to_file(&src, &dst, opts))
-            .map_err(parquet_err)?;
-        return rows.into_py_any(py);
-    }
-    let (schema, batches) = py
-        .detach(|| -> Result<_, ParquetError> {
-            let mut iter = open_chunks(&src, opts)?;
-            let schema = iter.out_schema.clone();
-            let mut batches = Vec::new();
-            while let Some(b) = iter.next_chunk()? {
-                batches.push(b);
+/// An entry is an `element_id` (`int`) or a variable name (`str`). Ids are the
+/// key NHTSA does not rename between data releases; names are the convenience.
+fn column_specs(columns: Option<Vec<Bound<'_, PyAny>>>) -> PyResult<Vec<ColumnSpec>> {
+    let Some(items) = columns else {
+        return Ok(ultravin::all_public_ids(ultravin::Db::embedded())
+            .into_iter()
+            .map(ColumnSpec::Id)
+            .collect());
+    };
+    let mut specs = Vec::with_capacity(items.len());
+    for item in items {
+        if let Ok(name) = item.cast::<PyString>() {
+            specs.push(ColumnSpec::Name(name.to_cow()?.into_owned()));
+            continue;
+        }
+        // `bool` is an `int` subclass in Python, so `True` would extract as
+        // element id 1 — a real element, silently projected.
+        match item.extract::<i32>() {
+            Ok(id) if !item.is_instance_of::<PyBool>() => specs.push(ColumnSpec::Id(id)),
+            _ => {
+                return Err(PyTypeError::new_err(format!(
+                    "columns entries are element ids (int) or variable names (str); got {}",
+                    type_name(&item)
+                )))
             }
-            Ok((schema, batches))
-        })
-        .map_err(parquet_err)?;
-    let schema =
-        schema.ok_or_else(|| PyValueError::new_err("source expanded to no parquet files"))?;
-    Ok(batches_to_dict(py, &schema, &batches)?.into_any().unbind())
+        }
+    }
+    Ok(specs)
 }
 
-/// Streaming form of [`decode_parquet`]: one `{column: [values]}` dict per chunk,
-/// so a source larger than memory can be consumed a chunk at a time.
+/// How to label the projected columns.
+///
+/// A schema-drift decision: `"variable"` reads better, `"id"` (`attr_<id>`)
+/// survives NHTSA renaming a variable between monthly data releases.
+fn column_names_from(mode: &str) -> PyResult<ColumnNames> {
+    match mode {
+        "variable" => Ok(ColumnNames::Variable),
+        "id" => Ok(ColumnNames::Id),
+        other => Err(PyValueError::new_err(format!(
+            "column_names must be \"variable\" or \"id\"; got {other:?}"
+        ))),
+    }
+}
+
+/// A Python object's type name, for an error message. Falls back rather than
+/// failing: a broken `__name__` must not replace the real complaint.
+fn type_name(obj: &Bound<'_, PyAny>) -> String {
+    obj.get_type()
+        .name()
+        .map(|n| n.to_string())
+        .unwrap_or_else(|_| "an unknown type".to_string())
+}
+
+/// Move the `FFI_ArrowArrayStream` out of a producer's capsule.
+///
+/// The C data interface transfers ownership on export, so the struct is moved
+/// out and an empty one left in its place — the capsule's own destructor then
+/// finds nothing to release and cannot double-free the stream we now own.
+fn stream_from_capsule(capsule: &Bound<'_, PyCapsule>) -> PyResult<FFI_ArrowArrayStream> {
+    let ptr = capsule.pointer_checked(Some(STREAM_CAPSULE))?.as_ptr() as *mut FFI_ArrowArrayStream;
+    // SAFETY: the capsule is named `arrow_array_stream`, which by protocol means
+    // it holds exactly one initialized `FFI_ArrowArrayStream` for us to take.
+    Ok(unsafe { std::ptr::replace(ptr, FFI_ArrowArrayStream::empty()) })
+}
+
+/// One `RecordBatch` imported from an `__arrow_c_array__` pair of capsules.
+///
+/// A struct array is already a batch of named columns. Anything else is a single
+/// unnamed column, which can only be the VINs — give it the name the decoder
+/// autodetects and pass it through.
+fn batch_from_capsules(
+    schema_cap: &Bound<'_, PyCapsule>,
+    array_cap: &Bound<'_, PyCapsule>,
+) -> PyResult<RecordBatch> {
+    let schema_ptr =
+        schema_cap.pointer_checked(Some(SCHEMA_CAPSULE))?.as_ptr() as *mut FFI_ArrowSchema;
+    let array_ptr = array_cap.pointer_checked(Some(ARRAY_CAPSULE))?.as_ptr() as *mut FFI_ArrowArray;
+    // SAFETY: both capsules are protocol-named, so each holds one initialized
+    // struct; both are moved out so the capsules' destructors release nothing.
+    let (schema, array) = unsafe {
+        (
+            std::ptr::replace(schema_ptr, FFI_ArrowSchema::empty()),
+            std::ptr::replace(array_ptr, FFI_ArrowArray::empty()),
+        )
+    };
+    // SAFETY: `array` and `schema` were produced together by one exporter, which
+    // is exactly the pairing `from_ffi` requires.
+    let data = unsafe { from_ffi(array, &schema) }
+        .map_err(|e| PyValueError::new_err(format!("importing an Arrow array: {e}")))?;
+    let array = make_array(data);
+    if let Some(st) = array.as_any().downcast_ref::<StructArray>() {
+        return Ok(RecordBatch::from(st));
+    }
+    let field = Field::new(BARE_ARRAY_COLUMN, array.data_type().clone(), true);
+    RecordBatch::try_new(Arc::new(Schema::new(vec![field])), vec![array])
+        .map_err(|e| PyValueError::new_err(format!("importing an Arrow array: {e}")))
+}
+
+/// The Arrow input a source exposes, as a reader the decoder can pull from.
+/// A stream is taken as-is; a single array becomes a one-batch stream.
+fn arrow_input(source: &Bound<'_, PyAny>) -> PyResult<Box<dyn RecordBatchReader + Send>> {
+    if source.hasattr(intern!(source.py(), "__arrow_c_stream__"))? {
+        let capsule = source.call_method0(intern!(source.py(), "__arrow_c_stream__"))?;
+        let stream = stream_from_capsule(capsule.cast::<PyCapsule>()?)?;
+        let reader = ArrowArrayStreamReader::try_new(stream)
+            .map_err(|e| PyValueError::new_err(format!("importing an Arrow stream: {e}")))?;
+        return Ok(Box::new(reader));
+    }
+    let capsules = source.call_method0(intern!(source.py(), "__arrow_c_array__"))?;
+    let (schema_cap, array_cap): (Bound<'_, PyAny>, Bound<'_, PyAny>) = capsules.extract()?;
+    let batch = batch_from_capsules(
+        schema_cap.cast::<PyCapsule>()?,
+        array_cap.cast::<PyCapsule>()?,
+    )?;
+    let schema = batch.schema();
+    Ok(Box::new(RecordBatchIterator::new(vec![Ok(batch)], schema)))
+}
+
+/// Run one reader step, turning a panic into a stream error.
+///
+/// The exported stream's `get_next` is an `extern "C"` function that arrow-rs
+/// does not wrap in `catch_unwind`, so a panic anywhere under it — a rayon pool
+/// the process cannot grow under a pids limit, an i32 offset overflow assembling
+/// an oversized string column — would unwind across the C boundary and abort the
+/// interpreter instead of raising. Every batch on the capsule path passes
+/// through here, so the worst case is a failed stream rather than a dead process.
+///
+/// `AssertUnwindSafe` is the honest label: a panic can leave the reader
+/// half-advanced, which is why this reports an error rather than resuming.
+fn caught<F>(step: F) -> Option<Result<RecordBatch, ArrowRsError>>
+where
+    F: FnOnce() -> Option<Result<RecordBatch, ArrowRsError>>,
+{
+    match catch_unwind(AssertUnwindSafe(step)) {
+        Ok(item) => item,
+        Err(payload) => Some(Err(ArrowRsError::ComputeError(format!(
+            "panic while decoding: {}",
+            panic_message(payload.as_ref())
+        )))),
+    }
+}
+
+/// The message out of a panic payload, which is a `&str` or a `String` for every
+/// panic the standard macros raise.
+fn panic_message(payload: &(dyn Any + Send)) -> String {
+    if let Some(s) = payload.downcast_ref::<&str>() {
+        (*s).to_string()
+    } else if let Some(s) = payload.downcast_ref::<String>() {
+        s.clone()
+    } else {
+        "no message".to_string()
+    }
+}
+
+/// A dataset source as a `RecordBatchReader`.
+///
+/// [`ParquetChunkIter`] already yields decoded batches; this only restates its
+/// schema and its errors in the shapes the Arrow C data interface takes, so a
+/// parquet source and an Arrow source reach the same exit.
+struct ParquetReader {
+    inner: ParquetChunkIter,
+    schema: SchemaRef,
+}
+
+impl Iterator for ParquetReader {
+    type Item = Result<RecordBatch, ArrowRsError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let inner = &mut self.inner;
+        caught(move || inner.next().map(|r| r.map_err(Into::into)))
+    }
+}
+
+impl RecordBatchReader for ParquetReader {
+    fn schema(&self) -> SchemaRef {
+        self.schema.clone()
+    }
+}
+
+/// Decode every batch an input reader yields, in the projected output shape.
+///
+/// This is what an exported decode stream runs: no Python object is touched in
+/// `next`, so once it is inside an `FFI_ArrowArrayStream` the consumer drives the
+/// whole decode from C.
+struct DecodingReader {
+    input: Box<dyn RecordBatchReader + Send>,
+    decoder: ArrowDecoder,
+}
+
+impl Iterator for DecodingReader {
+    type Item = Result<RecordBatch, ArrowRsError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let DecodingReader { input, decoder } = self;
+        caught(move || match input.next()? {
+            Ok(batch) => Some(decoder.decode_batch(&batch).map_err(Into::into)),
+            Err(e) => Some(Err(e)),
+        })
+    }
+}
+
+impl RecordBatchReader for DecodingReader {
+    fn schema(&self) -> SchemaRef {
+        self.decoder.out_schema().clone()
+    }
+}
+
+/// A one-shot stream of decoded Arrow batches.
+///
+/// Both output doors — the C stream capsule and `to_parquet` — consume the
+/// source, so the reader is taken out on first use and a second attempt raises
+/// rather than handing back a silently truncated result.
 #[pyclass(module = "ultravin._ultravin")]
-struct ParquetBatchIter {
-    /// A `#[pyclass]` must be `Sync`, and the parquet row-group reader inside is
-    /// `Send` but not — the lock is what makes handing the iterator to another
-    /// thread legal. Uncontended, and taken once per chunk of `batch_size` rows.
-    inner: std::sync::Mutex<ParquetChunkIter>,
+struct DecodeStream {
+    /// `None` once consumed. A `#[pyclass]` must be `Sync` and a reader is only
+    /// `Send`, so the lock is also what makes sharing one across threads legal.
+    reader: Mutex<Option<Box<dyn RecordBatchReader + Send>>>,
+    schema: SchemaRef,
+    /// The parquet source, when there was one — `to_parquet` must not write over
+    /// the file it is still reading.
+    src: Option<PathBuf>,
+    row_group: usize,
+}
+
+impl DecodeStream {
+    /// Take the reader, or say why there isn't one.
+    fn take(&self) -> PyResult<Box<dyn RecordBatchReader + Send>> {
+        self.reader
+            .lock()
+            .map_err(|_| {
+                PyRuntimeError::new_err("this stream was left unusable by an earlier panic")
+            })?
+            .take()
+            .ok_or_else(|| {
+                PyRuntimeError::new_err(
+                    "this DecodeStream has already been consumed; call decode_stream() again \
+                     to re-read the source",
+                )
+            })
+    }
 }
 
 #[pymethods]
-impl ParquetBatchIter {
-    #[new]
-    #[pyo3(signature = (src, *, vin = None, year = None, ids = None, batch_size = 65_536, sample_rows = 100))]
-    fn new(
-        py: Python<'_>,
-        src: PathBuf,
-        vin: Option<String>,
-        year: Option<String>,
-        ids: Option<Vec<i32>>,
-        batch_size: usize,
-        sample_rows: usize,
-    ) -> PyResult<Self> {
-        let opts = parquet_opts(vin, year, ids, batch_size, sample_rows);
-        let inner = py.detach(|| open_chunks(&src, opts)).map_err(parquet_err)?;
-        Ok(ParquetBatchIter {
-            inner: std::sync::Mutex::new(inner),
-        })
+impl DecodeStream {
+    /// The Arrow C stream export: hand the decode to pyarrow, polars, duckdb, …
+    ///
+    /// `requested_schema` is accepted and ignored, which the protocol allows —
+    /// the output schema is fixed by the projection and cannot be renegotiated.
+    #[pyo3(signature = (requested_schema = None))]
+    fn __arrow_c_stream__<'py>(
+        &self,
+        py: Python<'py>,
+        requested_schema: Option<Bound<'py, PyAny>>,
+    ) -> PyResult<Bound<'py, PyCapsule>> {
+        let _ = requested_schema;
+        PyCapsule::new_with_value(py, FFI_ArrowArrayStream::new(self.take()?), STREAM_CAPSULE)
     }
 
-    fn __iter__(slf: PyRef<'_, Self>) -> PyRef<'_, Self> {
-        slf
+    /// The output schema, known before a single row is decoded.
+    fn __arrow_c_schema__<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyCapsule>> {
+        let schema = FFI_ArrowSchema::try_from(self.schema.as_ref())
+            .map_err(|e| PyValueError::new_err(format!("exporting the output schema: {e}")))?;
+        PyCapsule::new_with_value(py, schema, SCHEMA_CAPSULE)
     }
 
-    fn __next__(&self, py: Python<'_>) -> PyResult<Option<Py<PyDict>>> {
-        // The lock is taken *inside* `detach`. Taking it first would let a second
-        // thread sharing this iterator block on it while holding the GIL, which
-        // the holder needs back to return — deadlocking the interpreter.
-        let batch = py
-            .detach(|| {
-                self.inner
-                    .lock()
-                    .map_err(|_| {
-                        ParquetError::Io(
-                            "this iterator was left unusable by an earlier panic".to_string(),
-                        )
-                    })
-                    .and_then(|mut it| it.next_chunk())
-            })
-            .map_err(parquet_err)?;
-        match batch {
-            Some(b) => Ok(Some(batch_to_dict(py, &b)?.unbind())),
-            None => Ok(None),
+    /// Decode straight to a parquet file, returning the rows written.
+    ///
+    /// The whole job stays in Rust with the GIL released — no row is ever a
+    /// Python object — and peak memory is one chunk.
+    fn to_parquet(&self, py: Python<'_>, dst: PathBuf) -> PyResult<usize> {
+        // Refused before the reader is taken, so a rejected destination leaves
+        // the stream usable — and, more to the point, leaves the source intact.
+        if let Some(src) = &self.src {
+            check_dst_outside_src(src, &dst).map_err(arrow_err)?;
         }
+        let reader = self.take()?;
+        let schema = self.schema.clone();
+        py.detach(|| {
+            let batches = reader.map(|r| r.map_err(ArrowError::from));
+            write_parquet(batches, schema, &dst, self.row_group)
+        })
+        .map_err(arrow_err)
     }
+
+    /// The decode as a pandas `DataFrame`, via pyarrow.
+    ///
+    /// pyarrow is imported lazily and is not an ultravin dependency: everything
+    /// else here reads and writes Arrow without it.
+    fn to_pandas<'py>(slf: Bound<'py, Self>, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        let pa = py.import(intern!(py, "pyarrow")).map_err(|e| {
+            if e.is_instance_of::<PyImportError>(py) {
+                PyImportError::new_err("to_pandas() requires pyarrow: pip install pyarrow")
+            } else {
+                e
+            }
+        })?;
+        pa.call_method1(intern!(py, "table"), (slf,))?
+            .call_method0(intern!(py, "to_pandas"))
+    }
+}
+
+/// Decode a dataset into a stream of Arrow batches.
+///
+/// `source` is a parquet file, a directory of them, or any object exposing the
+/// Arrow C data interface (`__arrow_c_stream__` or `__arrow_c_array__`) — a
+/// pyarrow `Table`/`RecordBatchReader`, a polars `DataFrame`, a duckdb result.
+///
+/// `column_names` labels the projection: `"variable"` (the default) uses the vPIC
+/// variable name, `"id"` uses `attr_<element_id>`, which does not move when NHTSA
+/// renames a variable. Either way both keys ride along as field metadata.
+#[pyfunction]
+#[pyo3(signature = (source, *, vin_column = None, year_column = None, columns = None, column_names = "variable", batch_size = 65_536, sample_rows = 100))]
+// One parameter per documented keyword; collapsing them into a struct would only
+// move the argument list into Python.
+#[allow(clippy::too_many_arguments)]
+fn decode_stream(
+    py: Python<'_>,
+    source: &Bound<'_, PyAny>,
+    vin_column: Option<String>,
+    year_column: Option<String>,
+    columns: Option<Vec<Bound<'_, PyAny>>>,
+    column_names: &str,
+    batch_size: usize,
+    sample_rows: usize,
+) -> PyResult<DecodeStream> {
+    // A list of VINs is the one wrong argument worth naming outright: it is what
+    // a reader of `decode_batch` would try first, and it is not a dataset. It is
+    // checked before the projection is validated, so passing a list *and* a bad
+    // column says which one to fix first.
+    if source.is_instance_of::<PyList>() {
+        return Err(PyTypeError::new_err(
+            "decode_stream() takes a dataset, not a list of VINs — use decode_batch(vins) for that",
+        ));
+    }
+    let specs = column_specs(columns)?;
+    let names = column_names_from(column_names)?;
+    if source.hasattr(intern!(py, "__arrow_c_stream__"))?
+        || source.hasattr(intern!(py, "__arrow_c_array__"))?
+    {
+        let input = arrow_input(source)?;
+        let opts = ArrowOpts {
+            vin: vin_column,
+            year: year_column,
+            columns: specs,
+            names,
+        };
+        let decoder = ArrowDecoder::new(&input.schema(), &opts).map_err(arrow_err)?;
+        let schema = decoder.out_schema().clone();
+        return Ok(DecodeStream {
+            reader: Mutex::new(Some(Box::new(DecodingReader { input, decoder }))),
+            schema,
+            src: None,
+            row_group: batch_size,
+        });
+    }
+    let src: PathBuf = source.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "decode_stream() takes a parquet file or directory path (str | os.PathLike), \
+             or an object implementing the Arrow C data interface \
+             (__arrow_c_stream__ / __arrow_c_array__); got {}",
+            type_name(source)
+        ))
+    })?;
+    let opts = ParquetOpts {
+        vin: vin_column,
+        year: year_column,
+        columns: specs,
+        names,
+        batch_size,
+        sample_rows,
+    };
+    let iter = py.detach(|| open_chunks(&src, opts)).map_err(arrow_err)?;
+    let schema = iter
+        .out_schema
+        .clone()
+        .ok_or_else(|| PyValueError::new_err("source expanded to no parquet files"))?;
+    Ok(DecodeStream {
+        reader: Mutex::new(Some(Box::new(ParquetReader {
+            inner: iter,
+            schema: schema.clone(),
+        }))),
+        schema,
+        src: Some(src),
+        row_group: batch_size,
+    })
 }
 
 #[pymodule]
@@ -646,8 +880,8 @@ fn _ultravin(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(cover_vins, m)?)?;
     m.add_function(wrap_pyfunction!(pairwise, m)?)?;
     m.add_function(wrap_pyfunction!(seeded, m)?)?;
-    m.add_function(wrap_pyfunction!(decode_parquet, m)?)?;
-    m.add_class::<ParquetBatchIter>()?;
+    m.add_function(wrap_pyfunction!(decode_stream, m)?)?;
+    m.add_class::<DecodeStream>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }

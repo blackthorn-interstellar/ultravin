@@ -118,8 +118,16 @@ def from_ultravin(elem: dict[str, Any]) -> dict[str, Any]:
 
 
 def ultravin_rows(result: dict[str, Any]) -> list[dict[str, Any]]:
-    """All canonical rows from an ultravin decode result, in emission order."""
-    return [from_ultravin(e) for e in result.get("elements", [])]
+    """All canonical rows from an ultravin decode result, in emission order.
+
+    Takes a `full=True` decode: the default shape carries `attributes` instead,
+    and defaulting to an empty row list there would make every parity check pass
+    against nothing at all.
+    """
+    if "elements" not in result:
+        msg = "parity needs the provenance rows — decode(vin, full=True)"
+        raise KeyError(msg)
+    return [from_ultravin(e) for e in result["elements"]]
 
 
 # spvindecode's final ORDER BY is *only* this GroupName CASE (no secondary key),

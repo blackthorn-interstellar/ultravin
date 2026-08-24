@@ -50,7 +50,7 @@ def _recover(conn: Any) -> None:
 
 def _entry(conn: Any, vin: str, kind: str, note: str | None) -> dict[str, Any]:
     oracle_rows = [normalize.from_oracle(r) for r in oracle.decode(conn, vin)]
-    mine = normalize.ultravin_rows(uv.decode(vin))
+    mine = normalize.ultravin_rows(uv.decode(vin, full=True))
     diff = normalize.diff_rows(oracle_rows, mine)
     return {
         "vin": vin,

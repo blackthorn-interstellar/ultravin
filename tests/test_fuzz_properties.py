@@ -135,6 +135,23 @@ def test_decode_json_matches_decode() -> None:
         assert json.loads(uv.decode_json(v)) == uv.decode(v), f"decode_json != decode for {v!r}"
 
 
+def test_the_provenance_shape_survives_the_same_inputs() -> None:
+    """`full=True` marshals a 15-key dict per element instead of one mapping —
+    a second, wider path over the same sanitized string, so fuzz it too."""
+    for v in CRASHERS + [encodable_input() for _ in range(500)]:
+        try:
+            r = uv.decode(v, full=True)
+        except BaseException as e:  # noqa: BLE001
+            msg = f"decode({v!r}, full=True) raised {type(e).__name__}: {e}"
+            raise AssertionError(msg) from e
+        assert json.loads(uv.decode_json(v, full=True)) == r, f"json != dict for {v!r}"
+        # The two shapes are the same decode, so the headers must agree exactly.
+        flat = uv.decode(v)
+        assert {k: x for k, x in r.items() if k != "elements"} == {
+            k: x for k, x in flat.items() if k != "attributes"
+        }, f"headers differ for {v!r}"
+
+
 def test_decode_batch_matches_singles() -> None:
     pinned = [
         CRASHERS,  # one bad VIN per batch must not take the batch down

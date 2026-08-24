@@ -21,20 +21,20 @@ def test_matching_year_changes_nothing() -> None:
 
 
 def test_divergent_year_runs_its_own_pass_and_can_win() -> None:
-    r = uv.decode(VIN, year=1995, flat=True)
+    r = uv.decode(VIN, year=1995)
     assert r["model_year"] == 1995
     assert r["error_codes"] == [3, 12, 14]
 
 
 def test_out_of_window_year_still_flags_error_12() -> None:
-    r = uv.decode(VIN, year=1979, flat=True)
+    r = uv.decode(VIN, year=1979)
     assert r["model_year"] == 2003
     assert r["error_codes"] == [0, 12]
 
 
 def test_json_paths_match_dict_paths() -> None:
     assert json.loads(uv.decode_json(VIN, year=1995)) == uv.decode(VIN, year=1995)
-    assert json.loads(uv.decode_json(VIN, year=1995, flat=True)) == uv.decode(VIN, year=1995, flat=True)
+    assert json.loads(uv.decode_json(VIN, year=1995, full=True)) == uv.decode(VIN, year=1995, full=True)
 
 
 def test_batch_years_thread_per_vin() -> None:
@@ -43,6 +43,10 @@ def test_batch_years_thread_per_vin() -> None:
     assert batch[1] == uv.decode(VIN, year=1995)
     json_batch = json.loads(uv.decode_batch_json([VIN, VIN], years=[None, 1995]))
     assert json_batch == batch
+    # The hint threads through the provenance shape too, not just the default.
+    full = uv.decode_batch([VIN, VIN], years=[None, 1995], full=True)
+    assert full[1] == uv.decode(VIN, year=1995, full=True)
+    assert json.loads(uv.decode_batch_json([VIN, VIN], years=[None, 1995], full=True)) == full
 
 
 def test_batch_years_length_mismatch_raises() -> None:

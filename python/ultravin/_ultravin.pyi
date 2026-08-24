@@ -1,12 +1,23 @@
 """Type stubs for the compiled `ultravin._ultravin` extension module."""
 
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal, Protocol
 
 __version__: str
 
-def decode(vin: str, *, year: int | None = None, flat: bool = False) -> dict[str, Any]:
+class ArrowStreamSource(Protocol):
+    """Anything exposing the Arrow C stream interface (pyarrow, polars, duckdb)."""
+
+    def __arrow_c_stream__(self, requested_schema: object | None = None) -> object: ...
+
+class ArrowArraySource(Protocol):
+    """Anything exposing a single Arrow array over the C data interface."""
+
+    def __arrow_c_array__(self, requested_schema: object | None = None) -> tuple[object, object]: ...
+
+def decode(vin: str, *, year: int | None = None, full: bool = False) -> dict[str, Any]:
     """Decode a VIN.
 
     ``year`` is the optional caller-supplied model year (vPIC's ``modelyear``
@@ -18,32 +29,31 @@ def decode(vin: str, *, year: int | None = None, flat: bool = False) -> dict[str
 
     Returns a dict with keys: ``vin``, ``wmi``, ``descriptor``, ``model_year``
     (int | None), ``error_codes`` (list[int]), ``check_digit_valid`` (bool),
-    ``corrected_vin`` (str), and ``elements`` — a list of per-element dicts, each
-    with: ``group_name``, ``variable``, ``value``, ``element_id``,
-    ``attribute_id``, ``code``, ``data_type``, ``decode``, ``source``,
-    ``pattern_id``, ``vin_schema_id``, ``keys``, ``created_on``, ``wmi_id``,
-    ``to_be_qced``.
+    ``corrected_vin`` (str), and ``attributes`` — one ``variable -> value``
+    mapping. Values are ``str``, except the names in ``ultravin.MULTI_VALUED``,
+    which are always ``list[str]``.
 
-    With ``flat=True``, ``elements`` is replaced by ``attributes``: one
-    ``variable -> value`` dict. Values are ``str``, except the names in
-    ``ultravin.MULTI_VALUED``, which are always ``list[str]``. The other 13
-    per-element columns (provenance: ``source``, ``attribute_id``, ``pattern_id``,
-    …) are dropped — use the default shape if you need them. Costs ~41 dict
-    entries per VIN instead of ~615, so it is materially faster to marshal.
+    With ``full=True``, ``attributes`` is replaced by ``elements``: a list of
+    per-element dicts carrying the value *and* its provenance — ``group_name``,
+    ``variable``, ``value``, ``element_id``, ``attribute_id``, ``code``,
+    ``data_type``, ``decode``, ``source``, ``pattern_id``, ``vin_schema_id``,
+    ``keys``, ``created_on``, ``wmi_id``, ``to_be_qced``. That costs ~615 dict
+    entries per VIN against the default's ~41, so it is materially slower to
+    marshal — reach for it when you need to know *where* a value came from.
     """
 
 def decode_batch(
     vins: list[str],
     *,
     years: list[int | None] | None = None,
-    flat: bool = False,
+    full: bool = False,
 ) -> list[dict[str, Any]]:
     """Decode many VINs; ``years`` optionally supplies one caller model year per
     VIN (``None`` entries allowed), mirroring the vPIC batch API's per-line
     ``VIN,year`` format. Raises ``ValueError`` if the lengths differ.
     """
 
-def decode_json(vin: str, *, year: int | None = None, flat: bool = False) -> str:
+def decode_json(vin: str, *, year: int | None = None, full: bool = False) -> str:
     """Decode a VIN to a JSON object string (same shape as :func:`decode`).
 
     Serialized in Rust; ``json.loads(decode_json(vin)) == decode(vin)``.
@@ -53,7 +63,7 @@ def decode_batch_json(
     vins: list[str],
     *,
     years: list[int | None] | None = None,
-    flat: bool = False,
+    full: bool = False,
 ) -> str:
     """Decode many VINs to a single JSON array string, serialized in Rust.
 
@@ -64,7 +74,7 @@ def decode_batch_json(
     """
 
 def multi_valued() -> list[str]:
-    """Variable names whose ``flat=True`` value is always a list.
+    """Variable names whose ``attributes`` value is always a list.
 
     Exposed as the ``ultravin.MULTI_VALUED`` frozenset.
     """
@@ -178,54 +188,85 @@ def seeded(*, limit: int = 0) -> list[str]:
     builder to reach for when :func:`generate`'s repeats are a problem.
     """
 
-def decode_parquet(
-    src: str | Path,
-    dst: str | Path | None = None,
+def decode_stream(
+    source: str | Path | ArrowStreamSource | ArrowArraySource,
     *,
-    vin: str | None = None,
-    year: str | None = None,
-    ids: list[int] | None = None,
+    vin_column: str | None = None,
+    year_column: str | None = None,
+    columns: Sequence[int | str] | None = None,
+    column_names: Literal["variable", "id"] = "variable",
     batch_size: int = 65_536,
     sample_rows: int = 100,
-) -> int | dict[str, list[Any]]:
-    """Decode a parquet file (or directory of them), projecting the named elements.
+) -> DecodeStream:
+    """Decode a dataset into a stream of Arrow batches.
 
-    ``ids`` are vPIC ``element_id``s; omit it for every publicly decodable
-    element. The library wrapper (:func:`ultravin.decode_parquet`) adds a
-    ``codes=`` alternative that takes variable names.
+    ``source`` is a parquet file, a directory of ``*.parquet`` read in sorted
+    order, or any object exposing the Arrow C data interface — a pyarrow
+    ``Table``/``RecordBatch``/``RecordBatchReader``, a polars ``DataFrame``, a
+    duckdb result. A bare unnamed array is read as the VIN column. A ``list`` of
+    VINs raises ``TypeError``: that is :func:`decode_batch`'s job.
 
-    The VIN column and the optional caller-year column are resolved from the
-    footer schema by name, then by sniffing the first ``sample_rows`` values;
-    ``vin=``/``year=`` name them outright and skip that. Output columns are the
-    passthrough VIN (and year), ``decoded_model_year``, then one ``Utf8``/
-    ``Int64``/``Float64`` column per projected element.
+    The VIN column and the optional caller-year column are resolved by name and,
+    for a parquet source, then by sniffing the first ``sample_rows`` values;
+    ``vin_column=``/``year_column=`` name them outright and skip that. The VIN
+    column may be ``Utf8``, ``LargeUtf8``, ``Utf8View`` or a dictionary of any of
+    them — it is normalized on the way in.
 
-    With ``dst`` the rows are written there as parquet and the row count is
-    returned — the decode never leaves Rust and peak memory is O(``batch_size``).
-    Without ``dst`` the columns come back as one ``{name: [values]}`` dict, which
-    holds the whole source in memory; use :class:`ParquetBatchIter` to stream.
+    ``columns`` picks the projection, mixing vPIC ``element_id``s (``int``) and
+    variable names (``str``) freely; omit it for every publicly decodable
+    element. Output columns are the passthrough VIN (and caller year),
+    ``decoded_model_year``, then one ``Utf8``/``Int64``/``Float64`` column per
+    projected element following vPIC's own ``data_type``, with an empty value
+    written as null.
+
+    ``column_names`` labels those projected columns: ``"variable"`` (the default)
+    uses the vPIC variable name, ``"id"`` uses ``attr_<element_id>`` — which does
+    not move when NHTSA renames a variable between monthly data releases, so it is
+    what a long-lived table should be pinned to. Passthrough columns keep their own
+    names either way. Anything else raises ``ValueError``.
+
+    Whichever mode is used, every projected field carries **both** keys as Arrow
+    field metadata — ``{"element_id": "26", "variable": "Make"}`` — and they
+    survive a parquet round-trip, so the label you did not pick is still readable
+    off the schema.
+
+    For a parquet source, rows stream through in ``batch_size``-row chunks with
+    the GIL released, so peak memory is one chunk however large the source is. For
+    an Arrow source the producer decides the input chunking and ``batch_size``
+    only sets the parquet row-group size of :meth:`DecodeStream.to_parquet`.
 
     Raises ``ValueError`` for a caller mistake (unknown column or element id,
     ambiguous autodetect) and ``OSError`` for an unreadable file.
     """
 
-class ParquetBatchIter:
-    """Chunk-at-a-time :func:`decode_parquet`, yielding ``{name: [values]}`` dicts.
+class DecodeStream:
+    """A one-shot stream of decoded Arrow batches.
 
-    Each chunk is at most ``batch_size`` rows, decoded with the GIL released, so
-    a source far larger than memory streams through at O(chunk) cost. Arguments
-    are :func:`decode_parquet`'s, minus ``dst``.
+    Every exit consumes the source, so a second use raises ``RuntimeError``
+    rather than handing back a silently truncated result. Build another with
+    :func:`decode_stream` to re-read.
     """
 
-    def __init__(
-        self,
-        src: str | Path,
-        *,
-        vin: str | None = None,
-        year: str | None = None,
-        ids: list[int] | None = None,
-        batch_size: int = 65_536,
-        sample_rows: int = 100,
-    ) -> None: ...
-    def __iter__(self) -> ParquetBatchIter: ...
-    def __next__(self) -> dict[str, list[Any]]: ...
+    def __arrow_c_stream__(self, requested_schema: object | None = None) -> object:
+        """The Arrow C stream capsule — what ``pa.table(stream)``,
+        ``pl.DataFrame(stream)`` and duckdb consume. ``requested_schema`` is
+        accepted and ignored: the output schema is fixed by the projection.
+        """
+
+    def __arrow_c_schema__(self) -> object:
+        """The output schema capsule, known before a row is decoded."""
+
+    def to_parquet(self, dst: str | Path) -> int:
+        """Decode straight to a parquet file, returning the rows written.
+
+        Snappy-compressed, one row group per chunk. The whole job stays in Rust
+        with the GIL released — no row is ever a Python object. Refuses a ``dst``
+        that is (or is inside) the parquet source being read.
+        """
+
+    def to_pandas(self) -> Any:
+        """The decode as a pandas ``DataFrame``, via pyarrow.
+
+        pyarrow is imported lazily and is not an ultravin dependency; without it
+        this raises ``ImportError``.
+        """

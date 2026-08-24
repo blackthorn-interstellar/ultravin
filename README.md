@@ -52,14 +52,19 @@ r["wmi"]  # '1HG'
 r["check_digit_valid"]  # True
 r["error_codes"]  # [0]
 
-# `elements` is the full decoded attribute list, one dict per attribute:
-r["elements"][0]  # {'variable': 'Make', 'value': 'HONDA', 'source': ..., …}
+# `attributes` is the decoded vehicle, one entry per vPIC variable:
+r["attributes"]["Make"]  # 'HONDA'
+r["attributes"]["Model"]  # 'Accord'
 ```
 
 `decode(vin)` returns a `dict` with keys `vin`, `wmi`, `descriptor`,
 `model_year`, `error_codes`, `check_digit_valid`, `corrected_vin`, and
-`elements` — a list of per-attribute dicts (`group_name`, `variable`, `value`,
-`element_id`, `source`, …). Decode many at once with `decode_batch`:
+`attributes` — a single `variable -> value` mapping. Values are `str`, except the
+free-text note fields listed in `ultravin.MULTI_VALUED`, which are **always**
+`list[str]`: those are the only vPIC elements allowed to repeat within one
+decode, and each row is a separate note rather than a competing value.
+
+Decode many at once with `decode_batch`:
 
 ```python
 results = ultravin.decode_batch(["1HGCM82633A004352", "5YJ3E1EA7JF000000"])
@@ -76,41 +81,37 @@ ultravin.decode("1HGCM82633A004352", year=1995)  # decodes as a 1995
 ultravin.decode_batch(vins, years=[2011, None, 1987])  # one entry per VIN
 ```
 
-If you only want the values, pass `flat=True` and skip the per-attribute dicts
-entirely — **~2× faster end to end**. Decoding is no longer the expensive part;
-building ~615 dict entries per VIN is:
+### Provenance: `full=True`
+
+The default keeps the value and drops the provenance. If you need to know *where*
+a value came from — `source`, over half of all rows being vehicle-type defaults
+rather than something the VIN encodes — or the raw vPIC `attribute_id`, pass
+`full=True`:
 
 ```python
-r = ultravin.decode("1HGCM82633A004352", flat=True)
+r = ultravin.decode("1HGCM82633A004352", full=True)
 
-r["attributes"]["Make"]  # 'HONDA'
-r["attributes"]["Model"]  # 'Accord'
+r["elements"][0]  # {'variable': 'Make', 'value': 'HONDA', 'source': 'Manu. Name', …}
 ```
 
-`flat=True` replaces `elements` with `attributes`, a single `variable -> value`
-mapping (header keys are unchanged), and works the same on `decode_batch`,
-`decode_json` and `decode_batch_json`. Two things to know:
-
-- Values are `str`, except the free-text note fields listed in
-  `ultravin.MULTI_VALUED`, which are **always** `list[str]` — those are the only
-  vPIC elements allowed to repeat within one decode, and each row is a separate
-  note rather than a competing value.
-- It keeps the value and drops the provenance. If you need to know *where* a
-  value came from (`source` — over half of all rows are vehicle-type defaults
-  rather than something the VIN encodes), or the raw vPIC `attribute_id`, use the
-  default shape.
+`full=True` replaces `attributes` with `elements`, a list of per-attribute dicts
+(`group_name`, `variable`, `value`, `element_id`, `attribute_id`, `source`,
+`pattern_id`, …), and works the same on `decode_batch`, `decode_json` and
+`decode_batch_json`. It is **~2× slower end to end**: decoding is not the
+expensive part, and `elements` costs ~615 dict entries per VIN against the
+default's ~41.
 
 `ultravin.ELEMENTS` maps each variable name to its static metadata
 (`element_id`, `group_name`, `data_type`, …). Pin to `element_id` if you need a
 key that survives NHTSA renaming a variable between data releases.
 
-From the command line:
+From the command line — every command emits JSON:
 
 ```bash
-ultravin decode 1HGCM82633A004352          # human-readable table
-ultravin decode 1HGCM82633A004352 --json   # full JSON
-ultravin decode 1HGCM82633A004352 --flat   # values only, no provenance
-ultravin decode-batch vins.txt --json      # one VIN per line
+ultravin decode 1HGCM82633A004352             # JSON object
+ultravin decode 1HGCM82633A004352 --year 1995 # with a caller model-year hint
+ultravin decode 1HGCM82633A004352 --full      # with per-element provenance
+ultravin decode-batch vins.txt                # one VIN per line -> JSON array
 ultravin version
 ```
 
@@ -131,47 +132,106 @@ loading: [crates/ultravin/README.md](crates/ultravin/README.md).
 
 ## Datasets
 
-For bulk work there is a parquet door — parquet in, parquet out, without a
-single row ever becoming a Python object:
+For bulk work there is `decode_stream` — a stream of decoded Arrow batches,
+without a single row ever becoming a Python object:
 
 ```python
 import ultravin
 
-rows = ultravin.decode_parquet("registrations.parquet", "decoded.parquet", codes=["Make", "Model"])
+rows = ultravin.decode_stream("registrations.parquet").to_parquet("decoded.parquet")
 
 rows  # 4812004 — the rows written, not the rows themselves
 ```
 
-The VIN column is found by name (`vin`, case-insensitively) and then by sniffing
-the leading rows, as is the optional caller-year column (`year`, `model_year`,
-…); pass `vin=`/`year=` to name them outright. Pick the projection with `codes=`
-(vPIC variable names) or `ids=` (`element_id`s, the key that survives NHTSA
-renaming a variable), or omit both for every publicly decodable element. The
-output holds the VIN and caller year passed through, then `decoded_model_year`
-(named so it cannot collide with an input column called `model_year`), then one
-column per projected element — string, `int64` or `float64` following vPIC's own
-`data_type`, with an empty value written as null. A source that is a directory
-works wherever a file does: every `*.parquet` in it is read in sorted order as
-one stream.
-
-Rows stream through in `batch_size` chunks with the GIL released, so peak memory
-is one chunk no matter how large the source is. Leave the destination out to get
-the whole decode back as `{column: [values]}` (small inputs only), or iterate
-`ParquetBatchIter` to stream it a chunk at a time:
+The source is a parquet file, a directory of `*.parquet` read in sorted order, or
+anything speaking the Arrow C data interface — so the same call takes a pyarrow
+`Table`, a polars `DataFrame`, a duckdb result, or a `RecordBatchReader`. A
+`DecodeStream` is itself an Arrow source, which is what lets it hand the decode
+straight to whatever you already use:
 
 ```python
-for chunk in ultravin.ParquetBatchIter("registrations.parquet", ids=[26], batch_size=100_000):
-    chunk["Make"][:2]  # ['HONDA', 'FORD']
+import polars as pl, pyarrow as pa, duckdb
+
+pl.DataFrame(ultravin.decode_stream(df))  # -> polars
+pa.table(ultravin.decode_stream(df))  # -> pyarrow
+ultravin.decode_stream(df).to_pandas()  # -> pandas (needs pyarrow)
+
+stream = ultravin.decode_stream(df)  # duckdb resolves the name from scope
+duckdb.sql("select Make, count(*) from stream group by 1")
 ```
 
-Reading and writing parquet is the same Rust as the decoding, so this needs no
-pyarrow and no other install.
+Each stream is single-use — note the fresh `decode_stream(...)` on every line
+above. It pulls from a source that has already moved on, so a second consumer
+would get a silently truncated result; consuming one twice raises `RuntimeError`
+rather than handing back a short answer. Call `decode_stream` again to re-read.
+
+### Picking columns
+
+`columns=` takes vPIC variable names, `element_id`s, or both together; omit it for
+every publicly decodable element:
+
+```python
+ultravin.decode_stream("registrations.parquet", columns=["Make", "Model", 13])
+```
+
+**Pin to `element_id` for anything long-lived.** The id is the one key NHTSA does
+not rename between monthly data releases.
+
+### Column naming and schema drift
+
+Naming output columns after vPIC variables means a data refresh can silently
+change your table's shape — NHTSA renames variables, and `Displacement (L)`
+becoming something else takes every downstream query with it. `column_names="id"`
+labels each projected column `attr_<element_id>` instead, which never moves:
+
+```python
+ultravin.decode_stream(src, columns=[26, 13], column_names="id")
+# -> vin, decoded_model_year, attr_26, attr_13
+```
+
+Passthrough columns (the source VIN column, the source year column, and
+`decoded_model_year`) keep their own names in both modes; only the projection is
+renamed. The default is `"variable"` — reach for `"id"` when the output feeds a
+persisted schema rather than a human.
+
+You never lose the other name. Every projected column carries **both** keys as
+Arrow field metadata, in both modes, and they survive the parquet round-trip:
+
+```python
+table = pa.table(ultravin.decode_stream(src, columns=[26, 13], column_names="id"))
+{f.name: dict(f.metadata) for f in table.schema if f.metadata}
+# {'attr_26': {b'element_id': b'26', b'variable': b'Make'},
+#  'attr_13': {b'element_id': b'13', b'variable': b'Displacement (L)'}}
+```
+
+### Columns and layout
+
+The VIN column is found by name (`vin`, case-insensitively) and then, for a
+parquet source, by sniffing the leading rows — as is the optional caller-year
+column (`year`, `model_year`, …); pass `vin_column=`/`year_column=` to name them
+outright. Any text encoding works: `Utf8`, `LargeUtf8`, `Utf8View`, or the
+dictionary a pandas categorical arrives as.
+
+The output holds the VIN and caller year passed through, then
+`decoded_model_year` (named so it cannot collide with an input column called
+`model_year`), then one column per projected element — string, `int64` or
+`float64` following vPIC's own `data_type`, with an empty value written as null.
+Row order and row count always equal the input's: an undecodable VIN is a row of
+nulls, never a raise and never a dropped row.
+
+For a parquet source, rows stream through in `batch_size`-row chunks with the GIL
+released, so peak memory is one chunk no matter how large the source is. For an
+Arrow source the producer decides the input chunking, and `batch_size` only sets
+the parquet row-group size of `to_parquet`. Reading and writing parquet is the
+same Rust as the decoding, so the parquet path needs no pyarrow and no other
+install; only the pyarrow/polars/pandas hand-offs need those libraries.
 
 From the command line:
 
 ```bash
-ultravin decode-parquet registrations.parquet decoded.parquet --codes Make,Model
-ultravin decode-parquet parts/ decoded.parquet --ids 26,28 --vin chassis_no
+ultravin decode-parquet registrations.parquet decoded.parquet --columns Make,Model
+ultravin decode-parquet parts/ decoded.parquet --columns 26,28 --vin-column chassis_no
+ultravin decode-parquet registrations.parquet decoded.parquet --column-names id
 ```
 
 ## Benchmarks

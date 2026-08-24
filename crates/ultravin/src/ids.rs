@@ -1,10 +1,11 @@
-//! Projected batch decode: one typed column per requested `element_id`.
+//! Projected batch decode: one typed column per requested element.
 //!
-//! The dataset path (`parquet_io`, behind the `parquet` feature) decodes a chunk of rows and
-//! keeps only the caller-named elements, emitted as parallel typed columns
-//! instead of per-VIN element lists. Keying on the stable vPIC `element_id`
-//! rather than the variable name means a monthly NHTSA dump that renames a
-//! variable cannot silently break a pipeline.
+//! The columnar paths (`arrow_io`, and `parquet_io` on top of it) decode a chunk
+//! of rows and keep only the caller-named elements, emitted as parallel typed
+//! columns instead of per-VIN element lists. A column is requested by
+//! [`ColumnSpec`] — the stable vPIC `element_id`, or the variable name. Ids are
+//! the durable key: a monthly NHTSA dump that renames a variable cannot silently
+//! break a pipeline pinned to them.
 
 use std::collections::HashMap;
 
@@ -32,27 +33,68 @@ pub struct IdMeta {
     pub name: String,
 }
 
-/// Validate requested element ids against the embedded archive.
+/// One requested output column: a vPIC `element_id`, or a variable name.
 ///
-/// An id that does not exist, is private, or never reaches decode output is a
-/// caller mistake worth failing on up front — not a silent all-null column.
-pub fn resolve_ids(db: &Db, ids: &[i32]) -> Result<Vec<IdMeta>, String> {
-    let mut metas = Vec::with_capacity(ids.len());
+/// The id is the stable key — a monthly NHTSA dump that renames a variable
+/// cannot break a pipeline pinned to ids — so a long-lived job should prefer it.
+/// The name is what a human reads off `ultravin.ELEMENTS`, and is matched
+/// exactly (case-sensitively), as the archive spells it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ColumnSpec {
+    Id(i32),
+    Name(String),
+}
+
+impl From<i32> for ColumnSpec {
+    fn from(id: i32) -> ColumnSpec {
+        ColumnSpec::Id(id)
+    }
+}
+
+impl From<&str> for ColumnSpec {
+    fn from(name: &str) -> ColumnSpec {
+        ColumnSpec::Name(name.to_string())
+    }
+}
+
+/// Validate requested columns against the embedded archive.
+///
+/// A column that does not exist, is private, or never reaches decode output is a
+/// caller mistake worth failing on up front — not a silent all-null column. So is
+/// asking for the same element twice, however it was spelled: two ways to name
+/// one element still produce one column.
+pub fn resolve_columns(db: &Db, columns: &[ColumnSpec]) -> Result<Vec<IdMeta>, String> {
+    let mut metas = Vec::with_capacity(columns.len());
     let mut seen = IntSet::<i32>::default();
-    for &id in ids {
+    for spec in columns {
+        let e = match spec {
+            ColumnSpec::Id(id) => db.element_by_id(*id).ok_or_else(|| {
+                format!(
+                    "unknown element_id {id}; valid ids are in ultravin.ELEMENTS \
+                     (pin element_id, not variable name)"
+                )
+            })?,
+            // The element table is a few hundred rows and this runs once per job,
+            // so a scan beats carrying a name index for the id path to never read.
+            ColumnSpec::Name(name) => db
+                .elements()
+                .iter()
+                .find(|e| db.s(e.name.to_native()) == name)
+                .ok_or_else(|| {
+                    format!(
+                        "unknown column {name:?}; valid names are in ultravin.ELEMENTS \
+                         (matched exactly, case-sensitively)"
+                    )
+                })?,
+        };
+        let id = e.id.to_native();
+        let name = db.s(e.name.to_native());
         if !seen.insert(id) {
-            return Err(format!("element_id {id} requested more than once"));
+            return Err(format!("element_id {id} ({name}) requested more than once"));
         }
-        let e = db.element_by_id(id).ok_or_else(|| {
-            format!(
-                "unknown element_id {id}; valid ids are in ultravin.ELEMENTS \
-                 (pin element_id, not variable name)"
-            )
-        })?;
         if public_decode(db, e).is_none() {
             return Err(format!(
-                "element_id {id} ({}) never appears in decode output",
-                db.s(e.name.to_native())
+                "element_id {id} ({name}) never appears in decode output"
             ));
         }
         let dtype = match db.s(e.datatype.to_native()) {
@@ -63,13 +105,19 @@ pub fn resolve_ids(db: &Db, ids: &[i32]) -> Result<Vec<IdMeta>, String> {
         metas.push(IdMeta {
             id,
             dtype,
-            name: db.s(e.name.to_native()).to_string(),
+            name: name.to_string(),
         });
     }
     Ok(metas)
 }
 
-/// Every public element id in archive order — the wide projection (`ids=None`).
+/// [`resolve_columns`] for a plain id list.
+pub fn resolve_ids(db: &Db, ids: &[i32]) -> Result<Vec<IdMeta>, String> {
+    let columns: Vec<ColumnSpec> = ids.iter().copied().map(ColumnSpec::from).collect();
+    resolve_columns(db, &columns)
+}
+
+/// Every public element id in archive order — the wide projection (`columns=None`).
 pub fn all_public_ids(db: &Db) -> Vec<i32> {
     db.elements()
         .iter()
@@ -174,13 +222,7 @@ pub fn decode_batch_ids(
             .zip(&mut model_year)
             .zip(slots.par_chunks_mut(stride))
             .for_each(|(((i, vin), my), row)| {
-                let r = decode_full(
-                    db,
-                    vin,
-                    now_micros,
-                    current_year,
-                    years.and_then(|ys| ys.get(i)).copied().flatten(),
-                );
+                let r = decode_full(db, vin, now_micros, current_year, crate::year_at(years, i));
                 *my = r.model_year;
                 for e in &r.elements {
                     if let Some(&ci) = index.get(&e.element_id) {
@@ -311,6 +353,47 @@ mod tests {
         let err = resolve_ids(d, &[hidden]).unwrap_err();
         assert!(err.contains("never appears in decode output"), "{err}");
         assert!(!all_public_ids(d).contains(&hidden));
+    }
+
+    #[test]
+    fn resolve_columns_accepts_names_and_ids_interchangeably() {
+        let Some(d) = db() else {
+            return;
+        };
+        // Variable names move with the dump, so ask the archive for them rather
+        // than pinning strings that will rot — except "Make", which the id test
+        // above already pins.
+        let by_id = resolve_ids(d, &[MAKE, CYLINDERS, DISPLACEMENT_L]).unwrap();
+        let specs: Vec<ColumnSpec> = by_id
+            .iter()
+            .map(|m| ColumnSpec::Name(m.name.clone()))
+            .collect();
+        assert_eq!(specs[0], ColumnSpec::Name("Make".to_string()));
+        // A name resolves to exactly what its id resolves to, dtype included.
+        let by_name = resolve_columns(d, &specs).unwrap();
+        assert_eq!(by_name.len(), by_id.len());
+        for (n, i) in by_name.iter().zip(&by_id) {
+            assert_eq!((n.id, n.dtype, &n.name), (i.id, i.dtype, &i.name));
+        }
+    }
+
+    #[test]
+    fn resolve_columns_rejects_an_unknown_name() {
+        let Some(d) = db() else {
+            return;
+        };
+        let err = resolve_columns(d, &[ColumnSpec::Name("make".to_string())]).unwrap_err();
+        assert!(err.contains("unknown column \"make\""), "{err}");
+        assert!(err.contains("ELEMENTS"), "{err}");
+    }
+
+    #[test]
+    fn resolve_columns_rejects_one_element_named_twice_two_ways() {
+        let Some(d) = db() else {
+            return;
+        };
+        let err = resolve_columns(d, &[MAKE.into(), "Make".into()]).unwrap_err();
+        assert!(err.contains("more than once"), "{err}");
     }
 
     #[test]

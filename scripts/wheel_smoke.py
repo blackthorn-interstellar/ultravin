@@ -60,10 +60,9 @@ def run_checks() -> int:
 
     def stub_tell() -> None:
         result = uv.decode(CANARY_VIN)
-        elements = result.get("elements")
-        count = len(elements) if isinstance(elements, list) else -1
-        assert count >= 20, f"{count} elements — looks like an empty-data stub build"
-        attributes = uv.decode(CANARY_VIN, flat=True)["attributes"]
+        attributes = result["attributes"]
+        count = len(attributes)
+        assert count >= 20, f"{count} attributes — looks like an empty-data stub build"
         assert attributes.get("Make") == "HONDA", f"Make={attributes.get('Make')!r}"
         assert attributes.get("Model Year") == "2003", f"Model Year={attributes.get('Model Year')!r}"
         assert result.get("model_year") == 2003, f"model_year={result.get('model_year')!r}"

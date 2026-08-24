@@ -1,5 +1,11 @@
 //! Parquet-to-parquet dataset decode: read row groups, decode + project each
-//! chunk through [`crate::decode_batch_ids`], write projected parquet.
+//! chunk through [`crate::arrow_io::ArrowDecoder`], write projected parquet.
+//!
+//! This is the file-I/O layer over the source-agnostic arrow core — everything
+//! here is about getting batches off disk (directory expansion, per-file column
+//! resolution including the value sniffers, streaming, writing). The batch→batch
+//! decode itself lives in [`crate::arrow_io`] and is shared with every other
+//! Arrow source.
 //!
 //! Memory is O(chunk), never O(file): the reader streams record batches at
 //! `batch_size` rows, and the writer emits roughly one row group per chunk. It
@@ -10,20 +16,24 @@
 
 use std::fs::File;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 
-use arrow_array::{
-    cast::AsArray, Array, ArrayRef, Float64Array, Int32Array, Int64Array, RecordBatch, StringArray,
-};
+use arrow_array::{cast::AsArray, Array, RecordBatch, RecordBatchReader};
 use arrow_cast::cast;
-use arrow_schema::{DataType, Field, Schema, SchemaRef};
+use arrow_schema::{DataType, SchemaRef};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
 use parquet::arrow::{ArrowWriter, ProjectionMask};
 use parquet::basic::Compression;
 use parquet::file::properties::WriterProperties;
 
+use crate::arrow_io::{
+    is_intish, is_stringish, vin_by_name, year_by_name, ArrowDecoder, ColumnNames,
+};
 use crate::db::Db;
-use crate::ids::{decode_batch_ids, resolve_ids, ColumnValues, IdMeta, IdsDType};
+use crate::ids::{resolve_columns, ColumnSpec, IdMeta};
+
+/// The dataset door reports failures through the arrow layer's error type, so a
+/// column mistake reads the same whether it came off disk or out of a stream.
+pub use crate::arrow_io::ArrowError as ParquetError;
 
 /// Caller-tunable knobs for a dataset job.
 #[derive(Debug, Clone)]
@@ -32,11 +42,16 @@ pub struct ParquetOpts {
     pub vin: Option<String>,
     /// Input caller-year column name; `None` → autodetect (absence is fine).
     pub year: Option<String>,
-    /// Element ids to project; validated against the archive by [`open_chunks`].
-    pub ids: Vec<i32>,
+    /// Elements to project, by id or name, in output order; validated against
+    /// the archive by [`open_chunks`].
+    pub columns: Vec<ColumnSpec>,
+    /// How to label the projected columns; defaults to the variable name.
+    pub names: ColumnNames,
     /// Rows per chunk — memory, not throughput.
     pub batch_size: usize,
-    /// How many leading rows to sniff when autodetecting columns.
+    /// How many leading rows to sniff when autodetecting columns. Clamped to at
+    /// least 1, as `batch_size` is — sniffing zero rows would report every column
+    /// as unrecognizable rather than as unsampled.
     pub sample_rows: usize,
 }
 
@@ -45,40 +60,13 @@ impl Default for ParquetOpts {
         ParquetOpts {
             vin: None,
             year: None,
-            ids: Vec::new(),
+            columns: Vec::new(),
+            names: ColumnNames::default(),
             batch_size: 65_536,
             sample_rows: 100,
         }
     }
 }
-
-/// `Io` covers unreadable files/footers/row groups; `Config` is a caller
-/// mistake (missing/ambiguous columns, bad element ids) worth a `ValueError`.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ParquetError {
-    Io(String),
-    Config(String),
-}
-
-impl std::fmt::Display for ParquetError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ParquetError::Io(m) | ParquetError::Config(m) => f.write_str(m),
-        }
-    }
-}
-
-impl std::error::Error for ParquetError {}
-
-/// Year-column candidates tried by name before sniffing (case-insensitive) —
-/// the common names across NHTSA, fleet-telemetry, and registration exports.
-const YEAR_NAMES: [&str; 5] = [
-    "year",
-    "model_year",
-    "model_yr_num",
-    "veh_mfg_yr",
-    "sf_model_year",
-];
 
 /// Fraction of non-null sample values that must look like VINs / plausible
 /// years for a sniffed candidate to count ("vast majority").
@@ -93,37 +81,6 @@ fn is_vin_like(s: &str) -> bool {
         && s.bytes().all(|b| {
             b.is_ascii_alphanumeric() && !matches!(b.to_ascii_uppercase(), b'I' | b'O' | b'Q')
         })
-}
-
-/// Text, including the dictionary encoding pandas gives a categorical column —
-/// the cast in [`transform`] flattens it either way, so autodetect has no reason
-/// to skip it.
-fn is_stringish(dt: &DataType) -> bool {
-    match dt {
-        DataType::Utf8
-        | DataType::LargeUtf8
-        | DataType::Utf8View
-        | DataType::Binary
-        | DataType::LargeBinary
-        | DataType::BinaryView => true,
-        DataType::Dictionary(_, inner) => is_stringish(inner),
-        _ => false,
-    }
-}
-
-fn is_intish(dt: &DataType) -> bool {
-    match dt {
-        DataType::Int8
-        | DataType::Int16
-        | DataType::Int32
-        | DataType::Int64
-        | DataType::UInt8
-        | DataType::UInt16
-        | DataType::UInt32
-        | DataType::UInt64 => true,
-        DataType::Dictionary(_, inner) => is_intish(inner),
-        _ => false,
-    }
 }
 
 /// Ratio test: ≥90% of the non-null sampled values pass `pred`, at least one.
@@ -220,14 +177,11 @@ fn expand_src(src: &Path) -> Result<Vec<PathBuf>, ParquetError> {
     }
 }
 
-/// Per-file reader state: which input columns feed the kernel, and the fixed
-/// output schema every chunk from this file produces. `vin_idx`/`year_idx`
-/// index the *projected* reader, not the file.
+/// Per-file reader state: the streaming reader, plus the decoder bound to the
+/// columns this file resolved.
 struct FileState {
     reader: parquet::arrow::arrow_reader::ParquetRecordBatchReader,
-    vin_idx: usize,
-    year_idx: Option<usize>,
-    out_schema: SchemaRef,
+    decoder: ArrowDecoder,
 }
 
 impl FileState {
@@ -246,112 +200,59 @@ impl FileState {
         // to resolve: outer `None` = not read yet, inner `None` = empty file.
         let mut sample: Option<Option<RecordBatch>> = None;
 
-        let vin_idx = match &opts.vin {
-            Some(name) => col_index(&schema, name)
-                .ok_or_else(|| ParquetError::Config(format!("no column named {name:?}")))?,
+        // Names first — the same resolution every Arrow source gets. Only when
+        // they come up empty does the file get sniffed, which is the one thing
+        // this layer knows how to do that a bare schema cannot.
+        let vin_idx = match vin_by_name(&schema, opts.vin.as_deref())? {
+            Some(i) => i,
             None => {
-                let named = indices(&schema, |n| n.eq_ignore_ascii_case("vin"));
-                match named.len() {
-                    1 => named[0],
-                    0 => {
-                        let b = peek_first(&mut sample, path, opts)?.ok_or_else(|| {
-                            ParquetError::Config(format!(
-                                "{}: cannot autodetect the VIN column from an empty file — \
-                                 name the column explicitly",
-                                path.display()
-                            ))
-                        })?;
-                        let cands = sniff_vin_candidates(b, opts.sample_rows);
-                        one_candidate(&cands, &schema, "VIN-like")?
-                    }
-                    _ => {
-                        return Err(ParquetError::Config(format!(
-                            "ambiguous VIN column: {} all match by name",
-                            named
-                                .iter()
-                                .map(|&i| schema.field(i).name().clone())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        )))
-                    }
-                }
+                let b = peek_first(&mut sample, path, opts)?.ok_or_else(|| {
+                    ParquetError::Config(format!(
+                        "{}: cannot autodetect the VIN column from an empty file — \
+                         name the column explicitly",
+                        path.display()
+                    ))
+                })?;
+                let cands = sniff_vin_candidates(b, opts.sample_rows.max(1));
+                one_candidate(&cands, &schema, "VIN-like")?
             }
         };
 
-        let year_idx = match &opts.year {
-            Some(name) => Some(
-                col_index(&schema, name)
-                    .ok_or_else(|| ParquetError::Config(format!("no column named {name:?}")))?,
-            ),
+        let year_idx = match year_by_name(&schema, opts.year.as_deref())? {
+            Some(i) => Some(i),
             None => {
-                let mut named = Vec::new();
-                for cand in YEAR_NAMES {
-                    named.extend(indices(&schema, |n| n.eq_ignore_ascii_case(cand)));
+                // No year column is fine — those rows just decode without the
+                // caller hint, so an empty file is not fatal here the way a
+                // missing VIN column is. Only ambiguity is a mistake.
+                let cands = match peek_first(&mut sample, path, opts)? {
+                    Some(b) => sniff_year_candidates(b, opts.sample_rows.max(1)),
+                    None => Vec::new(),
+                };
+                if cands.len() > 1 {
+                    return Err(ParquetError::Config(format!(
+                        "ambiguous caller-year column: {}",
+                        cands
+                            .iter()
+                            .map(|&i| schema.field(i).name().clone())
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    )));
                 }
-                match named.len() {
-                    1 => Some(named[0]),
-                    0 => {
-                        // No year column is fine — those rows just decode without
-                        // the caller hint, so an empty file is not fatal here the
-                        // way a missing VIN column is. Only ambiguity is a mistake.
-                        let cands = match peek_first(&mut sample, path, opts)? {
-                            Some(b) => sniff_year_candidates(b, opts.sample_rows),
-                            None => Vec::new(),
-                        };
-                        if cands.len() > 1 {
-                            return Err(ParquetError::Config(format!(
-                                "ambiguous caller-year column: {}",
-                                cands
-                                    .iter()
-                                    .map(|&i| schema.field(i).name().clone())
-                                    .collect::<Vec<_>>()
-                                    .join(", ")
-                            )));
-                        }
-                        cands.first().copied()
-                    }
-                    _ => {
-                        return Err(ParquetError::Config(format!(
-                            "ambiguous caller-year column: {}",
-                            named
-                                .iter()
-                                .map(|&i| schema.field(i).name().clone())
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        )))
-                    }
-                }
+                cands.first().copied()
             }
         };
-
-        // A named VIN column that holds numbers would be cast to text and decoded
-        // as garbage — silently, since an undecodable VIN is a null row by
-        // design. Autodetect can only pick text, so this catches `vin=`.
-        let vin_type = schema.field(vin_idx).data_type();
-        if !is_stringish(vin_type) {
-            return Err(ParquetError::Config(format!(
-                "VIN column {:?} holds {vin_type}, not text",
-                schema.field(vin_idx).name()
-            )));
-        }
-        // One column cannot be both the VIN and the caller year: the output would
-        // carry its name twice, with the second write winning.
-        if year_idx == Some(vin_idx) {
-            return Err(ParquetError::Config(format!(
-                "column {:?} was named as both the VIN and the caller-year column",
-                schema.field(vin_idx).name()
-            )));
-        }
-
-        let out_schema = build_out_schema(&schema, vin_idx, year_idx, metas)?;
 
         // Nothing downstream of here reads any other column, so masking them out
         // keeps a chunk's cost off the input's width. A projected batch holds
         // only the kept columns, still in file order — the indices move with
-        // them.
+        // them, so the decoder is bound to the projected schema, not the file's.
         let mut keep = vec![vin_idx];
         keep.extend(year_idx);
         keep.sort_unstable();
+        // A column named as both the VIN and the year is a caller mistake the
+        // decoder rejects below; don't hand the reader a repeated index to
+        // interpret in the meantime.
+        keep.dedup();
         let projected = |i: usize| keep.iter().position(|&k| k == i).expect("a kept column");
         let mask = ProjectionMask::roots(builder.parquet_schema(), keep.iter().copied());
         let reader = builder
@@ -360,12 +261,18 @@ impl FileState {
             .build()
             .map_err(|e| ParquetError::Io(format!("{}: {e}", path.display())))?;
 
-        Ok(FileState {
-            reader,
-            vin_idx: projected(vin_idx),
-            year_idx: year_idx.map(projected),
-            out_schema,
-        })
+        // Validation (a non-text VIN column, one column claimed twice, a name
+        // collision in the output) lives with the decoder, so `vin=` naming a
+        // number column fails here exactly as it does for any other source.
+        let decoder = ArrowDecoder::with_columns(
+            &reader.schema(),
+            projected(vin_idx),
+            year_idx.map(projected),
+            metas.to_vec(),
+            opts.names,
+        )?;
+
+        Ok(FileState { reader, decoder })
     }
 }
 
@@ -401,20 +308,6 @@ fn peek_first<'a>(
     Ok(sample.as_ref().and_then(Option::as_ref))
 }
 
-fn col_index(schema: &SchemaRef, name: &str) -> Option<usize> {
-    schema.fields().iter().position(|f| f.name() == name)
-}
-
-fn indices(schema: &SchemaRef, pred: impl Fn(&str) -> bool) -> Vec<usize> {
-    schema
-        .fields()
-        .iter()
-        .enumerate()
-        .filter(|(_, f)| pred(f.name()))
-        .map(|(i, _)| i)
-        .collect()
-}
-
 /// The passthrough (VIN, optional caller-year) column names of an output schema
 /// — the only part two files in a directory can disagree about, since every file
 /// projects the same id list. The layout is `[vin, year?, decoded_model_year,
@@ -446,107 +339,6 @@ fn one_candidate(cands: &[usize], schema: &SchemaRef, what: &str) -> Result<usiz
     }
 }
 
-/// The output schema: passthrough vin (+ year), decoded_model_year, then one
-/// typed field per requested id. A projection label colliding with a
-/// passthrough name would silently merge two different things — refuse.
-fn build_out_schema(
-    in_schema: &SchemaRef,
-    vin_idx: usize,
-    year_idx: Option<usize>,
-    metas: &[IdMeta],
-) -> Result<SchemaRef, ParquetError> {
-    let mut fields: Vec<Field> = Vec::with_capacity(metas.len() + 3);
-    fields.push(Field::new(
-        in_schema.field(vin_idx).name().clone(),
-        DataType::Utf8,
-        true,
-    ));
-    let mut taken: Vec<String> = vec![in_schema.field(vin_idx).name().clone()];
-    if let Some(yi) = year_idx {
-        let name = in_schema.field(yi).name().clone();
-        taken.push(name.clone());
-        fields.push(Field::new(name, DataType::Int32, true));
-    }
-    const DECODED_YEAR: &str = "decoded_model_year";
-    if taken.iter().any(|t| t == DECODED_YEAR) {
-        return Err(ParquetError::Config(format!(
-            "input already has a column named {DECODED_YEAR}; remove or rename it"
-        )));
-    }
-    taken.push(DECODED_YEAR.to_string());
-    fields.push(Field::new(DECODED_YEAR, DataType::Int32, true));
-    for m in metas {
-        let dt = match m.dtype {
-            IdsDType::Str => DataType::Utf8,
-            IdsDType::Int => DataType::Int64,
-            IdsDType::Float => DataType::Float64,
-        };
-        if taken.contains(&m.name) {
-            return Err(ParquetError::Config(format!(
-                "projected element {:?} collides with an output column name; drop it from ids",
-                m.name
-            )));
-        }
-        taken.push(m.name.clone());
-        fields.push(Field::new(m.name.clone(), dt, true));
-    }
-    Ok(Arc::new(Schema::new(fields)))
-}
-
-/// Decode + project one chunk into the file's output shape. Output row order
-/// equals input row order; null VINs decode as empty strings but stay null on
-/// the passthrough column.
-fn transform(
-    st: &FileState,
-    metas: &[IdMeta],
-    batch: RecordBatch,
-) -> Result<RecordBatch, ParquetError> {
-    let vin_arr = cast(batch.column(st.vin_idx), &DataType::Utf8)
-        .map_err(|e| ParquetError::Io(format!("casting VIN column: {e}")))?;
-    let vin = vin_arr.as_string::<i32>();
-    let vins: Vec<String> = (0..vin.len())
-        .map(|i| {
-            if vin.is_null(i) {
-                String::new()
-            } else {
-                vin.value(i).to_string()
-            }
-        })
-        .collect();
-
-    // The caller-year column is cast once and reused: the kernel reads it and the
-    // passthrough emits it, both as Int32.
-    let year_arr = match st.year_idx {
-        None => None,
-        Some(yi) => Some(
-            cast(batch.column(yi), &DataType::Int32)
-                .map_err(|e| ParquetError::Io(format!("casting caller-year column to int: {e}")))?,
-        ),
-    };
-    let years: Option<Vec<Option<i32>>> = year_arr.as_ref().map(|a| {
-        let y = a.as_primitive::<arrow_array::types::Int32Type>();
-        (0..y.len())
-            .map(|i| (!y.is_null(i)).then(|| y.value(i)))
-            .collect()
-    });
-
-    let out = decode_batch_ids(&vins, years.as_deref(), metas);
-
-    let mut cols: Vec<ArrayRef> = Vec::with_capacity(metas.len() + 3);
-    cols.push(vin_arr);
-    cols.extend(year_arr);
-    cols.push(Arc::new(Int32Array::from(out.model_year)));
-    for col in out.columns {
-        cols.push(match col {
-            ColumnValues::Str(v) => Arc::new(StringArray::from(v)) as ArrayRef,
-            ColumnValues::Int(v) => Arc::new(Int64Array::from(v)),
-            ColumnValues::Float(v) => Arc::new(Float64Array::from(v)),
-        });
-    }
-    RecordBatch::try_new(st.out_schema.clone(), cols)
-        .map_err(|e| ParquetError::Io(format!("assembling output batch: {e}")))
-}
-
 /// Streaming decoder over one file or a directory of them. Eagerly opens the
 /// first file so the output schema is known before the first chunk flows —
 /// callers writing parquet need it even for zero-row inputs.
@@ -565,7 +357,7 @@ pub struct ParquetChunkIter {
 
 /// Open a dataset source for chunked decoding.
 pub fn open_chunks(src: &Path, opts: ParquetOpts) -> Result<ParquetChunkIter, ParquetError> {
-    let metas = resolve_ids(Db::embedded(), &opts.ids).map_err(ParquetError::Config)?;
+    let metas = resolve_columns(Db::embedded(), &opts.columns).map_err(ParquetError::Config)?;
     let mut iter = ParquetChunkIter {
         files: expand_src(src)?.into_iter(),
         state: None,
@@ -593,19 +385,20 @@ impl ParquetChunkIter {
             return Ok(false);
         };
         let st = FileState::open(&path, &self.opts, &self.metas)?;
+        let schema = st.decoder.out_schema();
         match &self.out_schema {
-            Some(first) if first != &st.out_schema => {
+            Some(first) if first != schema => {
                 return Err(ParquetError::Config(format!(
                     "{}: passes through [{}], but the first file passes through [{}] — \
                      every file in a directory must resolve the same columns; \
                      name the VIN/year columns explicitly",
                     path.display(),
-                    passthrough_names(&st.out_schema, self.metas.len()),
+                    passthrough_names(schema, self.metas.len()),
                     passthrough_names(first, self.metas.len()),
                 )))
             }
             Some(_) => {}
-            None => self.out_schema = Some(st.out_schema.clone()),
+            None => self.out_schema = Some(schema.clone()),
         }
         self.state = Some(st);
         Ok(true)
@@ -638,7 +431,7 @@ impl ParquetChunkIter {
                 }
             };
             let st = self.state.as_ref().expect("a file is open");
-            return transform(st, &self.metas, batch).map(Some);
+            return st.decoder.decode_batch(&batch).map(Some);
         }
     }
 }
@@ -671,7 +464,7 @@ fn resolve_dst(dst: &Path) -> Option<PathBuf> {
 /// a destination that *is* the source (or lives inside a source directory) would
 /// destroy the input mid-decode. Both are caller mistakes worth refusing up
 /// front, while the input is still intact.
-fn check_dst_outside_src(src: &Path, dst: &Path) -> Result<(), ParquetError> {
+pub fn check_dst_outside_src(src: &Path, dst: &Path) -> Result<(), ParquetError> {
     let (Ok(src_real), Some(dst_real)) = (src.canonicalize(), resolve_dst(dst)) else {
         return Ok(());
     };
@@ -700,21 +493,36 @@ pub fn decode_parquet_to_file(
 ) -> Result<usize, ParquetError> {
     check_dst_outside_src(src, dst)?;
     let row_group = opts.batch_size.max(1);
-    let mut iter = open_chunks(src, opts)?;
+    let iter = open_chunks(src, opts)?;
     let schema = iter
         .out_schema
         .clone()
         .ok_or_else(|| ParquetError::Config("source expanded to no files".to_string()))?;
+    write_parquet(iter, schema, dst, row_group)
+}
+
+/// Write every batch a reader yields to `dst` as Snappy parquet, one row group
+/// per batch; returns the rows written.
+///
+/// The reader's schema opens the file, so a zero-row source still writes a valid
+/// (empty) parquet with the right columns. One row group per batch keeps peak
+/// write-side memory at O(batch), matching the read side.
+pub fn write_parquet(
+    batches: impl Iterator<Item = Result<RecordBatch, ParquetError>>,
+    schema: SchemaRef,
+    dst: &Path,
+    row_group: usize,
+) -> Result<usize, ParquetError> {
     let out = File::create(dst).map_err(|e| ParquetError::Io(format!("{}: {e}", dst.display())))?;
     let props = WriterProperties::builder()
         .set_compression(Compression::SNAPPY)
-        // One row group per chunk keeps peak write-side memory at O(chunk) too.
-        .set_max_row_group_row_count(Some(row_group))
+        .set_max_row_group_row_count(Some(row_group.max(1)))
         .build();
     let mut writer = ArrowWriter::try_new(out, schema, Some(props))
         .map_err(|e| ParquetError::Io(format!("{}: {e}", dst.display())))?;
     let mut rows = 0usize;
-    while let Some(batch) = iter.next_chunk()? {
+    for batch in batches {
+        let batch = batch?;
         rows += batch.num_rows();
         writer
             .write(&batch)
@@ -730,6 +538,10 @@ pub fn decode_parquet_to_file(
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU32, Ordering};
+    use std::sync::Arc;
+
+    use arrow_array::{ArrayRef, Int32Array, StringArray};
+    use arrow_schema::{Field, Schema};
 
     const MAKE: i32 = 26; // lookup  -> Utf8
     const CYLINDERS: i32 = 9; // int     -> Int64
@@ -773,7 +585,7 @@ mod tests {
 
     fn opts(ids: &[i32]) -> ParquetOpts {
         ParquetOpts {
-            ids: ids.to_vec(),
+            columns: ids.iter().copied().map(ColumnSpec::from).collect(),
             ..ParquetOpts::default()
         }
     }
@@ -869,7 +681,7 @@ mod tests {
     /// How many of the input's columns the reader will actually decode.
     fn reader_width(path: &Path, opts: &ParquetOpts) -> usize {
         use arrow_array::RecordBatchReader;
-        let metas = resolve_ids(Db::embedded(), &opts.ids).expect("ids");
+        let metas = resolve_columns(Db::embedded(), &opts.columns).expect("columns");
         let st = FileState::open(path, opts, &metas).expect("open");
         st.reader.schema().fields().len()
     }
@@ -1191,7 +1003,7 @@ mod tests {
             ..opts(&[MAKE])
         };
         let err = config_err(open_chunks(&src, named));
-        assert!(err.contains("collides with an output column"), "{err}");
+        assert!(err.contains("collides with a passthrough column"), "{err}");
 
         let src2 = dir.join("in2.parquet");
         write(

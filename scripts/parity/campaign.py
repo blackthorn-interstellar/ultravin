@@ -62,7 +62,7 @@ def _check(case: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
     vin, eng = case["vin"], case["engine"]
     try:
         o = [normalize.from_oracle(r) for r in oracle.decode(_conn, vin)]
-        m = normalize.ultravin_rows(ultravin.decode(vin))
+        m = normalize.ultravin_rows(ultravin.decode(vin, full=True))
         d = normalize.diff_rows(o, m)
     except Exception as e:  # noqa: BLE001
         return (eng, {"vin": vin, "engine": eng, "error": repr(e)[:200]})

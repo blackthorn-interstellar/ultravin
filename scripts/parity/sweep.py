@@ -59,7 +59,7 @@ def run(cases: list[dict[str, Any]], examples: int) -> dict[str, Any]:
                     conn.rollback()
                     conn.uv_pending = 0
                 continue
-            mine = normalize.ultravin_rows(uv.decode(vin))
+            mine = normalize.ultravin_rows(uv.decode(vin, full=True))
             d = normalize.diff_rows(oracle_rows, mine)
             if d["ok"]:
                 n_ok += 1
@@ -82,6 +82,11 @@ def run(cases: list[dict[str, Any]], examples: int) -> dict[str, Any]:
                         "vin": vin,
                         "note": case.get("note"),
                         "order_ok": d["order_ok"],
+                        # The complete diff, beside the readable-but-truncated
+                        # lists below: anything classifying a divergence (e.g.
+                        # scripts.parity.stale_cache) must not mistake the first
+                        # 20 field diffs of a wide one for the whole story.
+                        "fingerprint": normalize.fingerprint(d),
                         "field_diffs": d["field_diffs"][:20],
                         "missing": [{"element_id": r["element_id"], "variable": r["variable"]} for r in d["missing"]],
                         "extra": [{"element_id": r["element_id"], "variable": r["variable"]} for r in d["extra"]],

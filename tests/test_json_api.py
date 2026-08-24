@@ -17,13 +17,15 @@ import ultravin as uv
 from tests.vin_samples import VINS
 
 
-def test_decode_json_matches_decode() -> None:
+@pytest.mark.parametrize("full", [False, True])
+def test_decode_json_matches_decode(full: bool) -> None:
     for vin in VINS:
-        assert json.loads(uv.decode_json(vin)) == uv.decode(vin), vin
+        assert json.loads(uv.decode_json(vin, full=full)) == uv.decode(vin, full=full), vin
 
 
-def test_decode_batch_json_matches_decode_batch() -> None:
-    assert json.loads(uv.decode_batch_json(VINS)) == uv.decode_batch(VINS)
+@pytest.mark.parametrize("full", [False, True])
+def test_decode_batch_json_matches_decode_batch(full: bool) -> None:
+    assert json.loads(uv.decode_batch_json(VINS, full=full)) == uv.decode_batch(VINS, full=full)
 
 
 def test_decode_batch_json_empty() -> None:

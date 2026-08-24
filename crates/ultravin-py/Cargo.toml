@@ -17,12 +17,15 @@ crate-type = ["cdylib"]
 # download-data route is dead weight here — and enabling it would compile ureq
 # + ring into all 17 wheel jobs for nothing.
 ultravin = { path = "../ultravin", default-features = false, features = ["parquet"] }
-# The dataset door hands back arrow `RecordBatch`es from ultravin; these two
-# crates are only for reading them back out (schema field names, typed column
-# downcasts) when marshalling to Python dicts. Same versions the core pins, so
-# they resolve to the one already-locked copy.
-arrow-array = "59.2"
-arrow-schema = "59.2"
+# `decode_stream` moves arrow data across the Python boundary as C structs, in
+# both directions: the `ffi` feature is what supplies `FFI_ArrowArrayStream` /
+# `FFI_ArrowSchema` and the import/export helpers, so a decode stream can be
+# handed to pyarrow/polars/duckdb without a row ever becoming a Python object.
+# Same versions the core pins, so they resolve to the one already-locked copy.
+# The feature pulls in `libc` and `bitflags` — both pure Rust, so the exotic
+# cross-compile targets are unaffected.
+arrow-array = { version = "59.2", features = ["ffi"] }
+arrow-schema = { version = "59.2", features = ["ffi"] }
 # Windows links python3.dll via raw-dylib (pyo3 0.29+), so no import lib is
 # needed even for the aarch64 cross-build — the old generate-import-lib
 # feature is an inert no-op now and deliberately dropped.

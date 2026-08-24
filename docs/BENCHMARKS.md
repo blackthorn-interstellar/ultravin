@@ -12,9 +12,9 @@ Host: Apple Silicon (aarch64-apple-darwin), `cargo 1.90`, release profile
 
 Re-measured after memoizing `valid_chars_in_key` (the E6 unused-position scan in
 `errors.rs` re-expanded every matched pattern key on every pass, compiling a
-regex per bracket key) and adding the `flat=True` output shape. The memo is
+regex per bracket key) and adding the attributes output shape. The memo is
 byte-identical output — verified by checksumming the full JSON of 7,900 decodes
-before and after — and is worth ~1.4× on decode; `flat=True` is worth ~2× on
+before and after — and is worth ~1.4× on decode; the attributes shape is worth ~2× on
 the Python `decode_batch` path (2.4× on 10 cores), which is marshalling-bound
 rather than decode-bound. Measured on a contended host (load average 5–10), so these are
 conservative — see the honesty notes under Throughput for how each figure was
@@ -145,19 +145,23 @@ SQL-oracle rows are round-trip-bound and carried over from the prior run — the
 are dominated by query execution, not client CPU, so they are effectively
 host-independent at this scale.
 
-## Python output shapes (`flat=True`)
+## Python output shapes (`full=True`)
 
 Past a certain point the Rust decode stops being the cost and **marshalling into
-Python does**. The default shape returns ~41 elements per VIN as 15-key dicts —
-about 615 `PyDict_SetItem` calls, all GIL-serial, after the parallel decode has
+Python does**. The `full=True` shape returns ~41 elements per VIN as 15-key dicts
+— about 615 `PyDict_SetItem` calls, all GIL-serial, after the parallel decode has
 already finished. Measured at 22.6 ns per dict store, that is ~13.9 us/VIN, i.e.
-most of the wall clock. `flat=True` replaces the element list with one
-`variable -> value` dict: ~41 stores instead of ~615.
+most of the wall clock. The default `attributes` shape replaces the element list
+with one `variable -> value` dict: ~41 stores instead of ~615.
+
+These figures are why the cheap shape is the default: the columns below were
+measured when `elements` still was, so read `full=True` as "what you used to get
+for free" and `default` as the shape a caller now gets without asking.
 
 5,000-VIN corpus, 4 cores, min-of-15, release wheel — same basis as the
 throughput table above:
 
-| path | default | `flat=True` |
+| path | `full=True` | default |
 |---|---|---|
 | `decode_batch` → `list[dict]` | 30.9 us/VIN | **15.7 us/VIN** (2.0×) |
 | `decode_batch_json` → str | 16.4 us/VIN | **11.9 us/VIN** (1.4×) |
@@ -165,17 +169,18 @@ throughput table above:
 
 (On all 10 cores the same comparison reads 26.9 → 11.0 us/VIN, a 2.4× gain: the
 more cores the parallel decode gets, the larger a share the GIL-serial
-marshalling is, so `flat` matters *more* on bigger machines, not less.)
+marshalling is, so the shape matters *more* on bigger machines, not less.)
 
-The pipeline row is the one that matters: with the default shape the caller pays
-us to build 615 dict entries, then pays Python again to collapse them to the ~41
-it wanted. Pydantic validation of 40 fields is only 4.0 us of that total — the
+The pipeline row is the one that matters: with `full=True` the caller pays us to
+build 615 dict entries, then pays Python again to collapse them to the ~41 it
+wanted. Pydantic validation of 40 fields is only 4.0 us of that total — the
 decoder's output shape, not the consumer's validation, was the bottleneck.
 
-Two things `flat=True` is *not*: it is not a decode-time saving (identical work
-happens in Rust), and it is not lossless — it keeps `variable -> value` and drops
-the 13 provenance columns, including `source`, which distinguishes a value the
-VIN encodes from a vehicle-type default (53.6% of all rows are `Default`).
+Two things the default shape is *not*: it is not a decode-time saving (identical
+work happens in Rust), and it is not lossless — it keeps `variable -> value` and
+drops the 13 provenance columns, including `source`, which distinguishes a value
+the VIN encodes from a vehicle-type default (53.6% of all rows are `Default`).
+That is what `full=True` is for.
 
 An earlier attempt at the same target — interning the `value`/`attribute_id`/
 `source`/`keys` `PyString`s — was measured at **+2–3%** and reverted: CPython

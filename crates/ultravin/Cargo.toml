@@ -24,9 +24,14 @@ default = ["download-data"]
 download-data = ["dep:ureq"]
 # `Db::open`: mmap an artifact file at runtime instead of baking one in.
 external-data = ["dep:memmap2"]
-# The dataset door (`parquet_io`): parquet in, parquet out. Off by default so an
-# embedder that only decodes does not compile arrow.
-parquet = ["dep:arrow-array", "dep:arrow-cast", "dep:arrow-schema", "dep:parquet"]
+# Columnar decode (`arrow_io`): `RecordBatch` in, `RecordBatch` out, no file I/O.
+# Source-agnostic on purpose — parquet, an Arrow C stream from pyarrow/polars, or
+# batches a caller built by hand all enter the same door.
+arrow = ["dep:arrow-array", "dep:arrow-cast", "dep:arrow-schema"]
+# The dataset door (`parquet_io`): parquet in, parquet out, i.e. file I/O plus
+# column sniffing layered on `arrow`. Both are off by default so an embedder that
+# only decodes does not compile arrow.
+parquet = ["arrow", "dep:parquet"]
 
 [package.metadata.docs.rs]
 all-features = true

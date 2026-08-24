@@ -10,6 +10,8 @@
 //! built-in cover) for
 //! exercising a decoder with nothing else installed.
 
+#[cfg(feature = "arrow")]
+pub mod arrow_io;
 mod checkdigit;
 mod conversion;
 pub mod cover;
@@ -32,11 +34,17 @@ use std::fmt::Write as _;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[cfg(feature = "arrow")]
+pub use arrow_io::{
+    ArrowDecoder, ArrowError, ArrowOpts, ColumnNames, ELEMENT_ID_KEY, VARIABLE_KEY,
+};
 pub use checkdigit::check_digit;
 pub use db::Db;
+pub use errors::recompute_valid_chars;
 pub use generate::{generate, pairwise, seeded, sweep, Dimension, Filter};
 pub use ids::{
-    all_public_ids, decode_batch_ids, resolve_ids, ColumnValues, IdMeta, IdsBatch, IdsDType,
+    all_public_ids, decode_batch_ids, resolve_columns, resolve_ids, ColumnSpec, ColumnValues,
+    IdMeta, IdsBatch, IdsDType,
 };
 pub use matcher::sqlwild_to_regex;
 pub use wmi::{vin_descriptor, vin_wmi};
@@ -276,6 +284,12 @@ pub fn current_year_at(now_micros: i64) -> i32 {
 /// year flags error 12 on that pass.
 pub fn decode(input: &str, year: Option<i32>) -> DecodeResult<'static> {
     Db::embedded().decode(input, year)
+}
+
+/// [`decode`] with the [`FlatResult`] shape: elements collapsed to
+/// `variable -> value`, the 13 per-element provenance columns dropped.
+pub fn decode_flat(input: &str, year: Option<i32>) -> FlatResult<'static> {
+    FlatResult::from(decode(input, year))
 }
 
 /// Decode a VIN against an explicit database and clock (injectable for tests),
@@ -1008,6 +1022,19 @@ mod tests {
             .expect("make element");
         assert_eq!(make["value"], "HONDA");
         assert_eq!(make["source"], "pattern - model");
+    }
+
+    #[test]
+    fn decode_flat_matches_flattening_a_full_decode() {
+        let d = db();
+        if !d.is_loaded() {
+            eprintln!("skipping: artifact not built");
+            return;
+        }
+        let vin = "1HGCM82633A004352";
+        assert_eq!(decode_flat(vin, None), FlatResult::from(decode(vin, None)));
+        // The caller year reaches the decode through the flat door too.
+        assert_eq!(decode_flat(vin, Some(2013)).model_year, Some(2013));
     }
 
     #[test]

@@ -35,6 +35,7 @@ rust:  ## Run Rust fmt-check, clippy, and tests.
 	@cargo clippy --workspace --all-targets --all-features -- -D warnings
 	@cargo clippy -p ultravin --all-targets -- -D warnings  # default features: what a crates.io user compiles
 	@cargo clippy -p ultravin --all-targets --no-default-features -- -D warnings  # no download, no arrow
+	@cargo clippy -p ultravin --all-targets --no-default-features --features arrow -- -D warnings  # arrow without parquet: the columnar core alone
 	@cargo test --workspace --exclude ultravin-py --all-features
 	@echo -e "✅ Rust checks pass! ✨ 🍰 ✨"
 

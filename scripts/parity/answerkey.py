@@ -65,7 +65,7 @@ def ultravin_hashes(vins: list[str]) -> list[str]:
     Batched: `decode` one VIN at a time spends most of its time crossing the
     Python boundary, and the key is millions of rows long.
     """
-    results: Any = ultravin.decode_batch(vins)
+    results: Any = ultravin.decode_batch(vins, full=True)
     out = []
     for result in results:
         rows = normalize.collation_agnostic(normalize.ultravin_rows(result))
