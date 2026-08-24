@@ -459,6 +459,7 @@ jobs:
       contents: read
       pull-requests: read
       checks: read
+      statuses: read # review-verdict is a commit status, not a check run
     outputs:
       failed: ${{ steps.wait.outputs.failed }}
       rejected: ${{ steps.verdict.outputs.rejected }}
@@ -477,6 +478,40 @@ jobs:
             echo "failed=true" >> "$GITHUB_OUTPUT"
             gh pr checks deps/nightly --repo "${{ github.repository }}" || true
           fi
+      # `gh pr checks --watch` only judges the checks that EXIST. A REQUIRED
+      # context that never lands in the PR's rollup reads as green here, and the
+      # night then dies four jobs later at merge time with an opaque 405
+      # ("Required status check `review-verdict` is expected"). That is exactly
+      # how this pipeline broke: the review gate published its verdict as an
+      # API-created check run, which GitHub filed into a check suite that was
+      # not associated with the PR, so it never joined the rollup at all.
+      #
+      # Assert the one context that failure mode hits, read straight off the
+      # PR's own rollup. Deliberately NOT from the branch-protection API: that
+      # endpoint needs the `administration` scope, which the workflow
+      # `permissions:` key cannot grant a GITHUB_TOKEN, so it could only ever
+      # degrade to a nightly warning that asserts nothing. The rollup mixes
+      # CheckRun nodes (.name/.conclusion) with StatusContext nodes
+      # (.context/.state) — read both, newest entry for the context.
+      - name: review-verdict actually landed in the rollup
+        if: steps.wait.outputs.failed == 'false'
+        run: |
+          verdict=$(gh pr view deps/nightly --repo "${{ github.repository }}" --json statusCheckRollup \
+            --jq '[.statusCheckRollup[] | select((.name // .context) == "review-verdict")] | last | (.conclusion // .state // "ABSENT")')
+          verdict=${verdict:-ABSENT}
+          echo "review-verdict in the deps/nightly rollup: $verdict"
+          case "$verdict" in
+            SUCCESS | success) ;;
+            ABSENT)
+              echo "::error::review-verdict is absent from the deps/nightly rollup — a required context that never lands reads as green here and merge then dies with a 405"
+              exit 1
+              ;;
+            *)
+              echo "::error::review-verdict is '$verdict' on deps/nightly, not a settled success"
+              exit 1
+              ;;
+          esac
+          echo "review-verdict present and green on deps/nightly" >> "$GITHUB_STEP_SUMMARY"
       # The remediation agent exists for MECHANICAL failures. A red
       # `review-verdict` is not one: it is the adversarial gate judging this
       # bump's content, and it is the only judgment between an unattended
@@ -489,8 +524,10 @@ jobs:
         if: steps.wait.outputs.failed == 'true'
         run: |
           head=$(gh pr view deps/nightly --repo "${{ github.repository }}" --json headRefOid --jq .headRefOid)
-          verdict=$(gh api "repos/${{ github.repository }}/commits/$head/check-runs" \
-            --jq '[.check_runs[] | select(.name == "review-verdict")] | sort_by(.started_at) | last | .conclusion // ""')
+          # Commit status, not a check run: the combined-status endpoint already
+          # reports one entry per context, the newest post for that context.
+          verdict=$(gh api "repos/${{ github.repository }}/commits/$head/status" \
+            --jq '[.statuses[] | select(.context == "review-verdict")] | last | .state // ""')
           echo "review-verdict on $head: ${verdict:-<none>}"
           if [ "$verdict" = "failure" ]; then
             echo "rejected=true" >> "$GITHUB_OUTPUT"
@@ -752,6 +789,7 @@ jobs:
       pull-requests: write # merge, comment
       issues: write # gh label create / --add-label needs-human
       checks: read
+      statuses: read # review-verdict is a commit status, not a check run
       actions: read # poll re-dispatched workflow runs by head SHA (re-wait step)
     env:
       GH_TOKEN: ${{ github.token }}
@@ -808,7 +846,16 @@ jobs:
           done
           gh api "repos/$REPO/commits/$SHA/check-runs?per_page=100" --paginate \
             --jq '.check_runs[] | "\(.status) \(.conclusion // "none") \(.name)"' \
-            | sort > "$RUNNER_TEMP/checks.txt"
+            > "$RUNNER_TEMP/checks-raw.txt"
+          # review-verdict is a commit status, not a check run, so it is absent
+          # from the endpoint above; without this a rejected re-review would read
+          # green here and the merge below would die on an opaque 405. Rendered
+          # in the same "state conclusion name" shape the awk gate below reads;
+          # a status that is still `pending` is not `success`, hence red.
+          gh api "repos/$REPO/commits/$SHA/status" \
+            --jq '.statuses[] | "completed \(.state) \(.context)"' \
+            >> "$RUNNER_TEMP/checks-raw.txt"
+          sort "$RUNNER_TEMP/checks-raw.txt" > "$RUNNER_TEMP/checks.txt"
           cat "$RUNNER_TEMP/checks.txt"
           # neutral/skipped are green to branch protection; everything else that
           # is not a completed success — including a check still running after

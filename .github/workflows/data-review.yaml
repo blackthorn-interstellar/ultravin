@@ -1,6 +1,6 @@
 # Independent review gate for the PRs the automation merges on its own. Its
-# verdict is published as the `review-verdict` check run on the PR head SHA —
-# a required check on master, so a merge cannot happen without it:
+# verdict is published as the `review-verdict` LEGACY COMMIT STATUS on the PR
+# head SHA — a required context on master, so a merge cannot happen without it:
 #   - PRs outside the gated branch prefixes: success in seconds, $0
 #   - data/* PRs touching only regenerated files: deterministic allowlist pass, $0
 #   - data/* PRs with code/doc changes (agent-fixed months): an adversarial
@@ -21,19 +21,19 @@
 # — grok 1.0.4 treats a permission-rule denial as a session kill, so the
 # allowlist is the only viable scoping) over a PR diff and body that, on the
 # deps lane, are attacker-influenceable. If that same job also held the
-# checks:write token that publishes review-verdict, a prompt-injected reviewer
-# could forge its own required check (`gh api .../check-runs -f
-# name=review-verdict -f conclusion=success`) and merge itself past master's one
+# statuses:write token that publishes review-verdict, a prompt-injected reviewer
+# could forge its own required context (`gh api .../statuses/<sha> -f
+# context=review-verdict -f state=success`) and merge itself past master's one
 # gate. So the write token never sits in the agent's job:
-#   - review-open   (contents:read, pull-requests:read, checks:write): classifies
-#                   the PR and opens the pending check — no agent, no model sees
-#                   any content it feeds a prompt.
+#   - review-open   (contents:read, pull-requests:read, statuses:write):
+#                   classifies the PR and posts the pending status — no agent,
+#                   no model sees any content it feeds a prompt.
 #   - review        (contents:read ONLY): pre-fetches the head SHA and the PR
 #                   body, then runs the Grok reviewer with NO token in its env.
 #                   Nothing runs AFTER the agent here, so a shimmed `gh` on the
 #                   agent-appended PATH would find no credential.
-#   - review-publish (pull-requests:write, checks:write): reads the agent's
-#                   verdict as DATA, completes the check run, comments on
+#   - review-publish (pull-requests:write, statuses:write): reads the agent's
+#                   verdict as DATA, posts the terminal status, comments on
 #                   rejection. It checks out nothing and executes nothing the
 #                   agent produced.
 name: Data Review
@@ -49,8 +49,8 @@ on:
 permissions: {}
 
 jobs:
-  # Metadata + the pending-check window. Holds checks:write (to open the
-  # in_progress run) but runs NO agent: it only reads PR metadata and diffs the
+  # Metadata + the pending-status window. Holds statuses:write (to post the
+  # pending status) but runs NO agent: it only reads PR metadata and diffs the
   # base repo against the fetched head with git — it never feeds any of that to
   # a model, so the write token is never co-located with an injectable prompt.
   review-open:
@@ -59,14 +59,13 @@ jobs:
     permissions:
       contents: read # actions/checkout + git fetch/diff (works on this public repo without it, explicit so a private fork does not wedge closed)
       pull-requests: read # gh pr view
-      checks: write # open the review-verdict check run in_progress
+      statuses: write # post the pending review-verdict commit status
     outputs:
       head_ref: ${{ steps.pr.outputs.head_ref }}
       head_sha: ${{ steps.pr.outputs.head_sha }}
       base_sha: ${{ steps.pr.outputs.base_sha }}
       number: ${{ steps.pr.outputs.number }}
       verdict: ${{ steps.scope.outputs.verdict }}
-      check_run_id: ${{ steps.open.outputs.check_run_id }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -141,21 +140,31 @@ jobs:
       # simply does not exist on the head SHA, and a watcher (branch
       # protection's "expected" list, or the nightly deps-watch job's
       # `gh pr checks --watch`) can read that absence as "nothing pending".
-      # Open the run in_progress up front and have review-publish complete THIS
-      # run, so the whole review window is visibly pending. The instant verdicts
-      # skip it: they publish in the same second, and it keeps the $0 paths at a
+      # Post it pending up front and have review-publish overwrite THAT context,
+      # so the whole review window is visibly pending. The instant verdicts skip
+      # it: they publish in the same second, and it keeps the $0 paths at a
       # single API call.
-      - name: Open the verdict check run
-        id: open
+      #
+      # A commit status, not a check run, and that is the whole point: an
+      # API-created check run is filed into the Actions app's EARLIEST check
+      # suite on the SHA, which on a pipeline-dispatched PR is a
+      # workflow_dispatch suite that is never PR-associated — the verdict passed
+      # but never appeared in the PR's rollup, so branch protection kept
+      # reporting `review-verdict` as "expected" and every auto-merge died with
+      # HTTP 405. Statuses attach to the SHA and belong to no suite at all.
+      # target_url points back at this run, recovering the check-run UI link.
+      - name: Open the pending verdict status
         if: steps.scope.outputs.verdict == 'model-review' || steps.scope.outputs.verdict == 'deps-review'
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          id=$(gh api "repos/${{ github.repository }}/check-runs" \
-            -f name=review-verdict -f head_sha="$HEAD_SHA" -f status=in_progress --jq .id)
-          echo "check_run_id=$id" >> "$GITHUB_OUTPUT"
-          echo "review-verdict: in_progress @ $HEAD_SHA (run $id)" >> "$GITHUB_STEP_SUMMARY"
+          gh api "repos/${{ github.repository }}/statuses/$HEAD_SHA" --silent \
+            -f state=pending -f context=review-verdict \
+            -f description="adversarial review in progress" \
+            -f target_url="$RUN_URL"
+          echo "review-verdict: pending @ $HEAD_SHA" >> "$GITHUB_STEP_SUMMARY"
       # Hand the PR body to the tokenless reviewer out of band: the agent job
       # holds no token, so it cannot call `gh pr view` itself. Body text is
       # untrusted data (the deps report is agent-authored), handled as data.
@@ -541,8 +550,8 @@ jobs:
   # Publishes review-verdict. Holds the write token but treats the agent's
   # verdict purely as DATA — it checks out nothing and executes nothing the
   # agent produced. `needs: [review-open, review]` + `if: always()` so it ALWAYS
-  # runs and always reports a conclusion (even when `review` was skipped for the
-  # pass/human-review paths or went red), so the required check is never left
+  # runs and always reports a verdict (even when `review` was skipped for the
+  # pass/human-review paths or went red), so the required context is never left
   # pending forever. All-empty verdict fails closed.
   review-publish:
     needs: [review-open, review]
@@ -551,7 +560,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       pull-requests: write # findings comment on rejection
-      checks: write # complete/create the review-verdict check run
+      statuses: write # post the terminal review-verdict commit status
     steps:
       - name: Publish verdict
         env:
@@ -559,7 +568,7 @@ jobs:
           HEAD_SHA: ${{ needs.review-open.outputs.head_sha }}
           PR_NUM: ${{ needs.review-open.outputs.number }}
           SCOPE: ${{ needs.review-open.outputs.verdict }}
-          CHECK_RUN_ID: ${{ needs.review-open.outputs.check_run_id }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           # First non-empty attempt wins; all-empty stays '' and fails closed below.
           VERDICT: ${{ needs.review.outputs.agent || needs.review.outputs.agent_retry || needs.review.outputs.agent_deps || needs.review.outputs.agent_deps_retry }}
         run: |
@@ -580,17 +589,18 @@ jobs:
               fi
               ;;
           esac
-          # Complete the run opened before the review when there is one, so the
-          # pending check becomes the verdict instead of a second check run
-          # racing it.
-          if [ -n "$CHECK_RUN_ID" ]; then
-            gh api -X PATCH "repos/${{ github.repository }}/check-runs/$CHECK_RUN_ID" --silent \
-              -f status=completed -f conclusion="$conclusion"
-          else
-            gh api "repos/${{ github.repository }}/check-runs" --silent \
-              -f name=review-verdict -f head_sha="$HEAD_SHA" \
-              -f status=completed -f conclusion="$conclusion"
-          fi
+          # Overwrite the (sha, context) pair review-open may have left pending:
+          # a status is keyed by that pair, so the newest post for the context
+          # IS the verdict — no run id to thread through, and no second check
+          # run racing the first. GitHub status states are only
+          # error/failure/pending/success, so anything but a success conclusion
+          # publishes as failure.
+          state=failure
+          if [ "$conclusion" = "success" ]; then state=success; fi
+          gh api "repos/${{ github.repository }}/statuses/$HEAD_SHA" --silent \
+            -f state="$state" -f context=review-verdict \
+            -f description="review gate: $state ($SCOPE)" \
+            -f target_url="$RUN_URL"
           if [ "$conclusion" != "success" ]; then
             if [ -n "$note" ]; then
               printf '%s\n' "$note" | gh pr comment "$PR_NUM" --body-file -
