@@ -206,6 +206,37 @@ def test_a_narrow_diff_in_a_listed_cell_at_an_unaffected_position_is_not_the_cla
     assert not stale_cache.is_expected_divergence(vin, at_five, listed, CELLS)
 
 
+def test_a_diff_spanning_a_stale_and_an_unaffected_position_is_not_the_class() -> None:
+    """Containment, not overlap. `(MLH, 2019)` is stale at position 11 only, so a
+    charset that also differs at position 5 is the previous test's bug with a
+    second row bolted on — the stale cell explains position 11 and says nothing
+    about position 5. Accepting it on the strength of the overlap would let one
+    listed position launder every other position printed beside it."""
+    vin, listed = "MLHAE041XKA111111", {"model_year": 2019}
+    both = {
+        "field_diffs": [[144, "value", "(5:ABC)(11:AJ)", "(5:AB)(11:J)"]],
+        "missing": [],
+        "extra": [],
+        "order_ok": True,
+    }
+    assert stale_cache.error_fields_only(both)
+    assert stale_cache.diff_positions(both) == {5, 11}
+    assert stale_cache.stale_positions(vin, listed, CELLS) == frozenset({11})
+    assert not stale_cache.is_expected_divergence(vin, both, listed, CELLS)
+
+
+def test_a_one_sided_element_144_must_be_stale_at_every_position_it_prints() -> None:
+    """A wholly missing/extra possible-values row puts *all* of its positions in
+    evidence, because the other side printed none of them. Only the row confined
+    to the cell's stale positions is this class."""
+    vin, listed = "MLHAE041XKA111111", {"model_year": 2019}
+    confined = {"field_diffs": [], "missing": [], "extra": [[144, "(11:J)"]], "order_ok": True}
+    wider = {"field_diffs": [], "missing": [], "extra": [[144, "(5:AB)(11:J)"]], "order_ok": True}
+    assert stale_cache.is_expected_divergence(vin, confined, listed, CELLS)
+    assert stale_cache.diff_positions(wider) == {5, 11}
+    assert not stale_cache.is_expected_divergence(vin, wider, listed, CELLS)
+
+
 def test_diff_positions_reads_element_144_groups_and_element_142_suggestions() -> None:
     """The two elements that name a position: 144's `(position:charset)` groups
     and 142's whole rewritten VIN, compared character by character (1-based)."""

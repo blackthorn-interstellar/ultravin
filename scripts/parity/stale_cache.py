@@ -365,17 +365,19 @@ def is_expected_divergence(
     All three conditions are required, cheapest first (the second needs a
     decode): only error/correction fields differ, at all — that is everything the
     cache can reach; the cell that decode reads is one the scan found stale; and
-    the difference points at a position that cell is *actually* stale at. Without
-    the third, a cell stale at position 11 would excuse a wrong charset printed
-    for position 5, which it does not explain at all.
+    *every* position the difference points at is one that cell is actually stale
+    at. Containment, not overlap: a cell stale at position 11 explains a wrong
+    charset printed for position 11 and nothing about one printed for position 5,
+    so a difference spanning both is wider than the cell accounts for and stays a
+    bug — the same verdict it would get had position 11 not been involved.
 
     Fails closed on every axis, the last one included: a record whose difference
     names no position is not this class.
     """
     if not error_fields_only(diff):
         return False
-    stale = stale_positions(vin, decoded, cells)
-    return bool(stale) and bool(diff_positions(diff) & stale)
+    at = diff_positions(diff)
+    return bool(at) and at <= stale_positions(vin, decoded, cells)
 
 
 def _decode(vin: str) -> dict[str, Any]:
