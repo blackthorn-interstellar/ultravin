@@ -45,6 +45,10 @@ runs:
         # regeneration is data-only. Fail closed — an unreadable or empty diff
         # is treated as schema-change, never merged.
         #
+        # scripts/stale_cache_cells.json is in that data set: refresh.py
+        # regenerates it from the dump's own WMIYearValidChars scan, exactly as
+        # it regenerates vpic/, and it is never hand-edited.
+        #
         # The list must be rename-VISIBLE, which `gh pr diff --name-only` is
         # not: GitHub's diff runs rename detection (`rename from`/`rename to`)
         # and gh prints only the b/ side, so `git mv vpic/schema/tables.sql
@@ -65,7 +69,7 @@ runs:
           cls="schema-change"
         elif printf '%s\n' "$files" | grep -qE '^vpic/(schema|procs)/'; then
           cls="schema-change"   # structural: mirrors refresh.py classify()
-        elif printf '%s\n' "$files" | grep -qvE '^(vpic/|tests/parity_corpus\.json$)'; then
+        elif printf '%s\n' "$files" | grep -qvE '^(vpic/|tests/parity_corpus\.json$|scripts/stale_cache_cells\.json$)'; then
           cls="schema-change"   # decoder code / scripts / packaging / .github
         else
           cls="data-only"

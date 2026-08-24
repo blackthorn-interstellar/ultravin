@@ -629,17 +629,10 @@ impl Interner {
     }
 }
 
-/// Build the artifact and write it to `path` (creating parents).
-pub fn write_artifact(
-    builder: ArtifactBuilder,
-    path: &Path,
-    builder_version: u32,
-    cover_year: i32,
-) -> std::io::Result<(usize, String)> {
-    let (bytes, hex) = builder.build(builder_version, cover_year);
+/// Write built artifact bytes to `path` (creating parents).
+pub fn write_bytes(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    std::fs::write(path, &bytes)?;
-    Ok((bytes.len(), hex))
+    std::fs::write(path, bytes)
 }

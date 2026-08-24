@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 from scripts import refresh
-from scripts.parity import answerkey
+from scripts.parity import answerkey, stale_cache
 
 DOC = Path(refresh.ROOT) / "docs" / "KNOWN_DEVIATIONS.md"
 FIELDS = ("vin", "kind", "class", "scope", "cause", "first_observed", "evidence", "doc")
@@ -79,6 +79,24 @@ def test_refresh_sets_are_exactly_the_registry_split_by_kind(entries: list[dict[
     assert frozenset(e["vin"] for e in entries if e["kind"] == "oracle-crash") == refresh.ORACLE_CRASH_VINS
     assert frozenset(e["vin"] for e in entries if e["kind"] == "deviation") == refresh.KNOWN_DEVIATION_VINS
     assert not refresh.ORACLE_CRASH_VINS & refresh.KNOWN_DEVIATION_VINS
+
+
+def test_the_stale_cache_class_is_enumerated_not_sampled(entries: list[dict[str, str]]) -> None:
+    """Its error-field members live in scripts/stale_cache_cells.json, not here.
+
+    Registering that class one VIN at a time was always a sample of an unbounded
+    one — every VIN reaching a stale cell diverges the same way — and the nightly
+    fuzzer kept re-finding members of it. The scan enumerates the cells instead
+    (scripts/parity/stale_cache.py adjudicates against them). What the cell list
+    may never excuse is a divergence wider than the error fields the cache feeds,
+    so `clean-decode` members stay registered individually and are the only ones
+    left here. A new `error-fields` entry in this class means someone re-sampled
+    a class that is already enumerated."""
+    stale = [e for e in entries if e["class"] == "stale-wmiyearvalidchars-cache"]
+    assert stale, "the class vanished from the registry — its evidence section still claims it"
+    assert {e["scope"] for e in stale} == {"clean-decode"}, (
+        f"error-field members belong in {stale_cache.CELLS.name}: {[e['vin'] for e in stale if e['scope'] != 'clean-decode']}"
+    )
 
 
 def test_answerkey_excludes_every_registered_vin(entries: list[dict[str, str]]) -> None:

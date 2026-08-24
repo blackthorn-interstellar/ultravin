@@ -133,7 +133,7 @@ jobs:
             echo "::error::master moved onto files this refresh regenerated — rerun the refresh against current master"
             exit 1
           fi
-          git add -A vpic tests/parity_corpus.json
+          git add -A vpic tests/parity_corpus.json scripts/stale_cache_cells.json
           git commit -m "data: NHTSA vPIC $MONTH ($CLASSIFICATION)"
           git push -f origin "data/$MONTH"
           gh label create data-refresh --color 0E8A16 --description "automated monthly vPIC data update" || true

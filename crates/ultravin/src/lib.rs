@@ -40,6 +40,7 @@ pub use arrow_io::{
 };
 pub use checkdigit::check_digit;
 pub use db::Db;
+#[doc(hidden)] // build-tooling hook (`vpic-import --stale-cache-report`), not API
 pub use errors::recompute_valid_chars;
 pub use generate::{generate, pairwise, seeded, sweep, Dimension, Filter};
 pub use ids::{

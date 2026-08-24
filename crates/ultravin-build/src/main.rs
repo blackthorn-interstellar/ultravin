@@ -18,6 +18,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 mod artifact;
+mod stalecache;
 use artifact::ArtifactBuilder;
 
 #[derive(Parser)]
@@ -38,6 +39,12 @@ struct Cli {
     /// Path for the embedded rkyv artifact (a gitignored build product).
     #[arg(long, default_value = "crates/ultravin/data/vpic.rkyv")]
     emit_artifact: PathBuf,
+    /// Opt-in: diff the dump's `wmiyearvalidchars` cache against the recompute
+    /// from its own pattern rows and write the JSON report here (see
+    /// [`stalecache`]). Off by default — it holds the cache's 8.8M rows in memory
+    /// and recomputes every (wmi, year) cell (~10 s on the 2026_08 dump).
+    #[arg(long)]
+    stale_cache_report: Option<PathBuf>,
 }
 
 #[derive(Serialize)]
@@ -96,6 +103,13 @@ fn obj_basename(name: &str) -> String {
         })
         .collect::<String>()
         .to_ascii_lowercase()
+}
+
+/// Which table of the opt-in staleness scan the current COPY block belongs to.
+#[derive(Clone, Copy)]
+enum Feeding {
+    Cache,
+    Exceptions,
 }
 
 /// Table name from a `COPY vpic.<table> (...) FROM stdin;` line.
@@ -228,6 +242,11 @@ fn run(cli: &Cli) -> Result<(), Box<dyn Error>> {
     let mut body: Vec<String> = Vec::new();
     let mut data_mode: Option<(String, u64)> = None; // (table, row count)
     let mut builder = ArtifactBuilder::default();
+    let mut cache_rows: Option<stalecache::CacheRows> = None;
+    let mut cache_exceptions: Option<stalecache::CacheExceptions> = None;
+    // Which of the scan's two tables the current COPY block is, if either. A tag
+    // rather than a name comparison: this runs on every one of the dump's rows.
+    let mut feeding: Option<Feeding> = None;
 
     for line in reader.lines() {
         let line = line?;
@@ -235,16 +254,39 @@ fn run(cli: &Cli) -> Result<(), Box<dyn Error>> {
             if line == "\\." {
                 imp.tables.insert(table.clone(), *count);
                 builder.end_copy();
+                feeding = None;
                 data_mode = None;
             } else {
                 *count += 1;
                 builder.feed(&line);
+                match feeding {
+                    Some(Feeding::Cache) => {
+                        if let Some(rows) = cache_rows.as_mut() {
+                            rows.feed(&line);
+                        }
+                    }
+                    Some(Feeding::Exceptions) => {
+                        if let Some(ex) = cache_exceptions.as_mut() {
+                            ex.feed(&line);
+                        }
+                    }
+                    None => {}
+                }
             }
             continue;
         }
         if line.starts_with("COPY ") && line.trim_end().ends_with("FROM stdin;") {
             if let Some(table) = copy_table(&line) {
                 builder.begin_copy(&table, &line);
+                if cli.stale_cache_report.is_some() {
+                    if table == stalecache::TABLE {
+                        cache_rows = stalecache::CacheRows::from_copy_line(&line);
+                        feeding = cache_rows.is_some().then_some(Feeding::Cache);
+                    } else if table == stalecache::EXCEPTIONS_TABLE {
+                        cache_exceptions = stalecache::CacheExceptions::from_copy_line(&line);
+                        feeding = cache_exceptions.is_some().then_some(Feeding::Exceptions);
+                    }
+                }
                 data_mode = Some((table, 0));
             }
             continue;
@@ -304,8 +346,23 @@ fn run(cli: &Cli) -> Result<(), Box<dyn Error>> {
         .next()
         .and_then(|y| y.parse().ok())
         .unwrap_or(2026);
-    let (artifact_bytes, artifact_blake3) =
-        artifact::write_artifact(builder, &cli.emit_artifact, builder_version, cover_year)?;
+    let (artifact, artifact_blake3) = builder.build(builder_version, cover_year);
+    let artifact_bytes = artifact.len();
+    artifact::write_bytes(&cli.emit_artifact, &artifact)?;
+
+    // Opt-in staleness scan. It runs against the artifact just built from *this*
+    // dump, never the one embedded in this binary, so the recompute and the cache
+    // always come from the same pattern rows.
+    if let Some(path) = &cli.stale_cache_report {
+        let rows = cache_rows.ok_or("dump has no vpic.wmiyearvalidchars COPY block")?;
+        // An absent exceptions block is an empty exception list: that is what an
+        // empty table means to the proc too.
+        let exceptions = cache_exceptions.map(stalecache::CacheExceptions::into_wmis);
+        let db = ultravin::Db::from_bytes(&artifact).map_err(|e| format!("stale-cache: {e}"))?;
+        let report = rows.report(&db, &cli.month, &exceptions.unwrap_or_default());
+        write_file(path, &serde_json::to_string_pretty(&report)?)?;
+        eprintln!("vpic-import: stale-cache report -> {}", path.display());
+    }
 
     let total_rows: u64 = imp.tables.values().sum();
     let manifest = Manifest {

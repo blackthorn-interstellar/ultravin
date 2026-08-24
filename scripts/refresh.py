@@ -19,6 +19,11 @@ hand-edited; the gates then decide:
   corpus    every diverging re-frozen VIN is a documented known deviation
   sweep     a fresh live sweep diverges only on known deviations, and the oracle
             crashed only on VINs documented as crashing it
+  stale-cache
+            the regenerated scripts/stale_cache_cells.json agrees with its own
+            summary, did not gain implausibly many cells, and still faces an
+            empty cacheexceptions table (the list *changing* month to month is
+            the point, not a failure — see scripts/parity/stale_cache.py)
   known-problems
             every documented oracle problem still reproduces — the converse of
             the two above, which only ever *excuse* those VINs — and each
@@ -47,6 +52,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import urllib.error
 import urllib.request
 import zipfile
@@ -58,6 +64,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "vpic" / "manifest.json"
 LOOKUPS = ROOT / "vpic" / "lookups.json"
 CORPUS = ROOT / "tests" / "parity_corpus.json"
+STALE_CACHE_CELLS = ROOT / "scripts" / "stale_cache_cells.json"
 REPORT_DIR = ROOT / "target" / "refresh"
 URL_TEMPLATE = "https://vpic.nhtsa.dot.gov/Downloads/vPICList_lite_{month}.plain.zip"
 MONTH_RE = re.compile(r"^\d{4}_(0[1-9]|1[0-2])$")
@@ -278,16 +285,79 @@ def _exact(fp: dict) -> bool:
     return not fp["field_diffs"] and not fp["missing"] and not fp["extra"] and fp["order_ok"]
 
 
-def corpus_gate(corpus: dict) -> Gate:
+# One documented class is enumerated by machine rather than by VIN: every
+# (wmi, year) cell where the dump's vpic.wmiyearvalidchars cache contradicts the
+# recompute from that same dump's pattern rows. The oracle reads the cache and
+# ultravin recomputes, so a divergence that touches only the error/correction
+# elements *and* lands on a listed cell is that defect and nothing else — see
+# scripts/parity/stale_cache.py and docs/KNOWN_DEVIATIONS.md. The gates below
+# take that set as an argument (computed by a subprocess that has the extension;
+# this module runs under a bare python3) and default to empty, so nothing is
+# excused unless the classification actually ran.
+
+
+def corpus_gate(corpus: dict, stale_cache_vins: frozenset[str] = frozenset()) -> Gate:
     diverging = sorted(e["vin"] for e in corpus["entries"] if not _exact(e["expected_diff"]))
-    unexpected = [v for v in diverging if v not in KNOWN_DEVIATION_VINS]
+    stale = [v for v in diverging if v in stale_cache_vins and v not in KNOWN_DEVIATION_VINS]
+    unexpected = [v for v in diverging if v not in KNOWN_DEVIATION_VINS and v not in stale_cache_vins]
     detail = f"{len(corpus['entries'])} VINs re-frozen; diverging: {diverging or 'none'}"
+    if stale:
+        detail += f"; {len(stale)} in the stale-wmiyearvalidchars-cache class: {stale}"
     if unexpected:
         detail += f"; NOT documented deviations: {unexpected}"
     return Gate("corpus", not unexpected, detail)
 
 
-def sweep_gate(report: dict) -> Gate:
+# Legitimate month-over-month churn in the stale-cell list is tens of cells: a
+# rebuild drops some pattern rows and the cache lags on the handful of WMI-years
+# they covered. A charset regression in the decoder looks nothing like that — it
+# re-lists thousands at once, because every cell whose recompute moved now
+# contradicts a cache that did not. So a jump this large stops the refresh: the
+# answer key must be green and a human must read the scan report before a month
+# that big is accepted.
+STALE_CACHE_JUMP_LIMIT = 500
+
+
+def stale_cache_gate(doc: dict, head_doc: dict | None, problems: list[str]) -> Gate:
+    """The regenerated stale-cell list must be self-consistent and plausible.
+
+    A month-over-month *change* in the list is expected — the cache is stale in
+    different places every rebuild — and is reported, never failed: the list is
+    a fact about the dump and the refresh PR diff is where it documents itself.
+    Three things do fail. An internally inconsistent list means the file was
+    hand-edited or its two halves came from different scans, and every divergence
+    excused on the strength of it is then unfounded. A newly-stale count past
+    `STALE_CACHE_JUMP_LIMIT` is the shape a decoder charset regression takes, not
+    the shape upstream churn takes. And a non-empty
+    `wmiyearvalidchars_cacheexceptions` means the proc no longer reads the cache
+    the way this whole scan assumes it does."""
+    cells = {(wmi, year) for wmi, year, *_ in doc["cells"]}
+    detail = f"{len(cells):,} stale cells in {doc['dump']}"
+    implausible: list[str] = []
+    if head_doc is not None:
+        was = {(wmi, year) for wmi, year, *_ in head_doc.get("cells", [])}
+        newly, healed = cells - was, was - cells
+        detail += f"; vs {head_doc.get('dump')}: {len(newly):+,} newly stale, {len(healed):,} healed"
+        if len(newly) > STALE_CACHE_JUMP_LIMIT:
+            implausible.append(
+                f"{len(newly):,} newly stale cells exceeds the {STALE_CACHE_JUMP_LIMIT:,} jump limit — "
+                "upstream churn is tens of cells, a decoder charset regression re-lists thousands; "
+                "confirm `answerkey verify` is green and read target/refresh/stale_cache.json before accepting"
+            )
+    exceptions = doc.get("summary", {}).get("cache_exception_wmis", 0)
+    if exceptions:
+        implausible.append(
+            f"vpic.wmiyearvalidchars_cacheexceptions carries {exceptions:,} WMI(s) — it has always been "
+            "empty, so the proc's cache read now behaves differently and the scan's assumptions need re-deriving"
+        )
+    if problems:
+        detail += "; INCONSISTENT (the list contradicts its own summary): " + "; ".join(problems)
+    if implausible:
+        detail += "; REJECTED: " + "; ".join(implausible)
+    return Gate("stale-cache", not problems and not implausible, detail)
+
+
+def sweep_gate(report: dict, stale_cache_vins: frozenset[str] = frozenset()) -> Gate:
     total, exact = report["total"], report["exact_parity"]
     # A VIN the oracle crashed on produced no answer, so it is neither parity nor
     # a diff. sweep.py used to die on the first one; now it reports them and the
@@ -302,10 +372,13 @@ def sweep_gate(report: dict) -> Gate:
     if report["diverged"] == 0:
         return Gate("sweep", not undocumented_crashes, f"{exact}/{total} exact{crash_detail}")
     vins = sorted({ex["vin"] for ex in report["examples"]})
-    unexpected = [v for v in vins if v not in KNOWN_DEVIATION_VINS]
+    stale = [v for v in vins if v in stale_cache_vins and v not in KNOWN_DEVIATION_VINS]
+    unexpected = [v for v in vins if v not in KNOWN_DEVIATION_VINS and v not in stale_cache_vins]
     unlisted = report["diverged"] - len(report["examples"])  # only if --examples < limit
     ok = not unexpected and unlisted <= 0 and not undocumented_crashes
     detail = f"{exact}/{total} exact; diverging: {vins}{crash_detail}"
+    if stale:
+        detail += f"; {len(stale)} in the stale-wmiyearvalidchars-cache class: {stale}"
     if unlisted > 0:
         detail += f"; {unlisted} further diffs not enumerated"
     return Gate("sweep", ok, detail)
@@ -726,6 +799,53 @@ def corpus_vins_file(corpus: Path = CORPUS, out: Path | None = None) -> Path | N
     return out
 
 
+def _stale_cache():  # noqa: ANN202 — the module, whose import is deferred on purpose
+    """`scripts.parity.stale_cache`, importable however this file was started.
+
+    `python3 scripts/refresh.py` puts `scripts/` on sys.path rather than the repo
+    root, so the package import needs the root put back. Deferred rather than a
+    top-level import only so this module's own import stays as cheap as its
+    docstring promises; the target is stdlib-only too."""
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from scripts.parity import stale_cache  # noqa: PLC0415
+
+    return stale_cache
+
+
+def stale_cache_expected(corpus: Path, sweep: Path) -> dict[str, frozenset[str]]:
+    """Diverging VINs whose difference is the machine-enumerated stale-cache class.
+
+    Shelled out, like every other parity step: deciding it needs a live ultravin
+    decode for the model year the cell is keyed by, and this file runs under a
+    bare `python3` with no extension installed. A run that produced nothing
+    returns empty sets — nothing is excused by a classification that did not
+    happen."""
+    out = REPORT_DIR / "stale_cache_expected.json"
+    out.unlink(missing_ok=True)
+    sh(
+        [
+            "uv",
+            "run",
+            "--frozen",
+            "--",
+            "python",
+            "-m",
+            "scripts.parity.stale_cache",
+            "expected",
+            "--corpus",
+            str(corpus),
+            "--sweep",
+            str(sweep),
+            "--out",
+            str(out),
+        ],
+        check=False,
+    )
+    found = json.loads(out.read_text()) if out.exists() else {}
+    return {k: frozenset(found.get(k, ())) for k in ("corpus", "sweep")}
+
+
 def freeze_command(vins_file: Path | None) -> list[str]:
     """`scripts.parity.freeze` argv: re-freeze the existing corpus, or sample a new one."""
     cmd = ["uv", "run", "--frozen", "--", "python", "-m", "scripts.parity.freeze"]
@@ -747,6 +867,10 @@ def cmd_run(args: argparse.Namespace) -> int:
         return 0
 
     # Rebuild vpic/ + the embedded artifact, then the Python extension on top of it.
+    # The same pass scans vpic.wmiyearvalidchars against its own pattern rows
+    # (--stale-cache-report), so the month's stale cells cost no second parse.
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    stale_report = REPORT_DIR / "stale_cache.json"
     sh(
         [
             "cargo",
@@ -762,9 +886,19 @@ def cmd_run(args: argparse.Namespace) -> int:
             month,
             "--out",
             "vpic",
+            "--stale-cache-report",
+            str(stale_report),
         ]
     )
     new_manifest = json.loads(MANIFEST.read_text())
+
+    # Regenerate the committed cell list so the refresh PR carries this month's.
+    # The full report stays in target/refresh/ and rides out as the workflow's
+    # data-refresh-report artifact; only the compact list is committed.
+    stale_cache = _stale_cache()
+    head_cells = head_json("scripts/stale_cache_cells.json")
+    cells_doc = stale_cache.write_cells(json.loads(stale_report.read_text()), STALE_CACHE_CELLS)
+    cells_problems = stale_cache.consistency_errors(cells_doc)
 
     # Freeze small lookup tables so in-place label renames surface in the PR
     # diff and the report (row counts can't show them).
@@ -790,10 +924,8 @@ def cmd_run(args: argparse.Namespace) -> int:
     print(freeze.stdout, end="")
     skipped = parse_freeze_skips(freeze.stdout)
     corpus = json.loads(CORPUS.read_text())
-    gates = [corpus_gate(corpus)]
     shape_changes = deviation_shape_changes(head_corpus, head_registry, corpus, _KNOWN_PROBLEMS)
 
-    REPORT_DIR.mkdir(parents=True, exist_ok=True)
     sweep_path = REPORT_DIR / "sweep.json"
     sh(
         [
@@ -814,7 +946,13 @@ def cmd_run(args: argparse.Namespace) -> int:
             str(sweep_path),
         ]
     )
-    gates.append(sweep_gate(json.loads(sweep_path.read_text())))
+    # Both gates judge the same divergences, so both consult the same class.
+    expected = stale_cache_expected(CORPUS, sweep_path)
+    gates = [
+        corpus_gate(corpus, expected["corpus"]),
+        sweep_gate(json.loads(sweep_path.read_text()), expected["sweep"]),
+        stale_cache_gate(cells_doc, head_cells, cells_problems),
+    ]
 
     # Re-probe the documented problems themselves. The gates above only excuse
     # these VINs, and freeze's sample and the sweep almost never contain a crash

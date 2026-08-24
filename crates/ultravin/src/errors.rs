@@ -6,7 +6,7 @@
 //! (element 156). Every intentional bug is preserved (see comments).
 
 use std::cell::RefCell;
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::rc::Rc;
 
 use crate::checkdigit::{check_digit_v1, check_digit_with_flag, is_default_char, is_my_char};
@@ -246,7 +246,7 @@ thread_local! {
     /// Per-thread memo of [`valid_charset`], keyed by wmi then `model_year`. The
     /// charset is a pure function of those two inputs and the immutable archive,
     /// yet the SQL recomputes it on every decode (and once per best-of pass) —
-    /// the same WMIYearValidChars cache the stored proc materialises server-side.
+    /// the same work the server-side `WMIYearValidChars` table materialises.
     /// Mirrors the `REGEX_CACHE` in `matcher.rs`; `Rc` keeps a hit clone-free. The
     /// outer key is a `String` but lookups borrow it as `&str`, so a cache hit
     /// allocates nothing (the old `(String, i32)` key allocated on every call).
@@ -254,19 +254,9 @@ thread_local! {
         RefCell::new(HashMap::new());
 }
 
-/// Port of `vpic.fExtractValidCharsPerWmiYear` (== the `WMIYearValidChars`
-/// cache, verified byte-equal): VIN-position -> allowed chars, where the VIN
-/// position is the key index + 3. Empty when `model_year` is `None`.
-fn valid_charset(db: &Db, wmi: &str, model_year: Option<i32>) -> Charset {
-    let Some(year) = model_year else {
-        return Rc::new(HashMap::new());
-    };
-    if let Some(hit) =
-        CHARSET_CACHE.with(|c| c.borrow().get(wmi).and_then(|m| m.get(&year)).cloned())
-    {
-        return hit;
-    }
-    let mut map: HashMap<i32, ValidChars> = HashMap::new();
+/// The distinct pattern keys covering `wmi` in `year` — the cursor body of
+/// `vpic.fExtractValidCharsPerWmiYear`.
+fn charset_keys(db: &Db, wmi: &str, year: i32) -> BTreeSet<String> {
     let mut keys: BTreeSet<String> = BTreeSet::new();
     for wmiid in db.wmi_ids_for_str(wmi) {
         for wvs in db.wmi_vinschema_for(wmiid) {
@@ -278,7 +268,41 @@ fn valid_charset(db: &Db, wmi: &str, model_year: Option<i32>) -> Charset {
             }
         }
     }
-    for key in &keys {
+    keys
+}
+
+/// [`valid_charset`] as plain data: VIN position -> allowed chars, ascending.
+///
+/// The shipped `vpic.WMIYearValidChars` table is a stale snapshot of this same
+/// function, so `ultravin-build --stale-cache-report` diffs a dump's cache
+/// against this. Not on the decode path; no memo.
+pub fn recompute_valid_chars(db: &Db, wmi: &str, year: i32) -> BTreeMap<i32, BTreeSet<char>> {
+    let mut map: BTreeMap<i32, BTreeSet<char>> = BTreeMap::new();
+    for key in &charset_keys(db, wmi, year) {
+        for (kpos, c) in valid_chars_in_key(key) {
+            map.entry(kpos + 3).or_default().insert(c);
+        }
+    }
+    map
+}
+
+/// Port of `vpic.fExtractValidCharsPerWmiYear`, byte-equal to that function:
+/// VIN-position -> allowed chars, where the VIN position is the key index + 3.
+/// Empty when `model_year` is `None`. The stored proc prefers the derived
+/// `WMIYearValidChars` cache and only calls the function on an empty cell, and
+/// the shipped cache is stale for ~2% of (wmi, year) cells — see
+/// `docs/KNOWN_DEVIATIONS.md` and the `--stale-cache-report` scan.
+fn valid_charset(db: &Db, wmi: &str, model_year: Option<i32>) -> Charset {
+    let Some(year) = model_year else {
+        return Rc::new(HashMap::new());
+    };
+    if let Some(hit) =
+        CHARSET_CACHE.with(|c| c.borrow().get(wmi).and_then(|m| m.get(&year)).cloned())
+    {
+        return hit;
+    }
+    let mut map: HashMap<i32, ValidChars> = HashMap::new();
+    for key in &charset_keys(db, wmi, year) {
         for (kpos, c) in valid_chars_in_key(key) {
             map.entry(kpos + 3).or_default().insert(c);
         }

@@ -164,8 +164,10 @@ consistent with the `pattern` rows the same file ships.
 
 **What happened in 2026_08.** The refresh moved `pattern` +6,450 rows and
 `wmiyearvalidchars` −3,318. The cache was rebuilt, but not from the `pattern`
-table this dump ships: nine WMI-year cells still carry characters that no key of
-any schema covering that year allows. (The 2026_06 entry in this section was the
+table this dump ships: **4,967 of its 241,380 WMI-year cells** still carry
+characters that no key of any schema covering that year allows — enumerated by
+machine, see the addendum below. The nine worked through here are the ones the
+first VINs to hit the class landed on. (The 2026_06 entry in this section was the
 same defect in the opposite direction — a cache frozen mid-edit, missing a schema
 the dump already contained. It healed in 2026_08 and is retired below.)
 
@@ -196,33 +198,31 @@ select p, string_agg(distinct c, '' order by c)
 **The cache is what makes the oracle's answer, demonstrably.** Deleting a stale
 cell inside a transaction takes `tmpRowCount` to 0, so the proc runs its own
 `fExtractValidCharsPerWmiYear` fallback over the same dump — and the oracle then
-reproduces ultravin **byte-for-byte** on all ten VINs, including the two whose
-whole decode changes. Rolled back afterwards; the cache is left at its shipped
-8,809,229 rows.
+reproduces ultravin **byte-for-byte** on every probe VIN reaching those cells,
+including the two whose whole decode changes. Rolled back afterwards; the cache
+is left at its shipped 8,809,229 rows.
 
 ```
 MLHAE041XKA111111  delete 81 cache rows for (MLH,2019) -> oracle MY=1989 codes='0,14'  parity_now=True
 JH2RD1613RA111111  delete 80 cache rows for (JH2,2024) -> oracle MY=1994 codes='0,14'  parity_now=True
-JH2SC7752RA111111  delete 80 cache rows for (JH2,2024) -> oracle MY=2024 codes='3,14'  parity_now=True
-3GNAAAAA2PS111111  delete 41 cache rows for (3GN,2023) -> oracle MY=2023 codes='5,14'  parity_now=True
-JM1AAAAA1S0111111  delete 27 cache rows for (JM1,2025) -> oracle MY=2025 codes='5,14'  parity_now=True
-1V2AAAE81SA111111  delete 51 cache rows for (1V2,2025) -> oracle MY=2025 codes='5,14'  parity_now=True
-YV4AAABE8RA111111  delete 40 cache rows for (YV4,2024) -> oracle MY=2024 codes='5,14'  parity_now=True
-SCFAAAAA0SG111111  delete 17 cache rows for (SCF,2025) -> oracle MY=2025 codes='5,14'  parity_now=True
-SCFAAAAA9TG111111  delete 25 cache rows for (SCF,2026) -> oracle MY=2026 codes='5,14'  parity_now=True
-1ZVAAAAA6E5111111  delete 18 cache rows for (1ZV,2014) -> oracle MY=2014 codes='5,14'  parity_now=True
+
+one probe VIN per remaining cell, all error-fields-only, all parity_now=True:
+  (JH2,2024) -80 rows  codes '0,14' -> '3,14'      (3GN,2023) -41 rows  codes '5,14'
+  (JM1,2025) -27 rows  codes '5,14'                (1V2,2025) -51 rows  codes '5,14'
+  (YV4,2024) -40 rows  codes '5,14'                (SCF,2025) -17 rows  codes '5,14'
+  (SCF,2026) -25 rows  codes '5,14'                (1ZV,2014) -18 rows  codes '5,14'
 ```
 
 **How far the defect reaches** depends on which position the stale characters sit
 at, and the registry records it as each entry's `scope`:
 
-1. **Element 144 only** (`error-fields`, seven VINs). The position is already in
-   error for another reason, so the only difference is the possible-values list
-   printed for it — the oracle offers characters the data no longer allows, e.g.
-   `(7:EFGKL)` against ultravin's `(7:EFGL)` for `SCFAAAAA0SG111111`.
+1. **Element 144 only** (`error-fields`, seven of the nine cells). The position
+   is already in error for another reason, so the only difference is the
+   possible-values list printed for it — the oracle offers characters the data no
+   longer allows, e.g. `(7:EFGKL)` against ultravin's `(7:EFGL)` at `(SCF, 2025)`.
 
-2. **The correction ladder** (`error-fields`, `JH2SC7752RA111111`). Position 11
-   of that VIN is `A`. The cache lists `A`, so the oracle sees nothing wrong and
+2. **The correction ladder** (`error-fields`, `(JH2, 2024)`). Position 11 of the
+   probe VIN is `A`. The cache lists `A`, so the oracle sees nothing wrong and
    returns codes `0,14` with no SuggestedVIN; the pattern source does not, so
    ultravin flags one error, lets the check digit pick the single surviving
    candidate `J`, and returns codes `3,14` with error bytes `(11:J)`.
@@ -254,12 +254,64 @@ at, and the registry records it as each entry's `scope`:
 **Decision: keep ultravin's source-consistent computation.** Matching the oracle
 here would mean shipping the 8.8M-row cache — or its delta — purely to reproduce
 characters the dump's own `pattern` table contradicts, on a defect that
-self-heals the next time NHTSA rebuilds the cache (as the 2026_06 one did). The
-registered VINs are a *sample* of an unbounded class: any VIN reaching one of
-these cells, and any cell the next rebuild leaves stale, diverges the same way.
-A new one therefore fails the corpus or sweep gate until a human re-verifies it
-against this section and registers it — deliberately, so a fresh divergence is
-never waved through on the strength of an old explanation.
+self-heals the next time NHTSA rebuilds the cache (as the 2026_06 one did).
+
+### Addendum (2026_08): the class is enumerated, not sampled
+
+Registering VINs one at a time was always a sample of an unbounded class, and
+the nightly fuzzer kept re-finding members of it. It no longer has to be a
+sample. **`vpic-import --stale-cache-report` diffs every cell of the dump's
+cache against the recompute from that same dump's pattern rows** — the
+decoder's own `ultravin::recompute_valid_chars` — and
+**`scripts/stale_cache_cells.json` is the resulting `(wmi, year, positions)` list**:
+**4,967 stale cells of 241,380 as of 2026_08**. It is regenerated by every
+monthly refresh (`scripts/refresh.py`, the `stale-cache` gate), so the list is
+always this month's dump; the full report rides out as the run's
+`data-refresh-report` artifact. A month-over-month change in the list is the
+expected signal, not a failure — it self-documents in the refresh PR diff.
+
+**Per-VIN registration for this class is retired.** A divergence is adjudicated
+against the list by `scripts/parity/stale_cache.py` and counts as this defect
+only when **all three** hold: its field diffs touch **only** the error/correction
+elements (142/143/144/156/191 — all `spvindecode_errorcode`, the cache's sole
+consumer, can reach); the `(wmi, year)` cell that decode reads — `fVinWMI` plus
+the model year the decode chose — is on the list; **and** the difference points
+at a VIN position that cell is actually stale at. Each entry is
+`[wmi, year, positions]` for exactly that reason — a cell stale at position 11
+explains nothing about a wrong charset printed for position 5. The positions come
+from the difference itself: element 144 renders one `(position:charset)` group per
+flagged position, and element 142 is the whole VIN with the flagged positions
+rewritten, so the two SuggestedVINs compare character by character. Elements
+143/156/191 are per-decode summaries with no position of their own and can only
+ride along. A divergence whose evidence names no position at all is **not** this
+class. The corpus and sweep gates count the ones that qualify as the known class;
+the nightly covfuzz intake drops them instead of filing backlog work. Everything
+else fails exactly as before.
+
+**What keeps a decoder bug out of the list — and what does not.** The list is
+computed from the dump alone, never from an observed ultravin-vs-oracle
+difference, so no output the decoder prints can put a cell on it. That is *not*
+the same as independence from the decoder: the recompute half of the diff is
+`ultravin::recompute_valid_chars`, the decoder's own charset code, so a bug
+there would move the list and the decode together and the cell would look
+legitimately stale. Three controls stand against that, none of them this list:
+
+1. **`answerkey verify` on every PR** re-checks the *whole* decode of every VIN
+   in `tests/answerkey.json` against the frozen oracle answer. It never consults
+   the cell list, so a charset bug shows up there as a plain mismatch.
+2. **The frozen unit tests in `crates/ultravin/src/errors.rs`** pin the charset
+   extraction and the element-144 rendering directly, independent of any dump.
+3. **The refresh's `stale-cache` jump gate** fails a month whose newly-stale
+   cell count exceeds 500. Upstream churn moves tens of cells; a charset
+   regression re-lists thousands, because every cell whose recompute moved now
+   contradicts a cache that did not.
+
+What the list itself contributes is narrowness, not proof: the excuse it buys is
+bounded to the five elements the cache feeds, on the one cell that VIN's decode
+reads, at a VIN position that cell is actually stale at. A defect that reaches
+further is outside the class by construction. That is why the two `clean-decode`
+VINs above stay registered individually: their whole decode changes, which no
+cell list may excuse.
 
 ---
 

@@ -279,7 +279,12 @@ jobs:
 
             Approve ONLY if every one of these holds:
             1. Scope: every changed file belongs to a monthly refresh —
-               regenerated vpic/** and tests/parity_corpus.json, plus decoder
+               regenerated vpic/**, tests/parity_corpus.json and
+               scripts/stale_cache_cells.json (the stale WMIYearValidChars
+               cells, regenerated from the dump by the scan — its contents
+               moving month to month is expected, but reject implausible
+               growth: upstream churn moves tens of cells and a decoder
+               charset regression re-lists thousands), plus decoder
                changes (crates/ultravin/**) and known-problem
                documentation (scripts/known_problems.json plus its evidence
                section in docs/KNOWN_DEVIATIONS.md) that the upstream change
@@ -372,7 +377,12 @@ jobs:
 
             Approve ONLY if every one of these holds:
             1. Scope: every changed file belongs to a monthly refresh —
-               regenerated vpic/** and tests/parity_corpus.json, plus decoder
+               regenerated vpic/**, tests/parity_corpus.json and
+               scripts/stale_cache_cells.json (the stale WMIYearValidChars
+               cells, regenerated from the dump by the scan — its contents
+               moving month to month is expected, but reject implausible
+               growth: upstream churn moves tens of cells and a decoder
+               charset regression re-lists thousands), plus decoder
                changes (crates/ultravin/**) and known-problem
                documentation (scripts/known_problems.json plus its evidence
                section in docs/KNOWN_DEVIATIONS.md) that the upstream change

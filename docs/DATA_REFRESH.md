@@ -39,8 +39,21 @@ oracle onto the new dump, re-freezes `tests/parity_corpus.json`, and gates:
   diverges, not whether it still diverges the *same way*).
 - **sweep** — 500 freshly generated VINs decoded live against the new oracle,
   zero undocumented divergence.
-- **known-problems** — the converse of the two above: every registered VIN still
-  *reproduces* its documented problem. See below.
+- **stale-cache** — `scripts/stale_cache_cells.json`, regenerated from this
+  month's dump by the same `vpic-import` pass, is internally consistent, did not
+  gain implausibly many cells, and still faces an empty
+  `vpic.wmiyearvalidchars_cacheexceptions`. This is the one documented deviation
+  class enumerated by machine rather than by VIN: every `(wmi, year)` cell whose
+  `WMIYearValidChars` contents contradict the recompute from the dump's own
+  pattern rows, with the VIN positions they disagree at. The list *changing*
+  month to month is the point, not a failure — it self-documents in the PR diff.
+  What fails is a list that contradicts its own summary, a jump past 500 newly
+  stale cells (upstream churn moves tens; a decoder charset regression re-lists
+  thousands), or a non-empty cacheexceptions table, which would mean the proc no
+  longer reads the cache the way the scan assumes. Policy: `docs/ACCEPTANCE.md`;
+  evidence: `docs/KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache`.
+- **known-problems** — the converse of the three above: every registered VIN
+  still *reproduces* its documented problem. See below.
 - **coverage** — `make coverage`: the decode path still reaches 100% of the
   regions a VIN can reach, and no allowance in
   `scripts/coverage_allowances.json` went **stale**. A stale one is the
@@ -180,9 +193,22 @@ immediately). Run it after changing the settings above or rotating the key.
 - **corpus/sweep gate names an unknown VIN** — either the decoder no longer
   matches the new data (fix Rust) or the dump itself is defective (oracle
   crash, stale cache table — precedent in `docs/KNOWN_DEVIATIONS.md`). The
-  agent triages; the gate only accepts VINs registered in
-  `scripts/known_problems.json`, and registering one needs a named defective
-  upstream artifact, not just the diff.
+  agent triages. The gates accept a diverging VIN from exactly two sources:
+  registration in `scripts/known_problems.json`, which needs a named defective
+  upstream artifact and not just the diff; or adjudication into the
+  machine-enumerated stale-cache class, which needs the diff to touch only
+  elements 142/143/144/156/191, land on a cell `scripts/stale_cache_cells.json`
+  lists, and point at a position that cell is stale at. A VIN the gate names is
+  one *neither* source covered — never widen either to make it go away.
+- **stale-cache gate fails** — read the detail. `INCONSISTENT` means the
+  committed list disagrees with the summary printed beside it: it was
+  hand-edited or its halves came from different scans, so regenerate it rather
+  than patch it. `REJECTED` names either a jump past 500 newly stale cells —
+  confirm `answerkey verify` is green and read `target/refresh/stale_cache.json`
+  before accepting a month that big, because that is the shape a decoder charset
+  regression takes — or a non-empty `vpic.wmiyearvalidchars_cacheexceptions`,
+  which is upstream changing how the proc reads the cache and needs a human to
+  re-derive the scan's assumptions against `vpic/procs/spvindecode_errorcode.sql`.
 - **known-problems gate names a healed VIN** — upstream fixed the defect (or the
   dump stopped carrying it). Confirm against §-evidence in
   `docs/KNOWN_DEVIATIONS.md`, retire the entry from

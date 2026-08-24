@@ -1071,22 +1071,54 @@ jobs:
           if [ -s campaign/fails-covfuzz.jsonl ]; then
             # Filter dead-oracle artifacts: the first live probe enqueued
             # 13,944 connection errors after Postgres died — noise, not signal.
+            # And classify: the fuzzer re-finds the documented stale
+            # WMIYearValidChars class every night, because exact-VIN dedupe
+            # cannot see that two VINs are the same defect. Anything that
+            # touches only the error fields AND lands on a cell
+            # scripts/stale_cache_cells.json enumerates is that defect, already
+            # documented, and is dropped rather than filed as fresh work.
             uv run --frozen -- python - <<'PYEOF'
           import json
+          from collections import Counter
+          import ultravin
           from scripts.parity.campaign import is_infra_error
+          from scripts.parity.stale_cache import cell_for, is_expected_divergence
           seen = {json.loads(line)["vin"] for line in open("tests/parity_backlog.jsonl")}
-          new, infra = [], 0
+          new, infra, unjudged = [], 0, 0
+          stale = Counter()
           for line in open("campaign/fails-covfuzz.jsonl"):
               rec = json.loads(line)
               if is_infra_error(rec):
                   infra += 1
-              elif rec["vin"] not in seen:
+                  continue
+              if rec["vin"] in seen:
+                  continue
+              try:
+                  # One decode, both answers: cell_for would otherwise repeat it.
+                  decoded = ultravin.decode(rec["vin"])
+                  cell = cell_for(rec["vin"], decoded) if is_expected_divergence(rec["vin"], rec, decoded) else None
+              except Exception as exc:  # noqa: BLE001 - see below
+                  # Deliberately blanket: this is the only thing standing between
+                  # a real divergence and /dev/null. Whatever the record did to
+                  # the classifier - unknown shape, a decode that raises - the
+                  # answer is to file it and let a human look, never to drop it.
+                  print(f"::warning::unclassifiable {rec.get('vin')!r}, filing it: {exc!r}")
+                  cell, unjudged = None, unjudged + 1
+              if cell is not None:
+                  stale[cell] += 1
+              else:
                   seen.add(rec["vin"])
                   new.append(line)
           if new:
               with open("tests/parity_backlog.jsonl", "a") as f:
                   f.writelines(new)
-          print(f"{len(new)} new backlog entries from tonight's probe ({infra} infra errors dropped)")
+          cells = ", ".join(f"({w},{y})x{n}" for (w, y), n in stale.most_common(10))
+          print(
+              f"{len(new)} new backlog entries from tonight's probe "
+              f"({infra} infra errors dropped; {sum(stale.values())} known stale-cache "
+              f"divergences dropped across {len(stale)} cell(s){': ' + cells if cells else ''}"
+              f"; {unjudged} filed unclassified)"
+          )
           PYEOF
           fi
       - name: Save covfuzz state

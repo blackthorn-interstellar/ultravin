@@ -200,6 +200,98 @@ def test_sweep_gate_fails_on_an_undocumented_crash_alongside_known_diffs() -> No
     assert not refresh.sweep_gate(mixed).ok
 
 
+# --------------------------------------------------------------------------- stale-cache class
+
+_STALE = frozenset({"EEE"})
+
+
+def test_gates_count_the_stale_cache_class_instead_of_failing_on_it() -> None:
+    """The one class enumerated by machine rather than by VIN. A divergence the
+    classifier recognised is reported as that defect, not as a gate failure."""
+    corpus = {"entries": [{"vin": "EEE", "expected_diff": _fp(exact=False)}]}
+    gate = refresh.corpus_gate(corpus, _STALE)
+    assert gate.ok
+    assert "stale-wmiyearvalidchars-cache" in gate.detail
+
+    sweep = {"total": 500, "exact_parity": 499, "diverged": 1, "examples": [{"vin": "EEE"}]}
+    gate = refresh.sweep_gate(sweep, _STALE)
+    assert gate.ok
+    assert "stale-wmiyearvalidchars-cache" in gate.detail
+
+
+def test_a_divergence_outside_the_class_still_fails_both_gates() -> None:
+    """refresh.py:82-88's philosophy: unregistered and unlisted is still a bug."""
+    corpus = {"entries": [{"vin": "FFF", "expected_diff": _fp(exact=False)}]}
+    assert not refresh.corpus_gate(corpus, _STALE).ok
+    sweep = {"total": 500, "exact_parity": 499, "diverged": 1, "examples": [{"vin": "FFF"}]}
+    assert not refresh.sweep_gate(sweep, _STALE).ok
+
+
+def test_gates_excuse_nothing_when_the_classification_did_not_run() -> None:
+    """The default is an empty set: a classification that never happened must
+    not read as one that found the divergence expected."""
+    corpus = {"entries": [{"vin": "EEE", "expected_diff": _fp(exact=False)}]}
+    assert not refresh.corpus_gate(corpus).ok
+
+
+def _cells(*cells: tuple[str, int], exceptions: int = 0) -> dict:
+    return {
+        "dump": "2026_08",
+        "summary": {
+            "stale_cells": len(cells),
+            "rows_only_in_cache": len(cells),
+            "rows_only_in_recompute": 0,
+            "cells_recompute_empty": 0,
+            "cache_exception_wmis": exceptions,
+        },
+        "cells": [[w, y, [11]] for w, y in cells],
+    }
+
+
+def test_stale_cache_gate_reports_the_month_over_month_move_without_failing() -> None:
+    """A list that changed is the point of regenerating it, not a failure."""
+    now, head = _cells(("AAA", 2020), ("BBB", 2021)), _cells(("AAA", 2020), ("CCC", 2019))
+    head["dump"] = "2026_07"
+    gate = refresh.stale_cache_gate(now, head, [])
+    assert gate.ok
+    assert "+1 newly stale" in gate.detail
+    assert "1 healed" in gate.detail
+
+
+def test_stale_cache_gate_fails_on_a_list_that_contradicts_itself() -> None:
+    gate = refresh.stale_cache_gate(_cells(("AAA", 2020)), None, ["summary.stale_cells = 7 but ..."])
+    assert not gate.ok
+    assert "INCONSISTENT" in gate.detail
+
+
+def test_stale_cache_gate_survives_a_first_refresh_with_no_baseline() -> None:
+    assert refresh.stale_cache_gate(_cells(("AAA", 2020)), None, []).ok
+
+
+def test_stale_cache_gate_fails_on_an_implausible_jump() -> None:
+    """Upstream churn moves tens of cells; a decoder charset regression re-lists
+    thousands, because every cell whose recompute moved now contradicts a cache
+    that did not. The gate cannot tell the two apart, so it stops and asks."""
+    limit = refresh.STALE_CACHE_JUMP_LIMIT
+    head = _cells(("AAA", 2020))
+    just_under = _cells(("AAA", 2020), *((f"W{i:04d}", 2020) for i in range(limit)))
+    assert refresh.stale_cache_gate(just_under, head, []).ok
+    over = _cells(("AAA", 2020), *((f"W{i:04d}", 2020) for i in range(limit + 1)))
+    gate = refresh.stale_cache_gate(over, head, [])
+    assert not gate.ok
+    assert "jump limit" in gate.detail
+    # Healing is never suspicious: the cache catching up is the good outcome.
+    assert refresh.stale_cache_gate(head, over, []).ok
+
+
+def test_stale_cache_gate_fails_when_the_proc_stops_reading_the_cache() -> None:
+    """A non-empty wmiyearvalidchars_cacheexceptions means the premise the whole
+    scan rests on moved, whatever the cell list happens to say."""
+    gate = refresh.stale_cache_gate(_cells(("AAA", 2020), exceptions=3), None, [])
+    assert not gate.ok
+    assert "cacheexceptions" in gate.detail
+
+
 _CRASH = frozenset({"7T0AAAAA0SA111111"})
 _DEV = frozenset({DEVIATION_VIN})
 
