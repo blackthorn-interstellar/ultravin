@@ -73,6 +73,13 @@ pub struct Db {
     /// `log(all_rows)` tuple compares over the whole concatenated table. The
     /// winning-pass `resolve_xxx` runs dozens of lookups per VIN.
     lookup_index: OnceLock<Box<[(u32, u32)]>>,
+    /// Dense `element_id -> can this element contribute a pattern match` table
+    /// (built once). The pattern loop tests every pattern of every schema of the
+    /// WMI — the hottest loop in a decode — and the test only ever reads three
+    /// immutable element flags. Precomputing them turns two random reads (the
+    /// `element_index` slot, then the element row) into one byte load out of a
+    /// table small enough to stay in L1. See `decode::decode_core`.
+    pattern_element_ok: OnceLock<Box<[bool]>>,
 }
 
 // SAFETY: the archive is immutable, validated bytes; sharing `&Db` across threads
@@ -97,6 +104,7 @@ impl Db {
             archive,
             element_index: OnceLock::new(),
             lookup_index: OnceLock::new(),
+            pattern_element_ok: OnceLock::new(),
         })
     }
 
@@ -117,6 +125,7 @@ impl Db {
             archive,
             element_index: OnceLock::new(),
             lookup_index: OnceLock::new(),
+            pattern_element_ok: OnceLock::new(),
         }
     }
 
@@ -275,6 +284,25 @@ impl Db {
         } else {
             Some(&self.a().element.as_slice()[slot as usize])
         }
+    }
+
+    /// `element_id -> eligible for the pattern pass`: the element exists, has a
+    /// public decode, and is not one of the four the pass skips (26/27/29/39 are
+    /// added by their own later passes). Indexed by element id; ids past the end
+    /// are absent, hence ineligible.
+    pub fn pattern_element_ok(&self) -> &[bool] {
+        self.pattern_element_ok.get_or_init(|| {
+            let idx = self.element_index();
+            let mut ok = vec![false; idx.len()].into_boxed_slice();
+            for (id, slot) in idx.iter().enumerate() {
+                if *slot < 0 || matches!(id, 26 | 27 | 29 | 39) {
+                    continue;
+                }
+                let e = &self.a().element.as_slice()[*slot as usize];
+                ok[id] = e.decode_present && !e.isprivate;
+            }
+            ok
+        })
     }
 
     /// Lazily-built dense `element_id -> slice index` table (see field docs).

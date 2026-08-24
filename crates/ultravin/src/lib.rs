@@ -545,6 +545,8 @@ pub fn decode_full<'a>(
 
     // Pass 1 (descriptor/dmy) is permanently dead in the proc — skipped here.
     let mut passes: Vec<Pass> = Vec::new();
+    // Shared by every pass of this decode: the key scan does not vary with year.
+    let mut scan = decode::PatternScan::default();
     let mut model_year_source = "***X*|Y".to_string();
     let mut do3and4 = true;
 
@@ -567,6 +569,7 @@ pub fn decode_full<'a>(
                     &model_year_source,
                     true,
                     true,
+                    &mut scan,
                 );
                 do3and4 = p.codes.contains(&8) && plan.rmy.is_some();
                 passes.push(p);
@@ -589,6 +592,7 @@ pub fn decode_full<'a>(
             &model_year_source,
             plan.conclusive,
             e12,
+            &mut scan,
         ));
         // Pass 4: omy (only when inconclusive).
         if let Some(omy) = plan.omy {
@@ -605,6 +609,7 @@ pub fn decode_full<'a>(
                 &model_year_source,
                 plan.conclusive,
                 e12,
+                &mut scan,
             ));
         }
     }
@@ -648,6 +653,7 @@ fn run_pass(
     model_year_source: &str,
     conclusive: bool,
     error12: bool,
+    scan: &mut decode::PatternScan,
 ) -> Pass {
     let core = decode::decode_core(
         db,
@@ -656,6 +662,7 @@ fn run_pass(
         model_year,
         model_year_source,
         now_micros,
+        scan,
     );
     let err = errors::compute_errors(db, vin, var_wmi, &core, model_year, error12, conclusive);
 

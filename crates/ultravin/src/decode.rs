@@ -32,6 +32,19 @@ pub struct DecodingItem {
     pub to_be_qced: bool,
 }
 
+/// Per-decode memo of the pattern-key scan, keyed by VIN schema id.
+///
+/// Which patterns of a schema a VIN's keys match depends only on the keys, not on
+/// the model year — but [`crate::decode_full`] runs the core once per candidate
+/// year (~1.5 passes per VIN over the parity corpus), and that scan is the single
+/// hottest loop in a decode. Caching the hit list per schema makes the later
+/// passes a replay instead of a rescan. Values are indices into
+/// [`crate::db::Db::patterns_for`]'s slice for that schema.
+#[derive(Default)]
+pub struct PatternScan {
+    hits: IntMap<i32, Vec<u32>>,
+}
+
 /// Output of the core pass.
 pub struct CoreResult {
     pub items: Vec<DecodingItem>,
@@ -63,6 +76,7 @@ pub fn decode_core(
     model_year: Option<i32>,
     model_year_source: &str,
     now_micros: i64,
+    scan: &mut PatternScan,
 ) -> CoreResult {
     let Some(wmi) = db.wmi_by_str(var_wmi, now_micros) else {
         return CoreResult {
@@ -83,6 +97,7 @@ pub fn decode_core(
     // wins) so the Pattern-source priority is one map lookup per matched pattern
     // instead of `schema_year_from` rescanning `wmi_vinschema` per pattern.
     let mut schema_yearfrom: IntMap<i32, i32> = IntMap::default();
+    let elem_ok = db.pattern_element_ok();
     for wvs in db.wmi_vinschema_for(wmiid) {
         if let Some(my) = model_year {
             if my < wvs.yearfrom.to_native() || my > wvs.yearto_or(2999) {
@@ -92,32 +107,42 @@ pub fn decode_core(
         schema_yearfrom
             .entry(wvs.vinschemaid.to_native())
             .or_insert(wvs.yearfrom.to_native());
-        let Some(vs) = db.vinschema_by_id(wvs.vinschemaid.to_native()) else {
+        let sid = wvs.vinschemaid.to_native();
+        let Some(vs) = db.vinschema_by_id(sid) else {
             continue;
         };
         if vs.tobeqced {
             continue;
         }
-        for p in db.patterns_for(wvs.vinschemaid.to_native()) {
-            if matches!(p.elementid.to_native(), 26 | 27 | 29 | 39) {
-                continue;
+        let pats = db.patterns_for(sid);
+        // Year-independent, so the first pass to reach this schema pays for the
+        // scan and any later pass replays its hit list (see [`PatternScan`]).
+        let hits = scan.hits.entry(sid).or_insert_with(|| {
+            let mut hits: Vec<u32> = Vec::new();
+            for (i, p) in pats.iter().enumerate() {
+                // Element eligibility is a property of the archive, precomputed
+                // once (`26 | 27 | 29 | 39` included) so this loop stays a single
+                // L1 load per pattern instead of chasing the element table.
+                if !elem_ok
+                    .get(p.elementid.to_native() as usize)
+                    .copied()
+                    .unwrap_or(false)
+                {
+                    continue;
+                }
+                let hit = if p.has_bracket {
+                    let rid = p.keys_regex.to_native();
+                    regex_match_cached(rid, db.s(rid), var_keys)
+                } else {
+                    like_match(vkb, db.s(p.keys.to_native()).as_bytes())
+                };
+                if hit {
+                    hits.push(i as u32);
+                }
             }
-            let Some(e) = db.element_by_id(p.elementid.to_native()) else {
-                continue;
-            };
-            if !e.decode_present || e.isprivate {
-                continue;
-            }
-            let hit = if p.has_bracket {
-                let rid = p.keys_regex.to_native();
-                regex_match_cached(rid, db.s(rid), var_keys)
-            } else {
-                like_match(vkb, db.s(p.keys.to_native()).as_bytes())
-            };
-            if hit {
-                matched.push(p);
-            }
-        }
+            hits
+        });
+        matched.extend(hits.iter().map(|&i| &pats[i as usize]));
     }
     // Pattern ids are unique, so the order is total — no need for a stable sort
     // (which allocates a scratch buffer).

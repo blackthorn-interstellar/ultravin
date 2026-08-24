@@ -30,19 +30,37 @@ use crate::tables::{ArchivedWmi, NULL_I32};
 /// payload — it only ever occupies VIN position 9, which is skipped before the
 /// charset is consulted — so `_` is the only non-alphanumeric that arrives.
 #[derive(Debug, Default, Clone)]
-pub(crate) struct ValidChars(std::collections::BTreeSet<char>);
+pub(crate) struct ValidChars {
+    chars: std::collections::BTreeSet<char>,
+    /// The rendered form, built on first use and kept: a charset is built once
+    /// per (WMI, year, position) and memoized, but every VIN with a bad character
+    /// at that position renders the same set again — sorting and formatting it
+    /// char by char was ~4% of a decode. Cleared on `insert`, so the cache can
+    /// never outlive the set it describes.
+    rendered: std::cell::OnceCell<String>,
+}
 
 impl ValidChars {
     fn insert(&mut self, c: char) {
-        self.0.insert(c);
+        self.rendered.take();
+        self.chars.insert(c);
+    }
+
+    /// The `Display` text, computed once per set.
+    fn rendered(&self) -> &str {
+        self.rendered.get_or_init(|| {
+            let mut chars: Vec<char> = self.chars.iter().copied().collect();
+            chars.sort_by_key(|c| (c.is_ascii_alphanumeric(), *c));
+            chars.into_iter().collect()
+        })
     }
 
     fn contains(&self, c: char) -> bool {
-        self.0.contains(&c)
+        self.chars.contains(&c)
     }
 
     fn is_empty(&self) -> bool {
-        self.0.is_empty()
+        self.chars.is_empty()
     }
 }
 
@@ -53,12 +71,7 @@ impl ValidChars {
 /// to make unrepresentable.
 impl std::fmt::Display for ValidChars {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let mut chars: Vec<char> = self.0.iter().copied().collect();
-        chars.sort_by_key(|c| (c.is_ascii_alphanumeric(), *c));
-        for c in chars {
-            write!(f, "{c}")?;
-        }
-        Ok(())
+        f.write_str(self.rendered())
     }
 }
 
@@ -345,11 +358,12 @@ fn errorcode(
                 if set.contains(var_c) {
                     corrected.push(var_c);
                 } else {
-                    let x = set.to_string();
-                    replacements.push_str(&format!("({i}:{x})"));
+                    let x = set.rendered();
+                    let _ =
+                        std::fmt::Write::write_fmt(&mut replacements, format_args!("({i}:{x})"));
                     cnt_errors += 1;
                     last_error_pos = i;
-                    last_replacements = x;
+                    last_replacements = x.to_string();
                     corrected.push('!');
                 }
             }
