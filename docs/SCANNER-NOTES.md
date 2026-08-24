@@ -235,3 +235,18 @@ stale by the time they were triaged:
   the GIL serializes refcounting, the strings are immutable, and pyo3's own
   `intern!` shares strings process-wide the same way. The `META_CACHE`
   annotation in `crates/ultravin-py/src/lib.rs` records the full reasoning.
+
+## m. Network access in `build.rs`
+
+`crates/ultravin/build.rs` downloads the data artifact when a *released* crate
+version is built with no artifact supplied (the default `download-data`
+feature). Scanners flag build-script downloads as a supply-chain vector. Here
+the fetch is HTTPS to this project's own GitHub release for the exact crate
+version (`CARGO_PKG_REPOSITORY` + `v$CARGO_PKG_VERSION`), and the bytes are
+never trusted on arrival: they must hash to the blake3 pinned inside the crate
+(`data/manifest.json`, committed and released with the code) and then pass the
+same `validate_body` proofs as any untrusted artifact before they become
+`include_bytes!`. A mismatch fails the build. There is no download in the
+repo's own builds (version 0.0.0 skips it, the checkout has `data/vpic.rkyv`)
+nor on docs.rs; embedders who forbid build-time network set `ULTRAVIN_DATA` or
+build with `--no-default-features`.

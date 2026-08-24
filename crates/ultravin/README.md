@@ -1,46 +1,13 @@
 # ultravin
 
 Pure-Rust NHTSA vPIC VIN decoder: byte-for-byte parity with the official
-`spVinDecode` stored procedure, ~0.04 ms per decode, fully offline. This is the
-engine behind the [`ultravin`](https://pypi.org/project/ultravin/) Python
+`spVinDecode` stored procedure, ~0.04 ms per decode, fully offline at runtime.
+Same engine as the [`ultravin`](https://pypi.org/project/ultravin/) Python
 package; the repo, benchmarks and parity evidence live at
 [github.com/blackthorn-interstellar/ultravin](https://github.com/blackthorn-interstellar/ultravin).
 
-```toml
-[dependencies]
-ultravin = "1"
-```
-
-## The data artifact
-
-The decoder runs against `vpic.rkyv` (~82 MB): the whole vPIC database, built
-deterministically from NHTSA's monthly dump. It is too big for crates.io, so the
-crate ships **without** it and every GitHub release attaches the exact file that
-release was verified against. Download it from the release whose tag matches
-your crate version and check its `blake3` against `artifact_blake3` in that
-tag's `vpic/manifest.json`:
-
 ```bash
-gh release download v1.1.0 --repo blackthorn-interstellar/ultravin --pattern vpic.rkyv
-```
-
-Then pick one of two ways to use it.
-
-### Bake it in (recommended)
-
-Point `ULTRAVIN_DATA` (absolute path) at the file when you build. The crate's
-build script validates it and embeds it with `include_bytes!`, giving you the
-same single self-contained binary the Python wheel is — no files at runtime.
-
-```bash
-ULTRAVIN_DATA=/abs/path/to/vpic.rkyv cargo build --release
-```
-
-Or persist it in your project's `.cargo/config.toml`:
-
-```toml
-[env]
-ULTRAVIN_DATA = "/abs/path/to/vpic.rkyv"
+cargo add ultravin
 ```
 
 ```rust
@@ -57,16 +24,32 @@ let results = ultravin::decode_batch(&vins, None);
 let flat = ultravin::decode_batch_flat(&vins, None);
 ```
 
-Without `ULTRAVIN_DATA` the crate still compiles (an empty placeholder is
-embedded so docs and CI work), but `decode` panics with a message saying so and
-`Db::try_embedded()` returns `None`.
+## The data
 
-### Load it at runtime
+The decoder runs against `vpic.rkyv` (~83 MB): the whole vPIC database, built
+deterministically from NHTSA's monthly dump. It is too big for crates.io, so the
+**first build** fetches it from this version's GitHub release, checks its blake3
+against the pin shipped in the crate (`data/manifest.json`), validates it, caches
+it in `~/.cache/ultravin` (override with `ULTRAVIN_CACHE_DIR`), and bakes it into
+your binary with `include_bytes!`. One download per machine; the executable you
+ship is self-contained and never touches the network.
 
-Enable the `external-data` feature and memory-map the file yourself:
+### Offline or reproducible builds
+
+Either supply the file yourself — the build script validates and embeds it and
+attempts no download:
+
+```bash
+gh release download v1.2.0 --repo blackthorn-interstellar/ultravin --pattern vpic.rkyv
+ULTRAVIN_DATA=/abs/path/to/vpic.rkyv cargo build --release
+```
+
+(check its blake3 against `artifact_blake3` in that tag's `vpic/manifest.json`;
+`[env] ULTRAVIN_DATA = "..."` in `.cargo/config.toml` persists it), or turn the
+download off and load the file at runtime instead:
 
 ```toml
-ultravin = { version = "1", features = ["external-data"] }
+ultravin = { version = "1", default-features = false, features = ["external-data"] }
 ```
 
 ```rust
@@ -78,7 +61,10 @@ let batch = db.decode_batch(&vins, None);
 ```
 
 `Db::open` fully validates the file (it is untrusted input); do not modify it
-while the `Db` lives. `Db::from_bytes` takes an owned buffer instead.
+while the `Db` lives. `Db::from_bytes` takes an owned buffer instead. Without
+any artifact the crate still compiles (an empty placeholder is embedded so docs
+and CI work), but `decode` panics with a message saying so and
+`Db::try_embedded()` returns `None`.
 
 ## Results
 
@@ -97,6 +83,7 @@ when it contradicts the VIN.
 
 | feature | default | what it adds |
 |---|---|---|
+| `download-data` | **on** | build.rs fetches, verifies and embeds this version's `vpic.rkyv` when none is supplied (pulls in `ureq` as a build dependency) |
 | `external-data` | off | `Db::open` (mmap an artifact at runtime; pulls in `memmap2`) |
 | `parquet` | off | `parquet_io`: decode a parquet dataset to parquet, streaming by row group (pulls in `arrow`/`parquet`) |
 

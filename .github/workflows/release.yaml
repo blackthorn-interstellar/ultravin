@@ -84,6 +84,7 @@ jobs:
       - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
       # Default features: the build a crates.io consumer gets (no arrow/parquet).
       - run: cargo clippy -p ultravin --all-targets -- -D warnings
+      - run: cargo clippy -p ultravin --all-targets --no-default-features -- -D warnings
       - run: cargo test --workspace --exclude ultravin-py --all-features --locked
       # crates.io preflight: package + verify-build the crate exactly as the
       # `crate` job's publish will (placeholder artifact, default features), so a
@@ -419,9 +420,11 @@ jobs:
         if: steps.probe.outputs.publish == 'true'
         id: auth
       # --allow-dirty: the stamp above edits Cargo.toml/Cargo.lock in place and
-      # cargo otherwise refuses to publish an uncommitted tree. The package is
-      # verify-built without the data artifact (build.rs's placeholder), exactly
-      # what the gate job's `cargo package` already proved.
+      # cargo otherwise refuses to publish an uncommitted tree. The verify build
+      # runs at the stamped version with no local artifact, so build.rs takes the
+      # download route against the GitHub release the `release` job just created
+      # — the exact path a `cargo add ultravin` user hits. A missing or
+      # mismatched asset fails here, before anything reaches crates.io.
       - name: cargo publish
         if: steps.probe.outputs.publish == 'true'
         env:

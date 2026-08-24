@@ -326,10 +326,15 @@ fn run(cli: &Cli) -> Result<(), Box<dyn Error>> {
         artifact_blake3,
         artifact_bytes,
     };
-    write_file(
-        &cli.out.join("manifest.json"),
-        &serde_json::to_string_pretty(&manifest)?,
-    )?;
+    let manifest_json = serde_json::to_string_pretty(&manifest)?;
+    write_file(&cli.out.join("manifest.json"), &manifest_json)?;
+    // The crate carries a copy beside the artifact it pins (data/manifest.json):
+    // build.rs checks a downloaded artifact against its artifact_blake3, and the
+    // packaged crate cannot reach vpic/. tests/test_data_pin.py keeps the two
+    // byte-identical.
+    if let Some(dir) = cli.emit_artifact.parent() {
+        write_file(&dir.join("manifest.json"), &manifest_json)?;
+    }
 
     eprintln!(
         "vpic-import: {} tables ({} rows), {} functions; sha256={}",

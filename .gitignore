@@ -116,6 +116,7 @@ ENV/
 # gitignored build artifact (rebuilt deterministically from the pinned dump)
 /crates/ultravin/data/*
 !/crates/ultravin/data/.gitkeep
+!/crates/ultravin/data/manifest.json
 
 # Detached campaign runtime (state, logs, fail-logs, coverage)
 /campaign/

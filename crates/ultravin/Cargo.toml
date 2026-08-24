@@ -16,7 +16,12 @@ categories = ["parsing", "database-implementations"]
 exclude = ["data/*.rkyv"]
 
 [features]
-default = []
+default = ["download-data"]
+# build.rs fetches this version's vpic.rkyv from its GitHub release when no
+# artifact is supplied — once per machine, blake3-verified against
+# data/manifest.json, then embedded. Off for offline/reproducible builds:
+# supply ULTRAVIN_DATA, or load a file at runtime via `external-data`.
+download-data = ["dep:ureq"]
 # `Db::open`: mmap an artifact file at runtime instead of baking one in.
 external-data = ["dep:memmap2"]
 # The dataset door (`parquet_io`): parquet in, parquet out. Off by default so an
@@ -57,6 +62,10 @@ parquet = { version = "59.2", default-features = false, features = ["arrow", "sn
 [build-dependencies]
 blake3 = { version = "1.8.5", features = ["pure"] }
 rkyv = "0.8"
+# download-data only. rustls + ring + webpki-roots; ring's C is host-only (a
+# build dependency never cross-compiles), so the crate stays pure Rust for
+# every target.
+ureq = { version = "3", default-features = false, features = ["rustls"], optional = true }
 
 [dev-dependencies]
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }

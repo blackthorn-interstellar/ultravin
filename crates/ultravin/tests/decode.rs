@@ -91,11 +91,9 @@ fn artifact_blake3_matches_manifest() {
     }
     let art = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/data/vpic.rkyv")).unwrap();
     let hex = ultravin::tables::artifact_blake3_hex(&art);
-    let manifest = std::fs::read_to_string(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../vpic/manifest.json"
-    ))
-    .unwrap();
+    let manifest =
+        std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/data/manifest.json"))
+            .unwrap();
     assert!(
         manifest.contains(&hex),
         "artifact blake3 {hex} not found in manifest"
