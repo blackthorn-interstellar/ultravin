@@ -1,5 +1,9 @@
 # ultravin
 
+<p align="center">
+  <img src="https://raw.githubusercontent.com/blackthorn-interstellar/ultravin/master/assets/benchmark.svg" alt="VINs decoded per second: ultravin batched on 4 cores and single-core vs corgi v3, corgi v2, NHTSA MSSQL, NHTSA Postgres" width="640">
+</p>
+
 Pure-Rust NHTSA vPIC VIN decoder: byte-for-byte parity with the official
 `spVinDecode` stored procedure, ~0.04 ms per decode, fully offline at runtime.
 Same engine as the [`ultravin`](https://pypi.org/project/ultravin/) Python
