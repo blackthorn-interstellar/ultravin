@@ -144,13 +144,16 @@ rows  # 4812004 — the rows written, not the rows themselves
 ```
 
 The source is a parquet file, a directory of `*.parquet` read in sorted order, or
-anything speaking the Arrow C data interface — so the same call takes a pyarrow
-`Table`, a polars `DataFrame`, a duckdb result, or a `RecordBatchReader`. A
-`DecodeStream` is itself an Arrow source, which is what lets it hand the decode
-straight to whatever you already use:
+anything speaking the Arrow C data interface — so the same call takes a pandas
+`DataFrame` (pandas ≥ 2.2, with pyarrow installed), a pyarrow `Table`, a polars
+`DataFrame`, a duckdb result, or a `RecordBatchReader`. A `DecodeStream` is
+itself an Arrow source, which is what lets it hand the decode straight to
+whatever you already use:
 
 ```python
-import polars as pl, pyarrow as pa, duckdb
+import pandas as pd, polars as pl, pyarrow as pa, duckdb
+
+df = pd.DataFrame({"vin": ["1HGCM82633A004352", "5YJ3E1EA7KF328931"]})
 
 pl.DataFrame(ultravin.decode_stream(df))  # -> polars
 pa.table(ultravin.decode_stream(df))  # -> pyarrow
