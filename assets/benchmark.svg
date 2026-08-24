@@ -7,11 +7,11 @@
 <line class="grid" x1="596.0" y1="14" x2="596.0" y2="226"/>
 <line class="grid" x1="690.0" y1="14" x2="690.0" y2="226"/>
 <text class="label strong" x="210" y="35.0" text-anchor="end">ultravin — batched (4 cores)</text>
-<rect class="bar-hi" x="220" y="22.0" width="385.2" height="18" rx="2"/>
-<text class="value strong" x="611.2" y="35.0">81,948</text>
+<rect class="bar-hi" x="220" y="22.0" width="441.9" height="18" rx="2"/>
+<text class="value strong" x="667.9" y="35.0">94,030</text>
 <text class="label strong" x="210" y="65.0" text-anchor="end">ultravin — 1 core</text>
-<rect class="bar-hi" x="220" y="52.0" width="118.3" height="18" rx="2"/>
-<text class="value strong" x="344.3" y="65.0">25,175</text>
+<rect class="bar-hi" x="220" y="52.0" width="139.0" height="18" rx="2"/>
+<text class="value strong" x="365.0" y="65.0">29,568</text>
 <text class="label" x="210" y="95.0" text-anchor="end">corgi v3</text>
 <rect class="bar" x="220" y="82.0" width="2.0" height="18" rx="2"/>
 <text class="value" x="226.4" y="95.0">83</text>
