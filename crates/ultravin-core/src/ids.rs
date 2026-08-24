@@ -1,6 +1,6 @@
 //! Projected batch decode: one typed column per requested `element_id`.
 //!
-//! The dataset path (see [`crate::parquet_io`]) decodes a chunk of rows and
+//! The dataset path (`parquet_io`, behind the `parquet` feature) decodes a chunk of rows and
 //! keeps only the caller-named elements, emitted as parallel typed columns
 //! instead of per-VIN element lists. Keying on the stable vPIC `element_id`
 //! rather than the variable name means a monthly NHTSA dump that renames a
@@ -231,11 +231,6 @@ pub fn decode_batch_ids(
         model_year,
         columns,
     }
-}
-
-/// Top of the model-year window the parquet layer's year sniffer accepts.
-pub fn year_upper_bound() -> i32 {
-    epoch_to_year(now_secs()) + 2
 }
 
 #[cfg(test)]

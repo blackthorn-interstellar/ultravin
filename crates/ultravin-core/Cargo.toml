@@ -7,12 +7,27 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 
+readme = "README.md"
+keywords = ["vin", "nhtsa", "vpic", "vehicle", "decoder"]
+categories = ["parsing", "database-implementations"]
+# The 82 MB artifact is a build product fetched from a GitHub release (see
+# build.rs); it never ships in the package. Its directory does (data/.gitkeep)
+# so build.rs has something to watch.
+exclude = ["data/*.rkyv"]
+
 [lib]
 name = "ultravin_core"
 
 [features]
 default = []
+# `Db::open`: mmap an artifact file at runtime instead of baking one in.
 external-data = ["dep:memmap2"]
+# The dataset door (`parquet_io`): parquet in, parquet out. Off by default so an
+# embedder that only decodes does not compile arrow.
+parquet = ["dep:arrow-array", "dep:arrow-cast", "dep:arrow-schema", "dep:parquet"]
+
+[package.metadata.docs.rs]
+all-features = true
 
 [lints]
 workspace = true
@@ -37,10 +52,10 @@ serde_json = "1"
 # Dataset path (decode-parquet): parquet row-group streaming in Rust so no row
 # ever becomes a Python object. arrow/parquet are pure Rust — the exotic
 # cross-compile targets stay plain-gcc buildable, same as serde above.
-arrow-array = "59.2"
-arrow-cast = "59.2"
-arrow-schema = "59.2"
-parquet = { version = "59.2", default-features = false, features = ["arrow", "snap"] }
+arrow-array = { version = "59.2", optional = true }
+arrow-cast = { version = "59.2", optional = true }
+arrow-schema = { version = "59.2", optional = true }
+parquet = { version = "59.2", default-features = false, features = ["arrow", "snap"], optional = true }
 
 [build-dependencies]
 blake3 = { version = "1.8.5", features = ["pure"] }

@@ -96,18 +96,22 @@ clauses. Both sites carry `nosemgrep` annotations.
 ## f. `unsafe` in the Rust core
 
 `crates/ultravin-core/src/db.rs` — eight `unsafe` sites: two `unsafe impl`
-(`Send`/`Sync`, lines 84-85), an `unsafe fn` declaration (138), and five blocks
-(118, 195, 224, 233, 247). The load path for **untrusted** artifacts
-(`Db::from_bytes` → `Db::build`) validates before it trusts: checked
-`rkyv::access` proves layout and alignment, `validate_arena` proves every
-interned arena slice is valid UTF-8, and `check_element_ids` bounds element ids
-so a crafted artifact cannot drive a huge index allocation. Only after all three
-pass does line 118 take the unchecked pointer. The validation-skipping path is
-`unsafe fn build_trusted`, reachable only from `embedded_raw()` for the blob
-compiled into the binary — an embedder cannot reach it with their own file. The
-`from_utf8_unchecked` at 247 sits on the hottest call in a decode and is covered
+(`Send`/`Sync`, lines 80-81), an `unsafe fn` declaration (112), and five blocks
+(92, 169, 198, 207, 221). The load path for **untrusted** artifacts
+(`Db::from_bytes` → `Db::build`) validates before it trusts, through
+`tables::validate_body`: checked `rkyv::access` proves layout and alignment,
+`validate_arena` proves every interned arena slice is valid UTF-8, and
+`check_element_ids` bounds element ids so a crafted artifact cannot drive a
+huge index allocation. Only after all three pass does line 92 take the unchecked
+pointer. The validation-skipping path is `unsafe fn build_trusted`, reachable
+only from `embedded_raw()` for the blob compiled into the binary. That blob is
+either our importer's output from the checkout (`data/vpic.rkyv`) or a file an
+embedder names with `ULTRAVIN_DATA` at build time — and `build.rs` runs the same
+`validate_body` proofs on that file before it becomes `include_bytes!`, so no
+unvalidated bytes reach `build_trusted` by either route. The
+`from_utf8_unchecked` at 221 sits on the hottest call in a decode and is covered
 by the `validate_arena` proof; re-validating per call measured ~13% of decode
-self-time. Line 224's `Mmap::map` and its documented TOCTOU caveat live behind
+self-time. Line 198's `Mmap::map` and its documented TOCTOU caveat live behind
 the non-default `external-data` cargo feature, which is not compiled into the
 shipped Python wheel and has no in-repo caller.
 

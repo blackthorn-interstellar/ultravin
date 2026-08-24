@@ -32,9 +32,14 @@ typecheck: ## Run the Python type checker.
 
 rust:  ## Run Rust fmt-check, clippy, and tests.
 	@cargo fmt --all -- --check
-	@cargo clippy --workspace --all-targets -- -D warnings
-	@cargo test --workspace --exclude ultravin-py
+	@cargo clippy --workspace --all-targets --all-features -- -D warnings
+	@cargo clippy -p ultravin-core --all-targets -- -D warnings  # default features: what a crates.io user compiles
+	@cargo test --workspace --exclude ultravin-py --all-features
 	@echo -e "✅ Rust checks pass! ✨ 🍰 ✨"
+
+crate-package:  ## Package + verify-build ultravin-core exactly as `cargo publish` would (no upload).
+	@cargo package -p ultravin-core --allow-dirty
+	@ls -l target/package/*.crate
 
 build-dev:  ## Build the native extension into the dev venv.
 	@uv run -- maturin develop --uv

@@ -14,7 +14,7 @@
 </p>
 
 - ⚡️ ~0.042 ms per decode — orders of magnitude faster than the NHTSA SQL procedures (corgi, Postgres, MSSQL)
-- 🦀 Pure Rust core, shipped as a Python library
+- 🦀 Pure Rust core, shipped as a Python library and a Rust crate
 - 📦 The entire vPIC vehicle database baked into the wheel
 - 🔌 Fully offline — no network, no database, no data files at runtime
 - 🎯 Byte-for-byte parity with vPIC's `spVinDecode`, verified across every decodable VIN — except documented vPIC defects, which ultravin deliberately does not reproduce ([the registry](scripts/known_problems.json), [evidence](docs/KNOWN_DEVIATIONS.md))
@@ -113,6 +113,19 @@ ultravin decode 1HGCM82633A004352 --flat   # values only, no provenance
 ultravin decode-batch vins.txt --json      # one VIN per line
 ultravin version
 ```
+
+## Rust
+
+The engine is its own crate, [`ultravin-core`](https://crates.io/crates/ultravin-core):
+
+```rust
+let r = ultravin_core::decode("1HGCM82633A004352", None);
+assert_eq!(r.model_year, Some(2003));
+```
+
+The 82 MB vPIC artifact is too big for crates.io, so each GitHub release attaches
+it; point `ULTRAVIN_DATA` at it when you build to bake it in, or load it at
+runtime with `Db::open`. Details: [crates/ultravin-core/README.md](crates/ultravin-core/README.md).
 
 ## Datasets
 

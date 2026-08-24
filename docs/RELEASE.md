@@ -36,12 +36,35 @@ The sdist embeds the artifact too (`[tool.maturin] include`), so a source instal
 (`pip install` with no matching wheel) works fully offline.
 
 Tagged releases also attach that exact `vpic.rkyv` to the GitHub release. That
-is the supported data channel for Rust-crate users — the crate itself can't
-carry 82MB (crates.io size cap), and a build without the artifact embeds an
-empty placeholder that `Db::embedded()` refuses to serve at runtime. Download
-the asset and either `Db::open` it (`external-data` feature) or drop it at
-`crates/ultravin-core/data/vpic.rkyv` before building to bake it in; verify its
-`blake3` against the tag's `vpic/manifest.json`.
+is the data channel for Rust-crate users — the crate itself can't carry 82MB
+(crates.io size cap), and a build without the artifact embeds an empty
+placeholder (written to `OUT_DIR` by `build.rs`) that `Db::embedded()` refuses
+to serve at runtime. A crate user bakes the downloaded asset in with
+`ULTRAVIN_DATA=/abs/path/vpic.rkyv` at build time (build.rs fully validates it
+first) or mmaps it at runtime with `Db::open` (`external-data` feature); either
+way they verify its `blake3` against the tag's `vpic/manifest.json`. User-facing
+instructions: `crates/ultravin-core/README.md` (the crate's crates.io page).
+
+## The Rust crate
+
+`ultravin-core` is published to crates.io by the release workflow's `crate` job,
+after PyPI and the GitHub release (so the artifact exists before the crate that
+needs it). The gate job runs `cargo package -p ultravin-core` first, which
+verify-builds the packaged crate with the placeholder artifact and default
+features — exactly what publish does. `make crate-package` is the local
+equivalent.
+
+Auth is crates.io Trusted Publishing (OIDC via `rust-lang/crates-io-auth-action`),
+so no token lives in repo secrets. It has to be bootstrapped once by hand:
+
+1. Publish the first version locally with an owner's API token:
+   `./.github/stamp-version.sh vX.Y.Z && cargo publish -p ultravin-core --allow-dirty`
+   (then `git checkout Cargo.toml Cargo.lock`).
+2. On crates.io → the crate → Settings → Trusted Publishing, add
+   `blackthorn-interstellar/ultravin`, workflow `release.yaml`, no environment.
+
+From then on every tag publishes. The job skips itself when the version is
+already on crates.io, so a re-run of a tag's workflow is safe.
 
 Data bumps are automated: a daily workflow detects new NHTSA dumps, integrates
 them behind parity gates, and opens a classified PR (see

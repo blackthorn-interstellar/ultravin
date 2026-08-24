@@ -21,6 +21,7 @@ mod hash;
 mod ids;
 mod keyspec;
 mod matcher;
+#[cfg(feature = "parquet")]
 pub mod parquet_io;
 mod resolve;
 pub mod tables;
@@ -47,7 +48,7 @@ pub use wmi::{vin_descriptor, vin_wmi};
 /// allocating an owned copy per element per decode — they were the single largest
 /// allocation block on the decode path. The item-derived columns
 /// (`value`/`attribute_id`/`keys`/`source`) are *moved* out of the decode items in
-/// [`project`], not cloned. `source` stays a `Cow` so its overwhelmingly common
+/// `project`, not cloned. `source` stays a `Cow` so its overwhelmingly common
 /// borrowed-literal form (`"Pattern"`, `"Make"`, …) costs nothing.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct DecodedElement<'a> {
@@ -168,7 +169,7 @@ impl<'a> From<DecodeResult<'a>> for FlatResult<'a> {
     }
 }
 
-/// The element's `Decode` text when it is one [`project`] emits, `None` when the
+/// The element's `Decode` text when it is one `project` emits, `None` when the
 /// element never reaches output (no Decode text, or private). The single gate for
 /// "can this element appear in a result", shared by the projection, the
 /// multi-valued list and the exported element table so they cannot drift.
@@ -245,7 +246,7 @@ pub fn current_year() -> i32 {
     epoch_to_year(secs)
 }
 
-/// "Now" in the units [`decode_with`], [`decode_full`] and [`generate`] take.
+/// "Now" in the units [`decode_with`], [`decode_full`] and [`generate`](fn@generate) take.
 ///
 /// Those take the clock as an argument so their output is a pure function of
 /// their inputs; this is the one place that reads it, for callers who do want
@@ -263,14 +264,7 @@ pub fn now_micros() -> i64 {
 /// In or out of that window, a caller year that contradicts a pass's decoded
 /// year flags error 12 on that pass.
 pub fn decode(input: &str, year: Option<i32>) -> DecodeResult<'static> {
-    let secs = now_secs();
-    decode_full(
-        Db::embedded(),
-        input,
-        secs * 1_000_000,
-        epoch_to_year(secs),
-        year,
-    )
+    Db::embedded().decode(input, year)
 }
 
 /// Decode a VIN against an explicit database and clock (injectable for tests),
@@ -296,7 +290,7 @@ pub fn decode_batch(
     inputs: &[String],
     years: Option<&[Option<i32>]>,
 ) -> Vec<DecodeResult<'static>> {
-    batch(inputs, years, |r| r)
+    Db::embedded().decode_batch(inputs, years)
 }
 
 /// [`decode_batch`] with the [`FlatResult`] shape. Flattening runs inside the
@@ -305,7 +299,36 @@ pub fn decode_batch_flat(
     inputs: &[String],
     years: Option<&[Option<i32>]>,
 ) -> Vec<FlatResult<'static>> {
-    batch(inputs, years, FlatResult::from)
+    Db::embedded().decode_batch_flat(inputs, years)
+}
+
+/// The decode API against an explicit database, for a [`Db`] you loaded yourself
+/// ([`Db::open`] / [`Db::from_bytes`]). The free functions above are these three
+/// on [`Db::embedded`]; results borrow the `Db`'s arena for the element metadata.
+impl Db {
+    /// [`decode`](fn@decode) against this database, with the system clock.
+    pub fn decode(&self, input: &str, year: Option<i32>) -> DecodeResult<'_> {
+        let secs = now_secs();
+        decode_full(self, input, secs * 1_000_000, epoch_to_year(secs), year)
+    }
+
+    /// [`decode_batch`](fn@decode_batch) against this database.
+    pub fn decode_batch(
+        &self,
+        inputs: &[String],
+        years: Option<&[Option<i32>]>,
+    ) -> Vec<DecodeResult<'_>> {
+        batch(self, inputs, years, |r| r)
+    }
+
+    /// [`decode_batch_flat`](fn@decode_batch_flat) against this database.
+    pub fn decode_batch_flat(
+        &self,
+        inputs: &[String],
+        years: Option<&[Option<i32>]>,
+    ) -> Vec<FlatResult<'_>> {
+        batch(self, inputs, years, FlatResult::from)
+    }
 }
 
 /// The thread pool the batch paths run on, rebuilt whenever the pid changes.
@@ -350,17 +373,17 @@ fn year_at(years: Option<&[Option<i32>]>, i: usize) -> Option<i32> {
 
 /// Shared body of the batch paths: decode every input in parallel over the shared
 /// archive, mapped through `shape`. Output order matches `inputs`.
-fn batch<T: Send>(
+fn batch<'a, T: Send>(
+    db: &'a Db,
     inputs: &[String],
     years: Option<&[Option<i32>]>,
-    shape: impl Fn(DecodeResult<'static>) -> T + Sync,
+    shape: impl Fn(DecodeResult<'a>) -> T + Sync,
 ) -> Vec<T> {
     use rayon::prelude::*;
 
     let secs = now_secs();
     let now_micros = secs * 1_000_000;
     let current_year = epoch_to_year(secs);
-    let db = Db::embedded();
     batch_pool().install(|| {
         inputs
             .par_iter()

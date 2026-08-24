@@ -167,7 +167,7 @@ fn sniff_vin_candidates(batch: &RecordBatch, sample: usize) -> Vec<usize> {
 /// years (`[1980, current_year + 2]`, the same window vPIC accepts).
 fn sniff_year_candidates(batch: &RecordBatch, sample: usize) -> Vec<usize> {
     let lo = 1980i64;
-    let hi = i64::from(crate::ids::year_upper_bound());
+    let hi = i64::from(crate::current_year() + 2);
     let mut cands = Vec::new();
     for i in 0..batch.num_columns() {
         let dt = batch.column(i).data_type();
