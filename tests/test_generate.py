@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
 
 import pytest
 import ultravin
@@ -35,6 +36,41 @@ def test_generated_vins_decode_to_real_vehicles() -> None:
     for result in ultravin.decode_batch(ultravin.generate(25, seed=2)):
         assert 7 not in result["error_codes"], result["vin"]
         assert result["elements"]
+
+
+def test_generate_will_not_draw_from_an_unpublished_wmi() -> None:
+    # The decoder resolves a WMI only once its public-availability date has passed
+    # and reports the miss as error 7, "manufacturer not registered"; generation
+    # used to draw from every WMI row regardless. Find the unpublished rows the way
+    # the decoder sees them -- one VIN per raw WMI row, kept when it decodes to
+    # error 7 -- and require that asking for one by name yields nothing. Only ~1 in
+    # 13k rows is unpublished, which is why sampling generate() cannot test this:
+    # a few thousand random draws miss it most of the time.
+    per_row = ultravin.sweep(["wmi"])
+    unpublished = sorted({v[:3] for v, r in zip(per_row, ultravin.decode_batch(per_row)) if 7 in r["error_codes"]})
+    if not unpublished:
+        pytest.skip("every WMI in this data month is published")
+    for wmi in unpublished:
+        assert ultravin.generate(50, seed=9, wmi=wmi) == [], wmi
+
+
+def test_no_generated_vin_comes_from_an_unregistered_wmi() -> None:
+    # The broad net behind the exact test above: the 25 VINs checked earlier cannot
+    # see a defect at the one-in-thousands rate this one samples at.
+    results = ultravin.decode_batch(ultravin.generate(4_000, seed=9))
+    assert not [r["vin"] for r in results if 7 in r["error_codes"]]
+
+
+def test_generated_model_years_span_the_schema_band() -> None:
+    # A generated corpus is a sample of the data, so the model year has to move:
+    # taking each schema's newest allowed year collapsed ~83% of VINs onto
+    # current_year + 2 and left every older year in the band untested. Sampling
+    # the band spreads them (~48 distinct years, none above 9%); the thresholds
+    # here are loose enough that only a re-collapse trips them.
+    years = [r["model_year"] for r in ultravin.decode_batch(ultravin.generate(4_000, seed=10))]
+    counts = Counter(years)
+    top, n = counts.most_common(1)[0]
+    assert n < len(years) * 0.5, f"{top} took {n}/{len(years)}"
 
 
 def test_generate_filters_by_wmi() -> None:

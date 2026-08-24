@@ -272,6 +272,17 @@ impl ArchivedWmi {
         let vt = self.vehicletypeid.to_native();
         matches!(vt, 2 | 7) || (vt == 3 && self.trucktypeid.to_native() == 1)
     }
+
+    /// Is this WMI row published as of `now_micros`? A NULL date means never.
+    ///
+    /// One definition because two callers must agree on it: decode resolves a VIN
+    /// through `Db::wmi_by_str`, which skips rows failing this test, so anything
+    /// generating VINs from the raw `wmi` slice hands out VINs the decoder reports
+    /// as error 7, "manufacturer not registered".
+    pub(crate) fn is_public(&self, now_micros: i64) -> bool {
+        let pad = self.publicavailabilitydate.to_native();
+        pad != NULL_I64 && pad <= now_micros
+    }
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
@@ -486,6 +497,91 @@ pub const MAGIC: [u8; 8] = *b"ULTRAVIN";
 pub const FORMAT_VERSION: u16 = 1;
 /// Fixed header length prepended to the rkyv buffer.
 pub const HEADER_LEN: usize = 64;
+
+/// Validate magic + format on the *full* artifact bytes (header + body).
+pub fn check_header(bytes: &[u8]) -> Result<(), String> {
+    if bytes.len() < HEADER_LEN {
+        return Err("artifact too small".into());
+    }
+    if bytes[..8] != MAGIC {
+        return Err("bad artifact magic".into());
+    }
+    let fmt = u16::from_le_bytes([bytes[8], bytes[9]]);
+    if fmt != FORMAT_VERSION {
+        return Err(format!("artifact format {fmt} != {FORMAT_VERSION}"));
+    }
+    Ok(())
+}
+
+/// Fully validate an **untrusted** rkyv body (the artifact minus its header;
+/// must be 16-byte aligned) and return the archived root.
+///
+/// Three proofs, in order: checked `rkyv::access` (layout + alignment),
+/// `validate_arena` (every interned string is UTF-8 — the decode hot path
+/// reads them with `from_utf8_unchecked`), and `check_element_ids` (bounds the
+/// dense element index a crafted id could blow up). This is the one gate for
+/// bytes that did not come out of our own importer in this same build: the
+/// `Db::from_bytes`/`Db::open` loaders and the build script's `ULTRAVIN_DATA`
+/// bake-in all go through it.
+pub fn validate_body(body: &[u8]) -> Result<&ArchivedVpicData, String> {
+    let archived = rkyv::access::<ArchivedVpicData, rkyv::rancor::Error>(body)
+        .map_err(|e| format!("artifact validation failed: {e}"))?;
+    validate_arena(archived)?;
+    check_element_ids(archived)?;
+    Ok(archived)
+}
+
+/// Prove every arena slice is in range and valid UTF-8.
+fn validate_arena(a: &ArchivedVpicData) -> Result<(), String> {
+    let bytes = a.arena_bytes.as_slice();
+    let offsets = a.arena_offsets.as_slice();
+    if offsets.is_empty() {
+        return Err("arena offsets empty".into());
+    }
+    let mut prev = 0usize;
+    for (i, off) in offsets.iter().enumerate() {
+        let cur = off.to_native() as usize;
+        if cur > bytes.len() || cur < prev {
+            return Err(format!("arena offset {i} out of range"));
+        }
+        if i > 0 {
+            std::str::from_utf8(&bytes[prev..cur])
+                .map_err(|_| format!("arena string {} is not valid UTF-8", i - 1))?;
+        }
+        prev = cur;
+    }
+    Ok(())
+}
+
+/// The lazily-built `element_index` (`Db::element_index`) is a dense
+/// `vec![-1i32; max_element_id + 1]`. On trusted data the real vPIC `Element.id`
+/// maximum is ~203, so that vec is a few hundred entries. An untrusted artifact
+/// carrying a crafted `Element.id` near `i32::MAX` would instead force a multi-GB
+/// allocation (OOM) on the first `element_by_id`. Reject any untrusted artifact
+/// whose largest element id exceeds this cap.
+///
+/// 100_000 is ~500x the real max — far beyond any plausible vPIC growth — while
+/// still bounding the dense index to <400 KB (4 bytes/entry). The trusted embedded
+/// blob skips this check (see `Db::build_trusted`), so tightening the cap can only
+/// reject a hostile external artifact, never the baked-in data.
+pub const MAX_ELEMENT_ID: i32 = 100_000;
+
+/// Reject an untrusted artifact whose largest `Element.id` exceeds
+/// [`MAX_ELEMENT_ID`] (bounds the dense `element_index` allocation).
+fn check_element_ids(a: &ArchivedVpicData) -> Result<(), String> {
+    let max = a
+        .element
+        .iter()
+        .map(|e| e.id.to_native())
+        .max()
+        .unwrap_or(-1);
+    if max > MAX_ELEMENT_ID {
+        return Err(format!(
+            "element id {max} exceeds cap {MAX_ELEMENT_ID} (artifact rejected)"
+        ));
+    }
+    Ok(())
+}
 
 /// Serialize `data` into a self-describing artifact: a 64-byte header
 /// (magic, format/builder version, blake3, root offset) followed by the rkyv

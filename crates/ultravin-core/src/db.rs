@@ -12,14 +12,13 @@
 
 use std::sync::OnceLock;
 
-use rkyv::rancor;
-
+use crate::tables::{check_header, validate_body};
 use crate::tables::{
     ArchivedConversion, ArchivedDefaultValue, ArchivedElement, ArchivedEngineModel,
     ArchivedEngineModelPattern, ArchivedMakeModel, ArchivedPattern, ArchivedVSpecPattern,
     ArchivedVSpecSchema, ArchivedVSpecSchemaModel, ArchivedVSpecSchemaPattern,
     ArchivedVSpecSchemaYear, ArchivedVinSchema, ArchivedVpicData, ArchivedWmi, ArchivedWmiMake,
-    ArchivedWmiVinSchema, FORMAT_VERSION, HEADER_LEN, MAGIC, NULL_I64,
+    ArchivedWmiVinSchema, HEADER_LEN,
 };
 
 /// 16-byte-aligned wrapper so `include_bytes!` (align 1) can be `rkyv::access`ed
@@ -30,10 +29,7 @@ struct Aligned16<T: ?Sized>(T);
 
 /// The artifact baked into the binary (a build product; see `build.rs`), forced
 /// to 16-byte alignment so it can be accessed in place with zero copies.
-static EMBEDDED: &Aligned16<[u8]> = &Aligned16(*include_bytes!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/data/vpic.rkyv"
-)));
+static EMBEDDED: &Aligned16<[u8]> = &Aligned16(*include_bytes!(env!("ULTRAVIN_ARTIFACT")));
 
 /// Owner of the validated archived bytes (keeps the backing memory alive).
 enum Backing {
@@ -84,35 +80,13 @@ pub struct Db {
 unsafe impl Send for Db {}
 unsafe impl Sync for Db {}
 
-/// Validate magic + format on the *full* artifact bytes (header + body).
-fn check_header(bytes: &[u8]) -> Result<(), String> {
-    if bytes.len() < HEADER_LEN {
-        return Err("artifact too small".into());
-    }
-    if bytes[..8] != MAGIC {
-        return Err("bad artifact magic".into());
-    }
-    let fmt = u16::from_le_bytes([bytes[8], bytes[9]]);
-    if fmt != FORMAT_VERSION {
-        return Err(format!("artifact format {fmt} != {FORMAT_VERSION}"));
-    }
-    Ok(())
-}
-
 impl Db {
     /// Fully validate the archived body (untrusted input), then hold it.
     fn build(backing: Backing) -> Result<Db, String> {
-        // Checked access validates layout + alignment.
-        let archived = rkyv::access::<ArchivedVpicData, rancor::Error>(backing.body())
-            .map_err(|e| format!("artifact validation failed: {e}"))?;
-        // The hot-path `s()` reads arena strings with `from_utf8_unchecked`, so an
-        // untrusted artifact must have its arena proven valid UTF-8 here, once, at
-        // the boundary — every interned slice at its declared offsets. (The trusted
-        // embedded blob skips this; it is built from `&str` by our importer.)
-        validate_arena(archived)?;
-        // Bound the element ids so the lazily-built dense `element_index` cannot be
-        // driven to a huge allocation by a crafted artifact (see `check_element_ids`).
-        check_element_ids(archived)?;
+        // Checked rkyv access (layout + alignment), then the arena UTF-8 proof the
+        // hot-path `from_utf8_unchecked` in `s()` relies on, then the element-id
+        // cap that bounds the dense `element_index` — see `tables::validate_body`.
+        validate_body(backing.body())?;
         // SAFETY: just validated above; the borrow is converted to a raw pointer
         // into the buffer owned by `backing` (stable across the move below).
         let archive = unsafe {
@@ -167,10 +141,11 @@ impl Db {
         let db = Db::embedded_raw();
         assert!(
             db.is_loaded(),
-            "ultravin: this binary embeds the EMPTY placeholder artifact (data/vpic.rkyv \
-             was absent at build time), so every decode would be wrong. Get real data: \
-             `make download && make data` (runs vpic-import), download vpic.rkyv from a \
-             GitHub release of this repo, or install the prebuilt wheel from PyPI."
+            "ultravin: this binary embeds the EMPTY placeholder artifact (no vpic.rkyv at \
+             build time), so every decode would be wrong. Get real data: download \
+             vpic.rkyv from the GitHub release matching this crate version and rebuild \
+             with ULTRAVIN_DATA=/abs/path/vpic.rkyv (or Db::open it with the \
+             external-data feature); in the repo, `make download && make data`."
         );
         db
     }
@@ -253,8 +228,7 @@ impl Db {
         let mut lo = v.partition_point(|w| self.s(w.wmi.to_native()) < wmi);
         while lo < v.len() && self.s(v[lo].wmi.to_native()) == wmi {
             let w = &v[lo];
-            let pad = w.publicavailabilitydate.to_native();
-            if pad != NULL_I64 && pad <= now_micros {
+            if w.is_public(now_micros) {
                 return Some(w);
             }
             lo += 1;
@@ -525,60 +499,6 @@ impl Db {
             idx.into_boxed_slice()
         })
     }
-}
-
-/// Prove an untrusted artifact's arena is valid UTF-8 at every declared offset,
-/// so the hot-path `Db::s` can decode it with `from_utf8_unchecked`. Offsets must
-/// be monotonic and in-bounds, and each interned slice must be valid UTF-8.
-fn validate_arena(a: &ArchivedVpicData) -> Result<(), String> {
-    let bytes = a.arena_bytes.as_slice();
-    let offsets = a.arena_offsets.as_slice();
-    if offsets.is_empty() {
-        return Err("arena offsets empty".into());
-    }
-    let mut prev = 0usize;
-    for (i, off) in offsets.iter().enumerate() {
-        let cur = off.to_native() as usize;
-        if cur > bytes.len() || cur < prev {
-            return Err(format!("arena offset {i} out of range"));
-        }
-        if i > 0 {
-            std::str::from_utf8(&bytes[prev..cur])
-                .map_err(|_| format!("arena string {} is not valid UTF-8", i - 1))?;
-        }
-        prev = cur;
-    }
-    Ok(())
-}
-
-/// The lazily-built `element_index` ([`Db::element_index`]) is a dense
-/// `vec![-1i32; max_element_id + 1]`. On trusted data the real vPIC `Element.id`
-/// maximum is ~203, so that vec is a few hundred entries. An untrusted artifact
-/// carrying a crafted `Element.id` near `i32::MAX` would instead force a multi-GB
-/// allocation (OOM) on the first `element_by_id`. Reject any untrusted artifact
-/// whose largest element id exceeds this cap.
-///
-/// 100_000 is ~500x the real max — far beyond any plausible vPIC growth — while
-/// still bounding the dense index to <400 KB (4 bytes/entry). The trusted embedded
-/// blob skips this check (see `build_trusted`), so tightening the cap can only
-/// reject a hostile external artifact, never the baked-in data.
-const MAX_ELEMENT_ID: i32 = 100_000;
-
-/// Reject an untrusted artifact whose largest `Element.id` exceeds
-/// [`MAX_ELEMENT_ID`] (bounds the dense `element_index` allocation).
-fn check_element_ids(a: &ArchivedVpicData) -> Result<(), String> {
-    let max = a
-        .element
-        .iter()
-        .map(|e| e.id.to_native())
-        .max()
-        .unwrap_or(-1);
-    if max > MAX_ELEMENT_ID {
-        return Err(format!(
-            "element id {max} exceeds cap {MAX_ELEMENT_ID} (artifact rejected)"
-        ));
-    }
-    Ok(())
 }
 
 /// Contiguous sub-slice of `v` (sorted by `key`) whose key equals `target`.

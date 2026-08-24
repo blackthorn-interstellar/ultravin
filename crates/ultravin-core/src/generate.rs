@@ -183,6 +183,25 @@ pub(crate) fn pick_year(yearfrom: i32, yearto: i32, current_year: i32) -> i32 {
     }
 }
 
+/// The same band as [`pick_year`], sampled instead of maximised.
+///
+/// Taking the cap is right for the corpora: `sweep`, `pairwise`, `seeded` and the
+/// cover must be byte-identical run to run, and the cover's contents are hashed
+/// into the shipped artifact. It is wrong for `generate`, whose VINs are a random
+/// sample of the data — pinning the year puts ~83% of them on `current_year + 2`,
+/// so a fixture exercises one model-year row of each schema instead of the band
+/// the schema actually spans. Bands too old to express (the `lo > hi` arms) have
+/// exactly one answer, so they defer.
+fn sample_year(rng: &mut Rng, yearfrom: i32, yearto: i32, current_year: i32) -> i32 {
+    let hi = yearto.min(current_year + 2).min(2039);
+    let lo = yearfrom.max(2010);
+    if lo <= hi {
+        lo + rng.below((hi - lo + 1) as usize) as i32
+    } else {
+        pick_year(yearfrom, yearto, current_year)
+    }
+}
+
 fn year_to(link: &crate::tables::ArchivedWmiVinSchema) -> i32 {
     link.yearto_or(9999)
 }
@@ -209,12 +228,33 @@ impl Rng {
     }
 }
 
+/// Does `vin` carry the check digit the decoder will compute for it?
+///
+/// A pattern's `Keys` can pin a letter where the VIN standard demands a digit
+/// (positions 15-17 always, 13-14 for a 3-character WMI, and 13 for a car/MPV/
+/// light truck). `fVINCheckDigit2` then returns no digit at all, `build_vin`
+/// stamps its '0' fallback, and the VIN decodes to error 400 plus a check-digit
+/// failure — the opposite of what [`generate`] promises. About 8 of the 1.65M
+/// (schema, keys) combinations do this, so which seeds trip over one is luck.
+///
+/// The car/MPV/LT flag comes from `wmi_any` on the VIN's own descriptor WMI
+/// because that is where `compute_errors` gets it. Taking it from the row this
+/// candidate was drawn from would agree today and stop agreeing the month two
+/// rows share a WMI string — the case `wmi_by_str` already loops for.
+fn check_digit_agrees(db: &Db, vin: &str) -> bool {
+    let car_lt = db
+        .wmi_any(&crate::vin_wmi(vin))
+        .is_some_and(|w| w.is_car_mpv_lt());
+    crate::checkdigit::check_digit_with_flag(vin, car_lt) == Some(vin.as_bytes()[8] as char)
+}
+
 /// `n` valid VINs matching `filter`, deterministic for a given `seed`.
 ///
 /// Each VIN is drawn from a real WMI, a schema that WMI actually uses, and one of
 /// that schema's patterns, so it decodes to real vehicle attributes rather than
-/// to an unknown-manufacturer error. Returns fewer than `n` only when the filter
-/// matches nothing.
+/// to an unknown-manufacturer error. Returns fewer than `n` when the filter
+/// matches nothing — including a `wmi` that exists in the data but is not
+/// published yet, which the decoder refuses to resolve and this refuses to emit.
 ///
 /// The clock is an argument, not a reading: the result is a pure function of
 /// (`n`, `seed`, `filter`, `now_micros`, `current_year`) over a given artifact,
@@ -237,6 +277,15 @@ pub fn generate(
     let candidates: Vec<&crate::tables::ArchivedWmi> = db
         .wmis()
         .iter()
+        // A WMI the decoder will not resolve cannot appear in a corpus that
+        // promises decodable VINs: `decode_full` goes through `wmi_by_str`, which
+        // skips rows whose public-availability date is NULL or still in the future,
+        // and reports the miss as error 7. Same clock, same predicate, so a
+        // generated VIN's manufacturer is registered by construction. The corpora
+        // built for the answer key (`seeded`, `sweep`, `pairwise`, the cover) draw
+        // from the raw list on purpose — unregistered WMIs are how they reach the
+        // error paths.
+        .filter(|w| w.is_public(now_micros))
         .filter(|w| match filter.wmi.as_deref() {
             Some(want) => db.s(w.wmi.to_native()).eq_ignore_ascii_case(want),
             None => true,
@@ -288,9 +337,15 @@ pub fn generate(
             continue;
         }
         let link = links[rng.below(links.len())];
-        let year = filter
-            .year
-            .unwrap_or_else(|| pick_year(link.yearfrom.to_native(), year_to(link), current_year));
+        let year = match filter.year {
+            Some(y) => y,
+            None => sample_year(
+                &mut rng,
+                link.yearfrom.to_native(),
+                year_to(link),
+                current_year,
+            ),
+        };
 
         let patterns = db.patterns_for(link.vinschemaid.to_native());
         let keys = if patterns.is_empty() {
@@ -302,6 +357,9 @@ pub fn generate(
         let Some(vin) = build_vin(db.s(w.wmi.to_native()), &keys, year) else {
             continue;
         };
+        if !check_digit_agrees(db, &vin) {
+            continue;
+        }
         // `year` is a promise about the decoded model year, and position 10 alone
         // cannot keep it: the character is a 30-year cycle, so `L` is both 2020 and
         // 1990. `fVinModelYear2` only resolves that from the VIN when the WMI is a
@@ -575,6 +633,76 @@ mod tests {
         assert_eq!(year_char(2039), '9');
         assert_eq!(year_char(2040), year_char(2010));
         assert_eq!(year_char(1995), year_char(2025));
+    }
+
+    #[test]
+    fn sampling_stays_inside_the_band_the_max_would_have_picked() {
+        let mut rng = Rng(1);
+        for _ in 0..200 {
+            let y = sample_year(&mut rng, 2015, 9999, 2026);
+            assert!((2015..=2028).contains(&y), "{y} left the band");
+        }
+        // A one-year band samples that year; a band ending before 2010 cannot be
+        // expressed in position 10 at all, so it defers to `pick_year`.
+        assert_eq!(sample_year(&mut rng, 2028, 2028, 2026), 2028);
+        assert_eq!(sample_year(&mut rng, 1995, 1998, 2026), 1998);
+        assert_eq!(pick_year(1995, 1998, 2026), 1998);
+    }
+
+    #[test]
+    fn a_letter_in_a_numeric_only_position_fails_the_check_digit_gate() {
+        let Some(db) = Db::try_embedded() else {
+            eprintln!("skip: artifact not built");
+            return;
+        };
+        assert!(
+            db.wmi_any("1HG").is_some_and(|w| w.is_car_mpv_lt()),
+            "1HG is the passenger-car WMI this test's position-13 rule needs"
+        );
+        assert!(check_digit_agrees(
+            db,
+            &build_vin("1HG", "CM826", 2026).unwrap()
+        ));
+        // VIS index 4 is VIN position 14: numeric-only for any 3-character WMI.
+        // This is the real shape that leaked out — WMI 4BE with a `TAT` key tail.
+        assert!(!check_digit_agrees(
+            db,
+            &build_vin("1HG", "CM826|****T", 2026).unwrap()
+        ));
+        // VIS index 3 is position 13: numeric-only *only* for a car/MPV/LT, so
+        // this case also pins which flag the gate passes to `fVINCheckDigit2`.
+        assert!(!check_digit_agrees(
+            db,
+            &build_vin("1HG", "CM826|***T", 2026).unwrap()
+        ));
+    }
+
+    #[test]
+    fn generation_never_draws_a_wmi_the_decoder_will_not_resolve() {
+        let Some(db) = Db::try_embedded() else {
+            eprintln!("skip: artifact not built");
+            return;
+        };
+        let now = crate::now_micros();
+        // A WMI with a schema (so it could be generated from) whose every row is
+        // unpublished (so `wmi_by_str` returns nothing and a decode is error 7).
+        let hit = db.wmis().iter().find(|w| {
+            !db.wmi_vinschema_for(w.id.to_native()).is_empty()
+                && db.wmi_by_str(db.s(w.wmi.to_native()), now).is_none()
+        });
+        let Some(w) = hit else {
+            eprintln!("skip: every WMI in this data month is published");
+            return;
+        };
+        let wmi = db.s(w.wmi.to_native()).to_string();
+        let filter = Filter {
+            wmi: Some(wmi.clone()),
+            ..Default::default()
+        };
+        assert!(
+            generate(db, 10, 1, &filter, now, crate::current_year()).is_empty(),
+            "{wmi} is unpublished but still generated VINs"
+        );
     }
 
     #[test]
