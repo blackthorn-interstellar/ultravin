@@ -750,6 +750,646 @@
       "first_observed": "2026_08",
       "evidence": "cache cell (wmiyearvalidchars, MLH, 2019) pos 11 = '1345ACDFKMRY' vs recomputed '5KY' — the extra characters are in no key of any schema covering that year; deleting the cell's 81 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
       "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1ACUV57AXBAM11111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1AC, 1981) cell missing characters that every covering schema's pattern keys still allow, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The truncated charset prints in element 144 and, when a VIN uses one of the missing characters, also changes Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1AC, 1981) pos 5 = 'ACHKMNW' vs recomputed 'ACGHKMNW' — the cache is missing 'G'; deleting the cell's 24 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1ACAV5EA7DAM11111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1AC, 1983) cell missing characters that every covering schema's pattern keys still allow, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The truncated charset prints in element 144 and, when a VIN uses one of the missing characters, also changes Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1AC, 1983) pos 8 = '057' vs recomputed '0579' — the cache is missing '9'; deleting the cell's 23 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1ACAM5BAXDAM11111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1AC, 1983) cell missing characters that every covering schema's pattern keys still allow, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The truncated charset prints in element 144 and, when a VIN uses one of the missing characters, also changes Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1AC, 1983) pos 8 = '057' vs recomputed '0579' — the cache is missing '9'; deleting the cell's 23 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1ACUV57A7DAM11111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1AC, 1983) cell missing characters that every covering schema's pattern keys still allow, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The truncated charset prints in element 144 and, when a VIN uses one of the missing characters, also changes Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1AC, 1983) pos 8 = '057' vs recomputed '0579' — the cache is missing '9'; deleting the cell's 23 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1ACAV5E97DAM11111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1AC, 1983) cell missing characters that every covering schema's pattern keys still allow, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The truncated charset prints in element 144 and, when a VIN uses one of the missing characters, also changes Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1AC, 1983) pos 8 = '057' vs recomputed '0579' — the cache is missing '9'; deleting the cell's 23 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1BNAUAYXXFB111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1BN, 1985) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1BN, 1985) pos 4 = '12' vs '123', pos 5 = 'BPST' vs 'BFMNPSTV', pos 11 = 'KPZ' vs 'ABKMNPSTVX' — extras 'Z', missing '3'/'FMNV'/'ABMNSTVX'; deleting the cell's 40 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1BNAUAY02FB111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1BN, 1985) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1BN, 1985) pos 4 = '12' vs '123', pos 5 = 'BPST' vs 'BFMNPSTV', pos 11 = 'KPZ' vs 'ABKMNPSTVX' — extras 'Z', missing '3'/'FMNV'/'ABMNSTVX'; deleting the cell's 40 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1BNAM9Y02FB11S111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1BN, 1985) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1BN, 1985) pos 4 = '12' vs '123', pos 5 = 'BPST' vs 'BFMNPSTV', pos 11 = 'KPZ' vs 'ABKMNPSTVX' — extras 'Z', missing '3'/'FMNV'/'ABMNSTVX'; deleting the cell's 40 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1BNAS9Y0?FB11S111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1BN, 1985) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1BN, 1985) pos 4 = '12' vs '123', pos 5 = 'BPST' vs 'BFMNPSTV', pos 11 = 'KPZ' vs 'ABKMNPSTVX' — extras 'Z', missing '3'/'FMNV'/'ABMNSTVX'; deleting the cell's 40 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1BN2UAYX0FB111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1BN, 1985) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1BN, 1985) pos 4 = '12' vs '123', pos 5 = 'BPST' vs 'BFMNPSTV', pos 11 = 'KPZ' vs 'ABKMNPSTVX' — extras 'Z', missing '3'/'FMNV'/'ABMNSTVX'; deleting the cell's 40 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1BNASXY0?FM11S111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1BN, 1985) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1BN, 1985) pos 4 = '12' vs '123', pos 5 = 'BPST' vs 'BFMNPSTV', pos 11 = 'KPZ' vs 'ABKMNPSTVX' — extras 'Z', missing '3'/'FMNV'/'ABMNSTVX'; deleting the cell's 40 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1BN3UXY0?FM11S111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1BN, 1985) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1BN, 1985) pos 4 = '12' vs '123', pos 5 = 'BPST' vs 'BFMNPSTV', pos 11 = 'KPZ' vs 'ABKMNPSTVX' — extras 'Z', missing '3'/'FMNV'/'ABMNSTVX'; deleting the cell's 40 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1BNABAYXXFB111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1BN, 1985) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1BN, 1985) pos 4 = '12' vs '123', pos 5 = 'BPST' vs 'BFMNPSTV', pos 11 = 'KPZ' vs 'ABKMNPSTVX' — extras 'Z', missing '3'/'FMNV'/'ABMNSTVX'; deleting the cell's 40 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1BN2VAYX4FB111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1BN, 1985) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1BN, 1985) pos 4 = '12' vs '123', pos 5 = 'BPST' vs 'BFMNPSTV', pos 11 = 'KPZ' vs 'ABKMNPSTVX' — extras 'Z', missing '3'/'FMNV'/'ABMNSTVX'; deleting the cell's 40 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1BNANXYT?FM11S111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1BN, 1985) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1BN, 1985) pos 4 = '12' vs '123', pos 5 = 'BPST' vs 'BFMNPSTV', pos 11 = 'KPZ' vs 'ABKMNPSTVX' — extras 'Z', missing '3'/'FMNV'/'ABMNSTVX'; deleting the cell's 40 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1BN1M9Y92FB11S111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1BN, 1985) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1BN, 1985) pos 4 = '12' vs '123', pos 5 = 'BPST' vs 'BFMNPSTV', pos 11 = 'KPZ' vs 'ABKMNPSTVX' — extras 'Z', missing '3'/'FMNV'/'ABMNSTVX'; deleting the cell's 40 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1BNCT9Y92FB11S111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1BN, 1985) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1BN, 1985) pos 4 = '12' vs '123', pos 5 = 'BPST' vs 'BFMNPSTV', pos 11 = 'KPZ' vs 'ABKMNPSTVX' — extras 'Z', missing '3'/'FMNV'/'ABMNSTVX'; deleting the cell's 40 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1BNAFXYT?FM11S111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1BN, 1985) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1BN, 1985) pos 4 = '12' vs '123', pos 5 = 'BPST' vs 'BFMNPSTV', pos 11 = 'KPZ' vs 'ABKMNPSTVX' — extras 'Z', missing '3'/'FMNV'/'ABMNSTVX'; deleting the cell's 40 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1BNAM9002LB11S111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1BN, 1990) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1BN, 1990) pos 4 = '12' vs '123', pos 5 = 'BPST' vs 'BFMNPSTV', pos 11 = 'KPZ' vs 'ABKMNPSTVX' — extras 'Z', missing '3'/'FMNV'/'ABMNSTVX'; deleting the cell's 40 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1G6KW4GY?JA077111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (1G6, 2018) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1G6, 2018) pos 4 = 'AKR', pos 5 = '1789ABCDEFGHJKLMNPRSTUVWXY', pos 7 = 'ERS', pos 8 = '468SXY' vs recomputed 'AK', '189ABCDEFGHJKLMNPRSTUVWXY', 'RS', '68SXY' — extras 'R'/'7'/'E'/'4'; deleting the cell's 44 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1GB6GUAB0TE111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (1GB, 2026) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1GB, 2026) pos 4/5/6/7/8/11 extras 'J'/'FWY'/'1'/'R'/'0FHT'/'4' vs the pattern-derived charsets; deleting the cell's 79 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1GC0AL1U1SA232111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (1GC, 2025) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1GC, 2025) pos 5 = '0AGKSTWY', pos 8 = '78DFHKLPTY' vs recomputed '0AGKST', '78DFKLPY' — extras 'WY'/'HT'; deleting the cell's 69 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1GC0AFGU8SA232111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (1GC, 2025) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1GC, 2025) pos 5 = '0AGKSTWY', pos 8 = '78DFHKLPTY' vs recomputed '0AGKST', '78DFKLPY' — extras 'WY'/'HT'; deleting the cell's 69 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1GDRH4EEPPA077111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (1GD, 2023) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1GD, 2023) pos 8 = '178DFHKLPTY' vs recomputed '178DKLPTY' — extras 'FH'; deleting the cell's 64 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1GDNH4EE4PA077111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (1GD, 2023) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1GD, 2023) pos 8 = '178DFHKLPTY' vs recomputed '178DKLPTY' — extras 'FH'; deleting the cell's 64 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1GDXHA0A2RA077111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (1GD, 2024) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1GD, 2024) pos 8 = '178CDFHKLPTY' vs recomputed '178CDKLPY' — extras 'FHT'; deleting the cell's 68 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1GDRHA042RA077111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (1GD, 2024) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1GD, 2024) pos 8 = '178CDFHKLPTY' vs recomputed '178CDKLPY' — extras 'FHT'; deleting the cell's 68 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1GDK7A0X?RA0771K1",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (1GD, 2024) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1GD, 2024) pos 8 = '178CDFHKLPTY' vs recomputed '178CDKLPY' — extras 'FHT'; deleting the cell's 68 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1GD07R0X?RA0771K1",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (1GD, 2024) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1GD, 2024) pos 8 = '178CDFHKLPTY' vs recomputed '178CDKLPY' — extras 'FHT'; deleting the cell's 68 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1GDK7AH62SA077111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (1GD, 2025) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1GD, 2025) pos 5 = '789HU', pos 8 = '178DFHKLPTY' vs recomputed '7HU', '178DKLPY' — extras '89'/'FHT'; deleting the cell's 63 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1GDG7FAZ3SA077111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (1GD, 2025) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1GD, 2025) pos 5 = '789HU', pos 8 = '178DFHKLPTY' vs recomputed '7HU', '178DKLPY' — extras '89'/'FHT'; deleting the cell's 63 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1GTC7MTR4PA077131",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (1GT, 2023) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1GT, 2023) pos 8 = '178ADFHKLPTY' vs recomputed '178ADKLPTY' — extras 'FH'; deleting the cell's 68 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1GTHCLAV5VU077111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (1GT, 2027) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1GT, 2027) pos 5 = '12789EHU', pos 8 = '78ABDFHKLPTY' vs recomputed '127EHU', '78ABDHKLPY' — extras '89'/'FT'; deleting the cell's 69 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "3GBAAFZ57PA112111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (3GB, 2023) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 3GB, 2023) pos 5 = 'ADWY', pos 8 = '8DFHKLT' vs recomputed 'AD', '8DKLT' — extras 'WY'/'FH'; deleting the cell's 30 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "3GBAABAP6PA111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (3GB, 2023) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 3GB, 2023) pos 5 = 'ADWY', pos 8 = '8DFHKLT' vs recomputed 'AD', '8DKLT' — extras 'WY'/'FH'; deleting the cell's 30 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "3GBVDJ5U4PA111191",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (3GB, 2023) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 3GB, 2023) pos 5 = 'ADWY', pos 8 = '8DFHKLT' vs recomputed 'AD', '8DKLT' — extras 'WY'/'FH'; deleting the cell's 30 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "3GBADFZ59PA112111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (3GB, 2023) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 3GB, 2023) pos 5 = 'ADWY', pos 8 = '8DFHKLT' vs recomputed 'AD', '8DKLT' — extras 'WY'/'FH'; deleting the cell's 30 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "3GBNAFZ56PA112111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (3GB, 2023) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 3GB, 2023) pos 5 = 'ADWY', pos 8 = '8DFHKLT' vs recomputed 'AD', '8DKLT' — extras 'WY'/'FH'; deleting the cell's 30 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "3GBAABAPXRA111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (3GB, 2024) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 3GB, 2024) pos 5 = 'ADWY', pos 8 = '8DFHKLT' vs recomputed 'AD', '8DKLT' — extras 'WY'/'FH'; deleting the cell's 31 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "3GBAAFE3?RA111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (3GB, 2024) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 3GB, 2024) pos 5 = 'ADWY', pos 8 = '8DFHKLT' vs recomputed 'AD', '8DKLT' — extras 'WY'/'FH'; deleting the cell's 31 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "3GBNA96N1RA111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (3GB, 2024) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 3GB, 2024) pos 5 = 'ADWY', pos 8 = '8DFHKLT' vs recomputed 'AD', '8DKLT' — extras 'WY'/'FH'; deleting the cell's 31 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "3GBATC0ZWRG111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (3GB, 2024) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 3GB, 2024) pos 5 = 'ADWY', pos 8 = '8DFHKLT' vs recomputed 'AD', '8DKLT' — extras 'WY'/'FH'; deleting the cell's 31 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "3GBNAC64?R4111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (3GB, 2024) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 3GB, 2024) pos 5 = 'ADWY', pos 8 = '8DFHKLT' vs recomputed 'AD', '8DKLT' — extras 'WY'/'FH'; deleting the cell's 31 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "3GBAAAPA?SA111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (3GB, 2025) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 3GB, 2025) pos 5 = 'AKWY', pos 8 = '8DFHKLT' vs recomputed 'AK', '8DKL' — extras 'WY'/'FHT'; deleting the cell's 31 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "3GBGA9JN3SA111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (3GB, 2025) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 3GB, 2025) pos 5 = 'AKWY', pos 8 = '8DFHKLT' vs recomputed 'AK', '8DKL' — extras 'WY'/'FHT'; deleting the cell's 31 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "3GBEAAEZ6SA111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (3GB, 2025) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 3GB, 2025) pos 5 = 'AKWY', pos 8 = '8DFHKLT' vs recomputed 'AK', '8DKL' — extras 'WY'/'FHT'; deleting the cell's 31 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "3GBAAFPA?SA111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (3GB, 2025) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 3GB, 2025) pos 5 = 'AKWY', pos 8 = '8DFHKLT' vs recomputed 'AK', '8DKL' — extras 'WY'/'FHT'; deleting the cell's 31 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "3GB5KG3A?TA111B11",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (3GB, 2026) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 3GB, 2026) pos 5 = 'AKWY', pos 8 = '8DFHKLT' vs recomputed 'AK', '8DKL' — extras 'WY'/'FHT'; deleting the cell's 32 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "3GNYJ8AD2KA111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (3GN, 2019) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 3GN, 2019) pos 4 = 'ACDFK', pos 5 = 'BJLX', pos 8 = '589ABEKMSUVXZ' vs recomputed 'ACDK', 'BJX', '89ABEMSUVXZ' — extras 'F'/'L'/'5K'; deleting the cell's 59 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "3GR0CLS05VA111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (3GR, 2027) cell missing characters that every covering schema's pattern keys still allow, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The truncated charset prints in element 144 and, when a VIN uses one of the missing characters, also changes Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 3GR, 2027) pos 4 = 'S' vs recomputed 'BS' — the cache is missing 'B'; deleting the cell's 64 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "7PDAGAAA3VN111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (7PD, 2027) cell missing characters that every covering schema's pattern keys still allow, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The truncated charset prints in element 144 and, when a VIN uses one of the missing characters, also changes Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 7PD, 2027) pos 4-8 = '2'/'E'/'A'/'A'/'AB' vs recomputed '2S'/'EG'/'ABCD'/'ABC'/'ABDEF' — the cache is missing 'S'/'G'/'BCD'/'BC'/'DEF'; deleting the cell's 8 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JTNKU22G?PA111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (JTN, 2023) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JTN, 2023) pos 4/5/6/7/8/11 extras 'BGK'/'1HX'/'01'/'CH'/'AKX'/'1' vs the pattern-derived charsets; deleting the cell's 28 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "SCCACCEX6RH1G1111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (SCC, 2024) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, SCC, 2024) pos 5 = 'EM', pos 6 = 'DJK', pos 7 = 'AMV', pos 8 = 'DNX' vs recomputed 'E', 'JK', 'AM', 'X' — extras 'M'/'D'/'V'/'DN'; deleting the cell's 21 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "SCCACKEX6RH1G1111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (SCC, 2024) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, SCC, 2024) pos 5 = 'EM', pos 6 = 'DJK', pos 7 = 'AMV', pos 8 = 'DNX' vs recomputed 'E', 'JK', 'AM', 'X' — extras 'M'/'D'/'V'/'DN'; deleting the cell's 21 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "SCCAACAA2SH111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (SCC, 2025) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, SCC, 2025) pos 5 = 'EM', pos 6 = 'DJKLM', pos 7 = 'AKMV', pos 8 = 'DNX' vs recomputed 'E', 'JKLM', 'AKM', 'X' — extras 'M'/'D'/'V'/'DN'; deleting the cell's 24 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "SCCAACAE8VH111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild (-3,318 rows) left the (SCC, 2027) cell holding characters no pattern row for that WMI-year allows any more, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters print in element 144's possible-values list for the flagged positions.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, SCC, 2027) pos 5 = 'EM', pos 6 = 'DJKLMN', pos 7 = 'AKMNVXYZ', pos 8 = 'DNX' vs recomputed 'E', 'JKLMN', 'AKMNXYZ', 'X' — extras 'M'/'D'/'V'/'DN'; deleting the cell's 29 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "ZDMNH8RD7JB111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (ZDM, 2018) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, ZDM, 2018) pos 5 = 'AB' vs 'A', pos 6 = 'BCDEFG' vs 'ABCDEFGHJ', pos 7 = 'ABCDEFGHJKLMNPRSTUVWXYZ' vs 'ABCDEFGHJKLMN' — extras 'B'/'PRSTUVWXYZ', missing 'AHJ'; deleting the cell's 50 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "ZDM1A7HR3JB111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (ZDM, 2018) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, ZDM, 2018) pos 5 = 'AB' vs 'A', pos 6 = 'BCDEFG' vs 'ABCDEFGHJ', pos 7 = 'ABCDEFGHJKLMNPRSTUVWXYZ' vs 'ABCDEFGHJKLMN' — extras 'B'/'PRSTUVWXYZ', missing 'AHJ'; deleting the cell's 50 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "ZDMTUXGW7JB111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (ZDM, 2018) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, ZDM, 2018) pos 5 = 'AB' vs 'A', pos 6 = 'BCDEFG' vs 'ABCDEFGHJ', pos 7 = 'ABCDEFGHJKLMNPRSTUVWXYZ' vs 'ABCDEFGHJKLMN' — extras 'B'/'PRSTUVWXYZ', missing 'AHJ'; deleting the cell's 50 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "ZDM1A7HS3JB111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (ZDM, 2018) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, ZDM, 2018) pos 5 = 'AB' vs 'A', pos 6 = 'BCDEFG' vs 'ABCDEFGHJ', pos 7 = 'ABCDEFGHJKLMNPRSTUVWXYZ' vs 'ABCDEFGHJKLMN' — extras 'B'/'PRSTUVWXYZ', missing 'AHJ'; deleting the cell's 50 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "ZDM1A7BS3JB111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (ZDM, 2018) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, ZDM, 2018) pos 5 = 'AB' vs 'A', pos 6 = 'BCDEFG' vs 'ABCDEFGHJ', pos 7 = 'ABCDEFGHJKLMNPRSTUVWXYZ' vs 'ABCDEFGHJKLMN' — extras 'B'/'PRSTUVWXYZ', missing 'AHJ'; deleting the cell's 50 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "ZDM1A7DR3JB111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (ZDM, 2018) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, ZDM, 2018) pos 5 = 'AB' vs 'A', pos 6 = 'BCDEFG' vs 'ABCDEFGHJ', pos 7 = 'ABCDEFGHJKLMNPRSTUVWXYZ' vs 'ABCDEFGHJKLMN' — extras 'B'/'PRSTUVWXYZ', missing 'AHJ'; deleting the cell's 50 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "ZDMXXKWP3JB111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (ZDM, 2018) cell both holding characters no covering pattern key allows and missing characters the pattern still allows, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The mismatched charset prints in element 144 and can also change Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, ZDM, 2018) pos 5 = 'AB' vs 'A', pos 6 = 'BCDEFG' vs 'ABCDEFGHJ', pos 7 = 'ABCDEFGHJKLMNPRSTUVWXYZ' vs 'ABCDEFGHJKLMN' — extras 'B'/'PRSTUVWXYZ', missing 'AHJ'; deleting the cell's 50 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "1Z9AAEA80TA599111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the 2026_08 rebuild left the (1Z9599, 2026) cell missing characters that every covering schema's pattern keys still allow, so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The truncated charset prints in element 144 and, when a VIN uses one of the missing characters, also changes Suggested VIN and the error-code ladder.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1Z9599, 2026) pos 5 = 'P', pos 7 = 'ABEF' vs recomputed 'GP', 'ABEFGHJK' — the cache is missing 'G'/'GHJK'; deleting the cell's 19 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
     }
   ]
 }

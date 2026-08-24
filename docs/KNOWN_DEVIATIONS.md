@@ -213,6 +213,81 @@ SCFAAAAA9TG111111  delete 25 cache rows for (SCF,2026) -> oracle MY=2026 codes='
 1ZVAAAAA6E5111111  delete 18 cache rows for (1ZV,2014) -> oracle MY=2014 codes='5,14'  parity_now=True
 ```
 
+**2026-08-24 backlog probe — 25 more stale cells, same artifact.** Tonight's
+covfuzz probe logged 71 VINs, every one an element-142/144 (sometimes 143/156/191)
+disagreement. None were stale: all 71 still diverged against the live 2026_08
+oracle. For each VIN, `vpic.fvinwmi` + the oracle's chosen model year named a
+`(wmi, year)` cell; comparing that cell's `wmiyearvalidchars` rows to
+`vpic.fextractvalidcharsperwmiyear` on the same dump showed a mismatch; deleting
+those rows inside a rolled-back transaction made `spvindecode` take the
+`fExtractValidCharsPerWmiYear` fallback and reproduce ultravin **byte-for-byte**
+on all 71. The defective upstream artifact is still the shipped cache, not the
+decoder. Some cells are the extras-only shape already in the table above; some
+are the opposite (cache missing characters the pattern still allows — the
+2026_06 direction); a few are mixed. All 71 stay `error-fields` — none flip the
+best-of year the way `MLHAE041XKA111111` did. Eight probe VINs contain I, O, or Q
+and cannot enter the registry; each of those cells is represented by a sibling
+or, for the 6-char trailer WMI `1Z9599` MY2026, by the well-formed stand-in
+`1Z9AAEA80TA599111` (same cell, same delete-cache proof).
+
+| cell (`wmi`, `year`) | cache rows | vs `fExtractValidCharsPerWmiYear` |
+|---|---:|---|
+| `1AC`, 1981 | 24 | pos 5 missing `G` |
+| `1AC`, 1983 | 23 | pos 8 missing `9` |
+| `1BN`, 1985 | 40 | pos 4/5 missing `3`/`FMNV`; pos 11 extra `Z`, missing `ABMNSTVX` |
+| `1BN`, 1990 | 40 | same shape as `(1BN, 1985)` |
+| `1G6`, 2018 | 44 | extras `R`/`7`/`E`/`4` at pos 4/5/7/8 |
+| `1GB`, 2026 | 79 | extras at pos 4/5/6/7/8/11 |
+| `1GC`, 2025 | 69 | extras `WY`/`HT` at pos 5/8 |
+| `1GD`, 2023 | 64 | extras `FH` at pos 8 |
+| `1GD`, 2024 | 68 | extras `FHT` at pos 8 |
+| `1GD`, 2025 | 63 | extras `89`/`FHT` at pos 5/8 |
+| `1GT`, 2023 | 68 | extras `FH` at pos 8 |
+| `1GT`, 2027 | 69 | extras `89`/`FT` at pos 5/8 |
+| `1Z9599`, 2026 | 19 | pos 5/7 missing `G`/`GHJK` (6-char trailer WMI) |
+| `3GB`, 2023 | 30 | extras `WY`/`FH` at pos 5/8 |
+| `3GB`, 2024 | 31 | extras `WY`/`FH` at pos 5/8 |
+| `3GB`, 2025 | 31 | extras `WY`/`FHT` at pos 5/8 |
+| `3GB`, 2026 | 32 | extras `WY`/`FHT` at pos 5/8 |
+| `3GN`, 2019 | 59 | extras `F`/`L`/`5K` at pos 4/5/8 (sibling of the documented 2023 cell) |
+| `3GR`, 2027 | 64 | pos 4 missing `B` |
+| `7PD`, 2027 | 8 | pos 4–8 missing `S`/`G`/`BCD`/`BC`/`DEF` |
+| `JTN`, 2023 | 28 | extras at pos 4/5/6/7/8/11 |
+| `SCC`, 2024 | 21 | extras `M`/`D`/`V`/`DN` at pos 5/6/7/8 |
+| `SCC`, 2025 | 24 | extras `M`/`D`/`V`/`DN` at pos 5/6/7/8 |
+| `SCC`, 2027 | 29 | extras `M`/`D`/`V`/`DN` at pos 5/6/7/8 |
+| `ZDM`, 2018 | 50 | pos 5 extra `B`; pos 6 missing `AHJ`; pos 7 extras `PRSTUVWXYZ` |
+
+One representative per cell, same delete-and-rollback:
+
+```
+1ACUV57AXBAM11111  delete 24 cache rows for (1AC,1981)   -> parity_now=True
+1ACAV5EA7DAM11111  delete 23 cache rows for (1AC,1983)   -> parity_now=True
+1BNAUAYXXFB111111  delete 40 cache rows for (1BN,1985)   -> parity_now=True
+1BNAM9002LB11S111  delete 40 cache rows for (1BN,1990)   -> parity_now=True
+1G6KW4GY?JA077111  delete 44 cache rows for (1G6,2018)   -> parity_now=True
+1GB6GUAB0TE111111  delete 79 cache rows for (1GB,2026)   -> parity_now=True
+1GC0AL1U1SA232111  delete 69 cache rows for (1GC,2025)   -> parity_now=True
+1GDRH4EEPPA077111  delete 64 cache rows for (1GD,2023)   -> parity_now=True
+1GDXHA0A2RA077111  delete 68 cache rows for (1GD,2024)   -> parity_now=True
+1GDK7AH62SA077111  delete 63 cache rows for (1GD,2025)   -> parity_now=True
+1GTC7MTR4PA077131  delete 68 cache rows for (1GT,2023)   -> parity_now=True
+1GTHCLAV5VU077111  delete 69 cache rows for (1GT,2027)   -> parity_now=True
+1Z9AAEA80TA599111  delete 19 cache rows for (1Z9599,2026) -> parity_now=True
+3GBAAFZ57PA112111  delete 30 cache rows for (3GB,2023)   -> parity_now=True
+3GBAABAPXRA111111  delete 31 cache rows for (3GB,2024)   -> parity_now=True
+3GBAAAPA?SA111111  delete 31 cache rows for (3GB,2025)   -> parity_now=True
+3GB5KG3A?TA111B11  delete 32 cache rows for (3GB,2026)   -> parity_now=True
+3GNYJ8AD2KA111111  delete 59 cache rows for (3GN,2019)   -> parity_now=True
+3GR0CLS05VA111111  delete 64 cache rows for (3GR,2027)   -> parity_now=True
+7PDAGAAA3VN111111  delete  8 cache rows for (7PD,2027)   -> parity_now=True
+JTNKU22G?PA111111  delete 28 cache rows for (JTN,2023)   -> parity_now=True
+SCCACCEX6RH1G1111  delete 21 cache rows for (SCC,2024)   -> parity_now=True
+SCCAACAA2SH111111  delete 24 cache rows for (SCC,2025)   -> parity_now=True
+SCCAACAE8VH111111  delete 29 cache rows for (SCC,2027)   -> parity_now=True
+ZDMNH8RD7JB111111  delete 50 cache rows for (ZDM,2018)   -> parity_now=True
+```
+
 **How far the defect reaches** depends on which position the stale characters sit
 at, and the registry records it as each entry's `scope`:
 
