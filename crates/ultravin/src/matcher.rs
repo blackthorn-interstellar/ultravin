@@ -75,28 +75,50 @@ enum Token {
 }
 
 impl Token {
-    #[inline]
-    fn matches(&self, b: u8) -> bool {
+    /// The token as a 256-bit "allowed byte" set — the form the matcher runs on.
+    fn byte_set(&self) -> ByteSet {
+        let mut set = [0u64; 4];
+        let mut allow = |b: u8| set[(b >> 6) as usize] |= 1 << (b & 63);
         match self {
-            Token::Any => b != b'\n',
-            Token::Lit(c) => b == *c,
-            Token::Class(ranges) => ranges.iter().any(|&(lo, hi)| lo <= b && b <= hi),
+            // regex `.` excludes `\n`; honoured for exactness.
+            Token::Any => (0..=u8::MAX).filter(|&b| b != b'\n').for_each(&mut allow),
+            Token::Lit(c) => allow(*c),
+            Token::Class(ranges) => ranges
+                .iter()
+                .flat_map(|&(lo, hi)| lo..=hi)
+                .for_each(&mut allow),
         }
+        set
     }
+}
+
+/// One key position's allowed bytes, one bit per byte value.
+///
+/// The bracket keys are 21% of the archive's patterns but the scan tests every
+/// one of them on every decode, so the shape of this matters: a flat array of
+/// these is one contiguous read per pattern, where the `Token` list it is built
+/// from was a `Vec` of enums whose classes each owned another heap `Vec` — a
+/// pointer chase per key position.
+type ByteSet = [u64; 4];
+
+#[inline]
+fn set_contains(set: &ByteSet, b: u8) -> bool {
+    set[(b >> 6) as usize] >> (b & 63) & 1 == 1
 }
 
 /// A compiled bracket matcher: the fast fixed-length-prefix token path, or the
 /// real `regex` engine for anything the parser doesn't fully recognise (`None`
 /// preserves the old "compile error => never match" behaviour).
 enum Matcher {
-    Tokens(Vec<Token>),
+    /// One allowed-byte set per key position, in one contiguous allocation.
+    Sets(Box<[ByteSet]>),
     Fallback(Option<Regex>),
 }
 
 impl Matcher {
     fn compile(regex: &str) -> Matcher {
         match parse_tokens(regex) {
-            Some(tokens) => Matcher::Tokens(tokens),
+            Some(tokens) => Matcher::Sets(tokens.iter().map(Token::byte_set).collect()),
             None => Matcher::Fallback(Regex::new(regex).ok()),
         }
     }
@@ -104,12 +126,12 @@ impl Matcher {
     #[inline]
     fn is_match(&self, haystack: &str) -> bool {
         match self {
-            Matcher::Tokens(tokens) => {
+            Matcher::Sets(sets) => {
                 let b = haystack.as_bytes();
-                if b.len() < tokens.len() {
+                if b.len() < sets.len() {
                     return false;
                 }
-                tokens.iter().zip(b).all(|(t, &c)| t.matches(c))
+                sets.iter().zip(b).all(|(s, &c)| set_contains(s, c))
             }
             Matcher::Fallback(re) => re.as_ref().is_some_and(|r| r.is_match(haystack)),
         }
@@ -231,6 +253,51 @@ mod tests {
         assert!(!regex_match_cached(2, &re, "CM825|3A004352"));
     }
 
+    /// Every real bracket key of a spread of real WMIs must decide exactly what
+    /// the regex engine decides. The byte-set form is a rewrite of the matching
+    /// engine, so the archive's own keys — not just hand-written shapes — are the
+    /// bar.
+    #[test]
+    fn byte_sets_agree_with_regex_over_archive_keys() {
+        let db = crate::db::Db::embedded_raw();
+        if !db.is_loaded() {
+            eprintln!("skipping: artifact not built");
+            return;
+        }
+        let inputs = [
+            "CM826|3A004352",
+            "WX7C5|BA123456",
+            "A7561|PC008269",
+            "TFW1E|DFC10312",
+            "",
+            "0",
+        ];
+        let mut checked = 0usize;
+        for wmi in ["1HG", "5UX", "JH4", "1FT", "WBA", "3VW", "KMH"] {
+            for wmiid in db.wmi_ids_for_str(wmi) {
+                for wvs in db.wmi_vinschema_for(wmiid) {
+                    for p in db.patterns_for(wvs.vinschemaid.to_native()) {
+                        if !p.has_bracket {
+                            continue;
+                        }
+                        let rs = db.s(p.keys_regex.to_native());
+                        let m = Matcher::compile(rs);
+                        let re = Regex::new(rs).ok();
+                        for inp in inputs {
+                            assert_eq!(
+                                m.is_match(inp),
+                                re.as_ref().is_some_and(|r| r.is_match(inp)),
+                                "mismatch for archive regex {rs} on {inp:?}"
+                            );
+                        }
+                        checked += 1;
+                    }
+                }
+            }
+        }
+        assert!(checked > 100, "expected real bracket keys, saw {checked}");
+    }
+
     /// The token fast path must agree with the real engine on every shape the
     /// grammar produces — literals, escaped `|`, `.`, ranges, multi-ranges,
     /// trailing/leading `-`, and out-of-range inputs.
@@ -263,10 +330,7 @@ mod tests {
             let re = Regex::new(&rs).unwrap();
             let m = Matcher::compile(&rs);
             // Force the fast path is actually exercised (not silently falling back).
-            assert!(
-                matches!(m, Matcher::Tokens(_)),
-                "expected fast path for {rs}"
-            );
+            assert!(matches!(m, Matcher::Sets(_)), "expected fast path for {rs}");
             for inp in inputs {
                 assert_eq!(
                     m.is_match(inp),
