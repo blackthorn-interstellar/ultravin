@@ -11,7 +11,7 @@ Embedded NHTSA vPIC data
 The following files are not original works of the Ultravin authors. They are
 derived, by mechanical transformation, from the NHTSA vPIC standalone database:
 
-    crates/ultravin-core/data/vpic.rkyv   reference tables, serialized
+    crates/ultravin/data/vpic.rkyv   reference tables, serialized
     vpic/schema/                          table definitions
     vpic/procs/                           decode stored procedures
 
@@ -52,7 +52,7 @@ Relationship to the upstream files
     checked against, run unmodified as the parity oracle; see
     docs/ACCEPTANCE.md.
 
-    crates/ultravin-core/data/vpic.rkyv is a transformation rather than a copy.
+    crates/ultravin/data/vpic.rkyv is a transformation rather than a copy.
     The importer normalizes the reference tables into a read-only columnar
     layout, interns strings into a shared arena, and drops tables the decoder
     never consults. It carries the same facts, arranged for lookup.

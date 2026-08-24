@@ -58,7 +58,7 @@ features = ["pyo3/extension-module"]
 # file. Include them explicitly so metadata and sdist agree. Any new root
 # LICENSE*/NOTICE*/COPYING* file needs a row here or the sdist upload 400s.
 include = [
-    { path = "crates/ultravin-core/data/vpic.rkyv", format = "sdist" },
+    { path = "crates/ultravin/data/vpic.rkyv", format = "sdist" },
     { path = "LICENSE", format = "sdist" },
     { path = "NOTICE", format = "sdist" },
 ]

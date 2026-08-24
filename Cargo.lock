@@ -1445,19 +1445,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6f5e870be6c3b371b77fe0ee0bafb859fa4964b4404c27de1d380043c4dda20"
 
 [[package]]
-name = "ultravin-build"
-version = "0.0.0"
-dependencies = [
- "clap",
- "serde",
- "serde_json",
- "sha2",
- "ultravin-core",
- "zip",
-]
-
-[[package]]
-name = "ultravin-core"
+name = "ultravin"
 version = "0.0.0"
 dependencies = [
  "arrow-array",
@@ -1476,6 +1464,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ultravin-build"
+version = "0.0.0"
+dependencies = [
+ "clap",
+ "serde",
+ "serde_json",
+ "sha2",
+ "ultravin",
+ "zip",
+]
+
+[[package]]
 name = "ultravin-py"
 version = "0.0.0"
 dependencies = [
@@ -1483,7 +1483,7 @@ dependencies = [
  "arrow-schema",
  "mimalloc",
  "pyo3",
- "ultravin-core",
+ "ultravin",
 ]
 
 [[package]]

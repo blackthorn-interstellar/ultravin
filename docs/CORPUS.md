@@ -172,7 +172,7 @@ code coverage of the Rust engine, measured over the same VIN list:
 cargo llvm-cov run --example covrun --summary-only -- vins.txt
 ```
 
-Measured on 2026_07 (`ultravin-core`, region coverage):
+Measured on 2026_07 (`ultravin`, region coverage):
 
 | corpus | VINs | regions |
 | --- | ---: | ---: |

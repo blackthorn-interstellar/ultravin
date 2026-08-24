@@ -18,13 +18,13 @@ sed -i.bak "s/^version = \"0.0.0\"/version = \"$V\"/" Cargo.toml
 
 # Cargo.lock pins each workspace crate's version; stamp all three so --locked
 # builds (e.g. from the sdist) resolve.
-for crate in ultravin-core ultravin-build ultravin-py; do
+for crate in ultravin ultravin-build ultravin-py; do
     sed -i.bak -e "/^name = \"$crate\"/{" -e n -e "s/^version = \"0.0.0\"/version = \"$V\"/" -e '}' Cargo.lock
 done
 rm -f Cargo.toml.bak Cargo.lock.bak
 
 grep -q "^version = \"$V\"" Cargo.toml || { echo "failed to stamp Cargo.toml" >&2; exit 1; }
-for crate in ultravin-core ultravin-build ultravin-py; do
+for crate in ultravin ultravin-build ultravin-py; do
     grep -A1 "^name = \"$crate\"" Cargo.lock | grep -q "^version = \"$V\"" \
         || { echo "failed to stamp $crate in Cargo.lock" >&2; exit 1; }
 done

@@ -1,5 +1,5 @@
 //! PyO3 bindings: exposes `ultravin._ultravin` with `decode`/`decode_batch`.
-//! All logic lives in `ultravin-core`; this layer only marshals to Python.
+//! All logic lives in `ultravin`; this layer only marshals to Python.
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -14,10 +14,10 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDateTime, PyDict, PyList, PyString};
 use pyo3::IntoPyObjectExt;
 
-use ultravin_core::parquet_io::{
+use ultravin::parquet_io::{
     decode_parquet_to_file, open_chunks, ParquetChunkIter, ParquetError, ParquetOpts,
 };
-use ultravin_core::{DecodeResult, DecodedElement, FlatResult, FlatValue};
+use ultravin::{DecodeResult, DecodedElement, FlatResult, FlatValue};
 
 // The decode engine is allocation-bound; a sharded allocator both speeds the
 // single-stream malloc path and removes the global-heap-lock contention that was
@@ -48,7 +48,7 @@ thread_local! {
     /// (used throughout `elem_to_dict`) shares strings process-wide the same way,
     /// so keying this cache by interpreter would not make the module clean.
     /// `fork()` gets a fresh process + thread-local, and the batch pool already
-    /// re-keys on pid (see `ultravin-core::lib`). If this module ever opts into
+    /// re-keys on pid (see `ultravin::lib`). If this module ever opts into
     /// multiple-interpreters, this cache MUST be reworked to key by interpreter.
     static META_CACHE: RefCell<Vec<Option<[Py<PyString>; 5]>>> = const { RefCell::new(Vec::new()) };
 }
@@ -184,7 +184,7 @@ fn decode<'py>(
     year: Option<i32>,
     flat: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let r = ultravin_core::decode(vin, year);
+    let r = ultravin::decode(vin, year);
     if flat {
         flat_to_dict(py, &r.into())
     } else {
@@ -209,10 +209,10 @@ fn decode_batch<'py>(
     if flat {
         // Flattening happens inside the parallel region, so the GIL-held part is
         // only the (much smaller) dict build.
-        let results = py.detach(|| ultravin_core::decode_batch_flat(&vins, years));
+        let results = py.detach(|| ultravin::decode_batch_flat(&vins, years));
         return results.iter().map(|r| flat_to_dict(py, r)).collect();
     }
-    let results = py.detach(|| ultravin_core::decode_batch(&vins, years));
+    let results = py.detach(|| ultravin::decode_batch(&vins, years));
     results.iter().map(|r| result_to_dict(py, r)).collect()
 }
 
@@ -221,16 +221,16 @@ fn decode_batch<'py>(
 #[pyo3(signature = (vin, *, year = None, flat = false))]
 fn decode_json(vin: &str, year: Option<i32>, flat: bool) -> String {
     if flat {
-        ultravin_core::decode_json_flat(vin, year)
+        ultravin::decode_json_flat(vin, year)
     } else {
-        ultravin_core::decode_json(vin, year)
+        ultravin::decode_json(vin, year)
     }
 }
 
 /// The variable names whose `flat=True` value is always a list.
 #[pyfunction]
 fn multi_valued() -> Vec<&'static str> {
-    ultravin_core::multi_valued_variables(ultravin_core::Db::embedded())
+    ultravin::multi_valued_variables(ultravin::Db::embedded())
 }
 
 /// The static element table: one `(variable, element_id, group_name, code,
@@ -239,10 +239,10 @@ fn multi_valued() -> Vec<&'static str> {
 /// data releases).
 #[pyfunction]
 fn elements(py: Python<'_>) -> PyResult<Vec<Bound<'_, PyDict>>> {
-    let db = ultravin_core::Db::embedded();
+    let db = ultravin::Db::embedded();
     let mut out = Vec::new();
     for e in db.elements() {
-        let Some(decode) = ultravin_core::public_decode(db, e) else {
+        let Some(decode) = ultravin::public_decode(db, e) else {
             continue;
         };
         let d = PyDict::new(py);
@@ -275,9 +275,9 @@ fn decode_batch_json(
     Ok(py.detach(|| {
         let years = years.as_deref();
         if flat {
-            ultravin_core::decode_batch_json_flat(&vins, years)
+            ultravin::decode_batch_json_flat(&vins, years)
         } else {
-            ultravin_core::decode_batch_json(&vins, years)
+            ultravin::decode_batch_json(&vins, years)
         }
     }))
 }
@@ -316,7 +316,7 @@ fn clock_from(now: &Bound<'_, PyDateTime>) -> PyResult<(i64, i32)> {
         now.call_method0(intern!(py, "timestamp"))?.extract()?
     };
     let micros = (secs.floor() as i64).saturating_mul(1_000_000);
-    Ok((micros, ultravin_core::current_year_at(micros)))
+    Ok((micros, ultravin::current_year_at(micros)))
 }
 
 /// Generate `n` valid VINs, deterministic for a given `seed`.
@@ -362,19 +362,19 @@ fn generate<'py>(
             // One reading, derived twice. Calling `now_micros` and `current_year`
             // separately reads the clock twice, and the two can straddle a second
             // — or, once a year, the model-year boundary itself.
-            let micros = ultravin_core::now_micros();
-            (micros, ultravin_core::current_year_at(micros))
+            let micros = ultravin::now_micros();
+            (micros, ultravin::current_year_at(micros))
         }
     };
-    let filter = ultravin_core::Filter {
+    let filter = ultravin::Filter {
         wmi,
         make,
         year,
         vehicle_type,
     };
     Ok(py.detach(|| {
-        ultravin_core::generate(
-            ultravin_core::Db::embedded(),
+        ultravin::generate(
+            ultravin::Db::embedded(),
             n,
             seed,
             &filter,
@@ -393,27 +393,21 @@ fn generate<'py>(
 #[pyo3(signature = (dimensions = None))]
 fn sweep(py: Python<'_>, dimensions: Option<Vec<String>>) -> PyResult<Vec<String>> {
     let dims = match dimensions {
-        None => ultravin_core::Dimension::ALL.to_vec(),
+        None => ultravin::Dimension::ALL.to_vec(),
         Some(names) => names
             .iter()
             .map(|n| match n.as_str() {
-                "wmi" => Ok(ultravin_core::Dimension::Wmi),
-                "pattern" => Ok(ultravin_core::Dimension::Pattern),
-                "engine" => Ok(ultravin_core::Dimension::Engine),
-                "vspec" => Ok(ultravin_core::Dimension::VehicleSpec),
-                "exception" => Ok(ultravin_core::Dimension::Exception),
-                "default" => Ok(ultravin_core::Dimension::Default),
+                "wmi" => Ok(ultravin::Dimension::Wmi),
+                "pattern" => Ok(ultravin::Dimension::Pattern),
+                "engine" => Ok(ultravin::Dimension::Engine),
+                "vspec" => Ok(ultravin::Dimension::VehicleSpec),
+                "exception" => Ok(ultravin::Dimension::Exception),
+                "default" => Ok(ultravin::Dimension::Default),
                 other => Err(PyValueError::new_err(format!("unknown dimension: {other}"))),
             })
             .collect::<PyResult<Vec<_>>>()?,
     };
-    Ok(py.detach(|| {
-        ultravin_core::sweep(
-            ultravin_core::Db::embedded(),
-            &dims,
-            ultravin_core::current_year(),
-        )
-    }))
+    Ok(py.detach(|| ultravin::sweep(ultravin::Db::embedded(), &dims, ultravin::current_year())))
 }
 
 /// The smallest VIN set that exercises every decode behaviour this data month
@@ -423,7 +417,7 @@ fn sweep(py: Python<'_>, dimensions: Option<Vec<String>>) -> PyResult<Vec<String
 /// every resolution rung, error code, conversion and tiebreak the data supports.
 #[pyfunction]
 fn cover_vins() -> Vec<String> {
-    ultravin_core::Db::embedded().cover()
+    ultravin::Db::embedded().cover()
 }
 
 /// Every pair of descriptor character-classes each schema can distinguish.
@@ -436,13 +430,7 @@ fn cover_vins() -> Vec<String> {
 #[pyfunction]
 #[pyo3(signature = (*, limit = 0))]
 fn pairwise(py: Python<'_>, limit: usize) -> Vec<String> {
-    py.detach(|| {
-        ultravin_core::pairwise(
-            ultravin_core::Db::embedded(),
-            ultravin_core::current_year(),
-            limit,
-        )
-    })
+    py.detach(|| ultravin::pairwise(ultravin::Db::embedded(), ultravin::current_year(), limit))
 }
 
 /// Every decoding rule matched *and* every 2-way descriptor interaction covered,
@@ -456,13 +444,7 @@ fn pairwise(py: Python<'_>, limit: usize) -> Vec<String> {
 #[pyfunction]
 #[pyo3(signature = (*, limit = 0))]
 fn seeded(py: Python<'_>, limit: usize) -> Vec<String> {
-    py.detach(|| {
-        ultravin_core::seeded(
-            ultravin_core::Db::embedded(),
-            ultravin_core::current_year(),
-            limit,
-        )
-    })
+    py.detach(|| ultravin::seeded(ultravin::Db::embedded(), ultravin::current_year(), limit))
 }
 
 /// `Config` is a caller mistake (unknown column, bad element id) and `Io` is the
@@ -486,7 +468,7 @@ fn parquet_opts(
     ParquetOpts {
         vin,
         year,
-        ids: ids.unwrap_or_else(|| ultravin_core::all_public_ids(ultravin_core::Db::embedded())),
+        ids: ids.unwrap_or_else(|| ultravin::all_public_ids(ultravin::Db::embedded())),
         batch_size,
         sample_rows,
     }

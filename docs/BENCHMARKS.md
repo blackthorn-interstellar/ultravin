@@ -6,7 +6,7 @@ down for comparison. All numbers are deliberately honest and reproducible.
 
 Host: Apple Silicon (aarch64-apple-darwin), `cargo 1.90`, release profile
 (`opt-level=3`, `lto="thin"`, `codegen-units=1`). Artifact:
-`crates/ultravin-core/data/vpic.rkyv` (gitignored build product).
+`crates/ultravin/data/vpic.rkyv` (gitignored build product).
 
 ## Latest results (verified)
 
@@ -190,7 +190,7 @@ make oracle-up
 uv run -- python -m scripts.bench.build_corpus            # writes scripts/bench/corpus.txt
 
 # 2. ultravin (in-process engine): single-stream + batched, 60 s each
-RAYON_NUM_THREADS=4 cargo run -p ultravin-core --example throughput --release -- scripts/bench/corpus.txt 60
+RAYON_NUM_THREADS=4 cargo run -p ultravin --example throughput --release -- scripts/bench/corpus.txt 60
 
 # 3. NHTSA Postgres
 uv run -- python -m scripts.bench.throughput postgres --seconds 60
@@ -245,13 +245,13 @@ PyDict marshalling under the GIL (~2.4k VIN/s for 66.9k VINs), not decode
 compute; the GIL-released parallel decode still cuts the compute portion. The
 < 100k VIN/s/core acceptance target needs further per-decode compute work
 (beyond batch parallelism) and is not reached here. Reproduce the multi-core
-number: `cargo run -p ultravin-core --example batch --release`.
+number: `cargo run -p ultravin --example batch --release`.
 
 ## Methodology
 
 ### Warm single-decode & batch (criterion)
-`crates/ultravin-core/benches/decode.rs` (criterion, `harness = false`).
-Run: `cargo bench -p ultravin-core --bench decode`.
+`crates/ultravin/benches/decode.rs` (criterion, `harness = false`).
+Run: `cargo bench -p ultravin --bench decode`.
 
 - `warm_single`: `decode_with(db, "1HGCM82633A004352", fixed_clock, 2026)` with the
   db already loaded (`Db::embedded()`); fixed clock so the number is stable.
@@ -264,11 +264,11 @@ Run: `cargo bench -p ultravin-core --bench decode`.
   `decode()` entry point → 41.6 µs (clock read is negligible).
 
 ### Cold-start
-`crates/ultravin-core/examples/cold.rs` — a fresh process that times from `main`
+`crates/ultravin/examples/cold.rs` — a fresh process that times from `main`
 entry to first decode complete (this captures the artifact load: `AlignedVec`
 copy of the ~79 MB body + `rkyv::access` validation — zero-copy, no
 deserialize-to-owned — then one decode).
-Run: `cargo build -p ultravin-core --example cold --release && target/release/examples/cold <VIN>`.
+Run: `cargo build -p ultravin --example cold --release && target/release/examples/cold <VIN>`.
 
 - In-process (Rust engine, load + first decode), 11 fresh runs, median: **0.670 ms**
   (min 0.579, with one 4.38 ms cold-cache outlier).
@@ -281,7 +281,7 @@ Run: `cargo build -p ultravin-core --example cold --release && target/release/ex
   matching the Rust criterion warm number.
 
 ### Artifact size
-`crates/ultravin-core/data/vpic.rkyv`.
+`crates/ultravin/data/vpic.rkyv`.
 
 | measure | bytes | MB |
 |---|---|---|
@@ -310,12 +310,12 @@ SQL Server 2022 decodes **~22.5 VIN/s** (amd64 emulation on Apple Silicon).
 ## Reproduce
 
 ```sh
-cargo bench -p ultravin-core --bench decode
-cargo build -p ultravin-core --example cold --release
+cargo bench -p ultravin --bench decode
+cargo build -p ultravin --example cold --release
 for i in $(seq 1 9); do target/release/examples/cold 1HGCM82633A004352; done | sort -n
-ls -l crates/ultravin-core/data/vpic.rkyv
-gzip -9 -c crates/ultravin-core/data/vpic.rkyv | wc -c
-zstd -19 -c crates/ultravin-core/data/vpic.rkyv | wc -c
+ls -l crates/ultravin/data/vpic.rkyv
+gzip -9 -c crates/ultravin/data/vpic.rkyv | wc -c
+zstd -19 -c crates/ultravin/data/vpic.rkyv | wc -c
 ```
 
 ## Parity fence (must stay green after every change)

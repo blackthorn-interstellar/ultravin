@@ -95,7 +95,7 @@ clauses. Both sites carry `nosemgrep` annotations.
 
 ## f. `unsafe` in the Rust core
 
-`crates/ultravin-core/src/db.rs` — eight `unsafe` sites: two `unsafe impl`
+`crates/ultravin/src/db.rs` — eight `unsafe` sites: two `unsafe impl`
 (`Send`/`Sync`, lines 80-81), an `unsafe fn` declaration (112), and five blocks
 (92, 169, 198, 207, 221). The load path for **untrusted** artifacts
 (`Db::from_bytes` → `Db::build`) validates before it trusts, through

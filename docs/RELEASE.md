@@ -24,7 +24,7 @@ for tags. Use it to dry-run the matrix.
 
 ## The embedded data artifact
 
-The decoder embeds `crates/ultravin-core/data/vpic.rkyv` (~82MB) via
+The decoder embeds `crates/ultravin/data/vpic.rkyv` (~82MB) via
 `include_bytes!`. That file is a gitignored build product: a pure, deterministic
 function of the pinned NHTSA dump recorded in `vpic/manifest.json` (month, source
 URL, dump `sha256`, and the artifact's `blake3`).
@@ -43,13 +43,13 @@ to serve at runtime. A crate user bakes the downloaded asset in with
 `ULTRAVIN_DATA=/abs/path/vpic.rkyv` at build time (build.rs fully validates it
 first) or mmaps it at runtime with `Db::open` (`external-data` feature); either
 way they verify its `blake3` against the tag's `vpic/manifest.json`. User-facing
-instructions: `crates/ultravin-core/README.md` (the crate's crates.io page).
+instructions: `crates/ultravin/README.md` (the crate's crates.io page).
 
 ## The Rust crate
 
-`ultravin-core` is published to crates.io by the release workflow's `crate` job,
+`ultravin` is published to crates.io by the release workflow's `crate` job,
 after PyPI and the GitHub release (so the artifact exists before the crate that
-needs it). The gate job runs `cargo package -p ultravin-core` first, which
+needs it). The gate job runs `cargo package -p ultravin` first, which
 verify-builds the packaged crate with the placeholder artifact and default
 features — exactly what publish does. `make crate-package` is the local
 equivalent.
@@ -58,7 +58,7 @@ Auth is crates.io Trusted Publishing (OIDC via `rust-lang/crates-io-auth-action`
 so no token lives in repo secrets. It has to be bootstrapped once by hand:
 
 1. Publish the first version locally with an owner's API token:
-   `./.github/stamp-version.sh vX.Y.Z && cargo publish -p ultravin-core --allow-dirty`
+   `./.github/stamp-version.sh vX.Y.Z && cargo publish -p ultravin --allow-dirty`
    (then `git checkout Cargo.toml Cargo.lock`).
 2. On crates.io → the crate → Settings → Trusted Publishing, add
    `blackthorn-interstellar/ultravin`, workflow `release.yaml`, no environment.

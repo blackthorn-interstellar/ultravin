@@ -93,7 +93,7 @@ fn placeholder(out_dir: &Path) -> PathBuf {
     // Cargo hides this for non-path dependencies; Db::embedded()'s runtime
     // refusal is the real guard. This is the compile-time heads-up.
     println!(
-        "cargo:warning=ultravin-core: no vpic.rkyv (ULTRAVIN_DATA unset, data/vpic.rkyv \
+        "cargo:warning=ultravin: no vpic.rkyv (ULTRAVIN_DATA unset, data/vpic.rkyv \
          absent) — embedding an EMPTY placeholder artifact. Decoding will refuse at \
          runtime; point ULTRAVIN_DATA at a vpic.rkyv from a GitHub release, or in the \
          repo run `make data`."

@@ -49,7 +49,7 @@ app = typer.Typer(add_completion=False, help="Decode-path coverage gate.")
 
 def demangle(name: str) -> str:
     """The bare function name out of a Rust symbol, e.g. `decode::decode_core`."""
-    tail = name.rsplit("13ultravin_core", 1)[-1]
+    tail = name.rsplit("13ultravin", 1)[-1]
     out, i = [], 0
     while i < len(tail):
         digits = ""

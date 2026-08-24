@@ -253,7 +253,7 @@ jobs:
             refresh: an agent picked a cluster of diverging VINs and either
             fixed the decoder or argued the oracle is defective. Judge it by the
             same rules below, reading rule 1's scope as that lane's remit —
-            crates/ultravin-core/**, scripts/known_problems.json,
+            crates/ultravin/**, scripts/known_problems.json,
             docs/KNOWN_DEVIATIONS.md, tests/parity_backlog.jsonl,
             tests/brutal_repros.json — and hold rule 3 hardest. That lane is
             exactly where a decoder bug can be laundered into a "documented
@@ -271,7 +271,7 @@ jobs:
             Approve ONLY if every one of these holds:
             1. Scope: every changed file belongs to a monthly refresh —
                regenerated vpic/** and tests/parity_corpus.json, plus decoder
-               changes (crates/ultravin-core/**) and known-problem
+               changes (crates/ultravin/**) and known-problem
                documentation (scripts/known_problems.json plus its evidence
                section in docs/KNOWN_DEVIATIONS.md) that the upstream change
                justifies. Touched workflows, CI, gate logic, or unrelated
@@ -346,7 +346,7 @@ jobs:
             refresh: an agent picked a cluster of diverging VINs and either
             fixed the decoder or argued the oracle is defective. Judge it by the
             same rules below, reading rule 1's scope as that lane's remit —
-            crates/ultravin-core/**, scripts/known_problems.json,
+            crates/ultravin/**, scripts/known_problems.json,
             docs/KNOWN_DEVIATIONS.md, tests/parity_backlog.jsonl,
             tests/brutal_repros.json — and hold rule 3 hardest. That lane is
             exactly where a decoder bug can be laundered into a "documented
@@ -364,7 +364,7 @@ jobs:
             Approve ONLY if every one of these holds:
             1. Scope: every changed file belongs to a monthly refresh —
                regenerated vpic/** and tests/parity_corpus.json, plus decoder
-               changes (crates/ultravin-core/**) and known-problem
+               changes (crates/ultravin/**) and known-problem
                documentation (scripts/known_problems.json plus its evidence
                section in docs/KNOWN_DEVIATIONS.md) that the upstream change
                justifies. Touched workflows, CI, gate logic, or unrelated

@@ -74,7 +74,7 @@ jobs:
           echo "month=$month" >> "$GITHUB_OUTPUT"
           make download MONTH="$month"
 
-      # crates/ultravin-core/data/vpic.rkyv is gitignored. Without it build.rs
+      # crates/ultravin/data/vpic.rkyv is gitignored. Without it build.rs
       # bakes in an empty stub, `seeded()` sees zero schemas, and every shard
       # writes a header and no answers — which is exactly how the first run of
       # this workflow failed.

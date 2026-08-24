@@ -287,7 +287,7 @@ jobs:
               breakage is diagnosable from vpic-schema.diff alone.
             - The decoder hand-ports constants from the procs and reference tables:
               source labels, error-code weights, GroupName ranks, element-to-lookup
-              mappings (crates/ultravin-core/src/tables.rs and decode.rs). When the
+              mappings (crates/ultravin/src/tables.rs and decode.rs). When the
               proc diff or oracle output shows a changed literal or weight, the fix is
               usually updating the ported constant to match.
             - The pipeline is deterministic end to end (importer, artifact, corpus

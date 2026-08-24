@@ -1,9 +1,9 @@
 //! Throughput probe for the parallel `decode_batch` path.
 //!
 //! Replicates the frozen-corpus VINs to a large batch and times
-//! `ultravin_core::decode_batch` (rayon over the shared archive). Reports
+//! `ultravin::decode_batch` (rayon over the shared archive). Reports
 //! multi-core VIN/s. Run:
-//! `cargo run -p ultravin-core --example batch --release`.
+//! `cargo run -p ultravin --example batch --release`.
 
 use std::time::Instant;
 
@@ -23,10 +23,10 @@ fn main() {
     let n = batch.len();
 
     // Warm the per-thread regex caches across the rayon pool.
-    let _ = ultravin_core::decode_batch(&batch, None);
+    let _ = ultravin::decode_batch(&batch, None);
 
     let t = Instant::now();
-    let out = ultravin_core::decode_batch(&batch, None);
+    let out = ultravin::decode_batch(&batch, None);
     let dt = t.elapsed();
     assert_eq!(out.len(), n);
 

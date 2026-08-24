@@ -12,8 +12,8 @@ name = "_ultravin"
 crate-type = ["cdylib"]
 
 [dependencies]
-ultravin-core = { path = "../ultravin-core", features = ["parquet"] }
-# The dataset door hands back arrow `RecordBatch`es from ultravin-core; these two
+ultravin = { path = "../ultravin", features = ["parquet"] }
+# The dataset door hands back arrow `RecordBatch`es from ultravin; these two
 # crates are only for reading them back out (schema field names, typed column
 # downcasts) when marshalling to Python dicts. Same versions the core pins, so
 # they resolve to the one already-locked copy.

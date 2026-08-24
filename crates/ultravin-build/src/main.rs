@@ -36,7 +36,7 @@ struct Cli {
     #[arg(long, default_value = "vpic")]
     out: PathBuf,
     /// Path for the embedded rkyv artifact (a gitignored build product).
-    #[arg(long, default_value = "crates/ultravin-core/data/vpic.rkyv")]
+    #[arg(long, default_value = "crates/ultravin/data/vpic.rkyv")]
     emit_artifact: PathBuf,
 }
 

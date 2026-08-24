@@ -87,7 +87,7 @@ jobs:
         with:
           enable-cache: false
       - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
-      # cargo test embeds crates/ultravin-core/data/vpic.rkyv — provision it
+      # cargo test embeds crates/ultravin/data/vpic.rkyv — provision it
       # exactly like ci.yaml does or make check false-fails.
       - uses: ./.github/actions/build-data
       - name: Bump inside the cooldown
@@ -272,7 +272,7 @@ jobs:
               usually a deprecation landing, a behavioral patch change, or a
               dev tool (ruff, clippy) tightening a rule.
             - The toolchain AND the embedded data artifact
-              (crates/ultravin-core/data/vpic.rkyv, via build-data) are already
+              (crates/ultravin/data/vpic.rkyv, via build-data) are already
               provisioned — `make check` works out of the box. Don't spend
               turns re-provisioning or re-deriving what target/deps/ already
               shows; your turn budget exists to fix, verify, and COMMIT.
@@ -1116,7 +1116,7 @@ jobs:
             2. Reproduce before fixing. A VIN that no longer diverges is
                stale: delete it from the backlog and say so in the PR.
                Stale-only cleanup is a valid delivery.
-            3. A genuine decoder bug: fix crates/ultravin-core (decode.rs,
+            3. A genuine decoder bug: fix crates/ultravin (decode.rs,
                tables.rs — the hand-ported constants are the usual suspects).
                A genuine oracle/dump defect (e.g. the oracle's regex helpers
                crashing on a malformed pattern — documented precedent):

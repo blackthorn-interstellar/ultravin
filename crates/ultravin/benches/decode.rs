@@ -8,7 +8,7 @@
 
 use criterion::{criterion_group, criterion_main, Criterion, Throughput};
 use std::hint::black_box;
-use ultravin_core::{decode, decode_with, Db};
+use ultravin::{decode, decode_with, Db};
 
 /// The frozen-corpus VINs (valid 17-char), one per line.
 static VINS: &str = include_str!("vins.txt");

@@ -1,4 +1,4 @@
-//! ultravin-core — pure-Rust NHTSA vPIC VIN decoder engine.
+//! ultravin — pure-Rust NHTSA vPIC VIN decoder engine.
 //!
 //! A full decode against the embedded rkyv artifact, targeting byte-for-byte
 //! parity with the official Postgres `vpic.spvindecode`: WMI lookup,

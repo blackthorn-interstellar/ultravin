@@ -116,16 +116,16 @@ ultravin version
 
 ## Rust
 
-The engine is its own crate, [`ultravin-core`](https://crates.io/crates/ultravin-core):
+The engine is its own crate, [`ultravin`](https://crates.io/crates/ultravin):
 
 ```rust
-let r = ultravin_core::decode("1HGCM82633A004352", None);
+let r = ultravin::decode("1HGCM82633A004352", None);
 assert_eq!(r.model_year, Some(2003));
 ```
 
 The 82 MB vPIC artifact is too big for crates.io, so each GitHub release attaches
 it; point `ULTRAVIN_DATA` at it when you build to bake it in, or load it at
-runtime with `Db::open`. Details: [crates/ultravin-core/README.md](crates/ultravin-core/README.md).
+runtime with `Db::open`. Details: [crates/ultravin/README.md](crates/ultravin/README.md).
 
 ## Datasets
 

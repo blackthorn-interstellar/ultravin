@@ -1,6 +1,6 @@
 name: Build vPIC data artifact
 description: >
-  Materialize and verify the embedded crates/ultravin-core/data/vpic.rkyv from the
+  Materialize and verify the embedded crates/ultravin/data/vpic.rkyv from the
   dump pinned in vpic/manifest.json. Self-verifying (dump sha256 + artifact blake3)
   and cached by that blake3 plus a hash of the crate sources that produce it, so an
   unchanged pin *and* unchanged importer skips the download and import entirely.
@@ -72,7 +72,7 @@ runs:
       id: cache
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
       with:
-        path: crates/ultravin-core/data/vpic.rkyv
+        path: crates/ultravin/data/vpic.rkyv
         key: vpic-artifact-${{ steps.meta.outputs.artifact_blake3 }}-${{ steps.meta.outputs.src_hash }}
     - name: Download pinned vPIC dump
       if: steps.cache.outputs.cache-hit != 'true'
@@ -86,7 +86,7 @@ runs:
       env:
         DUMP_SHA256: ${{ steps.meta.outputs.dump_sha256 }}
       run: echo "$DUMP_SHA256  $RUNNER_TEMP/dump.zip" | sha256sum -c -
-    - name: Build artifact (deterministic; emits crates/ultravin-core/data/vpic.rkyv)
+    - name: Build artifact (deterministic; emits crates/ultravin/data/vpic.rkyv)
       if: steps.cache.outputs.cache-hit != 'true'
       shell: bash
       env:
@@ -107,13 +107,13 @@ runs:
         echo "artifact verified: $got"
     - name: Confirm artifact present
       shell: bash
-      run: test -s crates/ultravin-core/data/vpic.rkyv
+      run: test -s crates/ultravin/data/vpic.rkyv
     # Independent integrity gate — UNCONDITIONAL (no cache-hit guard): on a cache
     # HIT this is the ONLY verification that runs, so a poisoned cache entry cannot
     # ship unverified into the wheels/sdist; on a MISS it's a cheap belt-and-braces
     # check. We re-hash the restored bytes ourselves rather than trusting any
     # importer-emitted manifest. The header layout and hash scheme below MUST stay
-    # in sync with `serialize_artifact` in crates/ultravin-core/src/tables.rs (the
+    # in sync with `serialize_artifact` in crates/ultravin/src/tables.rs (the
     # source of truth): 64-byte header [magic "ULTRAVIN"(8) | format u16 | builder
     # version u32 | blake3(32) | ...], rkyv body at [64:], and the recorded digest
     # is blake3(body || builder_version_le) — NOT a plain whole-file hash. The
@@ -142,7 +142,7 @@ runs:
         import blake3
 
         want = os.environ["want"].strip().lower()
-        data = open("crates/ultravin-core/data/vpic.rkyv", "rb").read()
+        data = open("crates/ultravin/data/vpic.rkyv", "rb").read()
         if data[:8] != b"ULTRAVIN":
             print(f"::error::vpic.rkyv bad magic {data[:8]!r}; expected b'ULTRAVIN'")
             raise SystemExit(1)

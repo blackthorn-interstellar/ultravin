@@ -1,5 +1,5 @@
 [package]
-name = "ultravin-core"
+name = "ultravin"
 description = "Pure-Rust NHTSA vPIC VIN decoder engine with spVinDecode parity"
 version.workspace = true
 edition.workspace = true
@@ -14,9 +14,6 @@ categories = ["parsing", "database-implementations"]
 # build.rs); it never ships in the package. Its directory does (data/.gitkeep)
 # so build.rs has something to watch.
 exclude = ["data/*.rkyv"]
-
-[lib]
-name = "ultravin_core"
 
 [features]
 default = []

@@ -6,8 +6,8 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use ultravin_core::sqlwild_to_regex;
-use ultravin_core::tables::{
+use ultravin::sqlwild_to_regex;
+use ultravin::tables::{
     serialize_artifact, tag_of_table, Conversion, DefaultValue, Element, EngineModel,
     EngineModelPattern, LookupRow, MakeModel, Pattern, VSpecPattern, VSpecSchema, VSpecSchemaModel,
     VSpecSchemaPattern, VSpecSchemaYear, VinException, VinSchema, VpicData, Wmi, WmiMake,
@@ -593,12 +593,12 @@ impl ArtifactBuilder {
         // it cannot exist until the artifact does. Serialize, load, compute,
         // serialize again with it filled in.
         let staged = serialize_artifact(&data, builder_version);
-        match ultravin_core::Db::from_bytes(&staged) {
-            Ok(db) => data.cover = ultravin_core::cover::compute(&db, cover_year),
+        match ultravin::Db::from_bytes(&staged) {
+            Ok(db) => data.cover = ultravin::cover::compute(&db, cover_year),
             Err(e) => eprintln!("warning: cover not computed ({e})"),
         }
         let bytes = serialize_artifact(&data, builder_version);
-        let hex = ultravin_core::tables::artifact_blake3_hex(&bytes);
+        let hex = ultravin::tables::artifact_blake3_hex(&bytes);
         (bytes, hex)
     }
 }

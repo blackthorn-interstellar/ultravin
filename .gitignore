@@ -114,8 +114,8 @@ ENV/
 # Rust
 /target
 # gitignored build artifact (rebuilt deterministically from the pinned dump)
-/crates/ultravin-core/data/*
-!/crates/ultravin-core/data/.gitkeep
+/crates/ultravin/data/*
+!/crates/ultravin/data/.gitkeep
 
 # Detached campaign runtime (state, logs, fail-logs, coverage)
 /campaign/

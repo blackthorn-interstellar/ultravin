@@ -23,14 +23,14 @@ fn main() {
     let mut elements = 0usize;
     let mut bytes = 0usize;
     for vin in &vins {
-        elements += ultravin_core::decode(vin, None).elements.len();
-        bytes += ultravin_core::decode_json(vin, None).len()
-            + ultravin_core::decode_json_flat(vin, None).len();
+        elements += ultravin::decode(vin, None).elements.len();
+        bytes +=
+            ultravin::decode_json(vin, None).len() + ultravin::decode_json_flat(vin, None).len();
     }
-    elements += ultravin_core::decode_batch(&vins, None).len();
-    elements += ultravin_core::decode_batch_flat(&vins, None).len();
-    bytes += ultravin_core::decode_batch_json(&vins, None).len();
-    bytes += ultravin_core::decode_batch_json_flat(&vins, None).len();
+    elements += ultravin::decode_batch(&vins, None).len();
+    elements += ultravin::decode_batch_flat(&vins, None).len();
+    bytes += ultravin::decode_batch_json(&vins, None).len();
+    bytes += ultravin::decode_batch_json_flat(&vins, None).len();
 
     eprintln!(
         "covrun: {} VINs, {elements} elements, {bytes} json bytes",

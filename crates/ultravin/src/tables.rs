@@ -5,7 +5,7 @@
 //! Strings live in one shared arena and are referenced by a `u32` offset id.
 //!
 //! Shared by `ultravin-build` (which constructs and serializes it) and
-//! `ultravin-core::db` (which loads and queries it). One definition, one format.
+//! `ultravin::db` (which loads and queries it). One definition, one format.
 
 use rkyv::{Archive, Deserialize, Serialize};
 

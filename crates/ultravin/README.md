@@ -1,4 +1,4 @@
-# ultravin-core
+# ultravin
 
 Pure-Rust NHTSA vPIC VIN decoder: byte-for-byte parity with the official
 `spVinDecode` stored procedure, ~0.04 ms per decode, fully offline. This is the
@@ -8,7 +8,7 @@ package; the repo, benchmarks and parity evidence live at
 
 ```toml
 [dependencies]
-ultravin-core = "1"
+ultravin = "1"
 ```
 
 ## The data artifact
@@ -44,17 +44,17 @@ ULTRAVIN_DATA = "/abs/path/to/vpic.rkyv"
 ```
 
 ```rust
-let r = ultravin_core::decode("1HGCM82633A004352", None);
+let r = ultravin::decode("1HGCM82633A004352", None);
 assert_eq!(r.model_year, Some(2003));
 let make = r.elements.iter().find(|e| e.variable == "Make").unwrap();
 assert_eq!(make.value, "HONDA");
 
 // Parallel over rayon; output order matches input.
 let vins = vec!["1HGCM82633A004352".to_string(), "5YJ3E1EA7KF317000".to_string()];
-let results = ultravin_core::decode_batch(&vins, None);
+let results = ultravin::decode_batch(&vins, None);
 
 // `variable -> value` only, no per-element provenance:
-let flat = ultravin_core::decode_batch_flat(&vins, None);
+let flat = ultravin::decode_batch_flat(&vins, None);
 ```
 
 Without `ULTRAVIN_DATA` the crate still compiles (an empty placeholder is
@@ -66,11 +66,11 @@ embedded so docs and CI work), but `decode` panics with a message saying so and
 Enable the `external-data` feature and memory-map the file yourself:
 
 ```toml
-ultravin-core = { version = "1", features = ["external-data"] }
+ultravin = { version = "1", features = ["external-data"] }
 ```
 
 ```rust
-use ultravin_core::Db;
+use ultravin::Db;
 
 let db = Db::open(std::path::Path::new("/path/to/vpic.rkyv"))?;
 let r = db.decode("1HGCM82633A004352", None);

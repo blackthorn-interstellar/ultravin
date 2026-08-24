@@ -2,7 +2,7 @@
 //! artifact integrity (determinism) assertion. These are skipped gracefully when
 //! only the empty placeholder artifact is present (no dump imported yet).
 
-use ultravin_core::{decode, Db};
+use ultravin::{decode, Db};
 
 fn loaded() -> bool {
     Db::try_embedded().is_some()
@@ -90,7 +90,7 @@ fn artifact_blake3_matches_manifest() {
         return;
     }
     let art = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/data/vpic.rkyv")).unwrap();
-    let hex = ultravin_core::tables::artifact_blake3_hex(&art);
+    let hex = ultravin::tables::artifact_blake3_hex(&art);
     let manifest = std::fs::read_to_string(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../vpic/manifest.json"
@@ -110,14 +110,14 @@ fn embedded_loader_is_consistent() {
     }
     let art = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/data/vpic.rkyv")).unwrap();
     let db = Db::from_bytes(&art).unwrap();
-    let a = ultravin_core::decode_with(
+    let a = ultravin::decode_with(
         db_ref(&db),
         "1HGCM82633A004352",
         1_750_000_000_000_000,
         2026,
     );
     let b = decode("1HGCM82633A004352", None);
-    let map = |r: &ultravin_core::DecodeResult<'_>| {
+    let map = |r: &ultravin::DecodeResult<'_>| {
         let mut v: Vec<_> = r
             .elements
             .iter()
@@ -180,9 +180,9 @@ fn batch_years_thread_per_vin() {
     }
     let vins = ["1HGCM82633A004352", "1HGCM82633A004352"].map(String::from);
     let years = [None, Some(1995)];
-    let batch = ultravin_core::decode_batch(&vins, Some(&years));
+    let batch = ultravin::decode_batch(&vins, Some(&years));
     assert_eq!(batch[0], decode(&vins[0], None));
     assert_eq!(batch[1], decode(&vins[1], Some(1995)));
     // No years slice decodes exactly like all-None.
-    assert_eq!(ultravin_core::decode_batch(&vins, None)[1], batch[0]);
+    assert_eq!(ultravin::decode_batch(&vins, None)[1], batch[0]);
 }

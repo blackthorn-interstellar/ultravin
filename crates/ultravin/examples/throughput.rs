@@ -5,7 +5,7 @@
 //! the single-stream path and the parallel `decode_batch` path. This is the
 //! engine ceiling the SQL oracles in scripts/bench/throughput.py are measured
 //! against. Run:
-//! `cargo run -p ultravin-core --example throughput --release -- scripts/bench/corpus.txt [secs]`
+//! `cargo run -p ultravin --example throughput --release -- scripts/bench/corpus.txt [secs]`
 
 use std::time::{Duration, Instant};
 
@@ -29,13 +29,13 @@ fn main() {
     assert!(!vins.is_empty(), "empty corpus: {path}");
 
     // Single-stream: one sequential caller, system-clock path (what a caller sees).
-    let _ = ultravin_core::decode(vins[0], None); // warm caches
+    let _ = ultravin::decode(vins[0], None); // warm caches
     let t = Instant::now();
     let mut n: u64 = 0;
     while t.elapsed() < budget {
         // Decode a full pass so we never check the clock more than per-corpus.
         for v in &vins {
-            std::hint::black_box(ultravin_core::decode(v, None));
+            std::hint::black_box(ultravin::decode(v, None));
         }
         n += vins.len() as u64;
     }
@@ -44,11 +44,11 @@ fn main() {
 
     // Batched: rayon over the shared archive across all cores.
     let owned: Vec<String> = vins.iter().map(|s| s.to_string()).collect();
-    let _ = ultravin_core::decode_batch(&owned, None); // warm per-thread caches
+    let _ = ultravin::decode_batch(&owned, None); // warm per-thread caches
     let t = Instant::now();
     let mut n: u64 = 0;
     while t.elapsed() < budget {
-        std::hint::black_box(ultravin_core::decode_batch(&owned, None));
+        std::hint::black_box(ultravin::decode_batch(&owned, None));
         n += owned.len() as u64;
     }
     let dt = t.elapsed().as_secs_f64();
