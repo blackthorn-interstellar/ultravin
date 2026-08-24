@@ -11,7 +11,7 @@ use arrow_schema::{DataType, SchemaRef};
 use pyo3::exceptions::{PyOSError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyList, PyString};
+use pyo3::types::{PyDateTime, PyDict, PyList, PyString};
 use pyo3::IntoPyObjectExt;
 
 use ultravin_core::parquet_io::{
@@ -288,6 +288,37 @@ fn decode_batch_json(
 /// past any legitimate fixture.
 const GENERATE_MAX: usize = 10_000_000;
 
+/// A caller-supplied `now` as the `(now_micros, current_year)` pair the core
+/// `generate` takes, both derived from that one instant so they cannot disagree.
+///
+/// A naive datetime is read as UTC, not as local time: the point of pinning a
+/// clock is that the fixture replays identically, and local time would make the
+/// same literal mean a different instant in another timezone. An aware one is
+/// converted, so both spellings of an instant give the same pair.
+///
+/// Truncated to whole seconds because that is all `now_micros` carries; the WMI
+/// publication dates it ends up compared against are calendar days anyway.
+fn clock_from(now: &Bound<'_, PyDateTime>) -> PyResult<(i64, i32)> {
+    let py = now.py();
+    // `timestamp()` is already UTC epoch seconds for an aware datetime, whatever
+    // zone it is spelled in, so only a naive one needs to be told what it meant.
+    let secs: f64 = if now.getattr(intern!(py, "tzinfo"))?.is_none() {
+        let utc = py
+            .import(intern!(py, "datetime"))?
+            .getattr(intern!(py, "timezone"))?
+            .getattr(intern!(py, "utc"))?;
+        let kwargs = PyDict::new(py);
+        kwargs.set_item(intern!(py, "tzinfo"), &utc)?;
+        now.call_method(intern!(py, "replace"), (), Some(&kwargs))?
+            .call_method0(intern!(py, "timestamp"))?
+            .extract()?
+    } else {
+        now.call_method0(intern!(py, "timestamp"))?.extract()?
+    };
+    let micros = (secs.floor() as i64).saturating_mul(1_000_000);
+    Ok((micros, ultravin_core::current_year_at(micros)))
+}
+
 /// Generate `n` valid VINs, deterministic for a given `seed`.
 ///
 /// Each VIN comes from a real WMI, a schema that WMI uses, and one of that
@@ -297,23 +328,44 @@ const GENERATE_MAX: usize = 10_000_000;
 /// VIN decodes to, not merely the character in position 10. Returns fewer than
 /// `n` when the filter matches nothing — including a `wmi` that is in the data
 /// but not published yet, which the decoder refuses to resolve and this refuses
-/// to emit. Raises `ValueError` when `n` exceeds `GENERATE_MAX`.
+/// to emit. The result may repeat a VIN, increasingly so as `n` grows; `seeded`
+/// is the deduplicated corpus. Raises `ValueError` when `n` exceeds
+/// `GENERATE_MAX`.
+///
+/// `now` freezes the clock the core function otherwise reads here, which is what
+/// makes a seeded fixture reproducible past a year rollover. A `now` before the
+/// Unix epoch leaves every WMI's publication date in the future, so nothing is
+/// drawable and the result is empty rather than an error.
 #[pyfunction]
-#[pyo3(signature = (n, *, seed = 0, wmi = None, make = None, year = None, vehicle_type = None))]
-fn generate(
-    py: Python<'_>,
+#[pyo3(signature = (n, *, seed = 0, wmi = None, make = None, year = None, vehicle_type = None, now = None))]
+// One parameter per documented keyword; collapsing them into a struct would only
+// move the argument list into Python.
+#[allow(clippy::too_many_arguments)]
+fn generate<'py>(
+    py: Python<'py>,
     n: usize,
     seed: u64,
     wmi: Option<String>,
     make: Option<String>,
     year: Option<i32>,
     vehicle_type: Option<i32>,
+    now: Option<Bound<'py, PyDateTime>>,
 ) -> PyResult<Vec<String>> {
     if n > GENERATE_MAX {
         return Err(PyValueError::new_err(format!(
             "n={n} is too large; generate at most {GENERATE_MAX} VINs per call"
         )));
     }
+    let (now_micros, current_year) = match &now {
+        Some(dt) => clock_from(dt)?,
+        None => {
+            // One reading, derived twice. Calling `now_micros` and `current_year`
+            // separately reads the clock twice, and the two can straddle a second
+            // — or, once a year, the model-year boundary itself.
+            let micros = ultravin_core::now_micros();
+            (micros, ultravin_core::current_year_at(micros))
+        }
+    };
     let filter = ultravin_core::Filter {
         wmi,
         make,
@@ -326,8 +378,8 @@ fn generate(
             n,
             seed,
             &filter,
-            ultravin_core::now_micros(),
-            ultravin_core::current_year(),
+            now_micros,
+            current_year,
         )
     }))
 }

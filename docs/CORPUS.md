@@ -15,9 +15,17 @@ No database, no network — it all comes from the artifact already baked into th
 wheel. `scripts/parity/coverage.py` keeps only the part that genuinely needs
 Postgres: auditing a corpus against the vPIC row counts.
 
+`generate` samples, so it can hand back the same VIN twice — a pattern that pins
+no characters leaves the whole VIN to the fill — and the share that repeats climbs
+with `n`, negligible for a few hundred and percent-scale by the hundred thousand.
+It returns `n` VINs, not `n` distinct ones; `seeded` is the deduplicated builder.
+`generate` is also the only one of these that takes `now=datetime(...)`, to freeze
+the clock a fixture was generated against; the rest read the system clock.
+
 | | call | VINs | what it is for |
 | --- | --- | --- | --- |
 | **generate** | `ultravin.generate(n, seed=…)` | any | fixtures, fuzzing, load tests |
+| **seeded** | `ultravin.seeded(limit=…)` | ~1.75M | every rule *and* every 2-way pair, deduplicated |
 | **cover** | `ultravin.cover_vins()` | ~164 | CI, regressions, bisecting |
 | **sweep** | `ultravin.sweep()` | ~584k | every data row exercised once |
 | **pairwise** | `ultravin.pairwise()` | ~1.74M | every 2-way descriptor interaction |

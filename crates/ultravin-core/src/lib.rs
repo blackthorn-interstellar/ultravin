@@ -255,6 +255,17 @@ pub fn now_micros() -> i64 {
     now_secs() * 1_000_000
 }
 
+/// The model year a given clock reading falls in, in the units [`now_micros`]
+/// returns. [`current_year`] is this applied to the system clock.
+///
+/// A caller who supplies its own clock has to derive the year from that same
+/// reading, not from the calendar: January and February belong to the *next*
+/// model year, so a plain calendar year would disagree with the decoder for two
+/// months of every twelve.
+pub fn current_year_at(now_micros: i64) -> i32 {
+    epoch_to_year(now_micros.div_euclid(1_000_000))
+}
+
 /// Decode a VIN using the embedded database and the system clock.
 ///
 /// `year` is the optional caller-supplied model year (the proc's `@year`): when

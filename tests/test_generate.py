@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 import ultravin
@@ -202,3 +203,70 @@ def test_pairwise_pins_the_model_year_inside_the_schema_band() -> None:
     years = {r["model_year"] for r in ultravin.decode_batch(ultravin.pairwise(limit=2000))}
     assert years, "no model years resolved at all"
     assert all(y is None or 1980 <= y <= 2040 for y in years)
+
+
+def test_now_freezes_the_clock_a_seed_is_drawn_against() -> None:
+    # Without `now` the caller cannot pin the clock, so a fixture that pins only
+    # the seed silently changes the day the model year rolls over.
+    frozen = datetime(2026, 6, 1, 12, 0, 0)  # noqa: DTZ001 -- naive on purpose: the binding reads it as UTC
+    assert ultravin.generate(200, seed=42, now=frozen) == ultravin.generate(200, seed=42, now=frozen)
+
+
+def test_a_frozen_clock_bounds_the_model_years_that_can_be_drawn() -> None:
+    # The clock caps the year sampled inside a schema's band at current + 2, so
+    # two clocks a decade apart draw from different bands and cannot agree.
+    old = ultravin.generate(300, seed=3, now=datetime(2015, 6, 1))  # noqa: DTZ001 -- read as UTC
+    new = ultravin.generate(300, seed=3, now=datetime(2026, 6, 1))  # noqa: DTZ001 -- read as UTC
+    assert old != new
+
+    def years(vins: list[str]) -> list[int]:
+        return sorted(y for r in ultravin.decode_batch(vins) if (y := r["model_year"]) is not None)
+
+    old_years, new_years = years(old), years(new)
+    assert old_years
+    assert new_years
+    # Not `all(y <= 2017)`: a schema band that *starts* after the cap has exactly
+    # one expressible year and defers to it, so a handful legitimately sit above.
+    # The bulk still moves, which is the property the frozen clock buys.
+    assert old_years[len(old_years) // 2] <= 2017 < new_years[len(new_years) // 2]
+
+
+def test_naive_now_is_read_as_utc_not_local_time() -> None:
+    # A fixture pinned to a naive literal has to mean the same instant wherever it
+    # replays; reading it as local time would make the corpus machine-dependent.
+    naive = datetime(2026, 6, 1, 12, 0, 0)  # noqa: DTZ001 -- the naive spelling is the subject of this test
+    aware = datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+    assert ultravin.generate(200, seed=5, now=naive) == ultravin.generate(200, seed=5, now=aware)
+
+
+def test_a_now_that_is_not_a_datetime_is_refused() -> None:
+    # `date` has no time of day and a bare year is not a clock reading; taking
+    # either would silently pick a meaning the caller never asked for.
+    # Both arguments are deliberately the wrong type: the stub already rejects
+    # them statically, and this pins that the runtime refuses them too.
+    with pytest.raises(TypeError, match="datetime"):
+        ultravin.generate(5, now=date(2026, 6, 1))  # ty: ignore[invalid-argument-type]
+    with pytest.raises(TypeError, match="datetime"):
+        ultravin.generate(5, now=2026)  # ty: ignore[invalid-argument-type]
+
+
+def test_an_aware_now_is_converted_rather_than_truncated() -> None:
+    # The same instant spelled in two zones is one clock reading, not two.
+    utc = datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+    plus_two = utc.astimezone(timezone(timedelta(hours=2)))
+    assert plus_two.hour != utc.hour  # genuinely a different wall clock
+    assert ultravin.generate(200, seed=6, now=utc) == ultravin.generate(200, seed=6, now=plus_two)
+
+
+def test_omitting_now_still_reads_the_system_clock() -> None:
+    # The parameter is additive: the old call has to keep working unchanged.
+    assert len(ultravin.generate(50, seed=11)) == 50
+    assert ultravin.generate(50, seed=11) == ultravin.generate(50, seed=11)
+
+
+def test_generate_may_repeat_a_vin() -> None:
+    # Documented, not a defect: patterns that pin nothing leave the whole VIN to
+    # the fill, so draws collide. `generate` promises n VINs, not n distinct ones.
+    vins = ultravin.generate(5_000, seed=1)
+    assert len(vins) == 5_000
+    assert len(set(vins)) < len(vins), "the duplicate behaviour the docs describe is gone"

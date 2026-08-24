@@ -19,8 +19,7 @@ use std::collections::{BinaryHeap, HashSet};
 
 use crate::db::Db;
 use crate::generate::{
-    build_vin, pick_year, schema_to_wmi, stamp_check_digit, sweep, wmi_string, wmis_by_id,
-    year_char, Dimension,
+    build_vin, pick_year, stamp_check_digit, sweep, year_char, Dimension, WmiIndex,
 };
 
 /// One behaviour a VIN demonstrates. Interned as a string so the whole grammar
@@ -362,7 +361,7 @@ fn wmi_for_schema(db: &Db, schema: i32) -> Option<(&str, i32, i32)> {
 /// data can reach it. Nothing in the decode output distinguishes the arm, so the
 /// candidate declares it.
 fn yearless_vspec_candidates(db: &Db, current_year: i32) -> Vec<String> {
-    let index = schema_to_wmi(db);
+    let index = WmiIndex::build(db);
     let mut out = Vec::new();
     for vs in db.vspecschemas() {
         if !db.vspecschema_years_for(vs.id.to_native()).is_empty() {
@@ -377,12 +376,10 @@ fn yearless_vspec_candidates(db: &Db, current_year: i32) -> Vec<String> {
             .iter()
             .find(|p| p.elementid.to_native() == 28 && db.s(p.attributeid.to_native()) == modelid);
         let Some(p) = hit else { continue };
-        let Ok(i) = index.binary_search_by_key(&p.vinschemaid.to_native(), |e| e.0) else {
+        let Some(e) = index.schema(p.vinschemaid.to_native()) else {
             continue;
         };
-        let e = index[i];
-        let wmis = wmis_by_id(db);
-        if let Some(wmi) = wmi_string(&wmis, e.1) {
+        if let Some(wmi) = index.wmi(e.1) {
             out.extend(build_vin(
                 wmi,
                 db.s(p.keys.to_native()),

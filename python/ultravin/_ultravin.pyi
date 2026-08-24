@@ -1,5 +1,6 @@
 """Type stubs for the compiled `ultravin._ultravin` extension module."""
 
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -83,6 +84,7 @@ def generate(
     make: str | None = None,
     year: int | None = None,
     vehicle_type: int | None = None,
+    now: datetime | None = None,
 ) -> list[str]:
     """Generate ``n`` valid VINs, deterministic for a given ``seed``.
 
@@ -100,13 +102,33 @@ def generate(
     resolve and this refuses to emit.
 
     Same seed, same VINs — within one data month and one clock reading. The
-    clock is read once per call and reaches the result three ways: it drops WMIs
-    whose public-availability date has not passed (so does the decoder, as
-    "manufacturer not registered"), it bounds the model year sampled inside a
-    schema's band, and under ``year`` it decides which years a VIN can resolve
-    to at all (a year past the current one + 2 is pulled back 30, so no VIN can
-    decode to it). A fixture that must outlive the year should pin the VINs it
-    got, not the call that made them.
+    clock reaches the result three ways: it drops WMIs whose public-availability
+    date has not passed (so does the decoder, as "manufacturer not registered"),
+    it bounds the model year sampled inside a schema's band, and under ``year``
+    it decides which years a VIN can resolve to at all (a year past the current
+    one + 2 is pulled back 30, so no VIN can decode to it).
+
+    ``now`` freezes that clock, so a fixture keeps returning the same VINs across
+    a year rollover instead of drifting the day the calendar turns::
+
+        from datetime import datetime
+        ultravin.generate(100, seed=42, now=datetime(2026, 6, 1))
+
+    A naive ``now`` is read as UTC, not local time, so the same literal means the
+    same instant on every machine; an aware one is read in whatever zone it
+    carries, so both spellings of an instant agree. Anything that is not a
+    ``datetime`` raises ``TypeError``. A ``now`` before the Unix epoch leaves
+    every WMI's publication date in the future, so nothing is drawable and the
+    result is empty rather than an error. Omit it to read the system clock.
+
+    **VINs may repeat**, and the share that repeats climbs with ``n``: the draws
+    come from a finite pool, so collisions accumulate the way birthdays do —
+    negligible for a few hundred, percent-scale by the hundred thousand. Patterns
+    that pin no characters (a ``Keys`` of ``*****``) leave everything to the fill,
+    so two draws on the same WMI and year build the same 17 characters.
+    Deduplicating would mean silently returning fewer than ``n``, so it is left to
+    the caller: take the repeats, over-request and ``dict.fromkeys``, or use
+    :func:`seeded`, which is the deduplicated corpus builder.
 
     ``n`` may not exceed 10,000,000; a larger request raises ``ValueError``
     rather than attempting a multi-terabyte allocation. A filter that is
@@ -150,6 +172,10 @@ def seeded(*, limit: int = 0) -> list[str]:
     rule is guaranteed to match — and the positions it leaves free are chosen to
     knock out outstanding class pairs. ``limit`` caps the result at that many
     VINs (0 = all ~1.7M).
+
+    Deduplicated: filler-heavy rows from different schemas collide on the same
+    17 characters, and only the first occurrence is kept. This is the corpus
+    builder to reach for when :func:`generate`'s repeats are a problem.
     """
 
 def decode_parquet(

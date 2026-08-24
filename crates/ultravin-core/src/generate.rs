@@ -153,6 +153,9 @@ pub fn build_vin(wmi: &str, keys: &str, year: i32) -> Option<String> {
     }
 
     stamp_check_digit(&mut vin);
+    // Lossy, not `from_utf8`: a WMI or key literal carrying a non-UTF-8 byte would
+    // otherwise turn a VIN into an error, and this is the one copy that has to
+    // happen anyway because the result is owned.
     Some(String::from_utf8_lossy(&vin).into_owned())
 }
 
@@ -162,11 +165,14 @@ pub fn build_vin(wmi: &str, keys: &str, year: i32) -> Option<String> {
 /// well formed rather than panicking.
 pub(crate) fn stamp_check_digit(vin: &mut [u8]) {
     vin[8] = b'0';
-    let text = String::from_utf8_lossy(vin).into_owned();
-    vin[8] = match crate::check_digit(&text) {
+    // The lossy view is borrowed, not owned: `check_digit` only reads it, and for
+    // the ASCII case every real VIN takes that is no allocation at all. It has to
+    // land in a local first so the borrow of `vin` ends before the write below.
+    let digit = match crate::check_digit(&String::from_utf8_lossy(vin)) {
         Some(c) if c != '?' => c as u8,
         _ => b'0',
     };
+    vin[8] = digit;
 }
 
 /// A model year inside a schema's band, preferring recent years.
@@ -256,6 +262,16 @@ fn check_digit_agrees(db: &Db, vin: &str) -> bool {
 /// matches nothing — including a `wmi` that exists in the data but is not
 /// published yet, which the decoder refuses to resolve and this refuses to emit.
 ///
+/// **The result can repeat a VIN**, and the share that repeats climbs with `n`:
+/// the draws come from a finite pool, so collisions accumulate the way birthdays
+/// do — negligible for a few hundred, percent-scale by the hundred thousand. Two
+/// draws collapse to one string whenever their patterns pin the same characters
+/// and leave the rest to the fill: a `Keys` of `*****` constrains nothing at all,
+/// so every schema of a given WMI and year builds the same 17 characters.
+/// Deduplicating here would silently return fewer than `n`, so the caller
+/// decides — take the duplicates, ask for extra and dedup, or use [`seeded`],
+/// which is the deduplicated corpus builder.
+///
 /// The clock is an argument, not a reading: the result is a pure function of
 /// (`n`, `seed`, `filter`, `now_micros`, `current_year`) over a given artifact,
 /// so a fixture repeats exactly. `now_micros` and `current_year` are the same
@@ -325,18 +341,27 @@ pub fn generate(
         attempts += 1;
         misses += 1; // cleared by the push below; every `continue` is a miss
         let w = candidates[rng.below(candidates.len())];
-        let links: Vec<_> = db
-            .wmi_vinschema_for(w.id.to_native())
-            .iter()
-            .filter(|l| match filter.year {
-                Some(y) => y >= l.yearfrom.to_native() && y <= year_to(l),
-                None => true,
-            })
-            .collect();
-        if links.is_empty() {
-            continue;
-        }
-        let link = links[rng.below(links.len())];
+        let all = db.wmi_vinschema_for(w.id.to_native());
+        // Unfiltered, every link qualifies, so draw straight from the slice; the
+        // filtered arm is the only one that needs a narrowed list to draw from.
+        let link = match filter.year {
+            None => {
+                if all.is_empty() {
+                    continue;
+                }
+                &all[rng.below(all.len())]
+            }
+            Some(y) => {
+                let links: Vec<_> = all
+                    .iter()
+                    .filter(|l| y >= l.yearfrom.to_native() && y <= year_to(l))
+                    .collect();
+                if links.is_empty() {
+                    continue;
+                }
+                links[rng.below(links.len())]
+            }
+        };
         let year = match filter.year {
             Some(y) => y,
             None => sample_year(
@@ -349,12 +374,11 @@ pub fn generate(
 
         let patterns = db.patterns_for(link.vinschemaid.to_native());
         let keys = if patterns.is_empty() {
-            "*****".to_string()
+            "*****"
         } else {
             db.s(patterns[rng.below(patterns.len())].keys.to_native())
-                .to_string()
         };
-        let Some(vin) = build_vin(db.s(w.wmi.to_native()), &keys, year) else {
+        let Some(vin) = build_vin(db.s(w.wmi.to_native()), keys, year) else {
             continue;
         };
         if !check_digit_agrees(db, &vin) {
@@ -418,6 +442,7 @@ impl Dimension {
 /// codes); those live in the cover, which is built from this plus constructions.
 pub fn sweep(db: &Db, dimensions: &[Dimension], current_year: i32) -> Vec<String> {
     let mut out = Vec::new();
+    let index = WmiIndex::build(db);
     for dim in dimensions {
         match dim {
             Dimension::Wmi => {
@@ -429,9 +454,9 @@ pub fn sweep(db: &Db, dimensions: &[Dimension], current_year: i32) -> Vec<String
                     out.extend(build_vin(db.s(w.wmi.to_native()), "*****", year));
                 }
             }
-            Dimension::Pattern => sweep_patterns(db, current_year, &mut out),
-            Dimension::Engine => sweep_engines(db, current_year, &mut out),
-            Dimension::VehicleSpec => sweep_vspecs(db, current_year, &mut out),
+            Dimension::Pattern => sweep_patterns(db, &index, current_year, &mut out),
+            Dimension::Engine => sweep_engines(db, &index, current_year, &mut out),
+            Dimension::VehicleSpec => sweep_vspecs(db, &index, current_year, &mut out),
             Dimension::Exception => {
                 out.extend(
                     db.vinexceptions()
@@ -445,47 +470,69 @@ pub fn sweep(db: &Db, dimensions: &[Dimension], current_year: i32) -> Vec<String
     out
 }
 
-/// Index from schema id to a WMI that uses it, so a pattern can be turned into a
-/// VIN. Built once per sweep; `wmi_vinschema` is keyed the other way round.
-pub(crate) fn schema_to_wmi(db: &Db) -> Vec<(i32, i32, i32, i32)> {
-    let mut pairs: Vec<(i32, i32, i32, i32)> = Vec::new();
-    for w in db.wmis() {
-        for l in db.wmi_vinschema_for(w.id.to_native()) {
-            pairs.push((
-                l.vinschemaid.to_native(),
-                w.id.to_native(),
-                l.yearfrom.to_native(),
-                year_to(l),
-            ));
+/// The two id-keyed views of the WMI table every corpus builder needs.
+///
+/// Both are a full scan of `wmi` plus a sort, and every builder needs the same
+/// two, so they are built once at the entry point and passed down. Rebuilding
+/// per helper cost `sweep(ALL)` six constructions of the identical data.
+pub(crate) struct WmiIndex<'a> {
+    /// One `(schema id, WMI id, yearfrom, yearto)` per schema, in schema-id order.
+    /// A pattern names only its schema, so this is what turns one into a VIN;
+    /// `wmi_vinschema` is keyed the other way round.
+    schemas: Vec<(i32, i32, i32, i32)>,
+    /// WMI strings by row id. `wmi` is sorted by the WMI *string*, so a lookup by
+    /// id is a scan; doing that per pattern is the difference between seconds and
+    /// hours.
+    by_id: Vec<(i32, &'a str)>,
+}
+
+impl<'a> WmiIndex<'a> {
+    pub(crate) fn build(db: &'a Db) -> Self {
+        let mut schemas: Vec<(i32, i32, i32, i32)> = Vec::new();
+        let mut by_id: Vec<(i32, &str)> = Vec::with_capacity(db.wmis().len());
+        for w in db.wmis() {
+            let id = w.id.to_native();
+            by_id.push((id, db.s(w.wmi.to_native())));
+            for l in db.wmi_vinschema_for(id) {
+                schemas.push((
+                    l.vinschemaid.to_native(),
+                    id,
+                    l.yearfrom.to_native(),
+                    year_to(l),
+                ));
+            }
         }
+        // Sorted on the whole tuple, so which WMI a schema keeps is a property of
+        // the data rather than of the scan order, and the corpora stay stable.
+        schemas.sort_unstable();
+        schemas.dedup_by_key(|p| p.0);
+        by_id.sort_unstable_by_key(|e| e.0);
+        Self { schemas, by_id }
     }
-    pairs.sort_unstable();
-    pairs.dedup_by_key(|p| p.0);
-    pairs
+
+    /// Every `(schema, WMI, yearfrom, yearto)` entry, in schema-id order.
+    pub(crate) fn schemas(&self) -> &[(i32, i32, i32, i32)] {
+        &self.schemas
+    }
+
+    /// The entry for one schema id.
+    pub(crate) fn schema(&self, schemaid: i32) -> Option<(i32, i32, i32, i32)> {
+        self.schemas
+            .binary_search_by_key(&schemaid, |e| e.0)
+            .ok()
+            .map(|i| self.schemas[i])
+    }
+
+    /// The WMI string for a row id.
+    pub(crate) fn wmi(&self, wmiid: i32) -> Option<&'a str> {
+        self.by_id
+            .binary_search_by_key(&wmiid, |e| e.0)
+            .ok()
+            .map(|i| self.by_id[i].1)
+    }
 }
 
-/// WMI strings by row id. `wmi` is sorted by the WMI *string*, so a lookup by id
-/// is a scan; doing that per pattern is the difference between seconds and hours.
-pub(crate) fn wmis_by_id(db: &Db) -> Vec<(i32, &str)> {
-    let mut index: Vec<(i32, &str)> = db
-        .wmis()
-        .iter()
-        .map(|w| (w.id.to_native(), db.s(w.wmi.to_native())))
-        .collect();
-    index.sort_unstable_by_key(|e| e.0);
-    index
-}
-
-pub(crate) fn wmi_string<'a>(index: &[(i32, &'a str)], wmiid: i32) -> Option<&'a str> {
-    index
-        .binary_search_by_key(&wmiid, |e| e.0)
-        .ok()
-        .map(|i| index[i].1)
-}
-
-fn sweep_patterns(db: &Db, current_year: i32, out: &mut Vec<String>) {
-    let index = schema_to_wmi(db);
-    let wmis = wmis_by_id(db);
+fn sweep_patterns(db: &Db, index: &WmiIndex<'_>, current_year: i32, out: &mut Vec<String>) {
     // Patterns are grouped by schema but ordered by id within it, so identical
     // keys are not adjacent: dedup against the keys seen for the current schema,
     // and drop the set when the schema changes so this stays streaming.
@@ -503,11 +550,10 @@ fn sweep_patterns(db: &Db, current_year: i32, out: &mut Vec<String>) {
         } else {
             continue;
         }
-        let entry = match index.binary_search_by_key(&sid, |e| e.0) {
-            Ok(i) => index[i],
-            Err(_) => continue,
+        let Some(entry) = index.schema(sid) else {
+            continue;
         };
-        if let Some(wmi) = wmi_string(&wmis, entry.1) {
+        if let Some(wmi) = index.wmi(entry.1) {
             out.extend(build_vin(
                 wmi,
                 db.s(key_id),
@@ -542,9 +588,7 @@ fn patterns_by_attribute(db: &Db, elementid: i32, lower: bool) -> Vec<(String, u
     index
 }
 
-fn sweep_engines(db: &Db, current_year: i32, out: &mut Vec<String>) {
-    let index = schema_to_wmi(db);
-    let wmis = wmis_by_id(db);
+fn sweep_engines(db: &Db, index: &WmiIndex<'_>, current_year: i32, out: &mut Vec<String>) {
     let by_name = patterns_by_attribute(db, 18, true);
     for em in db.enginemodels() {
         let name = db.s(em.name.to_native()).trim().to_ascii_lowercase();
@@ -553,12 +597,10 @@ fn sweep_engines(db: &Db, current_year: i32, out: &mut Vec<String>) {
             .ok()
             .map(|i| &db.patterns()[by_name[i].1]);
         let Some(p) = hit else { continue };
-        let sid = p.vinschemaid.to_native();
-        let Ok(i) = index.binary_search_by_key(&sid, |e| e.0) else {
+        let Some(entry) = index.schema(p.vinschemaid.to_native()) else {
             continue;
         };
-        let entry = index[i];
-        if let Some(wmi) = wmi_string(&wmis, entry.1) {
+        if let Some(wmi) = index.wmi(entry.1) {
             out.extend(build_vin(
                 wmi,
                 db.s(p.keys.to_native()),
@@ -568,9 +610,7 @@ fn sweep_engines(db: &Db, current_year: i32, out: &mut Vec<String>) {
     }
 }
 
-fn sweep_vspecs(db: &Db, current_year: i32, out: &mut Vec<String>) {
-    let index = schema_to_wmi(db);
-    let wmis = wmis_by_id(db);
+fn sweep_vspecs(db: &Db, index: &WmiIndex<'_>, current_year: i32, out: &mut Vec<String>) {
     let by_model = patterns_by_attribute(db, 28, false);
     for vs in db.vspecschemas() {
         let models = db.vspecschema_models_for(vs.id.to_native());
@@ -584,17 +624,15 @@ fn sweep_vspecs(db: &Db, current_year: i32, out: &mut Vec<String>) {
             .map(|i| &db.patterns()[by_model[i].1]);
         let Some(p) = hit else { continue };
         let years = db.vspecschema_years_for(vs.id.to_native());
-        let sid = p.vinschemaid.to_native();
-        let Ok(i) = index.binary_search_by_key(&sid, |e| e.0) else {
+        let Some(entry) = index.schema(p.vinschemaid.to_native()) else {
             continue;
         };
-        let entry = index[i];
         let year = years
             .iter()
             .map(|y| y.year.to_native())
             .find(|y| *y >= entry.2 && *y <= entry.3)
             .unwrap_or_else(|| pick_year(entry.2, entry.3, current_year));
-        if let Some(wmi) = wmi_string(&wmis, entry.1) {
+        if let Some(wmi) = index.wmi(entry.1) {
             out.extend(build_vin(wmi, db.s(p.keys.to_native()), year));
         }
     }
@@ -633,6 +671,24 @@ mod tests {
         assert_eq!(year_char(2039), '9');
         assert_eq!(year_char(2040), year_char(2010));
         assert_eq!(year_char(1995), year_char(2025));
+    }
+
+    #[test]
+    fn pick_year_takes_the_newest_year_the_band_and_the_clock_both_allow() {
+        // Inside an open band the answer is the cap, not the band's own end.
+        assert_eq!(pick_year(2015, 9999, 2026), 2028);
+        // Whichever of the band and the clock binds first wins.
+        assert_eq!(pick_year(2015, 2020, 2026), 2020);
+        assert_eq!(pick_year(2015, 2028, 2026), 2028);
+        // Position 10 is a 30-year cycle starting at 2010, so 2039 is the newest
+        // year expressible at all however far the clock has run.
+        assert_eq!(pick_year(2015, 9999, 2099), 2039);
+        // Bands the cycle cannot express have exactly one answer each: wholly in
+        // the past, take `yearto`; starting after the cap, take `yearfrom`.
+        assert_eq!(pick_year(1995, 1998, 2026), 1998);
+        assert_eq!(pick_year(2035, 9999, 2026), 2035);
+        // A band opening before 2010 still starts at 2010 for the `lo <= hi` test.
+        assert_eq!(pick_year(1995, 2015, 2026), 2015);
     }
 
     #[test]
@@ -932,14 +988,13 @@ fn covering_array(levels: &[usize]) -> Vec<Vec<usize>> {
 /// ~1.7M VINs and minutes of work, which is more than a caller wanting a taste
 /// needs.
 pub fn pairwise(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
-    let index = schema_to_wmi(db);
-    let wmis = wmis_by_id(db);
+    let index = WmiIndex::build(db);
     let mut out = Vec::new();
-    for &(schema, wmiid, yearfrom, yearto) in &index {
+    for &(schema, wmiid, yearfrom, yearto) in index.schemas() {
         if limit > 0 && out.len() >= limit {
             break;
         }
-        let Some(wmi) = wmi_string(&wmis, wmiid) else {
+        let Some(wmi) = index.wmi(wmiid) else {
             continue;
         };
         let wb = wmi.as_bytes();
@@ -1110,19 +1165,18 @@ fn fill_and_retire(
 /// seeding costs ~1.75M and spends those same positions making sibling rules
 /// co-match, which is where the tiebreak logic lives.
 pub fn seeded(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
-    let index = schema_to_wmi(db);
-    let wmis = wmis_by_id(db);
+    let index = WmiIndex::build(db);
     let mut out = Vec::new();
     // Two schemas can generate the same VIN string (filler-heavy rows collide);
     // emit each unique VIN once so the answer key / equivalence compare don't
     // see duplicate rows. First occurrence wins, so order stays deterministic.
     let mut seen: HashSet<String> = HashSet::new();
 
-    for &(schema, wmiid, yearfrom, yearto) in &index {
+    for &(schema, wmiid, yearfrom, yearto) in index.schemas() {
         if limit > 0 && out.len() >= limit {
             break;
         }
-        let Some(wmi) = wmi_string(&wmis, wmiid) else {
+        let Some(wmi) = index.wmi(wmiid) else {
             continue;
         };
         let wb = wmi.as_bytes();
@@ -1235,5 +1289,95 @@ mod seeded_tests {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod corpus_tests {
+    use super::*;
+
+    /// The three public corpus builders take no seed: their whole contract is that
+    /// the same artifact and year give the same list, because an answer key built
+    /// on one machine has to verify on another.
+    const YEAR: i32 = 2026;
+
+    fn embedded() -> Option<&'static Db> {
+        let db = Db::try_embedded();
+        if db.is_none() {
+            eprintln!("skip: artifact not built");
+        }
+        db
+    }
+
+    /// 17 characters, and none of them I/O/Q — the two things every VIN in every
+    /// corpus must satisfy before anything else is worth asking.
+    fn assert_well_formed(vins: &[String], what: &str) {
+        assert!(!vins.is_empty(), "{what} produced nothing");
+        for vin in vins {
+            assert_eq!(vin.len(), 17, "{what}: {vin} is not 17 characters");
+            assert!(
+                vin.bytes().all(|c| !is_ioq(c)),
+                "{what}: {vin} carries an I, O or Q"
+            );
+        }
+    }
+
+    #[test]
+    fn sweep_is_deterministic_and_well_formed() {
+        let Some(db) = embedded() else { return };
+        // Not `Exception`: that dimension echoes VinException rows verbatim, which
+        // is the one place a corpus VIN is not built to these rules.
+        let dims = [Dimension::Wmi, Dimension::Default];
+        let a = sweep(db, &dims, YEAR);
+        assert_eq!(a, sweep(db, &dims, YEAR));
+        assert_well_formed(&a, "sweep");
+        // Each dimension is appended whole, so asking for both is asking for each.
+        assert_eq!(
+            a.len(),
+            sweep(db, &[Dimension::Wmi], YEAR).len() + sweep(db, &[Dimension::Default], YEAR).len()
+        );
+    }
+
+    #[test]
+    fn pairwise_is_deterministic_and_well_formed() {
+        let Some(db) = embedded() else { return };
+        let a = pairwise(db, YEAR, 2000);
+        assert_eq!(a, pairwise(db, YEAR, 2000));
+        assert_eq!(
+            a.len(),
+            2000,
+            "the limit is exact once the data is this big"
+        );
+        assert_well_formed(&a, "pairwise");
+        // The limit truncates one list rather than selecting a different one.
+        assert_eq!(a[..500], pairwise(db, YEAR, 500)[..]);
+    }
+
+    #[test]
+    fn seeded_is_deterministic_well_formed_and_free_of_duplicates() {
+        let Some(db) = embedded() else { return };
+        let a = seeded(db, YEAR, 5000);
+        assert_eq!(a, seeded(db, YEAR, 5000));
+        assert_well_formed(&a, "seeded");
+        // The property `generate` deliberately does not have: filler-heavy rows
+        // from different schemas collide, and `seeded` drops the repeats.
+        let unique: HashSet<&String> = a.iter().collect();
+        assert_eq!(unique.len(), a.len(), "seeded repeated a VIN");
+        assert_eq!(a[..500], seeded(db, YEAR, 500)[..]);
+    }
+
+    #[test]
+    fn generate_repeats_itself_and_is_allowed_to_repeat_a_vin() {
+        let Some(db) = embedded() else { return };
+        let now = crate::now_micros();
+        let f = Filter::default();
+        let a = generate(db, 500, 7, &f, now, YEAR);
+        assert_eq!(a, generate(db, 500, 7, &f, now, YEAR));
+        assert_well_formed(&a, "generate");
+        // Pinned so the documented duplicate behaviour cannot change unnoticed:
+        // `generate` returns `n` VINs, not `n` distinct ones.
+        let unique: HashSet<&String> = a.iter().collect();
+        assert_eq!(a.len(), 500);
+        assert!(unique.len() <= a.len());
     }
 }
