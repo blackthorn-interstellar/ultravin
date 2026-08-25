@@ -670,6 +670,16 @@
       "first_observed": "2026_08",
       "evidence": "cache cell (wmiyearvalidchars, MLH, 2019) pos 11 = '1345ACDFKMRY' vs recomputed '5KY' — the extra characters are in no key of any schema covering that year; deleting the cell's 81 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then reproduces ultravin byte-for-byte.",
       "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "ZDMA1ENT2JB011111",
+      "kind": "deviation",
+      "class": "stale-cache-code-2-vs-3",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (ZDM, 2018) cell still lists A and B at position 5 while vpic.fextractvalidcharsperwmiyear over the same dump's pattern rows allows only A. spvindecode_errorcode therefore takes the multi-candidate check-digit rung (error code 3) while ultravin, recomputing from those pattern rows, sees a single candidate and takes the auto-correct rung (error code 2). The check digit then filters the cache's AB down to A, so Suggested VIN and Possible Values agree and the machine-enumerated stale-cache class — which requires a named VIN position in elements 142/144 — cannot excuse the code-only difference.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, ZDM, 2018) pos 5 = 'AB' vs fextractvalidcharsperwmiyear 'A'; vpic.fvincheckdigit('ZDMAAENT2JB011111')='2' (matches pos 9) while 'ZDMABENT2JB011111'='6' (does not). Deleting the cell's 50 rows inside a rolled-back transaction makes the dump's own fallback run and the oracle then returns codes 2,14, matching ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-cache-code-2-vs-3"
     }
   ]
 }

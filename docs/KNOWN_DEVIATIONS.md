@@ -257,7 +257,12 @@ at, and the registry records it as each entry's `scope`:
    `A` at position 11: the cache lists `A`, so the oracle sees nothing wrong and
    returns codes `0,14` with no SuggestedVIN; the pattern source does not, so
    ultravin flags one error, lets the check digit pick the single surviving
-   candidate `J`, and returns codes `3,14` with error bytes `(11:J)`.
+   candidate `J`, and returns codes `3,14` with error bytes `(11:J)`. When the
+   cache's extra characters and the pattern source's singleton then collapse to
+   the same surviving character after the check-digit filter, Suggested VIN and
+   Possible Values match and only the error-code number differs (2 vs 3). That
+   observation names no VIN position, so the cell list cannot excuse it; those
+   VINs are registered individually (see §4).
 
 3. **The whole decode** (`clean-decode`, `MLHAE041XKA111111` and
    `JH2RD1613RA111111`). Same cells, but these VINs have an *inconclusive* model
@@ -393,3 +398,90 @@ tomorrow's. Instead: the answer key hashes element 144 as a character *set*
 charset *contents*, the position each charset is bound to, and the group order are
 all still compared byte-for-byte, so a genuine element-144 regression still
 diverges (`tests/test_normalize.py` pins exactly that boundary).
+
+---
+
+<a id="stale-cache-code-2-vs-3"></a>
+
+## 4. Stale cache picks the check-digit correction rung — WMI `ZDM`, MY 2018
+
+The same defective artifact as §2 — the shipped `vpic.WMIYearValidChars` cell —
+can move the correction *rung* without moving Suggested VIN or Possible Values.
+`spvindecode_errorcode` chooses error code 2 when the flagged position has
+exactly one replacement character, and error code 3 when it has several and the
+check digit leaves exactly one. When the cache is a strict superset of the
+pattern table at that position and the extra characters fail the check digit,
+both engines correct to the same VIN and print the same `(pos:char)` group; only
+elements 143 and 191 differ. The machine-enumerated class in §2 fails closed on
+that observation — `stale_cache.diff_positions` is empty, so
+`is_expected_divergence` is false — and the VIN has to be registered here.
+
+**The offending datum.** Cell `(ZDM, 2018)` is already on the §2 list, stale at
+positions 5, 6, and 7 (`scripts/stale_cache_cells.json`). Position 5 is the one
+this VIN trips. Both columns come out of the same loaded dump:
+
+```sql
+select position, string_agg("char", '' order by "char")
+  from vpic.wmiyearvalidchars where wmi = 'ZDM' and year = 2018
+  and position = 5 group by position;
+select p, string_agg(distinct c, '' order by c)
+  from vpic.fextractvalidcharsperwmiyear('ZDM', 2018::smallint)
+  where p = 5 group by p;
+```
+
+```
+ source  | position | chars
+---------+----------+-------
+ cache   |        5 | AB
+ extract |        5 | A
+```
+
+The extract is the pattern table speaking. Schema 20037 (*Ducati Motorcycle
+Schema for ZDM/ML0 (2018)*) is the only schema covering that cell; the only key
+that writes a character into key index 2 (VIN position 5) is `[ABDGHKMV]A`,
+which contributes `A`. No 2018 key contributes `B` there. `B` is a leftover in
+the cache, not a current rule.
+
+**The mechanism.** `ZDMA1ENT2JB011111` is invalid at position 5 (`1` is in
+neither charset). The rest of the VDS is on-charset, so `cntErrors = 1` and the
+rung is decided by `length(lastReplacements)`:
+
+| charset read | `lastReplacements` | rung | codes |
+|---|---|---|---|
+| cache `AB` | length 2 | check-digit filter (`fVINCheckDigit`) | 3, then 14 |
+| extract `A` | length 1 | auto-correct | 2, then 14 |
+
+The filter is what makes 142/144 agree. Position 9 of the input is `2`:
+
+```
+vpic=# select vpic.fvincheckdigit(<same VIN with pos 5 = A>);  -- 2  (kept)
+vpic=# select vpic.fvincheckdigit(<same VIN with pos 5 = B>);  -- 6  (dropped)
+```
+
+So the oracle's `NewReplacements` collapses to `A`, `err_errorbytes` becomes
+`(5:A)`, and `err_correctedvin` is the input with position 5 rewritten to `A` —
+the same pair ultravin emits from the single-candidate rung. Elements 143/191
+then print "3 - VIN corrected, error in one position (assuming Check Digit is
+correct)" versus "2 - VIN corrected, error in one position".
+
+**The cache is what makes the oracle's answer, demonstrably.** Deleting the
+cell's 50 rows inside a transaction takes `tmpRowCount` to 0, so the proc runs
+its own `fExtractValidCharsPerWmiYear` fallback — and the oracle then returns
+codes `2,14` with that same Suggested VIN and Possible Values `(5:A)`,
+byte-for-byte with ultravin. Rolled back afterwards; the cache is left at its
+shipped 8,809,229 rows.
+
+**Why this is not §2's enumerated class.** `scripts/parity/stale_cache.py`
+excuses a divergence only when the difference *points at* a VIN position the
+cell is stale at, and the only elements that name a position are 142 and 144.
+A 143/191-only fingerprint has `diff_positions == {}`, and an empty set is a
+verdict of *not* that class, not a free pass — otherwise any code-only bug
+that happened to land on a stale cell would be laundered. The defect is still
+the stale cell; the observation is just one the cell list is forbidden to
+forgive. Matching the oracle here would mean teaching ultravin to read that
+cell, which §2 already rejected.
+
+**What ultravin does.** `errors.rs::valid_charset` recomputes from the pattern
+rows, sees `{A}` at position 5, and takes the `cntErrors == 1 &&
+last_replacements.len() == 1` branch (code 2). That is the source-consistent
+answer, and it is what the oracle itself produces once the stale cell is gone.
