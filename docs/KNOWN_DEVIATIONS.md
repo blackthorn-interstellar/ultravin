@@ -1,28 +1,33 @@
 # Known deviations from the oracle
 
 ultravin is **byte-for-byte identical** to the official Postgres
-`vpic.spvindecode` **except on the VINs registered in
-`scripts/known_problems.json`**, where the reference itself is defective and
-ultravin deliberately does not reproduce the defect. The brutal multi-approach
-campaign (random + full systematic + coverage-guided covfuzz, 134,661
-divergences → 35 signatures) drove everything else to exact parity.
+`vpic.spvindecode` except where the reference itself is defective: the VINs
+registered in `scripts/known_problems.json` and the cache cells enumerated in
+`scripts/stale_cache_cells.json`. On those, and only those, ultravin
+deliberately does not reproduce the defect.
 
 **This file is the evidence companion to that registry, and both halves are
 mandatory.** `scripts/known_problems.json` says which VINs and why, one line
 each; the section here that an entry's `doc` anchor names carries the proof —
-the defective upstream artifact, named, and how it was shown to be defective. A
+the defective upstream artifact, named, and how it is shown to be defective. A
 registry entry with no section, or a section no entry points at, is a defect in
 the list itself, and `tests/test_known_problems.py` fails on either. An output
 diff is never evidence: it is the observation being explained, not the
 explanation.
 
-Each entry records a `scope`: `error-fields` when the defect only reaches the
-error-correction outputs (142/143/144/156/191), `clean-decode` when it reaches a
-clean full-VIN decode. Both are admissible. Scope is recorded so the blast
-radius is visible, not as a bar to clear — the bar is the evidence.
+Each entry records a `scope`. `error-fields` means the defect is confined to the
+oracle's error-correction machinery — `spvindecode_errorcode` and the five
+elements only it produces (142/143/144/156/191) — including the case where that
+machinery aborts and takes the whole call down with it. `clean-decode` means the
+divergence changes what a clean full-VIN decode resolves to: a different vehicle,
+not a different possible-values string. Both are admissible; scope is recorded so
+the blast radius is visible, not as a bar to clear — the bar is the evidence. It
+is load-bearing in exactly one place: the machine-enumerated cell list of §2 may
+excuse only `error-fields` divergences, so that class's `clean-decode` members
+stay registered per VIN (`tests/test_known_problems.py`).
 
-The policy that governs *how* a divergence earns a place here is
-`docs/ACCEPTANCE.md`.
+The policy that governs *how* a divergence earns a place here, and how the gates
+adjudicate one, is `docs/ACCEPTANCE.md`.
 
 **Entries expire.** Every data refresh re-decodes every registered VIN against
 the new oracle (`scripts/parity/known_problems.py`) and the **known-problems**
@@ -30,8 +35,8 @@ gate fails the run if one stopped reproducing — a crash VIN the oracle now
 answers, or a deviation VIN ultravin now matches. Upstream does fix things, and
 a stale excuse is worse than no excuse: it silently forgives the next real
 regression on that VIN. When the gate names one, verify it against the section's
-evidence below, then retire it from `scripts/known_problems.json` and retire the
-section here once its last VIN is gone.
+evidence below, then retire it from `scripts/known_problems.json`, and retire
+the section here once its last VIN is gone.
 
 ---
 
@@ -52,14 +57,16 @@ CONTEXT:  PL/pgSQL function vpic.fvalidcharsinregex(character varying) line 22 a
 
 `spvindecode` raises and returns **nothing** — not a partial row set, no rows at
 all — so there is no oracle answer to have parity *with*. ultravin decodes the
-VIN normally. This was first reported for one VIN in 2026_06; the 2026_07 parity
-campaign hit it 62 more times, which was enough data to name the exact cause. The
-2026-08-16 backlog probe hit two more (`7T03ZWKM9RA111111`, `7T0FRAYX7RA111111`,
-both MY code `R` = 2024), which were accepted by exhaustion rather than
-resemblance — see below.
+VIN normally.
 
-**The offending datum.** Exactly two rows in the 1,674,161-row `pattern` table
-carry a character class Postgres cannot compile:
+**The offending datum.** Two rows of the `pattern` table (1,674,161 rows in
+dump 2026_08, `vpic/manifest.json`) carry a character class Postgres cannot
+compile:
+
+```sql
+select id, vinschemaid, keys, elementid, attributeid
+  from vpic.pattern where keys like '%[1-A-JT]%';
+```
 
 ```
   id    | vinschemaid |      keys       | elementid | attributeid
@@ -75,8 +82,9 @@ fine; it matches schema 28060, whose keys are well-formed.
 
 **The mechanism.** `spvindecode_errorcode` feeds every matched item's `Keys` to
 `fValidCharsInKey`, which hands each bracket group to `fValidCharsInRegEx`, which
-builds `'^' || str || '$'` and evaluates `s ~ pattern` (line 22). For this key
-that is `^[1-A-JT]$`, and Postgres rejects the class outright:
+builds `'^' || str || '$'` and evaluates `s ~ pattern` in its loop
+(`vpic/procs/fvalidcharsinregex.sql`). For this key that is `^[1-A-JT]$`, and
+Postgres rejects the class outright:
 
 ```
 vpic=# select '1' ~ '^[1-A-JT]$';
@@ -97,19 +105,38 @@ and patched it in one of the two places the key is compiled. `fValidCharsInRegEx
 never got the same treatment, so half the proc tolerates the key and the other
 half aborts the entire decode.
 
-**The class is closed — verified by exhaustion, not sampling.** Registering a
-new crash VIN on resemblance would defeat the gate, so for the 2026_08 pair the
-resemblance was checked instead of assumed. Every distinct bracket group in the
-2026_07 dump's 1,667,711-row `pattern` table was compiled against Postgres' own
-regex engine: of 9,087 distinct groups, 1,670 take the regex path and exactly
-**one** is uncompilable — `[1-A-JT]`, carried by exactly the two rows above. An
-`invalid character range` abort out of `fValidCharsInRegEx` therefore cannot
-come from any other datum in that dump. Two boundary checks pin the blast
-radius: the abort is unconditional for a schema-24522 match — a synthesized
+The abort is unconditional for a schema-24522 match: a synthesized
 check-digit-valid 7T0 MY2024 VIN that ultravin decodes with error code 0 aborts
 the oracle just the same, so clean decodes are lost too, not only the error
-path's outputs — and the same VIN moved to MY2026 (schema 28060) decodes on the
-oracle in exact field-for-field parity with ultravin.
+path's outputs — these entries are `error-fields` because the defect sits in the
+error-correction machinery, not because the damage stops there. The same VIN
+moved to MY2026 (schema 28060) decodes on the oracle in exact field-for-field
+parity with ultravin.
+
+**Closure is checkable, not assumed.** Registering a crash VIN on resemblance
+would defeat the gate, so the question "can any other datum in this dump raise
+that error?" is answered by compiling every distinct bracket group the `pattern`
+table carries with the engine that decodes:
+
+```sql
+do $$
+declare g text;
+begin
+  for g in select distinct (regexp_matches(keys, '\[[^]]*\]', 'g'))[1] from vpic.pattern
+  loop
+    begin
+      perform 'A' ~ ('^' || g || '$');
+    exception when others then
+      raise notice 'uncompilable: %', g;
+    end;
+  end loop;
+end $$;
+```
+
+That scan returns exactly one group, `[1-A-JT]`, carried by exactly the two rows
+above. Nothing takes that on faith, though: the refresh gate
+below fails on any crash VIN that is not already registered, so a second
+uncompilable group would surface as a gate failure, not as a silent pass.
 
 **What ultravin does.** `errors.rs::valid_chars_in_regex` compiles the class with
 the Rust `regex` crate, which accepts it — `1-A` is an ascending range, and the
@@ -118,20 +145,19 @@ trailing `-` before `J` is a literal — and yields the valid characters
 is authored on, where `LIKE '[1-A-JT]'` reads the same range, literal `-`, `J`,
 `T`. Nothing about the VIN is special; only Postgres' stricter class parser is.
 ultravin therefore decodes and returns an answer where the oracle returns none.
+`errors.rs` pins the tolerated expansion in a unit test, so if the class ever
+starts resolving to something else, that is a change in ultravin, not a
+rediscovery of this defect.
 
 **How it is handled.** You cannot snapshot a crash, so these VINs are **excluded**
 from the regression corpus: `freeze.py` skips any VIN the oracle errors on and
 surfaces new skips in the refresh report. `scripts/parity/sweep.py` records them
-under `oracle_errors` (it used to die on the first one), and `refresh.sweep_gate`
-**fails** on any crash VIN not registered in `scripts/known_problems.json` under
-kind `oracle-crash` — the sample of 65 VINs observed so far. That list is a sample of an unbounded
-class, so a new 7T0 MY2023-2025 VIN will fail the gate until a human re-verifies
-it against this section. That is deliberate: a crash must never pass silently
-just because a similar one was once explained.
-
-`errors.rs` pins the tolerated expansion in a unit test, so if the class ever
-starts resolving to something else, that is a change in ultravin, not a rediscovery
-of this defect.
+under `oracle_errors`, and `refresh.sweep_gate` **fails** on any crash VIN not
+registered in `scripts/known_problems.json` under kind `oracle-crash` — the 65
+VINs registered there. That list is a sample of an unbounded class, so a new 7T0
+MY2023-2025 VIN fails the gate until a human re-verifies it against this section.
+That is deliberate: a crash must never pass silently just because a similar one
+was once explained.
 
 <a id="stale-wmiyearvalidchars-cache"></a>
 
@@ -145,7 +171,8 @@ has no row at all for that WMI-year:
 ```sql
 INSERT INTO tbl_spVinDecode_ErrorCode(p, c)
     SELECT DISTINCT position, "char" FROM vpic.WMIYearValidChars
-    WHERE wmi = var_wmi AND year = modelYear ...;
+    WHERE wmi = var_wmi AND year = modelYear
+      AND var_wmi NOT IN (SELECT DISTINCT wmi FROM vpic.WMIYearValidChars_CacheExceptions);
 
 SELECT COUNT(*) INTO tmpRowCount FROM tbl_spVinDecode_ErrorCode;
 if tmpRowCount = 0 then
@@ -162,29 +189,37 @@ port verified byte-equal to that function); the oracle reads the first. **When
 they disagree, the dump contradicts itself** — and only one of the two answers is
 consistent with the `pattern` rows the same file ships.
 
-**What happened in 2026_08.** The refresh moved `pattern` +6,450 rows and
-`wmiyearvalidchars` −3,318. The cache was rebuilt, but not from the `pattern`
-table this dump ships: **4,967 of its 241,380 WMI-year cells** still carry
-characters that no key of any schema covering that year allows — enumerated by
-machine, see the addendum below. The nine worked through here are the ones the
-first VINs to hit the class landed on. (The 2026_06 entry in this section was the
-same defect in the opposite direction — a cache frozen mid-edit, missing a schema
-the dump already contained. It healed in 2026_08 and is retired below.)
+(The exceptions subquery does not do what it reads like. The only WMI-named
+column of `WMIYearValidChars_CacheExceptions` is the quoted, upper-case `"WMI"`,
+so the unquoted `wmi` in the subquery matches nothing in its own `FROM` and
+resolves outward to `WMIYearValidChars.wmi` — and that column is array-typed
+(`character varying(6)[]`, `vpic/schema/tables/wmiyearvalidchars_cacheexceptions.sql`),
+a second independent reason the `NOT IN` cannot mean what it reads like. A single
+row in the table would therefore switch *every* WMI to the fallback. It ships
+empty. The scan below always runs: it skips the cells of any listed WMI and
+records how many WMIs it saw in `summary.cache_exception_wmis`, and the refresh
+gate — control 3 further down — rejects the month when that counter is non-zero.)
+
+**The class is enumerated, not sampled.** `vpic-import --stale-cache-report`
+(`crates/ultravin-build/src/stalecache.rs`) diffs every `(wmi, year)` cell of the
+dump's cache against the recompute from that same dump's pattern rows — the
+decoder's own `ultravin::recompute_valid_chars` — and **`scripts/stale_cache_cells.json`
+is the resulting `[wmi, year, positions]` list**: **4,967 stale cells in dump
+2026_08** (`summary.stale_cells`). That file is the authoritative membership list
+for this class. Every monthly refresh reruns the scan and rewrites the file from
+it — `scripts/refresh.py` invokes `vpic-import --stale-cache-report` and hands the
+report to `stale_cache.write_cells`, and the `stale-cache` gate then validates the
+result — so the list is always this month's dump; the full report rides out as the
+run's `data-refresh-report` artifact. A month-over-month change in the list is the
+expected signal, not a failure — it self-documents in the refresh PR diff.
+
+Two cells worked through, both of them the ones the registered `clean-decode`
+VINs land on:
 
 | cell (`wmi`, `year`) | position | cache | recomputed from `pattern` | stale extras |
 |---|---:|---|---|---|
-| `3GN`, 2023 | 4 | `AFK` | `AK` | `F` |
-| `3GN`, 2023 | 5 | `BLX` | `BX` | `L` |
-| `3GN`, 2023 | 6 | `5789BCDEFGHJKLMNSTUVWX` | `589BCDEFGHJKLMNSTUVWX` | `7` |
-| `3GN`, 2023 | 8 | `45GJKSV` | `4GJSV` | `5K` |
-| `JM1`, 2025 | 4, 5, 8 | `BDN`, `DPR`, `7BMY` | `BN`, `DP`, `7MY` | `D`, `R`, `B` |
-| `1V2`, 2025 | 11 | `CEMPW` | `C` | `EMPW` |
-| `YV4`, 2024 | 11 | `12BJP` | `12BP` | `J` |
-| `SCF`, 2025 | 7 | `EFGKL` | `EFGL` | `K` |
-| `SCF`, 2026 | 7 | `DEFGHJKLMN` | `DEFGHJLMN` | `K` |
-| `1ZV`, 2014 | 4, 8 | `BH`, `FHMNSZ` | `B`, `FMZ` | `H`, `HNS` |
-| `JH2`, 2024 | 11 | `1345ACDEFJKMRY` | `345EJKRY` | `1ACDFM` |
 | `MLH`, 2019 | 11 | `1345ACDFKMRY` | `5KY` | `134ACDFMR` |
+| `JH2`, 2024 | 11 | `1345ACDEFJKMRY` | `345EJKRY` | `1ACDFM` |
 
 Both columns come out of the same loaded dump, one query apart:
 
@@ -198,37 +233,34 @@ select p, string_agg(distinct c, '' order by c)
 **The cache is what makes the oracle's answer, demonstrably.** Deleting a stale
 cell inside a transaction takes `tmpRowCount` to 0, so the proc runs its own
 `fExtractValidCharsPerWmiYear` fallback over the same dump — and the oracle then
-reproduces ultravin **byte-for-byte** on every probe VIN reaching those cells,
-including the two whose whole decode changes. Rolled back afterwards; the cache
-is left at its shipped 8,809,229 rows.
+reproduces ultravin **byte-for-byte** on every probe VIN reaching that cell,
+including the two whose whole decode changes:
 
 ```
 MLHAE041XKA111111  delete 81 cache rows for (MLH,2019) -> oracle MY=1989 codes='0,14'  parity_now=True
 JH2RD1613RA111111  delete 80 cache rows for (JH2,2024) -> oracle MY=1994 codes='0,14'  parity_now=True
-
-one probe VIN per remaining cell, all error-fields-only, all parity_now=True:
-  (JH2,2024) -80 rows  codes '0,14' -> '3,14'      (3GN,2023) -41 rows  codes '5,14'
-  (JM1,2025) -27 rows  codes '5,14'                (1V2,2025) -51 rows  codes '5,14'
-  (YV4,2024) -40 rows  codes '5,14'                (SCF,2025) -17 rows  codes '5,14'
-  (SCF,2026) -25 rows  codes '5,14'                (1ZV,2014) -18 rows  codes '5,14'
 ```
+
+Rolled back afterwards; the cache is left at its shipped 8,809,229 rows
+(`vpic/manifest.json`).
 
 **How far the defect reaches** depends on which position the stale characters sit
 at, and the registry records it as each entry's `scope`:
 
-1. **Element 144 only** (`error-fields`, seven of the nine cells). The position
-   is already in error for another reason, so the only difference is the
-   possible-values list printed for it — the oracle offers characters the data no
-   longer allows, e.g. `(7:EFGKL)` against ultravin's `(7:EFGL)` at `(SCF, 2025)`.
+1. **Element 144 only** (`error-fields`, the common case). The position is
+   already in error for another reason, so the only difference is the possible-
+   values list printed for it: the oracle prints the cache's characters for that
+   position, ultravin the recompute's. `(SCF, 2025)`, listed stale at position 7,
+   is one such cell.
 
-2. **The correction ladder** (`error-fields`, `(JH2, 2024)`). Position 11 of the
-   probe VIN is `A`. The cache lists `A`, so the oracle sees nothing wrong and
+2. **The correction ladder** (`error-fields`). A probe VIN on `(JH2, 2024)` with
+   `A` at position 11: the cache lists `A`, so the oracle sees nothing wrong and
    returns codes `0,14` with no SuggestedVIN; the pattern source does not, so
    ultravin flags one error, lets the check digit pick the single surviving
    candidate `J`, and returns codes `3,14` with error bytes `(11:J)`.
 
 3. **The whole decode** (`clean-decode`, `MLHAE041XKA111111` and
-   `JH2RD1613RA111111`). Same cell, but these VINs have an *inconclusive* model
+   `JH2RD1613RA111111`). Same cells, but these VINs have an *inconclusive* model
    year — `fVinModelYear2` cannot choose between the two halves of position 10's
    30-year cycle, so both years get a decode pass and the best-of scoring picks
    one. Running the oracle's own `spvindecode_errorcode` per candidate year shows
@@ -251,42 +283,23 @@ at, and the registry records it as each entry's `scope`:
    candidate years and run a pass for each. Only the error code one of those
    passes earns differs, and that comes from the charset.
 
-**Decision: keep ultravin's source-consistent computation.** Matching the oracle
-here would mean shipping the 8.8M-row cache — or its delta — purely to reproduce
-characters the dump's own `pattern` table contradicts, on a defect that
-self-heals the next time NHTSA rebuilds the cache (as the 2026_06 one did).
-
-### Addendum (2026_08): the class is enumerated, not sampled
-
-Registering VINs one at a time was always a sample of an unbounded class, and
-the nightly fuzzer kept re-finding members of it. It no longer has to be a
-sample. **`vpic-import --stale-cache-report` diffs every cell of the dump's
-cache against the recompute from that same dump's pattern rows** — the
-decoder's own `ultravin::recompute_valid_chars` — and
-**`scripts/stale_cache_cells.json` is the resulting `(wmi, year, positions)` list**:
-**4,967 stale cells of 241,380 as of 2026_08**. It is regenerated by every
-monthly refresh (`scripts/refresh.py`, the `stale-cache` gate), so the list is
-always this month's dump; the full report rides out as the run's
-`data-refresh-report` artifact. A month-over-month change in the list is the
-expected signal, not a failure — it self-documents in the refresh PR diff.
-
-**Per-VIN registration for this class is retired.** A divergence is adjudicated
-against the list by `scripts/parity/stale_cache.py` and counts as this defect
-only when **all three** hold: its field diffs touch **only** the error/correction
-elements (142/143/144/156/191 — all `spvindecode_errorcode`, the cache's sole
-consumer, can reach); the `(wmi, year)` cell that decode reads — `fVinWMI` plus
-the model year the decode chose — is on the list; **and** the difference points
-at a VIN position that cell is actually stale at. Each entry is
-`[wmi, year, positions]` for exactly that reason — a cell stale at position 11
-explains nothing about a wrong charset printed for position 5. The positions come
-from the difference itself: element 144 renders one `(position:charset)` group per
-flagged position, and element 142 is the whole VIN with the flagged positions
-rewritten, so the two SuggestedVINs compare character by character. Elements
-143/156/191 are per-decode summaries with no position of their own and can only
-ride along. A divergence whose evidence names no position at all is **not** this
-class. The corpus and sweep gates count the ones that qualify as the known class;
-the nightly covfuzz intake drops them instead of filing backlog work. Everything
-else fails exactly as before.
+**Per-VIN registration for this class covers only the `clean-decode` members.** A
+divergence is adjudicated against the cell list by `scripts/parity/stale_cache.py`
+and counts as this defect only when **all three** hold: its field diffs touch
+**only** the error/correction elements (142/143/144/156/191 — all
+`spvindecode_errorcode`, the cache's sole consumer, can reach); the `(wmi, year)`
+cell that decode reads — `fVinWMI` plus the model year the decode chose — is on
+the list; **and** the difference points at a VIN position that cell is actually
+stale at. Each entry is `[wmi, year, positions]` for exactly that reason — a cell
+stale at position 11 explains nothing about a wrong charset printed for position
+5. The positions come from the difference itself: element 144 renders one
+`(position:charset)` group per flagged position, and element 142 is the whole VIN
+with the flagged positions rewritten, so the two SuggestedVINs compare character
+by character. Elements 143/156/191 are per-decode summaries with no position of
+their own and can only ride along. A divergence whose evidence names no position
+at all is **not** this class. The corpus and sweep gates count the ones that
+qualify as the known class; the nightly covfuzz intake drops them instead of
+filing backlog work. Everything else fails exactly as before.
 
 **What keeps a decoder bug out of the list — and what does not.** The list is
 computed from the dump alone, never from an observed ultravin-vs-oracle
@@ -296,15 +309,16 @@ the same as independence from the decoder: the recompute half of the diff is
 there would move the list and the decode together and the cell would look
 legitimately stale. Three controls stand against that, none of them this list:
 
-1. **`answerkey verify` on every PR** re-checks the *whole* decode of every VIN
-   in `tests/answerkey.json` against the frozen oracle answer. It never consults
-   the cell list, so a charset bug shows up there as a plain mismatch.
+1. **`answerkey verify`** re-checks the *whole* decode of every VIN in
+   `tests/answerkey.json` against the frozen oracle answer. It never consults the
+   cell list, so a charset bug shows up there as a plain mismatch. What that gate
+   is and when it runs is `docs/ACCEPTANCE.md`.
 2. **The frozen unit tests in `crates/ultravin/src/errors.rs`** pin the charset
    extraction and the element-144 rendering directly, independent of any dump.
 3. **The refresh's `stale-cache` jump gate** fails a month whose newly-stale
-   cell count exceeds 500. Upstream churn moves tens of cells; a charset
-   regression re-lists thousands, because every cell whose recompute moved now
-   contradicts a cache that did not.
+   cell count exceeds `refresh.STALE_CACHE_JUMP_LIMIT` (500). Upstream churn
+   moves tens of cells; a charset regression re-lists thousands, because every
+   cell whose recompute moved now contradicts a cache that did not.
 
 What the list itself contributes is narrowness, not proof: the excuse it buys is
 bounded to the five elements the cache feeds, on the one cell that VIN's decode
@@ -313,9 +327,14 @@ further is outside the class by construction. That is why the two `clean-decode`
 VINs above stay registered individually: their whole decode changes, which no
 cell list may excuse.
 
+**Decision: keep ultravin's source-consistent computation.** Matching the oracle
+here would mean shipping the 8.8M-row cache — or its delta — purely to reproduce
+characters the dump's own `pattern` table contradicts, on a defect that
+self-heals whenever NHTSA rebuilds the cache.
+
 ---
 
-## 3. The Postgres dump mis-collates element 144 — 95 charsets, 16 WMIs
+## 3. The Postgres dump mis-collates element 144
 
 Element 144 ("possible values") prints a position's valid-character set as a
 string, e.g. `(6:_123456789)`. That string is a *sort*, so its order is decided by
@@ -333,57 +352,18 @@ places `spvindecode` sorts text:
 |---|---|---|
 | SQL Server (`SQL_Latin1_General_CP1_CI_AS`) | reference | reference |
 | Postgres `C` | ✅ matches | ❌ `_` sorts last |
-| Postgres `en_US.utf8` | ❌ 1,071 VINs differ | ✅ matches |
+| Postgres `en_US.utf8` | ❌ key order diverges | ✅ matches |
 
 We pin the oracle to `C` (`docker-compose.yml`) because the tiebreak governs
 *which rows come back* while the charset governs only how one field prints, and
-because all 58 key pairs in the data were verified to order identically under
-SQL Server and C. ultravin then emits SQL Server's order at both sites, so it
-matches NHTSA and differs from our own Postgres oracle on element 144 alone.
+because every key pair in the data orders identically under SQL Server and `C`
+(`docs/ACCEPTANCE.md`). ultravin then emits SQL Server's order at both sites, so
+it matches NHTSA and differs from our own Postgres oracle on element 144 alone.
 
-**Scope is small and bounded.** The order only differs when a charset mixes `_`
-with alphanumerics: **95 of 1,681,352** `(wmi, year, position)` charsets do, across
-**16 WMIs**. Everything else is alphanumeric-only, where C and SQL Server agree.
-How many *corpus* VINs reach one is a property of that month's corpus and not of
-the defect — it was 172 when this section was written and is 0 in the current
-403-VIN corpus — which is the argument for neutralizing the class structurally
-instead of enumerating today's members.
-
-**How it is enforced, structurally.** The fix is not a call site — it is a type.
-`errors.rs` holds valid-character sets in `ValidChars`, whose inner `BTreeSet` is
-private and which implements only `Display`, in reference order. There is no
-`.iter()` to reach, so `set.iter().collect::<String>()` — the codepoint-ordered
-version, which is the bug — cannot be written. Unit tests pin the order against
-the full vPIC alphabet.
-
-Because the oracle's order here is a property of the dump host rather than of
-NHTSA's rules, the answer key hashes element 144 as a character *set*
-(`normalize.collation_agnostic`): its contents are compared, its byte order is
-not. That keeps the key from re-freezing one host's collation and from listing
-172 VINs that a data refresh would invalidate.
-
-### 3a. The differential runners did not apply that rule (fixed 2026-08-12)
-
-`collation_agnostic` was called by `answerkey.py` and by nothing else. The
-*differential* path — `sweep.py`, `campaign.py`, `brutal.py`, `freeze.py`, all of
-which compare through `normalize.diff_rows` — went straight from `from_oracle` to
-a byte comparison. So the answer key knew this deviation was expected and the
-parity campaign did not: every covfuzz VIN whose charset mixes `_` with
-alphanumerics was logged to `tests/parity_backlog.jsonl` as a fresh divergence,
-and re-logged on the next run, because there was no decoder change that could ever
-retire it. Four such entries had accumulated (WMI `1HD`, MY1999, position 7):
-
-```
-1HD2TW980XA084111  1HDCSM716XA084111  1HDCFPAP3XA084111  1HDCFG2P3XA084111
-
-oracle    (4:148)(5:BCDEFGRS)(6:ACDEFGHJKLMNPRST)(7:HJKLMNPRSTVWX_)(11:JKTY)
-ultravin  (4:148)(5:BCDEFGRS)(6:ACDEFGHJKLMNPRST)(7:_HJKLMNPRSTVWX)(11:JKTY)
-```
-
-Identical characters at identical positions; only the place of `_` differs, and
-only in the one charset that contains it. That the byte order is the *host's* and
-not the *data's* is directly demonstrable on the oracle itself — same rows, same
-server, two collations:
+The order can only differ where a charset mixes `_` with alphanumerics.
+Everything else is alphanumeric-only, where `C` and SQL Server agree. That the
+byte order is the *host's* and not the *data's* is directly demonstrable on the
+oracle itself — same rows, same server, two collations:
 
 ```sql
 select string_agg(c,'' order by c collate "C")           -- HJKLMNPRSTVWX_  (the oracle)
@@ -392,45 +372,24 @@ from unnest(string_to_array('H,J,K,L,M,N,P,R,S,T,V,W,X,_', ',')) as c;
 ```
 
 `spvindecode_errorcode` builds the payload with `ORDER BY c` over
-`tbl_spVinDecode_ErrorCode` (L79-86), so the sort happens at decode time on the
-oracle host — it is not a stored string that came from NHTSA.
+`tbl_spVinDecode_ErrorCode` (`vpic/procs/spvindecode_errorcode.sql`), so the sort
+happens at decode time on the oracle host — it is not a stored string that came
+from NHTSA.
 
-**Fix:** `diff_rows` now neutralizes element 144's within-charset order itself, so
-every comparison site inherits the one definition of semantic equality instead of
-each caller having to remember it. The neutralization is unchanged and still
-narrow — charset *contents*, the position each charset is bound to, and the group
-order are all still compared byte-for-byte, so a genuine element-144 regression
-still diverges (`tests/test_normalize.py` pins exactly that boundary). ultravin's
-own print order remains pinned by the `collation_tests` in `errors.rs`.
+**ultravin's print order is enforced by a type, not a call site.** `errors.rs`
+holds valid-character sets in `ValidChars`, whose inner `BTreeSet` is private and
+which implements only `Display`, in reference order. There is no `.iter()` to
+reach, so `set.iter().collect::<String>()` — the codepoint-ordered version, which
+is the bug — cannot be written. The `collation_tests` in `errors.rs` pin the order
+against the full vPIC alphabet.
 
-These VINs are **not** in `scripts/known_problems.json`, and this section
-carries no anchor for one to point at. The registry names individual VINs whose
-defect is re-probed one VIN at a time; this class is unbounded (any VIN reaching
-one of the 95 mixed charsets) and is neutralized structurally in
-`normalize.diff_rows` instead, so enumerating tonight's four would only invite
-the next four.
-
----
-
-## 4. Retired entries
-
-An entry that stopped reproducing is retired, not kept — a stale excuse silently
-forgives the next real regression on that VIN. The **known-problems** gate is
-what catches one: it re-decodes every registered VIN against each new dump and
-fails the refresh when one heals. This section is the log, so a reader who finds
-a VIN missing from the registry can see it was checked rather than lost.
-
-Retired sections carry no anchor: `scripts/known_problems.json` has no entry left
-to point at one, and `tests/test_known_problems.py` requires every anchor to be
-claimed.
-
-- **W1LSB0L72VEJV2EPX** — stale `WMIYearValidChars` cache, registered 2026_06,
-  **retired 2026-08-20 (dump 2026_08)**. The 2026_06 cache had been frozen
-  mid-edit, between W1L schema 29239 (created 2026-05-01 14:41, updated 14:53)
-  and schema 29240 (created 15:15), so its valid-character positions were
-  `{9, 11}` where the same dump's `pattern` table gave `{8, 9, 11}`: the oracle
-  missed position 8 and emitted code 14 where ultravin emitted code 4 with
-  possible-values. The
-  2026_08 rebuild picked schema 29240 up, the cell now agrees with the pattern
-  source, and ultravin decodes the VIN **exactly**. The class itself did not go
-  away — see section 2, where the same table is stale in the other direction.
+**The deviation is neutralized on both comparison paths, so it needs no registry
+entries and carries no anchor.** Any VIN reaching one of those mixed charsets
+diverges the same way, so enumerating today's members would only invite
+tomorrow's. Instead: the answer key hashes element 144 as a character *set*
+(`normalize.collation_agnostic`), and the differential runners (`sweep.py`,
+`campaign.py`, `brutal.py`, `freeze.py`) inherit the same rule because
+`normalize.diff_rows` applies it before comparing. The neutralization is narrow —
+charset *contents*, the position each charset is bound to, and the group order are
+all still compared byte-for-byte, so a genuine element-144 regression still
+diverges (`tests/test_normalize.py` pins exactly that boundary).
