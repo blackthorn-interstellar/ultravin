@@ -155,9 +155,32 @@ surfaces new skips in the refresh report. `scripts/parity/sweep.py` records them
 under `oracle_errors`, and `refresh.sweep_gate` **fails** on any crash VIN not
 registered in `scripts/known_problems.json` under kind `oracle-crash` — the 65
 VINs registered there. That list is a sample of an unbounded class, so a new 7T0
-MY2023-2025 VIN fails the gate until a human re-verifies it against this section.
-That is deliberate: a crash must never pass silently just because a similar one
-was once explained.
+MY2023-2025 VIN reaching a sweep fails that gate until a human re-verifies it
+against this section.
+
+**Machine-classified at covfuzz intake.** The gate is not where the fuzzer meets
+this class. Every night covfuzz re-finds fresh members — exact-VIN dedupe cannot
+see that two 7T0 VINs are one defect — and each one used to cost an agent PR that
+appended one more sample of an unbounded class. `scripts/parity/regex_crash.py`
+adjudicates them instead, and nightly.yaml drops a covfuzz failure record only
+when all three hold: it is a **crash** record (an `error`, no `field_diffs` or
+`fingerprint`), that error carries both the `InvalidRegularExpression` and the
+`vpic.fvalidcharsinregex` markers this defect raises, and ultravin's own full
+decode of the VIN actually selects the defective pattern — some element's `keys`
+contains the literal `[1-A-JT]`. It keys on the defect, not on WMI `7T0` and not
+on `vin_schema_id = 24522`, so it survives the renumbering each monthly dump
+brings. Fail any axis and the record is filed; fail to be judged at all and it is
+filed with a `::warning::`.
+
+**Intake suppression is not gate suppression.** Nothing above changes what the
+gates do: `refresh.sweep_gate` still fails on any crash VIN that reaches a sweep
+unregistered, `freeze.py` still excludes them from the corpus, and
+`scripts/known_problems.json` remains the human-verified record of this class.
+What the predicate buys is only that the fuzzer stops re-filing work already
+explained here. A genuine ultravin decoder bug cannot hide behind it: a decoder
+bug moves ultravin's *output values* on VINs the oracle answers, which surfaces
+as a divergence record carrying `field_diffs` — the first condition refuses that
+shape outright, whatever the VIN.
 
 <a id="stale-wmiyearvalidchars-cache"></a>
 

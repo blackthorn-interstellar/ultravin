@@ -30,4 +30,4 @@ rules:
       - nightly.yaml:147      # job `deps-publish` — pushes deps/nightly (L173)
       - nightly.yaml:374      # job `deps-fix-publish` — re-pushes deps/nightly after a fix (L420)
       - nightly.yaml:718      # job `deps-remedy-publish` — re-pushes deps/nightly after the check-remediation agent (L757)
-      - nightly.yaml:1345     # job `fixes-publish` — pushes the parity-fix branch (L1388)
+      - nightly.yaml:1354     # job `fixes-publish` — pushes the parity-fix branch (L1397)
