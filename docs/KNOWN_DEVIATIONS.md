@@ -153,7 +153,7 @@ rediscovery of this defect.
 from the regression corpus: `freeze.py` skips any VIN the oracle errors on and
 surfaces new skips in the refresh report. `scripts/parity/sweep.py` records them
 under `oracle_errors`, and `refresh.sweep_gate` **fails** on any crash VIN not
-registered in `scripts/known_problems.json` under kind `oracle-crash` — the 65
+registered in `scripts/known_problems.json` under kind `oracle-crash` — the 66
 VINs registered there. That list is a sample of an unbounded class, so a new 7T0
 MY2023-2025 VIN reaching a sweep fails that gate until a human re-verifies it
 against this section.

@@ -652,6 +652,16 @@
       "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
     },
     {
+      "vin": "7T0JA1189RA111111",
+      "kind": "oracle-crash",
+      "class": "regex-crash-7t0",
+      "scope": "error-fields",
+      "cause": "vpic.fvalidcharsinregex compiles the pattern key `*****|*[1-A-JT]` (vinschema 24522, BRINKLEY RV trailers, WMI 7T0 MY2023-2025) as a Postgres regex; Postgres rejects that character class, so spvindecode raises and returns no rows at all.",
+      "first_observed": "2026_08",
+      "evidence": "2026-08-26 backlog probe hit `invalid character range` inside vpic.fvalidcharsinregex; MY code R=2024 puts the VIN on vinschema 24522. Compiling every distinct bracket group in the 2026_08 pattern table against Postgres' own regex engine finds exactly one uncompilable group — `[1-A-JT]`, carried only by pattern rows 1827685/1827686 of schema 24522 — so this abort can come from no other datum in the dump.",
+      "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
+    },
+    {
       "vin": "JH2RD1613RA111111",
       "kind": "deviation",
       "class": "stale-wmiyearvalidchars-cache",
