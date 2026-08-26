@@ -49,9 +49,11 @@ from typing import Any
 # (`*****|*[1-A-JT]`). The literal is the defect; the schema carrying it is not.
 HOSTILE_KEY = "[1-A-JT]"
 
-# Both are required. The first is the exception psycopg raises for it; the second
-# is the vPIC function that fed the class to the regex engine, which is what makes
-# it *this* uncompilable pattern rather than any other regex error. `campaign.py`
+# Both are required, and together they identify the defect *family* — an
+# uncompilable character class raised through `vpic.fvalidcharsinregex` — not this
+# exact pattern. Pattern identity comes only from the decode-side `[1-A-JT]`
+# condition, and even that is a proxy: it proves ultravin's decode touches the
+# defective schema, not that the oracle crashed on that pattern. `campaign.py`
 # truncates the record to `repr(e)[:200]`; the second marker lands at offset ~111,
 # so both survive.
 ERROR_MARKERS = ("InvalidRegularExpression", "vpic.fvalidcharsinregex")
@@ -74,21 +76,17 @@ def is_crash_error(error: Any) -> bool:
     return isinstance(error, str) and all(marker in error for marker in ERROR_MARKERS)
 
 
-def selects_defective_schema(vin: str, decoded: dict[str, Any] | None = None) -> bool:
+def selects_defective_schema(vin: str) -> bool:
     """True when ultravin's decode of `vin` lands on a `[1-A-JT]` pattern key.
 
-    `decoded` is used only if it is a *full* decode; a plain `ultravin.decode()`
-    result carries no `elements` and therefore no `keys`, and answering from it
-    would be answering the wrong question. A decode costs ~40us — cheaper than
-    being wrong.
+    Only a *full* decode carries `elements`, and only those carry `keys`, so this
+    always decodes for itself. A decode costs ~40us — cheaper than being wrong.
     """
-    elements = decoded.get("elements") if isinstance(decoded, dict) else None
-    if not _carries_keys(elements):
-        elements = _decode_full(vin).get("elements")
+    elements = _decode_full(vin).get("elements")
     return any(HOSTILE_KEY in (e.get("keys") or "") for e in elements or () if isinstance(e, dict))
 
 
-def is_expected_crash(vin: str, record: dict[str, Any], decoded: dict[str, Any] | None = None) -> bool:
+def is_expected_crash(vin: str, record: dict[str, Any]) -> bool:
     """True when this crash *is* the documented `[1-A-JT]` class.
 
     All three conditions of the module docstring, cheapest first — the last one
@@ -104,12 +102,7 @@ def is_expected_crash(vin: str, record: dict[str, Any], decoded: dict[str, Any] 
         return False
     if not is_crash_error(record.get("error")):
         return False
-    return selects_defective_schema(vin, decoded)
-
-
-def _carries_keys(elements: Any) -> bool:
-    """True when `elements` is a full decode's element list (each row has `keys`)."""
-    return isinstance(elements, list) and bool(elements) and all(isinstance(e, dict) and "keys" in e for e in elements)
+    return selects_defective_schema(vin)
 
 
 def _decode_full(vin: str) -> dict[str, Any]:

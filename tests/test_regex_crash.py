@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import ultravin
 
 from scripts import refresh
 from scripts.parity import regex_crash
@@ -114,24 +113,6 @@ def test_a_vin_whose_decode_misses_the_defective_pattern_is_not_this_class() -> 
 def test_all_three_conditions_together_are_the_class() -> None:
     assert regex_crash.selects_defective_schema(CRASHER)
     assert regex_crash.is_expected_crash(CRASHER, _crash())
-
-
-def test_a_partial_decode_is_re_decoded_rather_than_mis_answered() -> None:
-    """`ultravin.decode()` without `full=True` has no `elements`, so it carries no
-    `keys` and cannot answer this question. Answering from it would clear every
-    crash in the corpus; the predicate decodes again instead."""
-    partial = ultravin.decode(CRASHER)
-    assert "elements" not in partial
-    assert regex_crash.selects_defective_schema(CRASHER, partial)
-    assert not regex_crash.selects_defective_schema(CONTROL, partial)
-
-
-def test_a_full_decode_handed_in_is_used_as_given() -> None:
-    """A real full decode answers without a second decode; a synthetic one whose
-    elements carry no hostile key answers `False` from those same elements."""
-    assert regex_crash.selects_defective_schema(CRASHER, ultravin.decode(CRASHER, full=True))
-    innocent = {"elements": [{"element_id": 75, "keys": "*****|*"}]}
-    assert not regex_crash.selects_defective_schema(CRASHER, innocent)
 
 
 def test_a_decode_that_raises_propagates_rather_than_excusing_itself(monkeypatch: pytest.MonkeyPatch) -> None:
