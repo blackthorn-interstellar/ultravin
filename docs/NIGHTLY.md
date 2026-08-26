@@ -88,7 +88,11 @@ deps merge. GitHub files their `pull_request` run as `action_required`, and an
 unapproved run executes nothing and contributes no check runs — so it would be
 invisible rather than red. Each publish job therefore polls (12 × 10s) until a
 Security run on the head SHA is actually moving, and `deps-merge` requires one
-to exist and have completed before it judges. A remediated SHA gets an explicit
+to exist and have completed before it judges. The plain green path asserts the
+same thing — `gh pr checks --watch` judges only the checks that *exist*, so a
+scan never approved off `action_required` would read green, and `deps-watch`
+fails the night onto the needs-human path when no non-gated Security run exists
+on the head SHA. A remediated SHA gets an explicit
 `gh workflow run security.yaml --ref deps/nightly`: only the publish jobs that
 *open* the PR get a scan for free, and a GITHUB_TOKEN push fires nothing.
 

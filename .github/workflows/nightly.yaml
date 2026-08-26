@@ -559,6 +559,30 @@ jobs:
               ;;
           esac
           echo "review-verdict present and green on deps/nightly" >> "$GITHUB_STEP_SUMMARY"
+      # Same failure mode, second gate. The Security suite is a merge gate that
+      # relies solely on its `pull_request` trigger, and a run gated at
+      # action_required executes no jobs, so it contributes ZERO check runs. If
+      # the publish job's approve-retry never managed to approve the scan on
+      # this SHA, the watch above had nothing of the scanner's to judge and read
+      # green — an unscanned dependency bump would then merge on nothing louder
+      # than a `::warning::`.
+      #
+      # So assert the scan actually ran. Key off `conclusion`, NEVER `status`:
+      # a gated-but-never-approved run reads status=completed with
+      # conclusion=action_required, so a status test calls the missing scan
+      # finished and asserts nothing.
+      - name: Security scan actually ran on this SHA
+        if: steps.wait.outputs.failed == 'false'
+        run: |
+          head=$(gh pr view deps/nightly --repo "${{ github.repository }}" --json headRefOid --jq .headRefOid)
+          sec=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=$head&per_page=100" \
+            --jq '[.workflow_runs[] | select(.path == ".github/workflows/security.yaml") | select(.conclusion != "action_required")] | length' || echo 0)
+          echo "Security runs on $head not gated at action_required: ${sec:-0}"
+          if [ "${sec:-0}" -eq 0 ]; then
+            echo "::error::no Security run executed on $head — a scan left at action_required contributes zero check runs, so the watch above read green on a bump nothing scanned"
+            exit 1
+          fi
+          echo "Security scan ran on deps/nightly ($sec run(s) on $head)" >> "$GITHUB_STEP_SUMMARY"
       # The remediation agent exists for MECHANICAL failures. A red
       # `review-verdict` is not one: it is the adversarial gate judging this
       # bump's content, and it is the only judgment between an unattended
