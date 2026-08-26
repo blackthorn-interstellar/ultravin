@@ -335,13 +335,15 @@ fn clock_from(now: &Bound<'_, PyDateTime>) -> PyResult<(i64, i32)> {
 /// Each VIN comes from a real WMI, a schema that WMI uses, and one of that
 /// schema's patterns, so it decodes to real attributes rather than to an
 /// unknown-manufacturer error. Filters are conjunctive; `vehicle_type` is a
-/// VehicleType row id (2 = passenger car, 7 = MPV) and `year` is the year the
-/// VIN decodes to, not merely the character in position 10. Returns fewer than
-/// `n` when the filter matches nothing — including a `wmi` that is in the data
-/// but not published yet, which the decoder refuses to resolve and this refuses
-/// to emit. The result may repeat a VIN, increasingly so as `n` grows; `seeded`
-/// is the deduplicated corpus. Raises `ValueError` when `n` exceeds
-/// `GENERATE_MAX`.
+/// VehicleType row id (2 = passenger car, 7 = MPV), and `year` and `make` are
+/// what the VIN decodes to — not merely the position-10 character or the WMI's
+/// make links. Returns fewer than `n` when the filter matches nothing —
+/// including a `wmi` that is in the data but not published yet, which the
+/// decoder refuses to resolve and this refuses to emit. Every position a
+/// pattern leaves open is randomized (serial digits, unpinned VDS/plant
+/// positions, free key choices), so repeats are vanishingly rare — but nothing
+/// dedups; `seeded` is the deduplicated corpus. Raises `ValueError` when `n`
+/// exceeds `GENERATE_MAX`.
 ///
 /// `now` freezes the clock the core function otherwise reads here, which is what
 /// makes a seeded fixture reproducible past a year rollover. A `now` before the

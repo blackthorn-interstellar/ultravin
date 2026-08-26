@@ -268,9 +268,18 @@ def test_omitting_now_still_reads_the_system_clock() -> None:
     assert ultravin.generate(50, seed=11) == ultravin.generate(50, seed=11)
 
 
-def test_generate_may_repeat_a_vin() -> None:
-    # Documented, not a defect: patterns that pin nothing leave the whole VIN to
-    # the fill, so draws collide. `generate` promises n VINs, not n distinct ones.
+def test_generate_draws_are_nearly_all_unique() -> None:
+    # Every position a pattern leaves open is randomized (serial digits, unpinned
+    # VDS/plant positions, free choices inside a key), so draws essentially never
+    # collide. The contract is still n VINs, not n distinct ones — nothing dedups
+    # — so the bound is near-total uniqueness, not exact.
     vins = ultravin.generate(5_000, seed=1)
     assert len(vins) == 5_000
-    assert len(set(vins)) < len(vins), "the duplicate behaviour the docs describe is gone"
+    assert len(set(vins)) > 4_995, "randomized fills should make repeats vanishingly rare"
+
+
+def test_generate_varies_the_serial_within_one_wmi() -> None:
+    # The regression this pins: fixed fills collapsed every draw of a combo onto
+    # one string (serial ...1111), so a WMI-filtered corpus was a handful of VINs.
+    vins = ultravin.generate(50, seed=8, wmi="1HG")
+    assert len({v[11:] for v in vins}) > 10, "serials did not vary"

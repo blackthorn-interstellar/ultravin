@@ -24,6 +24,9 @@ const MY_CHARS: &[u8; 30] = b"ABCDEFGHJKLMNPRSTVWXY123456789";
 /// VDS/plant fill; the serial gets digits so the check digit lands on a real VIN.
 const FILL: u8 = b'A';
 const FILL_SERIAL: u8 = b'1';
+/// The default per-position class `[A-H,J-N,P,R-Z,0-9]` — every character legal
+/// at an unconstrained VDS/plant position. Randomized fills draw from this.
+const DEFAULT_CLASS: &[u8; 33] = b"ABCDEFGHJKLMNPRSTUVWXYZ0123456789";
 
 /// Which VINs [`generate`] is allowed to return. Every field is a conjunct; an
 /// unset field constrains nothing.
@@ -47,7 +50,10 @@ pub fn year_char(year: i32) -> char {
 /// Per-position characters a `Keys` spec allows: `*`/`_` anything, `[ABC]` and
 /// `[A-C]` their members, `|` the VDS/VIS split, anything else a literal. A
 /// reversed range like `[C-A]` yields nothing, exactly as the regex engine sees it.
-fn key_positions(keys: &str) -> Vec<Option<u8>> {
+///
+/// With `rng`, positions the spec leaves open take a random satisfying character
+/// (`#` any digit, a class any legal member) instead of the fixed lowest one.
+fn key_positions(keys: &str, mut rng: Option<&mut Rng>) -> Vec<Option<u8>> {
     let b = keys.as_bytes();
     let mut out = Vec::with_capacity(b.len());
     let mut i = 0;
@@ -60,12 +66,15 @@ fn key_positions(keys: &str) -> Vec<Option<u8>> {
             b'#' => {
                 // A Formula Pattern digit slot: any digit will do, and leaving it
                 // literal would emit a character that is not legal in a VIN.
-                out.push(Some(b'1'));
+                out.push(Some(match rng.as_deref_mut() {
+                    Some(r) => b'0' + r.below(10) as u8,
+                    None => b'1',
+                }));
                 i += 1;
             }
             b'[' => match crate::keyspec::class_body(b, i) {
                 Some((body, next)) => {
-                    out.push(first_class_member(body));
+                    out.push(class_member(body, rng.as_deref_mut()));
                     i = next;
                 }
                 None => {
@@ -88,24 +97,27 @@ fn is_ioq(c: u8) -> bool {
     matches!(c, b'I' | b'O' | b'Q')
 }
 
-/// The character a bracket class contributes: the lowest member that is legal in
-/// a VIN (I/O/Q excluded). If every member is I/O/Q, returns that illegal member
-/// so `build_vin` drops the candidate rather than silently mismatching the
-/// pattern; `None` only when the class has no members at all (e.g. a reversed
-/// range), which leaves the position at its fill.
-fn first_class_member(body: &[u8]) -> Option<u8> {
-    let mut legal: Option<u8> = None;
+/// The character a bracket class contributes: a member that is legal in a VIN
+/// (I/O/Q excluded) — the lowest one without `rng`, a uniformly random one with.
+/// If every member is I/O/Q, returns that illegal member so `build_vin` drops the
+/// candidate rather than silently mismatching the pattern; `None` only when the
+/// class has no members at all (e.g. a reversed range), which leaves the position
+/// at its fill.
+fn class_member(body: &[u8], rng: Option<&mut Rng>) -> Option<u8> {
+    let mut legal: Vec<u8> = Vec::new();
     let mut any: Option<u8> = None;
     for (lo, hi) in crate::keyspec::class_ranges(body) {
         if lo > hi {
             continue; // a reversed range contributes nothing
         }
         any = Some(any.map_or(lo, |m| m.min(lo)));
-        if let Some(c) = (lo..=hi).find(|&c| !is_ioq(c)) {
-            legal = Some(legal.map_or(c, |m| m.min(c)));
-        }
+        legal.extend((lo..=hi).filter(|&c| !is_ioq(c)));
     }
-    legal.or(any)
+    match rng {
+        _ if legal.is_empty() => any,
+        Some(r) => Some(legal[r.below(legal.len())]),
+        None => legal.iter().min().copied(),
+    }
 }
 
 /// Build a 17-character VIN for `wmi` that satisfies `keys` at model year `year`,
@@ -115,9 +127,38 @@ fn first_class_member(body: &[u8]) -> Option<u8> {
 ///
 /// A 6-character (low-volume) WMI also fills positions 12-14, which is where
 /// `fVinWMI` looks for the rest of it when position 3 is `9`.
+///
+/// Deterministic on purpose: every unpinned position takes a fixed fill, so one
+/// `(wmi, keys, year)` triple is one VIN string. The corpora (`sweep`, `seeded`,
+/// the cover) and their frozen answer keys depend on that. [`generate`] wants the
+/// opposite — variety — and goes through [`build_vin_filled`] with an RNG.
 pub fn build_vin(wmi: &str, keys: &str, year: i32) -> Option<String> {
+    build_vin_filled(wmi, keys, year, None)
+}
+
+/// [`build_vin`] with the fills chosen by `rng` instead of fixed: unpinned VDS
+/// and plant positions draw from the full default class, the serial draws random
+/// digits, and a key's open choices (`#`, bracket classes) draw a random
+/// satisfying member. Still a VIN that satisfies `keys` — the pins land on top of
+/// the fills — and still a pure function of the RNG state, so [`generate`] stays
+/// deterministic per seed.
+fn build_vin_filled(wmi: &str, keys: &str, year: i32, mut rng: Option<&mut Rng>) -> Option<String> {
     let mut vin = [FILL; 17];
-    vin[11..17].fill(FILL_SERIAL);
+    match rng.as_deref_mut() {
+        Some(r) => {
+            // Only the positions a fill can actually reach: 4-8 (VDS) and 11
+            // (plant). WMI, check digit and year char are stamped below.
+            for i in [3, 4, 5, 6, 7, 10] {
+                vin[i] = DEFAULT_CLASS[r.below(DEFAULT_CLASS.len())];
+            }
+            // The serial stays numeric: digits are valid at positions 12-17 under
+            // every check-digit rule, letters only at some.
+            for slot in &mut vin[11..17] {
+                *slot = b'0' + r.below(10) as u8;
+            }
+        }
+        None => vin[11..17].fill(FILL_SERIAL),
+    }
 
     let w = wmi.as_bytes();
     for (i, &c) in w.iter().take(3).enumerate() {
@@ -132,14 +173,18 @@ pub fn build_vin(wmi: &str, keys: &str, year: i32) -> Option<String> {
 
     let mut parts = keys.split('|');
     if let Some(vds) = parts.next() {
-        for (i, ch) in key_positions(vds).into_iter().take(5).enumerate() {
+        for (i, ch) in key_positions(vds, rng.as_deref_mut())
+            .into_iter()
+            .take(5)
+            .enumerate()
+        {
             if let Some(c) = ch {
                 vin[3 + i] = c;
             }
         }
     }
     if let Some(vis) = parts.next() {
-        for (i, ch) in key_positions(vis).into_iter().take(8).enumerate() {
+        for (i, ch) in key_positions(vis, rng).into_iter().take(8).enumerate() {
             if let Some(c) = ch {
                 vin[9 + i] = c;
             }
@@ -262,21 +307,21 @@ fn check_digit_agrees(db: &Db, vin: &str) -> bool {
 /// matches nothing — including a `wmi` that exists in the data but is not
 /// published yet, which the decoder refuses to resolve and this refuses to emit.
 ///
-/// **The result can repeat a VIN**, and the share that repeats climbs with `n`:
-/// the draws come from a finite pool, so collisions accumulate the way birthdays
-/// do — negligible for a few hundred, percent-scale by the hundred thousand. Two
-/// draws collapse to one string whenever their patterns pin the same characters
-/// and leave the rest to the fill: a `Keys` of `*****` constrains nothing at all,
-/// so every schema of a given WMI and year builds the same 17 characters.
-/// Deduplicating here would silently return fewer than `n`, so the caller
-/// decides — take the duplicates, ask for extra and dedup, or use [`seeded`],
-/// which is the deduplicated corpus builder.
+/// Every position a pattern leaves open is randomized — the serial digits, the
+/// unpinned VDS/plant positions, and the free choices inside a key (`#`, bracket
+/// classes) — so two draws of the same (WMI, schema, pattern) still yield
+/// different strings essentially always. **The result can still repeat a VIN**
+/// (the draws are independent, nothing dedups), but collisions need identical
+/// random fills on top of an identical combo, so they are vanishingly rare
+/// rather than the norm they were when the fills were fixed. Deduplicating here
+/// would silently return fewer than `n`, so the caller decides — take the odds,
+/// or use [`seeded`], the deterministic deduplicated corpus builder.
 ///
 /// The clock is an argument, not a reading: the result is a pure function of
 /// (`n`, `seed`, `filter`, `now_micros`, `current_year`) over a given artifact,
 /// so a fixture repeats exactly. `now_micros` and `current_year` are the same
-/// pair [`crate::decode_full`] takes, and must be, because a `filter.year` is
-/// checked by decoding the candidate (see below).
+/// pair [`crate::decode_full`] takes, and must be, because a `filter.year` or
+/// `filter.make` is checked by decoding the candidate (see below).
 pub fn generate(
     db: &Db,
     n: usize,
@@ -378,25 +423,41 @@ pub fn generate(
         } else {
             db.s(patterns[rng.below(patterns.len())].keys.to_native())
         };
-        let Some(vin) = build_vin(db.s(w.wmi.to_native()), keys, year) else {
+        let Some(vin) = build_vin_filled(db.s(w.wmi.to_native()), keys, year, Some(&mut rng))
+        else {
             continue;
         };
         if !check_digit_agrees(db, &vin) {
             continue;
         }
-        // `year` is a promise about the decoded model year, and position 10 alone
-        // cannot keep it: the character is a 30-year cycle, so `L` is both 2020 and
-        // 1990. `fVinModelYear2` only resolves that from the VIN when the WMI is a
-        // car/MPV/light truck (position 7 then picks the half). Everywhere else the
-        // year is *inconclusive*, both halves get a decode pass, and the best-of
-        // scoring — not this function — decides which one the caller sees. So the
-        // only honest filter is to decode the candidate and keep it when it really
-        // resolves to the year asked for; the schema band it was drawn from is a
-        // necessary condition, not a sufficient one.
-        if let Some(want) = filter.year {
-            if crate::decode_full(db, &vin, now_micros, current_year, None).model_year != Some(want)
-            {
-                continue;
+        // `year` and `make` are promises about the *decoded* VIN, and the draw
+        // alone cannot keep either. Year: position 10 is a 30-year cycle, so `L`
+        // is both 2020 and 1990; `fVinModelYear2` only resolves that from the VIN
+        // when the WMI is a car/MPV/light truck (position 7 then picks the half),
+        // everywhere else both halves get a decode pass and the best-of scoring —
+        // not this function — decides which one the caller sees. Make: a WMI can
+        // be linked to several makes (Honda's WMIs also carry Acura), and which
+        // one a VIN carries is decided by the pattern its VDS characters match.
+        // So the only honest filter is to decode the candidate and keep it when
+        // it really resolves to what was asked for; the WMI/schema it was drawn
+        // from is a necessary condition, not a sufficient one.
+        if filter.year.is_some() || filter.make.is_some() {
+            let full = crate::decode_full(db, &vin, now_micros, current_year, None);
+            if let Some(want) = filter.year {
+                if full.model_year != Some(want) {
+                    continue;
+                }
+            }
+            if let Some(want) = filter.make.as_deref() {
+                // The same equality `lookup_ids_by_name` used to pre-filter the
+                // WMIs; element 26 is Make, its `value` the resolved lookup name.
+                if !full
+                    .elements
+                    .iter()
+                    .any(|e| e.element_id == 26 && e.value.eq_ignore_ascii_case(want))
+                {
+                    continue;
+                }
             }
         }
         out.push(vin);
@@ -1367,17 +1428,18 @@ mod corpus_tests {
     }
 
     #[test]
-    fn generate_repeats_itself_and_is_allowed_to_repeat_a_vin() {
+    fn generate_repeats_itself_and_randomized_fills_rarely_collide() {
         let Some(db) = embedded() else { return };
         let now = crate::now_micros();
         let f = Filter::default();
         let a = generate(db, 500, 7, &f, now, YEAR);
         assert_eq!(a, generate(db, 500, 7, &f, now, YEAR));
         assert_well_formed(&a, "generate");
-        // Pinned so the documented duplicate behaviour cannot change unnoticed:
-        // `generate` returns `n` VINs, not `n` distinct ones.
+        // Randomized fills (serial digits, unpinned VDS/plant, free key choices)
+        // make collisions vanishingly rare; the contract stays `n` VINs, not `n`
+        // distinct ones, so the bound is near-total uniqueness, not exact.
         let unique: HashSet<&String> = a.iter().collect();
         assert_eq!(a.len(), 500);
-        assert!(unique.len() <= a.len());
+        assert!(unique.len() > 495, "only {} unique of 500", unique.len());
     }
 }

@@ -104,10 +104,12 @@ def generate(
     network: everything comes from the embedded artifact.
 
     Filters are conjunctive. ``vehicle_type`` is a VehicleType row id (2 =
-    passenger car, 7 = MPV). ``year`` is the year the VIN *decodes to*, which
-    position 10 alone cannot pin down (its character is a 30-year cycle, so ``L``
-    is both 2020 and 1990); candidates are decoded and kept only if they resolve
-    to it. Returns fewer than ``n`` when nothing matches — including a ``wmi``
+    passenger car, 7 = MPV). ``year`` and ``make`` are what the VIN *decodes
+    to*: position 10 alone cannot pin the year down (its character is a 30-year
+    cycle, so ``L`` is both 2020 and 1990), and a WMI linked to a make can still
+    build VINs whose patterns resolve to a sibling make (Honda's WMIs also carry
+    Acura) — so candidates are decoded and kept only if they resolve to what was
+    asked. Returns fewer than ``n`` when nothing matches — including a ``wmi``
     that is in the data but not published yet, which the decoder refuses to
     resolve and this refuses to emit.
 
@@ -131,14 +133,15 @@ def generate(
     every WMI's publication date in the future, so nothing is drawable and the
     result is empty rather than an error. Omit it to read the system clock.
 
-    **VINs may repeat**, and the share that repeats climbs with ``n``: the draws
-    come from a finite pool, so collisions accumulate the way birthdays do —
-    negligible for a few hundred, percent-scale by the hundred thousand. Patterns
-    that pin no characters (a ``Keys`` of ``*****``) leave everything to the fill,
-    so two draws on the same WMI and year build the same 17 characters.
-    Deduplicating would mean silently returning fewer than ``n``, so it is left to
-    the caller: take the repeats, over-request and ``dict.fromkeys``, or use
-    :func:`seeded`, which is the deduplicated corpus builder.
+    Every position a pattern leaves open is randomized — the serial digits, the
+    unpinned VDS/plant positions, and the free choices inside a key — so two
+    draws of the same (WMI, schema, pattern) still yield different strings
+    essentially always. **VINs may still repeat** (the draws are independent,
+    nothing dedups), but a collision needs identical random fills on top of an
+    identical draw, so repeats are vanishingly rare rather than the norm.
+    Deduplicating would mean silently returning fewer than ``n``, so the odd
+    repeat is left to the caller; :func:`seeded` is the deterministic
+    deduplicated corpus builder.
 
     ``n`` may not exceed 10,000,000; a larger request raises ``ValueError``
     rather than attempting a multi-terabyte allocation. A filter that is
