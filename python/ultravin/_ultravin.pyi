@@ -93,6 +93,8 @@ def generate(
     wmi: str | None = None,
     make: str | None = None,
     year: int | None = None,
+    min_year: int | None = None,
+    max_year: int | None = None,
     vehicle_type: int | None = None,
     now: datetime | None = None,
 ) -> list[str]:
@@ -109,7 +111,10 @@ def generate(
     cycle, so ``L`` is both 2020 and 1990), and a WMI linked to a make can still
     build VINs whose patterns resolve to a sibling make (Honda's WMIs also carry
     Acura) — so candidates are decoded and kept only if they resolve to what was
-    asked. Returns fewer than ``n`` when nothing matches — including a ``wmi``
+    asked. ``min_year``/``max_year`` bound the decoded model year to an inclusive
+    range instead of pinning it; they conjoin with ``year``, so an empty
+    intersection matches nothing. Returns fewer than ``n`` when nothing
+    matches — including a ``wmi``
     that is in the data but not published yet, which the decoder refuses to
     resolve and this refuses to emit.
 

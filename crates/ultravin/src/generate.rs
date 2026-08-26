@@ -8,7 +8,7 @@
 //! Three ways in, in increasing size:
 //!
 //! - [`generate`] — `n` valid VINs, deterministic per seed, optionally filtered
-//!   to a WMI, make, model year or vehicle type.
+//!   to a WMI, make, model year (exact or a range) or vehicle type.
 //! - [`Db::cover`] — the smallest set that exercises every decode behaviour the
 //!   data can reach (computed when the artifact is built).
 //! - [`sweep`] — one VIN per row of every dimension that can change a decode,
@@ -38,6 +38,10 @@ pub struct Filter {
     pub make: Option<String>,
     /// Model year; only schemas covering it are used.
     pub year: Option<i32>,
+    /// Lowest model year to accept (inclusive). Conjunct with `year`/`max_year`.
+    pub min_year: Option<i32>,
+    /// Highest model year to accept (inclusive). Conjunct with `year`/`min_year`.
+    pub max_year: Option<i32>,
     /// `VehicleType` row id (2 = passenger car, 7 = MPV, ...).
     pub vehicle_type: Option<i32>,
 }
@@ -367,6 +371,22 @@ pub fn generate(
         return Vec::new();
     }
 
+    // The three year fields collapse to one inclusive range: `year` is a
+    // one-year range, and all of them are conjuncts. An empty intersection
+    // (min > max, or a `year` outside the range) matches nothing.
+    let year_lo = filter
+        .min_year
+        .unwrap_or(i32::MIN)
+        .max(filter.year.unwrap_or(i32::MIN));
+    let year_hi = filter
+        .max_year
+        .unwrap_or(i32::MAX)
+        .min(filter.year.unwrap_or(i32::MAX));
+    if year_lo > year_hi {
+        return Vec::new();
+    }
+    let year_constrained = year_lo != i32::MIN || year_hi != i32::MAX;
+
     let mut rng = Rng(seed);
     // `n` is caller-supplied; a huge value would abort in the allocator before the
     // attempt bound can limit the work. The Vec grows as needed, so only cap the
@@ -388,31 +408,31 @@ pub fn generate(
         let w = candidates[rng.below(candidates.len())];
         let all = db.wmi_vinschema_for(w.id.to_native());
         // Unfiltered, every link qualifies, so draw straight from the slice; the
-        // filtered arm is the only one that needs a narrowed list to draw from.
-        let link = match filter.year {
-            None => {
-                if all.is_empty() {
-                    continue;
-                }
-                &all[rng.below(all.len())]
+        // constrained arm is the only one that needs a narrowed list to draw
+        // from — links whose band intersects the requested range.
+        let link = if year_constrained {
+            let links: Vec<_> = all
+                .iter()
+                .filter(|l| year_hi >= l.yearfrom.to_native() && year_lo <= year_to(l))
+                .collect();
+            if links.is_empty() {
+                continue;
             }
-            Some(y) => {
-                let links: Vec<_> = all
-                    .iter()
-                    .filter(|l| y >= l.yearfrom.to_native() && y <= year_to(l))
-                    .collect();
-                if links.is_empty() {
-                    continue;
-                }
-                links[rng.below(links.len())]
+            links[rng.below(links.len())]
+        } else {
+            if all.is_empty() {
+                continue;
             }
+            &all[rng.below(all.len())]
         };
         let year = match filter.year {
             Some(y) => y,
+            // The link's band clamped to the requested range is never inverted:
+            // the link filter above only kept bands that intersect it.
             None => sample_year(
                 &mut rng,
-                link.yearfrom.to_native(),
-                year_to(link),
+                link.yearfrom.to_native().max(year_lo),
+                year_to(link).min(year_hi),
                 current_year,
             ),
         };
@@ -430,8 +450,8 @@ pub fn generate(
         if !check_digit_agrees(db, &vin) {
             continue;
         }
-        // `year` and `make` are promises about the *decoded* VIN, and the draw
-        // alone cannot keep either. Year: position 10 is a 30-year cycle, so `L`
+        // The year range and `make` are promises about the *decoded* VIN, and
+        // the draw alone cannot keep either. Year: position 10 is a 30-year cycle, so `L`
         // is both 2020 and 1990; `fVinModelYear2` only resolves that from the VIN
         // when the WMI is a car/MPV/light truck (position 7 then picks the half),
         // everywhere else both halves get a decode pass and the best-of scoring —
@@ -441,11 +461,12 @@ pub fn generate(
         // So the only honest filter is to decode the candidate and keep it when
         // it really resolves to what was asked for; the WMI/schema it was drawn
         // from is a necessary condition, not a sufficient one.
-        if filter.year.is_some() || filter.make.is_some() {
+        if year_constrained || filter.make.is_some() {
             let full = crate::decode_full(db, &vin, now_micros, current_year, None);
-            if let Some(want) = filter.year {
-                if full.model_year != Some(want) {
-                    continue;
+            if year_constrained {
+                match full.model_year {
+                    Some(y) if (year_lo..=year_hi).contains(&y) => {}
+                    _ => continue,
                 }
             }
             if let Some(want) = filter.make.as_deref() {
@@ -1441,5 +1462,42 @@ mod corpus_tests {
         let unique: HashSet<&String> = a.iter().collect();
         assert_eq!(a.len(), 500);
         assert!(unique.len() > 495, "only {} unique of 500", unique.len());
+    }
+
+    #[test]
+    fn a_year_range_bounds_the_decoded_model_year_and_samples_inside_it() {
+        let Some(db) = embedded() else { return };
+        let now = crate::now_micros();
+        let f = Filter {
+            min_year: Some(2015),
+            max_year: Some(2018),
+            ..Default::default()
+        };
+        let vins = generate(db, 100, 3, &f, now, YEAR);
+        assert!(!vins.is_empty());
+        let mut seen: HashSet<i32> = HashSet::new();
+        for vin in &vins {
+            let y = crate::decode_full(db, vin, now, YEAR, None)
+                .model_year
+                .expect("a range-filtered VIN must decode to a model year");
+            assert!((2015..=2018).contains(&y), "{vin} decoded to {y}");
+            seen.insert(y);
+        }
+        assert!(seen.len() > 1, "a range should sample the band, not pin it");
+        // An empty intersection — inverted range, or a `year` outside it —
+        // matches nothing.
+        let inverted = Filter {
+            min_year: Some(2018),
+            max_year: Some(2015),
+            ..Default::default()
+        };
+        assert!(generate(db, 5, 3, &inverted, now, YEAR).is_empty());
+        let outside = Filter {
+            year: Some(2020),
+            min_year: Some(2015),
+            max_year: Some(2018),
+            ..Default::default()
+        };
+        assert!(generate(db, 5, 3, &outside, now, YEAR).is_empty());
     }
 }

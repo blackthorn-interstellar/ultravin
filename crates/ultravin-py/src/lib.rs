@@ -335,8 +335,9 @@ fn clock_from(now: &Bound<'_, PyDateTime>) -> PyResult<(i64, i32)> {
 /// Each VIN comes from a real WMI, a schema that WMI uses, and one of that
 /// schema's patterns, so it decodes to real attributes rather than to an
 /// unknown-manufacturer error. Filters are conjunctive; `vehicle_type` is a
-/// VehicleType row id (2 = passenger car, 7 = MPV), and `year` and `make` are
-/// what the VIN decodes to — not merely the position-10 character or the WMI's
+/// VehicleType row id (2 = passenger car, 7 = MPV), and `year` (exact) or
+/// `min_year`/`max_year` (an inclusive range) and `make` are what the VIN
+/// decodes to — not merely the position-10 character or the WMI's
 /// make links. Returns fewer than `n` when the filter matches nothing —
 /// including a `wmi` that is in the data but not published yet, which the
 /// decoder refuses to resolve and this refuses to emit. Every position a
@@ -350,7 +351,7 @@ fn clock_from(now: &Bound<'_, PyDateTime>) -> PyResult<(i64, i32)> {
 /// Unix epoch leaves every WMI's publication date in the future, so nothing is
 /// drawable and the result is empty rather than an error.
 #[pyfunction]
-#[pyo3(signature = (n, *, seed = 0, wmi = None, make = None, year = None, vehicle_type = None, now = None))]
+#[pyo3(signature = (n, *, seed = 0, wmi = None, make = None, year = None, min_year = None, max_year = None, vehicle_type = None, now = None))]
 // One parameter per documented keyword; collapsing them into a struct would only
 // move the argument list into Python.
 #[allow(clippy::too_many_arguments)]
@@ -361,6 +362,8 @@ fn generate<'py>(
     wmi: Option<String>,
     make: Option<String>,
     year: Option<i32>,
+    min_year: Option<i32>,
+    max_year: Option<i32>,
     vehicle_type: Option<i32>,
     now: Option<Bound<'py, PyDateTime>>,
 ) -> PyResult<Vec<String>> {
@@ -383,6 +386,8 @@ fn generate<'py>(
         wmi,
         make,
         year,
+        min_year,
+        max_year,
         vehicle_type,
     };
     Ok(py.detach(|| {

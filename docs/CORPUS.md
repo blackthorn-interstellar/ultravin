@@ -7,6 +7,7 @@ import ultravin
 
 ultravin.generate(100, seed=42)  # deterministic valid VINs
 ultravin.generate(50, make="HONDA", year=2020)  # filtered
+ultravin.generate(50, min_year=2015, max_year=2020)  # decoded model year in a range
 ultravin.cover_vins()  # ~164: every behaviour, once
 ultravin.sweep(["pattern"])  # ~545k: every pattern row
 ```

@@ -98,6 +98,24 @@ def test_generate_filters_by_year() -> None:
     assert {r["model_year"] for r in ultravin.decode_batch(vins)} == {2020}
 
 
+def test_generate_filters_by_year_range() -> None:
+    vins = ultravin.generate(60, seed=5, min_year=2015, max_year=2018)
+    assert len(vins) == 60
+    years = {r["model_year"] for r in ultravin.decode_batch(vins)}
+    assert years <= {2015, 2016, 2017, 2018}
+    # A range is a sample of the band, not a pin: 60 draws over 4 years should
+    # touch more than one of them.
+    assert len(years) > 1
+
+
+def test_generate_year_range_is_conjunct_with_year() -> None:
+    # `year` inside the range narrows to that year; outside it, nothing matches.
+    vins = ultravin.generate(5, seed=5, year=2016, min_year=2015, max_year=2018)
+    assert {r["model_year"] for r in ultravin.decode_batch(vins)} == {2016}
+    assert ultravin.generate(5, seed=5, year=2020, min_year=2015, max_year=2018) == []
+    assert ultravin.generate(5, seed=5, min_year=2018, max_year=2015) == []
+
+
 def test_generate_gives_up_on_a_year_no_vin_can_decode_to() -> None:
     # Position 10 cannot express a year past current+2: `fVinModelYear2` pulls
     # anything above that back 30 years, so a 2039 request decodes to 2009 and no
