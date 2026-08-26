@@ -187,6 +187,18 @@ jobs:
           else
             python scripts/transform_readme.py --target pypi
           fi
+      # i686 is the one row where rustc itself is a 32-bit process (native
+      # toolchain inside the manylinux2014_i686 container): fat LTO + one
+      # codegen unit over the 82MB embedded artifact intermittently overruns
+      # its ~3GB address space (rustc-LLVM out of memory). Loosen the profile
+      # for this one niche wheel — maturin-action forwards CARGO_* env into
+      # the container. The other 16 builds keep Cargo.toml's fat-LTO profile.
+      - name: Loosen release profile for 32-bit rustc (i686)
+        if: matrix.kind == 'linux' && matrix.target == 'x86'
+        shell: bash
+        run: |
+          echo "CARGO_PROFILE_RELEASE_LTO=off" >> "$GITHUB_ENV"
+          echo "CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16" >> "$GITHUB_ENV"
       - name: Build wheel
         uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1.51.0
         with:
