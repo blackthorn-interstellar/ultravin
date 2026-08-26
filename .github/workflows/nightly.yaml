@@ -140,7 +140,7 @@ jobs:
       contents: write
       pull-requests: write
       issues: write # gh label create
-      actions: write # dispatch ci.yaml/data-review.yaml, approve gated runs
+      actions: write # dispatch ci.yaml/data-review.yaml, approve gated ci/data-review/security runs
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -184,7 +184,7 @@ jobs:
           gh workflow run ci.yaml --ref deps/nightly
           gh workflow run data-review.yaml -f pr="$(gh pr view deps/nightly --json number --jq .number)"
           head=$(gh pr view deps/nightly --json headRefOid --jq .headRefOid)
-          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml") | .id'); do
+          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id'); do
             gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
               || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
           done
@@ -367,7 +367,7 @@ jobs:
       contents: write
       pull-requests: write
       issues: write # gh label create
-      actions: write # dispatch ci.yaml/data-review.yaml, approve gated runs
+      actions: write # dispatch ci.yaml/data-review.yaml, approve gated ci/data-review/security runs
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -438,7 +438,7 @@ jobs:
           gh workflow run ci.yaml --ref deps/nightly
           gh workflow run data-review.yaml -f pr="$(gh pr view deps/nightly --json number --jq .number)"
           head=$(gh pr view deps/nightly --json headRefOid --jq .headRefOid)
-          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml") | .id'); do
+          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id'); do
             gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
               || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
           done
@@ -707,7 +707,7 @@ jobs:
       contents: write
       pull-requests: write
       issues: write # gh label create
-      actions: write # dispatch ci.yaml/data-review.yaml, approve gated runs
+      actions: write # dispatch ci.yaml/data-review.yaml, approve gated ci/data-review/security runs
     outputs:
       # deps-merge judges the checks of THIS SHA, not of whatever `gh pr checks`
       # resolves the PR head to seconds after a push.
@@ -765,7 +765,7 @@ jobs:
           gh workflow run ci.yaml --ref deps/nightly
           gh workflow run data-review.yaml -f pr="$(gh pr view deps/nightly --json number --jq .number)"
           head=$(gh pr view deps/nightly --json headRefOid --jq .headRefOid)
-          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml") | .id'); do
+          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id'); do
             gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
               || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
           done
@@ -1337,7 +1337,7 @@ jobs:
       contents: write
       pull-requests: write
       issues: write # gh label create
-      actions: write # dispatch ci.yaml/data-review.yaml, approve gated runs
+      actions: write # dispatch ci.yaml/data-review.yaml, approve gated ci/data-review/security runs
     env:
       GH_TOKEN: ${{ github.token }}
       BRANCH: ${{ needs.fixes.outputs.branch }}
@@ -1418,7 +1418,7 @@ jobs:
           gh workflow run ci.yaml --ref "$BRANCH"
           gh workflow run data-review.yaml -f pr="$(gh pr view "$BRANCH" --json number --jq .number)"
           head=$(gh pr view "$BRANCH" --json headRefOid --jq .headRefOid)
-          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml") | .id'); do
+          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id'); do
             gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
               || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
           done
