@@ -13,9 +13,11 @@ deps    lockfile bump (7-day cooldown) ──▶ make check ──▶ deps-publi
                                         deps-fix (agent, banks a patch)
                                               ──▶ deps-fix-publish opens the PR
 
-        whoever delivered it, deps-watch (no token) then waits for its checks:
+        whoever delivered it, deps-watch (no token) then waits for its checks
+        (ci + data-review + the Security scan):
           green           ──▶ deps-merge: trusted-diff guard, MERGE (end to end)
           review rejected ──▶ deps-merge: label needs-human, stop
+          Security red    ──▶ deps-merge: label needs-human, stop
           red             ──▶ deps-remedy (agent, ONE attempt, banks a patch)
                               ──▶ deps-remedy-publish pushes + re-kicks
                               ──▶ deps-merge waits again: green MERGES,
@@ -81,6 +83,15 @@ packages are plausible transitive dependencies, version moves match the bump
 report. Nothing in the diff or report may read like an instruction to the
 automation. Uncertainty is a rejection.
 
+It is also **scanned**: `security.yaml`'s 15 jobs run on bot PRs and gate the
+deps merge. GitHub files their `pull_request` run as `action_required`, and an
+unapproved run executes nothing and contributes no check runs — so it would be
+invisible rather than red. Each publish job therefore polls (12 × 10s) until a
+Security run on the head SHA is actually moving, and `deps-merge` requires one
+to exist and have completed before it judges. A remediated SHA gets an explicit
+`gh workflow run security.yaml --ref deps/nightly`: only the publish jobs that
+*open* the PR get a scan for free, and a GITHUB_TOKEN push fires nothing.
+
 Whoever delivered the PR, `deps-watch` then waits for the dispatched runs and
 classifies the outcome — it holds no token and checks nothing out, so a red
 branch cannot reach anything privileged from there. If checks failed
@@ -89,11 +100,13 @@ the failing log (`gh run view --log-failed`), fix, verify with a local `make
 check`, commit. `deps-remedy-publish` replays that patch onto `deps/nightly`,
 pushes, and re-kicks the checks; `deps-merge` waits for them once more and
 merges on green. That second wait is **pinned to the SHA the publish job
-pushed** — it waits until the re-dispatched `ci` and `data-review` runs exist
-and have completed on that commit before judging its check runs, because
-`gh pr checks` resolves the PR head lazily and would otherwise read the
-pre-remediation SHA's already-concluded reds. Every timeout in it counts as
-red: it may block a merge on doubt, never wave one through. Still red after
+pushed** — it waits until the re-dispatched `ci`, `data-review` **and
+`security`** runs exist and have completed on that commit before judging its
+check runs, because `gh pr checks` resolves the PR head lazily and would
+otherwise read the pre-remediation SHA's already-concluded reds. A SHA that
+never gets a Security run never merges — the wait simply times out. Every
+timeout in it counts as red: it may block a merge on doubt, never wave one
+through. Still red after
 that one attempt — the agent never sees the re-run — labels the PR
 `needs-human` and ends the run red; the agent's diagnosis is in its commit
 message and the full session in the `nightly-deps-remedy-transcript` artifact.
@@ -105,6 +118,12 @@ That agent handles **mechanical** failures only. If the failing check is
 `needs-human` and comments why. The reviewer's verdict is a human's call,
 never something for the pipeline to work around.
 
+The same holds for the scanners. When `ci` and `data-review` are green on the
+head SHA and only `security.yaml` is red, `deps-watch` classifies the night as
+needs-human and `deps-merge` labels it, naming the failed scanner jobs. A
+Security run that is red *alongside* a mechanical failure changes no routing —
+remediation proceeds, and the re-wait re-judges the scan on the remediated SHA.
+
 Whenever the lane delivered a PR and then ended without merging it — for any
 reason, including the ones that skip `deps-merge` entirely (the agent banked
 nothing, the branch moved under it, the automation guard refused its patch,
@@ -112,12 +131,13 @@ the first wait timed out) — `deps-needs-human` labels the PR `needs-human` and
 comments with a link to the failing run. **An open `deps/nightly` PR without
 that label always means the night is still in progress or ended merged.**
 
-Once CI is green **and** the review approved, `deps-merge` **merges the PR
-itself** — mechanical or agent-fixed alike, end to end with no human in the
-path. That job runs no repository code and reads no CI logs, which is what
-lets it hold the write token. The single refusal beyond the review: a diff
-touching `.github/**` or the `Makefile` fails the merge step for a human,
-because the machinery must not be able to edit its own judges.
+Once CI is green **and** the review approved **and** the Security scan passed,
+`deps-merge` **merges the PR itself** — mechanical or agent-fixed alike, end
+to end with no human in the path. That job runs no repository code and reads
+no CI logs, which is what lets it hold the write token. The single refusal
+beyond the two verdicts: a diff touching `.github/**` or the `Makefile` fails
+the merge step for a human, because the machinery must not be able to edit its
+own judges.
 
 ## The fixes lane
 
@@ -179,6 +199,11 @@ fails the run for a human.
 - **`fixes` PR is a `[needs-human]` draft** — the parity agent could not close
   the cluster honestly; `target/fixes/pr-body.md` (now the PR body) has the
   diagnosis.
+- **deps PR labeled `needs-human`, Security red** — a scanner found something
+  in the bumped tree and `ci`/`data-review` are green. The comment names the
+  failing jobs. No agent touched it: scanner verdicts are human-owned. Triage,
+  push a fix and re-run (`gh workflow run security.yaml --ref deps/nightly`),
+  or close the PR and let tomorrow retry.
 - **deps PR labeled `needs-human`, `review-verdict` red** — the adversarial
   review gate rejected the bump's content; its findings comment says why. The
   pipeline deliberately stops rather than remediate a verdict. Address the

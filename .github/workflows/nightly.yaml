@@ -28,9 +28,11 @@
 # Secrets: XAI_API_KEY in the data-refresh environment (master-pinned);
 # without it the fixes lane skips and a broken deps bump fails for a human.
 # Merge policy: deps PRs merge themselves once CI is green AND the adversarial
-# gate in data-review.yaml has approved the lock diff; a review rejection stops
-# the lane for a human instead of feeding the remediation agent. Parity-fix PRs
-# are always left for a human.
+# gate in data-review.yaml has approved the lock diff AND the security.yaml
+# scanner suite is green on the head SHA. Both verdicts — the reviewer's and the
+# scanners' — stop the lane for a human instead of feeding the remediation
+# agent, which is scoped to mechanical failures. Parity-fix PRs are always left
+# for a human.
 # Same event model as data-refresh.yaml: GITHUB_TOKEN events don't trigger
 # workflows, so CI and the review gate are dispatched explicitly.
 # Runbook: docs/NIGHTLY.md.
@@ -184,10 +186,31 @@ jobs:
           gh workflow run ci.yaml --ref deps/nightly
           gh workflow run data-review.yaml -f pr="$(gh pr view deps/nightly --json number --jq .number)"
           head=$(gh pr view deps/nightly --json headRefOid --jq .headRefOid)
-          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id'); do
-            gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
-              || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
+          # Approve this SHA's gated runs, and keep asking. ci and data-review
+          # have the `gh workflow run` dispatches above as a fallback; security
+          # relies solely on its pull_request trigger, and a run gated at
+          # action_required executes no jobs, so it contributes ZERO check runs:
+          # a scan that registers a moment after the PR opens is never approved
+          # and is then invisible to every watcher — the gate vanishes silently
+          # rather than failing. So poll until a Security run is actually
+          # moving instead of asking once and hoping.
+          sec=0
+          for _ in $(seq 1 12); do
+            for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id'); do
+              gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
+                || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
+            done
+            # A gated run reads status=completed conclusion=action_required, so
+            # "moving" is the conclusion test, not the status one — queued,
+            # in_progress and finished all count, because approval races with
+            # whatever a human clicked a second earlier.
+            sec=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=$head&per_page=100" --jq '[.workflow_runs[] | select(.path == ".github/workflows/security.yaml") | select(.conclusion != "action_required")] | length' || echo 0)
+            if [ "${sec:-0}" -gt 0 ]; then break; fi
+            sleep 10
           done
+          if [ "${sec:-0}" -eq 0 ]; then
+            echo "::warning::no Security run has started on $head after 12 tries — the scan may be missing from this pull request"
+          fi
 
   # Repair lane, agent half: when the bump broke the build, a Grok agent
   # fixes the code to work with the bumped versions. This job BUILDS AND RUNS
@@ -438,18 +461,39 @@ jobs:
           gh workflow run ci.yaml --ref deps/nightly
           gh workflow run data-review.yaml -f pr="$(gh pr view deps/nightly --json number --jq .number)"
           head=$(gh pr view deps/nightly --json headRefOid --jq .headRefOid)
-          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id'); do
-            gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
-              || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
+          # Approve this SHA's gated runs, and keep asking. ci and data-review
+          # have the `gh workflow run` dispatches above as a fallback; security
+          # relies solely on its pull_request trigger, and a run gated at
+          # action_required executes no jobs, so it contributes ZERO check runs:
+          # a scan that registers a moment after the PR opens is never approved
+          # and is then invisible to every watcher — the gate vanishes silently
+          # rather than failing. So poll until a Security run is actually
+          # moving instead of asking once and hoping.
+          sec=0
+          for _ in $(seq 1 12); do
+            for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id'); do
+              gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
+                || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
+            done
+            # A gated run reads status=completed conclusion=action_required, so
+            # "moving" is the conclusion test, not the status one — queued,
+            # in_progress and finished all count, because approval races with
+            # whatever a human clicked a second earlier.
+            sec=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=$head&per_page=100" --jq '[.workflow_runs[] | select(.path == ".github/workflows/security.yaml") | select(.conclusion != "action_required")] | length' || echo 0)
+            if [ "${sec:-0}" -gt 0 ]; then break; fi
+            sleep 10
           done
+          if [ "${sec:-0}" -eq 0 ]; then
+            echo "::warning::no Security run has started on $head after 12 tries — the scan may be missing from this pull request"
+          fi
 
   # Whoever delivered the deps PR — the mechanical path or the fix agent —
   # this job owns the verdict on its checks: wait for them and classify the
   # outcome. It checks out nothing and runs no repository code (just `gh`
   # against the API) and holds no write token, so a red branch cannot influence
-  # anything privileged from here. Green -> deps-merge merges. Review-rejected
-  # -> deps-merge labels it for a human. Mechanically red -> deps-remedy gets
-  # exactly one keyless attempt.
+  # anything privileged from here. Green -> deps-merge merges. Review-rejected,
+  # or red on the Security scan alone -> deps-merge labels it for a human.
+  # Mechanically red -> deps-remedy gets exactly one keyless attempt.
   deps-watch:
     needs: [deps, deps-publish, deps-fix-publish]
     if: always() && needs.deps.outputs.changed == 'true' && (needs['deps-publish'].result == 'success' || needs['deps-fix-publish'].result == 'success')
@@ -460,9 +504,12 @@ jobs:
       pull-requests: read
       checks: read
       statuses: read # review-verdict is a commit status, not a check run
+      actions: read # classify the red by workflow run (which file failed)
     outputs:
       failed: ${{ steps.wait.outputs.failed }}
       rejected: ${{ steps.verdict.outputs.rejected }}
+      security_only: ${{ steps.secgate.outputs.security_only }}
+      security_failed: ${{ steps.secgate.outputs.security_failed }}
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -534,6 +581,56 @@ jobs:
           else
             echo "rejected=false" >> "$GITHUB_OUTPUT"
           fi
+      # Same doctrine, second judge: the Security suite (15 scanners) gates the
+      # deps merge, and a scanner finding is no more an agent's business than a
+      # review verdict is. The remediation agent's prompt is scoped to
+      # MECHANICAL failures; an agent editing the branch until the scanner
+      # relents is the machinery overruling its own judge. So classify which
+      # workflow is actually red: ONLY when ci and data-review are green on this
+      # SHA and security alone is red does the night end for a human (deps-merge
+      # labels and comments — this job holds no token to do it with). A Security
+      # run that is red ALONGSIDE a mechanical failure changes no routing:
+      # remediation proceeds, and deps-merge re-judges the scan on the
+      # remediated SHA.
+      - name: Was it only the Security scan that said no?
+        id: secgate
+        if: steps.wait.outputs.failed == 'true' && steps.verdict.outputs.rejected != 'true'
+        run: |
+          head=$(gh pr view deps/nightly --repo "${{ github.repository }}" --json headRefOid --jq .headRefOid)
+          # A run gated at action_required is not a failure — it is an approval
+          # that did not happen, it ran no jobs, and it contributed no check
+          # runs for the watch above to have judged. Drop it from both sides of
+          # this classification.
+          gh api "repos/${{ github.repository }}/actions/runs?head_sha=$head&per_page=100" --paginate \
+            --jq '.workflow_runs[]
+                  | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml")
+                  | select(.conclusion != "action_required")
+                  | "\(.path) \(.status) \(.conclusion // "none") \(.id)"' > "$RUNNER_TEMP/runs.txt"
+          cat "$RUNNER_TEMP/runs.txt"
+          # neutral/skipped are green to branch protection; anything else that is
+          # not a completed success is red, matching deps-merge's awk gate.
+          red=$(awk '$2 != "completed" || ($3 != "success" && $3 != "neutral" && $3 != "skipped") {print $1}' "$RUNNER_TEMP/runs.txt" | sort -u)
+          if [ "$red" != ".github/workflows/security.yaml" ]; then
+            echo "red workflows on $head: ${red:-<none>} — not a Security-only failure, remediation routing unchanged"
+            exit 0
+          fi
+          # Name the scanners that actually failed, so the PR comment says what
+          # to triage rather than "go look".
+          awk '$1 == ".github/workflows/security.yaml" && ($2 != "completed" || ($3 != "success" && $3 != "neutral" && $3 != "skipped")) {print $4}' \
+            "$RUNNER_TEMP/runs.txt" > "$RUNNER_TEMP/secruns.txt"
+          : > "$RUNNER_TEMP/secjobs.txt"
+          while read -r rid; do
+            gh api "repos/${{ github.repository }}/actions/runs/$rid/jobs?per_page=100" --paginate \
+              --jq '.jobs[] | select(.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral") | .name' \
+              < /dev/null >> "$RUNNER_TEMP/secjobs.txt" || true
+          done < "$RUNNER_TEMP/secruns.txt"
+          # Join on one line: a GITHUB_OUTPUT value is single-line. (Not
+          # `paste -d', '` — that is a delimiter LIST and would alternate comma
+          # and space between names.)
+          jobs=$(sort -u "$RUNNER_TEMP/secjobs.txt" | awk '{ printf "%s%s", sep, $0; sep = ", " } END { printf "\n" }')
+          echo "security_only=true" >> "$GITHUB_OUTPUT"
+          echo "security_failed=${jobs:-unknown}" >> "$GITHUB_OUTPUT"
+          echo "only the Security scan is red on $head (${jobs:-unknown}) — human triage, not remediation" >> "$GITHUB_STEP_SUMMARY"
 
   # Repair lane for red checks, agent half. This job reads the failing runs'
   # logs — the output of the just-bumped dependencies' own code, i.e. attacker-
@@ -546,7 +643,7 @@ jobs:
   # checks are still red, deps-merge labels the PR needs-human and ends red.
   deps-remedy:
     needs: deps-watch
-    if: needs['deps-watch'].outputs.failed == 'true' && needs['deps-watch'].outputs.rejected != 'true'
+    if: needs['deps-watch'].outputs.failed == 'true' && needs['deps-watch'].outputs.rejected != 'true' && needs['deps-watch'].outputs.security_only != 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
     # XAI_API_KEY lives in this environment, whose deployment branch
@@ -707,7 +804,7 @@ jobs:
       contents: write
       pull-requests: write
       issues: write # gh label create
-      actions: write # dispatch ci.yaml/data-review.yaml, approve gated ci/data-review/security runs
+      actions: write # dispatch ci.yaml/data-review.yaml/security.yaml, approve gated ci/data-review/security runs
     outputs:
       # deps-merge judges the checks of THIS SHA, not of whatever `gh pr checks`
       # resolves the PR head to seconds after a push.
@@ -762,13 +859,40 @@ jobs:
           gh pr edit deps/nightly --repo "${{ github.repository }}" \
             --body-file "$RUNNER_TEMP/pr-body.md" --add-label agent-fixed
           # GITHUB_TOKEN events don't trigger workflows; explicit dispatches do.
+          # Security too, and only here: the other publish jobs OPEN the PR,
+          # whose pull_request event does file a (gated) scan run, but this one
+          # only pushes — a GITHUB_TOKEN push fires nothing, so the remediated
+          # SHA would carry no scan at all and deps-merge would rightly refuse
+          # to merge it.
           gh workflow run ci.yaml --ref deps/nightly
           gh workflow run data-review.yaml -f pr="$(gh pr view deps/nightly --json number --jq .number)"
+          gh workflow run security.yaml --ref deps/nightly
           head=$(gh pr view deps/nightly --json headRefOid --jq .headRefOid)
-          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id'); do
-            gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
-              || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
+          # Approve this SHA's gated runs, and keep asking. ci and data-review
+          # have the `gh workflow run` dispatches above as a fallback; security
+          # relies solely on its pull_request trigger, and a run gated at
+          # action_required executes no jobs, so it contributes ZERO check runs:
+          # a scan that registers a moment after the PR opens is never approved
+          # and is then invisible to every watcher — the gate vanishes silently
+          # rather than failing. So poll until a Security run is actually
+          # moving instead of asking once and hoping.
+          sec=0
+          for _ in $(seq 1 12); do
+            for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id'); do
+              gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
+                || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
+            done
+            # A gated run reads status=completed conclusion=action_required, so
+            # "moving" is the conclusion test, not the status one — queued,
+            # in_progress and finished all count, because approval races with
+            # whatever a human clicked a second earlier.
+            sec=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=$head&per_page=100" --jq '[.workflow_runs[] | select(.path == ".github/workflows/security.yaml") | select(.conclusion != "action_required")] | length' || echo 0)
+            if [ "${sec:-0}" -gt 0 ]; then break; fi
+            sleep 10
           done
+          if [ "${sec:-0}" -eq 0 ]; then
+            echo "::warning::no Security run has started on $head after 12 tries — the scan may be missing from this pull request"
+          fi
 
   # The merge decision, and the lane's two loud exits. Like deps-watch this job
   # checks nothing out and runs no repository code — git is never invoked, only
@@ -781,6 +905,7 @@ jobs:
       always() && needs['deps-watch'].result == 'success' &&
       (needs['deps-watch'].outputs.failed != 'true' ||
       needs['deps-watch'].outputs.rejected == 'true' ||
+      needs['deps-watch'].outputs.security_only == 'true' ||
       needs['deps-remedy-publish'].result == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 70
@@ -809,6 +934,29 @@ jobs:
           EOF
           echo "::error::review-verdict rejected deps/nightly — human decision required, not remediation"
           exit 1
+      # deps-watch found the scanner suite red and everything else green. Same
+      # doctrine, same exit: a scanner's finding is a human's call, never
+      # something for the remediation agent to edit away.
+      - name: A red Security scan ends the night
+        if: needs['deps-watch'].outputs.security_only == 'true'
+        env:
+          FAILED: ${{ needs['deps-watch'].outputs.security_failed }}
+        run: |
+          gh label create needs-human --color B60205 --description "automation stopped — needs a human" || true
+          gh pr edit deps/nightly --repo "${{ github.repository }}" --add-label needs-human
+          {
+            printf 'The **Security** scan is red on this dependency bump — failing jobs: %s\n\n' "${FAILED:-unknown}"
+            cat <<'EOF'
+          `ci` and `data-review` are green, so this is not the mechanical fallout the nightly
+          remediation agent handles: a scanner verdict is a human's call, exactly like
+          `review-verdict`. Triage the finding, push a fix and re-run the scan
+          (`gh workflow run security.yaml --ref deps/nightly`), or close this PR and let
+          tomorrow retry from master.
+          EOF
+          } > "$RUNNER_TEMP/sec-comment.md"
+          gh pr comment deps/nightly --repo "${{ github.repository }}" --body-file "$RUNNER_TEMP/sec-comment.md"
+          echo "::error::the Security scan is red on deps/nightly (${FAILED:-unknown}) — human triage required, not remediation"
+          exit 1
       - name: Wait for the re-kicked checks
         id: rewait
         if: needs['deps-remedy-publish'].result == 'success'
@@ -824,21 +972,31 @@ jobs:
           # until the re-dispatched runs EXIST and have COMPLETED on this SHA,
           # then judge its check runs. Every timeout below is still_red — this
           # step may block a merge on doubt, never wave one through.
+          #
+          # security.yaml is required here EXPLICITLY, not left to whatever
+          # happens to be in the rollup: the scan is a deliberate merge gate, so
+          # a SHA that never got one must not merge. Waiting for the run to
+          # exist and complete is what makes the awk gate below — which reads
+          # every check run on the commit — actually judge the scanner's jobs.
+          # A run gated at action_required ran nothing and contributes no check
+          # runs, so it does not count as having appeared.
           deadline=$(( $(date +%s) + 2400 ))
           while :; do
             gh api "repos/$REPO/actions/runs?head_sha=$SHA&per_page=100" \
               --jq '.workflow_runs[]
-                    | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml")
+                    | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml")
+                    | select(.conclusion != "action_required")
                     | "\(.path) \(.status)"' > "$RUNNER_TEMP/runs.txt" || true
             n_ci=$(grep -c 'ci\.yaml' "$RUNNER_TEMP/runs.txt" || true)
             n_review=$(grep -c 'data-review\.yaml' "$RUNNER_TEMP/runs.txt" || true)
+            n_security=$(grep -c 'security\.yaml' "$RUNNER_TEMP/runs.txt" || true)
             n_open=$(grep -vc ' completed$' "$RUNNER_TEMP/runs.txt" || true)
-            if [ "$n_ci" -gt 0 ] && [ "$n_review" -gt 0 ] && [ "$n_open" -eq 0 ]; then
+            if [ "$n_ci" -gt 0 ] && [ "$n_review" -gt 0 ] && [ "$n_security" -gt 0 ] && [ "$n_open" -eq 0 ]; then
               break
             fi
             if [ "$(date +%s)" -ge "$deadline" ]; then
               echo "still_red=true" >> "$GITHUB_OUTPUT"
-              echo "::error::the re-kicked runs never completed on $SHA (ci: $n_ci, data-review: $n_review, still open: $n_open)"
+              echo "::error::the re-kicked runs never completed on $SHA (ci: $n_ci, data-review: $n_review, security: $n_security, still open: $n_open)"
               cat "$RUNNER_TEMP/runs.txt"
               exit 0
             fi
@@ -1427,7 +1585,28 @@ jobs:
           gh workflow run ci.yaml --ref "$BRANCH"
           gh workflow run data-review.yaml -f pr="$(gh pr view "$BRANCH" --json number --jq .number)"
           head=$(gh pr view "$BRANCH" --json headRefOid --jq .headRefOid)
-          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id'); do
-            gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
-              || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
+          # Approve this SHA's gated runs, and keep asking. ci and data-review
+          # have the `gh workflow run` dispatches above as a fallback; security
+          # relies solely on its pull_request trigger, and a run gated at
+          # action_required executes no jobs, so it contributes ZERO check runs:
+          # a scan that registers a moment after the PR opens is never approved
+          # and is then invisible to every watcher — the gate vanishes silently
+          # rather than failing. So poll until a Security run is actually
+          # moving instead of asking once and hoping.
+          sec=0
+          for _ in $(seq 1 12); do
+            for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id'); do
+              gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
+                || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
+            done
+            # A gated run reads status=completed conclusion=action_required, so
+            # "moving" is the conclusion test, not the status one — queued,
+            # in_progress and finished all count, because approval races with
+            # whatever a human clicked a second earlier.
+            sec=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=$head&per_page=100" --jq '[.workflow_runs[] | select(.path == ".github/workflows/security.yaml") | select(.conclusion != "action_required")] | length' || echo 0)
+            if [ "${sec:-0}" -gt 0 ]; then break; fi
+            sleep 10
           done
+          if [ "${sec:-0}" -eq 0 ]; then
+            echo "::warning::no Security run has started on $head after 12 tries — the scan may be missing from this pull request"
+          fi
