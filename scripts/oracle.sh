@@ -11,6 +11,8 @@ POOL="oracle oracle2 oracle3 oracle4 oracle5"
 
 usage() {
   echo "usage: scripts/oracle.sh {up|load <dump>|decode <VIN>|psql [args]|down|pool-up|pool-load <dump>|pool-down}" >&2
+  echo "  down       remove just \$ULTRAVIN_ORACLE_SVC (default: oracle)" >&2
+  echo "  pool-down  DESTROY ALL FIVE oracles and their data" >&2
   exit 1
 }
 
@@ -52,7 +54,9 @@ cmd="${1:-}"; shift || true
 case "$cmd" in
   up)
     docker compose up -d --wait "$SVC"
-    echo "oracle ready on localhost:55432 (db=vpic, user=postgres)"
+    # Ask compose for the binding rather than hardcoding it: $SVC selects any pool
+    # member and they are on 55432-55436 (see docker-compose.yml).
+    echo "$SVC ready on $(docker compose port "$SVC" 5432) (db=vpic, user=postgres)"
     ;;
   load)
     dump="${1:?$(usage)}"
@@ -75,7 +79,12 @@ case "$cmd" in
     docker compose exec -T "$SVC" psql -U postgres -d vpic "$@"
     ;;
   down)
-    docker compose down -v
+    # Scoped to $SVC, deliberately. This used to be a bare `docker compose down -v`,
+    # which tears down all five pool members — so stopping one probe oracle threw
+    # away the whole loaded pool and cost a multi-minute reload. `rm -sfv` stops and
+    # removes exactly this service's container plus its anonymous volumes, and
+    # cannot reach the others. `pool-down` is the way to destroy everything.
+    docker compose rm -sfv "$SVC"
     ;;
   pool-up)
     docker compose up -d --wait $POOL
@@ -101,6 +110,9 @@ case "$cmd" in
     done
     ;;
   pool-down)
+    # DESTROYS ALL FIVE ORACLES and their data. Reloading the pool is a
+    # multi-minute `make oracle-pool-load`. Use `down` for a single service.
+    echo "tearing down ALL FIVE oracles and their data (reload: make oracle-pool-load DUMP=...)" >&2
     docker compose down -v
     ;;
   *)

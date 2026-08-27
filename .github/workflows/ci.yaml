@@ -5,6 +5,14 @@ on:
     branches:
       - master
   workflow_dispatch:
+
+# Keyed on the event too, not just the ref: automation dispatches this workflow
+# and then blocks on the contexts that run produces, so a plain ref-keyed group
+# would let an ordinary push cancel the run something is still waiting on.
+concurrency:
+  group: ci-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 jobs:
@@ -53,7 +61,6 @@ jobs:
         enable-cache: false
     - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
     - run: uv sync --frozen --all-extras
-    - run: uv pip install ty
     - name: Typecheck
       run: uv run --frozen -- ty check
   # The embedded vpic.rkyv is gitignored, so the extension only decodes real VINs

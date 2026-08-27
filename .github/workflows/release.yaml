@@ -85,6 +85,9 @@ jobs:
       # Default features: the build a crates.io consumer gets (no arrow/parquet).
       - run: cargo clippy -p ultravin --all-targets -- -D warnings
       - run: cargo clippy -p ultravin --all-targets --no-default-features -- -D warnings
+      # Arrow without parquet: the columnar core alone. These four rows are the
+      # same set `make rust` runs — keep them in step.
+      - run: cargo clippy -p ultravin --all-targets --no-default-features --features arrow -- -D warnings
       - run: cargo test --workspace --exclude ultravin-py --all-features --locked
       # crates.io preflight: package + verify-build the crate exactly as the
       # `crate` job's publish will (placeholder artifact, default features), so a

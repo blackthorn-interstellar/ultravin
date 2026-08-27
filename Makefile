@@ -9,7 +9,6 @@ export UV_FROZEN := 1
 
 init: install-uv ## Setup a dev environment for local development.
 	uv sync --all-extras
-	uv tool install ruff@0.0.287
 	@echo -e "\nEnvironment setup! ✨ 🍰 ✨ 🐍 \n"
 	@echo -e "The following commands are available to run in the Makefile\n"
 	@make -s help
@@ -105,7 +104,7 @@ oracle-load:  ## Load a dump into the oracle (usage: make oracle-load DUMP=path.
 oracle-decode:  ## Decode a VIN via the oracle (usage: make oracle-decode VIN=...).
 	@bash scripts/oracle.sh decode "$(VIN)"
 
-oracle-down:  ## Stop and remove the oracle.
+oracle-down:  ## Stop and remove one oracle (ULTRAVIN_ORACLE_SVC, default oracle); leaves the rest of the pool up.
 	@bash scripts/oracle.sh down
 
 oracle-pool-up:  ## Start the 5-oracle parity pool (Docker).
@@ -113,6 +112,9 @@ oracle-pool-up:  ## Start the 5-oracle parity pool (Docker).
 
 oracle-pool-load:  ## Load a dump into all 5 oracles (usage: make oracle-pool-load DUMP=path.zip).
 	@bash scripts/oracle.sh pool-load "$(DUMP)"
+
+oracle-pool-down:  ## DESTROY all 5 oracles and their data (reloading is a multi-minute oracle-pool-load).
+	@bash scripts/oracle.sh pool-down
 
 campaign-start:  ## Launch the detached comprehensive campaign (survives this session; needs the loaded 5-oracle pool).
 	@uv run -- python scripts/spawn_campaign.py && sleep 2 && echo "campaign launched (detached). progress: make campaign-status"
@@ -128,7 +130,7 @@ campaign-stop:  ## Stop the campaign (supervisor + engines).
 install-uv:  # Install uv if not already installed
 	@if ! uv --help >/dev/null 2>&1; then \
 		echo "Installing uv..."; \
-		wget -qO- https://astral.sh/uv/install.sh | sh; \
+		curl -LsSf https://astral.sh/uv/install.sh | sh; \
 		echo -e "\033[0;32m ✔️  uv installed \033[0m"; \
 	fi
 
