@@ -5,7 +5,7 @@
 #   SAST    CodeQL (python + rust + actions), Semgrep community
 #   Secrets gitleaks, TruffleHog (verified only), Trivy secret mode
 #   Supply  OpenSSF Scorecard, zizmor (Actions), actionlint
-#   Optional Snyk (runs only when SNYK_TOKEN is set in repo secrets)
+#   Optional Snyk (master refs only, and only when SNYK_TOKEN is set)
 #
 # Every tool here is free to run on this repo. Note the distinction for
 # gitleaks: the MIT-licensed binary is free for everyone, but the official
@@ -14,8 +14,8 @@
 # Trivy, CodeQL, Semgrep, Scorecard, and Snyk upload SARIF to GitHub Code
 # Scanning (Security tab); every other job — gitleaks included — reports in the
 # job log only. Every job hard-fails on a finding, with no soft-fail left in the
-# file: Snyk skips green without a token, but once one is set it gates like the
-# rest, on tool errors as well as findings.
+# file: Snyk skips green off master or without a token, but wherever it does run
+# it gates like the rest, on tool errors as well as findings.
 name: Security
 
 on:
@@ -336,8 +336,18 @@ jobs:
   # ─── Optional commercial (free tier) ───────────────────────────────────
   snyk:
     name: sca+sast (snyk)
-    # Free plan works. Job-level `if` cannot read secrets (GitHub context rule),
-    # so we always schedule the job and no-op when SNYK_TOKEN is unset. With the
+    # master only: the token must never share a VM with untrusted install code.
+    # Snyk's pip mode resolves versions from an INSTALLED environment, so this
+    # job has to `uv pip install` the tree's locked closure — which executes
+    # every package's build backend. Step-scoping SNYK_TOKEN is not a boundary
+    # (a same-VM process reads a later step's env, and an installed package owns
+    # the scanned interpreter's startup via .pth), and job-level `if` cannot
+    # read secrets, so the REF is the gate: push/schedule/dispatch on master,
+    # never a pull_request merge ref or a dispatch on a bot branch — nightly.yaml
+    # auto-approves the gated runs on those. Fork PRs carry no secrets either
+    # way. PRs keep pip-audit/osv/cargo-audit/trivy; snyk lands post-merge.
+    #
+    # Free plan works; the steps still no-op when SNYK_TOKEN is unset. With the
     # token present it's a hard gate like every other scanner: snyk exits 1 on
     # findings and 2/3 on tool errors, and all of those now fail the job. They
     # used to be swallowed by per-step continue-on-error, which rendered this
@@ -347,6 +357,7 @@ jobs:
     # If that ever gets turned off the step exits 2 with SNYK-CODE-0005 ("Snyk
     # Code is not enabled for the current Organization") and this job goes red —
     # a real prerequisite to restore, not flake to retry away.
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     permissions:
       contents: read

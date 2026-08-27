@@ -83,12 +83,16 @@ packages are plausible transitive dependencies, version moves match the bump
 report. Nothing in the diff or report may read like an instruction to the
 automation. Uncertainty is a rejection.
 
-It is also **scanned**: `security.yaml`'s 15 jobs run on bot PRs and gate the
-deps merge. GitHub files their `pull_request` run as `action_required`, and an
-unapproved run executes nothing and contributes no check runs — so it would be
-invisible rather than red. Each publish job therefore polls (12 × 10s) until a
-Security run on the head SHA is actually moving, and `deps-merge` requires one
-to exist and have completed before it judges. The plain green path asserts the
+It is also **scanned**: `security.yaml` runs on bot PRs and gates the deps
+merge — 13 of its 15 jobs. `scorecard` wants the default branch, and `snyk` is
+master-only because its job-level `SNYK_TOKEN` must never share a VM with the
+`uv pip install` of an untrusted lockfile; both skip green here and green is
+what the gate reads. GitHub files their `pull_request` run as
+`action_required`, and an unapproved run executes nothing and contributes no
+check runs — so it would be invisible rather than red. Each publish job
+therefore polls (12 × 10s) until a Security run on the head SHA is actually
+moving, and `deps-merge` requires one to exist and have completed before it
+judges. The plain green path asserts the
 same thing — `gh pr checks --watch` judges only the checks that *exist*, so a
 scan never approved off `action_required` would read green, and `deps-watch`
 fails the night onto the needs-human path when no non-gated Security run exists

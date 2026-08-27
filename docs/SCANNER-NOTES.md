@@ -203,7 +203,9 @@ Rather than annotate 19 lines, `.snyk` excludes `scripts/**` from Snyk Code:
 none of it is published (see the framing above), and it has no untrusted input
 to protect. With the noise gone, both Snyk steps in `security.yaml` now gate at
 `--severity-threshold=medium`, so a genuine medium finding in shipped code
-fails CI instead of sitting on a dashboard.
+fails CI instead of sitting on a dashboard. That job is ref-gated to `master`
+— its `SNYK_TOKEN` must not share a runner with the `uv pip install` of an
+untrusted lockfile — so it gates post-merge, not on the pull request.
 
 ## l. Codex cloud-scan batch, 2026-08-23 (five findings)
 
