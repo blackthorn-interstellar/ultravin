@@ -258,14 +258,33 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          branch="answerkey/$MONTH"
+          # Root the branch at LIVE master, not this run's pinned checkout: a
+          # .github/workflows/** commit landing on master during the ~6h build
+          # leaves the pinned base holding an older copy of the automation, and
+          # GitHub refuses that branch push as a workflow update the
+          # GITHUB_TOKEN has no `workflows` scope for. Granting that scope is
+          # not the fix; run 33049223812 threw away a full key build this way.
+          # FETCH_HEAD, not origin/master: checkout may configure a narrow
+          # refspec, so the tracking ref is not reliably the live tip.
+          #
+          # The pin is a working-tree change from the step above (untracked on
+          # a month's first run), so park it across the switch: leaving it in
+          # place makes the switch refuse outright if master's own
+          # tests/answerkey.json moved in the meantime.
+          cp tests/answerkey.json "$RUNNER_TEMP/answerkey.json"
+          rm -f tests/answerkey.json
+          git fetch origin master
+          git checkout -B "$branch" FETCH_HEAD
+          cp "$RUNNER_TEMP/answerkey.json" tests/answerkey.json
           # Stage before diffing: the pin is untracked on its first run, and
-          # `git diff` says nothing about a file git has never seen.
+          # `git diff` says nothing about a file git has never seen. The
+          # comparison is against live master now, so a pin that landed there
+          # mid-run is a no-op rather than an empty commit.
           git add tests/answerkey.json
           git diff --cached --quiet -- tests/answerkey.json && {
             echo "pin unchanged"; exit 0;
           }
-          branch="answerkey/$MONTH"
-          git checkout -B "$branch"
           git commit -m "test: pin the $MONTH answer key"
           git push -f origin "$branch"
           if [ "$(gh pr list --head "$branch" --state open --json number --jq length)" = "0" ]; then
