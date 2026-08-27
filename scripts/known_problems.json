@@ -2142,6 +2142,236 @@
       "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
     },
     {
+      "vin": "JKAAFCL12SDAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKA, 2025) cell is missing characters the pattern rows for that WMI-year still allow — it is stale at position 11 (scripts/stale_cache_cells.json) — so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. This is the *restrictive* direction of the defect: the cache omits position 11's 'D', so the oracle's 2025 pass takes a correction code it has not earned, loses the best-of scoring to its own 1995 pass, and the whole decode resolves to a different vehicle; ultravin recomputes the charset, finds the position clean, and keeps 2025. The stale cell is therefore keyed by ultravin's model year, not the oracle's — the mirror image of the permissive members of this class. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKA, 2025) pos 11 = 'ABJT' vs recomputed 'ABDJT' — the cache is missing 'D', which pattern rows covering that year do allow; deleting the cell's 66 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 2025, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKACJ2RA1SDAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKA, 2025) cell is missing characters the pattern rows for that WMI-year still allow — it is stale at position 11 (scripts/stale_cache_cells.json) — so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. This is the *restrictive* direction of the defect: the cache omits position 11's 'D', so the oracle's 2025 pass takes a correction code it has not earned, loses the best-of scoring to its own 1995 pass, and the whole decode resolves to a different vehicle; ultravin recomputes the charset, finds the position clean, and keeps 2025. The stale cell is therefore keyed by ultravin's model year, not the oracle's — the mirror image of the permissive members of this class. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKA, 2025) pos 11 = 'ABJT' vs recomputed 'ABDJT' — the cache is missing 'D', which pattern rows covering that year do allow; deleting the cell's 66 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 2025, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKACTDGC9SDAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKA, 2025) cell is missing characters the pattern rows for that WMI-year still allow — it is stale at position 11 (scripts/stale_cache_cells.json) — so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. This is the *restrictive* direction of the defect: the cache omits position 11's 'D', so the oracle's 2025 pass takes a correction code it has not earned, loses the best-of scoring to its own 1995 pass, and the whole decode resolves to a different vehicle; ultravin recomputes the charset, finds the position clean, and keeps 2025. The stale cell is therefore keyed by ultravin's model year, not the oracle's — the mirror image of the permissive members of this class. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKA, 2025) pos 11 = 'ABJT' vs recomputed 'ABDJT' — the cache is missing 'D', which pattern rows covering that year do allow; deleting the cell's 66 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 2025, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKACTF217SDAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKA, 2025) cell is missing characters the pattern rows for that WMI-year still allow — it is stale at position 11 (scripts/stale_cache_cells.json) — so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. This is the *restrictive* direction of the defect: the cache omits position 11's 'D', so the oracle's 2025 pass takes a correction code it has not earned, loses the best-of scoring to its own 1995 pass, and the whole decode resolves to a different vehicle; ultravin recomputes the charset, finds the position clean, and keeps 2025. The stale cell is therefore keyed by ultravin's model year, not the oracle's — the mirror image of the permissive members of this class. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKA, 2025) pos 11 = 'ABJT' vs recomputed 'ABDJT' — the cache is missing 'D', which pattern rows covering that year do allow; deleting the cell's 66 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 2025, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKAENED14SDAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKA, 2025) cell is missing characters the pattern rows for that WMI-year still allow — it is stale at position 11 (scripts/stale_cache_cells.json) — so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. This is the *restrictive* direction of the defect: the cache omits position 11's 'D', so the oracle's 2025 pass takes a correction code it has not earned, loses the best-of scoring to its own 1995 pass, and the whole decode resolves to a different vehicle; ultravin recomputes the charset, finds the position clean, and keeps 2025. The stale cell is therefore keyed by ultravin's model year, not the oracle's — the mirror image of the permissive members of this class. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKA, 2025) pos 11 = 'ABJT' vs recomputed 'ABDJT' — the cache is missing 'D', which pattern rows covering that year do allow; deleting the cell's 66 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 2025, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKAEREDA8MCAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKA, 2021) cell has no row at all for position 11 while vpic.fExtractValidCharsPerWmiYear over the same dump's pattern rows yields 'ABDJ' there — the cell is stale at positions 9, 11 (scripts/stale_cache_cells.json), which records exactly that absence. This is the *omitted-row* direction of the defect: spvindecode_errorcode's scan reads an empty charset for a position the cache does not cover and validates nothing there, so the oracle's 2021 pass never flags position 11's 'C', takes no correction code, outranks its own 1991 pass in the best-of scoring, and the whole decode resolves to a different vehicle. The leniency comes from a missing row rather than an extra character. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKA, 2021) pos 11 = no cache row at all (the cell's 69 rows cover only positions 4-8) vs recomputed 'ABDJ' — position 11 is on that cell's stale list precisely because the recompute has it and the cache does not; deleting the cell's 69 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 1991, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKALZBC1XSDAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKA, 2025) cell is missing characters the pattern rows for that WMI-year still allow — it is stale at position 11 (scripts/stale_cache_cells.json) — so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. This is the *restrictive* direction of the defect: the cache omits position 11's 'D', so the oracle's 2025 pass takes a correction code it has not earned, loses the best-of scoring to its own 1995 pass, and the whole decode resolves to a different vehicle; ultravin recomputes the charset, finds the position clean, and keeps 2025. The stale cell is therefore keyed by ultravin's model year, not the oracle's — the mirror image of the permissive members of this class. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKA, 2025) pos 11 = 'ABJT' vs recomputed 'ABDJT' — the cache is missing 'D', which pattern rows covering that year do allow; deleting the cell's 66 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 2025, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKAZR2E10SDAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKA, 2025) cell is missing characters the pattern rows for that WMI-year still allow — it is stale at position 11 (scripts/stale_cache_cells.json) — so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. This is the *restrictive* direction of the defect: the cache omits position 11's 'D', so the oracle's 2025 pass takes a correction code it has not earned, loses the best-of scoring to its own 1995 pass, and the whole decode resolves to a different vehicle; ultravin recomputes the charset, finds the position clean, and keeps 2025. The stale cell is therefore keyed by ultravin's model year, not the oracle's — the mirror image of the permissive members of this class. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKA, 2025) pos 11 = 'ABJT' vs recomputed 'ABDJT' — the cache is missing 'D', which pattern rows covering that year do allow; deleting the cell's 66 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 2025, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKAZXCJ18MCAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKA, 2021) cell has no row at all for position 11 while vpic.fExtractValidCharsPerWmiYear over the same dump's pattern rows yields 'ABDJ' there — the cell is stale at positions 9, 11 (scripts/stale_cache_cells.json), which records exactly that absence. This is the *omitted-row* direction of the defect: spvindecode_errorcode's scan reads an empty charset for a position the cache does not cover and validates nothing there, so the oracle's 2021 pass never flags position 11's 'C', takes no correction code, outranks its own 1991 pass in the best-of scoring, and the whole decode resolves to a different vehicle. The leniency comes from a missing row rather than an extra character. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKA, 2021) pos 11 = no cache row at all (the cell's 69 rows cover only positions 4-8) vs recomputed 'ABDJ' — position 11 is on that cell's stale list precisely because the recompute has it and the cache does not; deleting the cell's 69 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 1991, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKAZXCK1XMCAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKA, 2021) cell has no row at all for position 11 while vpic.fExtractValidCharsPerWmiYear over the same dump's pattern rows yields 'ABDJ' there — the cell is stale at positions 9, 11 (scripts/stale_cache_cells.json), which records exactly that absence. This is the *omitted-row* direction of the defect: spvindecode_errorcode's scan reads an empty charset for a position the cache does not cover and validates nothing there, so the oracle's 2021 pass never flags position 11's 'C', takes no correction code, outranks its own 1991 pass in the best-of scoring, and the whole decode resolves to a different vehicle. The leniency comes from a missing row rather than an extra character. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKA, 2021) pos 11 = no cache row at all (the cell's 69 rows cover only positions 4-8) vs recomputed 'ABDJ' — position 11 is on that cell's stale list precisely because the recompute has it and the cache does not; deleting the cell's 69 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 1991, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKAZXVF12MCAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKA, 2021) cell has no row at all for position 11 while vpic.fExtractValidCharsPerWmiYear over the same dump's pattern rows yields 'ABDJ' there — the cell is stale at positions 9, 11 (scripts/stale_cache_cells.json), which records exactly that absence. This is the *omitted-row* direction of the defect: spvindecode_errorcode's scan reads an empty charset for a position the cache does not cover and validates nothing there, so the oracle's 2021 pass never flags position 11's 'C', takes no correction code, outranks its own 1991 pass in the best-of scoring, and the whole decode resolves to a different vehicle. The leniency comes from a missing row rather than an extra character. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKA, 2021) pos 11 = no cache row at all (the cell's 69 rows cover only positions 4-8) vs recomputed 'ABDJ' — position 11 is on that cell's stale list precisely because the recompute has it and the cache does not; deleting the cell's 69 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 1991, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKAZXVH16MCAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKA, 2021) cell has no row at all for position 11 while vpic.fExtractValidCharsPerWmiYear over the same dump's pattern rows yields 'ABDJ' there — the cell is stale at positions 9, 11 (scripts/stale_cache_cells.json), which records exactly that absence. This is the *omitted-row* direction of the defect: spvindecode_errorcode's scan reads an empty charset for a position the cache does not cover and validates nothing there, so the oracle's 2021 pass never flags position 11's 'C', takes no correction code, outranks its own 1991 pass in the best-of scoring, and the whole decode resolves to a different vehicle. The leniency comes from a missing row rather than an extra character. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKA, 2021) pos 11 = no cache row at all (the cell's 69 rows cover only positions 4-8) vs recomputed 'ABDJ' — position 11 is on that cell's stale list precisely because the recompute has it and the cache does not; deleting the cell's 69 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 1991, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKBAFEJ1XSDAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKB, 2025) cell is missing characters the pattern rows for that WMI-year still allow — it is stale at position 11 (scripts/stale_cache_cells.json) — so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. This is the *restrictive* direction of the defect: the cache omits position 11's 'D', so the oracle's 2025 pass takes a correction code it has not earned, loses the best-of scoring to its own 1995 pass, and the whole decode resolves to a different vehicle; ultravin recomputes the charset, finds the position clean, and keeps 2025. The stale cell is therefore keyed by ultravin's model year, not the oracle's — the mirror image of the permissive members of this class. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKB, 2025) pos 11 = 'ABJT' vs recomputed 'ABDJT' — the cache is missing 'D', which pattern rows covering that year do allow; deleting the cell's 69 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 2025, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKBAFSF10SDAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKB, 2025) cell is missing characters the pattern rows for that WMI-year still allow — it is stale at position 11 (scripts/stale_cache_cells.json) — so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. This is the *restrictive* direction of the defect: the cache omits position 11's 'D', so the oracle's 2025 pass takes a correction code it has not earned, loses the best-of scoring to its own 1995 pass, and the whole decode resolves to a different vehicle; ultravin recomputes the charset, finds the position clean, and keeps 2025. The stale cell is therefore keyed by ultravin's model year, not the oracle's — the mirror image of the permissive members of this class. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKB, 2025) pos 11 = 'ABJT' vs recomputed 'ABDJT' — the cache is missing 'D', which pattern rows covering that year do allow; deleting the cell's 69 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 2025, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKBBM0T17SDAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKB, 2025) cell is missing characters the pattern rows for that WMI-year still allow — it is stale at position 11 (scripts/stale_cache_cells.json) — so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. This is the *restrictive* direction of the defect: the cache omits position 11's 'D', so the oracle's 2025 pass takes a correction code it has not earned, loses the best-of scoring to its own 1995 pass, and the whole decode resolves to a different vehicle; ultravin recomputes the charset, finds the position clean, and keeps 2025. The stale cell is therefore keyed by ultravin's model year, not the oracle's — the mirror image of the permissive members of this class. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKB, 2025) pos 11 = 'ABJT' vs recomputed 'ABDJT' — the cache is missing 'D', which pattern rows covering that year do allow; deleting the cell's 69 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 2025, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKBBTLSAXSDAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKB, 2025) cell is missing characters the pattern rows for that WMI-year still allow — it is stale at position 11 (scripts/stale_cache_cells.json) — so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. This is the *restrictive* direction of the defect: the cache omits position 11's 'D', so the oracle's 2025 pass takes a correction code it has not earned, loses the best-of scoring to its own 1995 pass, and the whole decode resolves to a different vehicle; ultravin recomputes the charset, finds the position clean, and keeps 2025. The stale cell is therefore keyed by ultravin's model year, not the oracle's — the mirror image of the permissive members of this class. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKB, 2025) pos 11 = 'ABJT' vs recomputed 'ABDJT' — the cache is missing 'D', which pattern rows covering that year do allow; deleting the cell's 69 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 2025, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKBC6TYA6SDAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKB, 2025) cell is missing characters the pattern rows for that WMI-year still allow — it is stale at position 11 (scripts/stale_cache_cells.json) — so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. This is the *restrictive* direction of the defect: the cache omits position 11's 'D', so the oracle's 2025 pass takes a correction code it has not earned, loses the best-of scoring to its own 1995 pass, and the whole decode resolves to a different vehicle; ultravin recomputes the charset, finds the position clean, and keeps 2025. The stale cell is therefore keyed by ultravin's model year, not the oracle's — the mirror image of the permissive members of this class. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKB, 2025) pos 11 = 'ABJT' vs recomputed 'ABDJT' — the cache is missing 'D', which pattern rows covering that year do allow; deleting the cell's 69 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 2025, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKBCTDGC4SDAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKB, 2025) cell is missing characters the pattern rows for that WMI-year still allow — it is stale at position 11 (scripts/stale_cache_cells.json) — so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. This is the *restrictive* direction of the defect: the cache omits position 11's 'D', so the oracle's 2025 pass takes a correction code it has not earned, loses the best-of scoring to its own 1995 pass, and the whole decode resolves to a different vehicle; ultravin recomputes the charset, finds the position clean, and keeps 2025. The stale cell is therefore keyed by ultravin's model year, not the oracle's — the mirror image of the permissive members of this class. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKB, 2025) pos 11 = 'ABJT' vs recomputed 'ABDJT' — the cache is missing 'D', which pattern rows covering that year do allow; deleting the cell's 69 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 2025, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKBKXECCXSDAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKB, 2025) cell is missing characters the pattern rows for that WMI-year still allow — it is stale at position 11 (scripts/stale_cache_cells.json) — so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. This is the *restrictive* direction of the defect: the cache omits position 11's 'D', so the oracle's 2025 pass takes a correction code it has not earned, loses the best-of scoring to its own 1995 pass, and the whole decode resolves to a different vehicle; ultravin recomputes the charset, finds the position clean, and keeps 2025. The stale cell is therefore keyed by ultravin's model year, not the oracle's — the mirror image of the permissive members of this class. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKB, 2025) pos 11 = 'ABJT' vs recomputed 'ABDJT' — the cache is missing 'D', which pattern rows covering that year do allow; deleting the cell's 69 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 2025, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKBKXGMC7SDAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKB, 2025) cell is missing characters the pattern rows for that WMI-year still allow — it is stale at position 11 (scripts/stale_cache_cells.json) — so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. This is the *restrictive* direction of the defect: the cache omits position 11's 'D', so the oracle's 2025 pass takes a correction code it has not earned, loses the best-of scoring to its own 1995 pass, and the whole decode resolves to a different vehicle; ultravin recomputes the charset, finds the position clean, and keeps 2025. The stale cell is therefore keyed by ultravin's model year, not the oracle's — the mirror image of the permissive members of this class. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKB, 2025) pos 11 = 'ABJT' vs recomputed 'ABDJT' — the cache is missing 'D', which pattern rows covering that year do allow; deleting the cell's 69 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 2025, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKBLE8B15SDAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKB, 2025) cell is missing characters the pattern rows for that WMI-year still allow — it is stale at position 11 (scripts/stale_cache_cells.json) — so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. This is the *restrictive* direction of the defect: the cache omits position 11's 'D', so the oracle's 2025 pass takes a correction code it has not earned, loses the best-of scoring to its own 1995 pass, and the whole decode resolves to a different vehicle; ultravin recomputes the charset, finds the position clean, and keeps 2025. The stale cell is therefore keyed by ultravin's model year, not the oracle's — the mirror image of the permissive members of this class. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKB, 2025) pos 11 = 'ABJT' vs recomputed 'ABDJT' — the cache is missing 'D', which pattern rows covering that year do allow; deleting the cell's 69 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 2025, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKBVN2E13SDAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKB, 2025) cell is missing characters the pattern rows for that WMI-year still allow — it is stale at position 11 (scripts/stale_cache_cells.json) — so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. This is the *restrictive* direction of the defect: the cache omits position 11's 'D', so the oracle's 2025 pass takes a correction code it has not earned, loses the best-of scoring to its own 1995 pass, and the whole decode resolves to a different vehicle; ultravin recomputes the charset, finds the position clean, and keeps 2025. The stale cell is therefore keyed by ultravin's model year, not the oracle's — the mirror image of the permissive members of this class. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKB, 2025) pos 11 = 'ABJT' vs recomputed 'ABDJT' — the cache is missing 'D', which pattern rows covering that year do allow; deleting the cell's 69 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 2025, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "JKBZRCL15SDAA0000",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (JKB, 2025) cell is missing characters the pattern rows for that WMI-year still allow — it is stale at position 11 (scripts/stale_cache_cells.json) — so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. This is the *restrictive* direction of the defect: the cache omits position 11's 'D', so the oracle's 2025 pass takes a correction code it has not earned, loses the best-of scoring to its own 1995 pass, and the whole decode resolves to a different vehicle; ultravin recomputes the charset, finds the position clean, and keeps 2025. The stale cell is therefore keyed by ultravin's model year, not the oracle's — the mirror image of the permissive members of this class. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, JKB, 2025) pos 11 = 'ABJT' vs recomputed 'ABDJT' — the cache is missing 'D', which pattern rows covering that year do allow; deleting the cell's 69 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 2025, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
       "vin": "JYA0PA1W9VAAA0000",
       "kind": "deviation",
       "class": "stale-wmiyearvalidchars-cache",

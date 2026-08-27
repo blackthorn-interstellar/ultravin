@@ -212,6 +212,24 @@ port verified byte-equal to that function); the oracle reads the first. **When
 they disagree, the dump contradicts itself** — and only one of the two answers is
 consistent with the `pattern` rows the same file ships.
 
+The disagreement takes **three shapes**, and every registered member of this class
+is one of them. They differ only in which side of the diff the deciding position
+sits on, so the cell list enumerates all three identically — but the direction
+decides *which* year's cell is the defective one, so an entry's evidence has to
+name its shape:
+
+| shape | at the deciding position | effect on the oracle | defective cell keyed by |
+|---|---|---|---|
+| **permissive** | cache lists a character the recompute does not | accepts a character the pattern rows reject, so that pass takes no correction code | the oracle's model year |
+| **restrictive** | cache is missing a character the recompute has | penalizes a pass the pattern rows say is clean, so that pass loses | ultravin's model year |
+| **omitted-row** | cache has no row for the position at all | validates nothing there — an absent charset is not an empty one | the oracle's model year |
+
+The omitted-row shape is the one worth pausing on: `spvindecode_errorcode`'s scan
+does `if allowed then ... end if`, so a position the cache never wrote is not
+checked, which makes an absent row strictly *more* permissive than any extra
+character. The cell list records those positions on its `only_in_recompute` side,
+so they are enumerated exactly like the other two.
+
 (The exceptions subquery does not do what it reads like. The only WMI-named
 column of `WMIYearValidChars_CacheExceptions` is the quoted, upper-case `"WMI"`,
 so the unquoted `wmi` in the subquery matches nothing in its own `FROM` and
@@ -287,7 +305,7 @@ at, and the registry records it as each entry's `scope`:
    observation names no VIN position, so the cell list cannot excuse it; those
    VINs are registered individually (see §4).
 
-3. **The whole decode** (`clean-decode`, 161 VINs registered individually; the
+3. **The whole decode** (`clean-decode`, 184 VINs registered individually; the
    two worked through here are `MLHAE041XKA111111` and
    `JH2RD1613RA111111`). Same cells, but these VINs have an *inconclusive* model
    year — `fVinModelYear2` cannot choose between the two halves of position 10's
@@ -313,16 +331,29 @@ at, and the registry records it as each entry's `scope`:
    passes earns differs, and that comes from the charset.
 
    The 2026_08 answer key made the size of this sub-class visible for the first
-   time: **159 further `clean-decode` VINs**, spread over **16 cells** — `(JH2,
-   2019…2026)`, `(MLH, 2025)`, `(MLH, 2026)`, `(10T, 2024)`, `(2HJ, 2025)`,
-   `(3H1, 2025)`, `(5J7, 2025)`, `(JH1, 2025)`, `(JYA, 2027)` — every one of them
-   a position-10 30-year ambiguity resolved by the cache. Each was admitted only
-   after a machine check that the deciding position's character is in the cell's
-   *shipped* charset and not in `fExtractValidCharsPerWmiYear` over the same
-   dump, and that the cell is on `scripts/stale_cache_cells.json`; each entry's
-   `evidence` carries its own cell, position, and the two charsets. Emptying each
+   time: **182 further `clean-decode` VINs**, spread over **19 cells**, every one
+   of them a position-10 30-year ambiguity resolved by the cache. All three
+   shapes are represented:
+
+   - **permissive**, 159 VINs over 16 cells — `(JH2, 2019…2026)`, `(MLH, 2025)`,
+     `(MLH, 2026)`, `(10T, 2024)`, `(2HJ, 2025)`, `(3H1, 2025)`, `(5J7, 2025)`,
+     `(JH1, 2025)`, `(JYA, 2027)`. The MLH/JH2 walkthrough above is this shape.
+   - **restrictive**, 18 VINs over `(JKA, 2025)` and `(JKB, 2025)`, both stale at
+     position 11 with cache `ABJT` against recompute `ABDJT`. Each VIN carries
+     `D` there, so the oracle penalizes its own 2025 pass and falls back to 1995
+     while ultravin keeps 2025 — the flip runs the *other* way, and the
+     defective cell is the one keyed by ultravin's year.
+   - **omitted-row**, 5 VINs on `(JKA, 2021)`, whose 69 rows cover only positions
+     4–8. The recompute yields `ABDJ` at position 11; each VIN carries `C`, which
+     ultravin rejects and the oracle never looks at.
+
+   Each was admitted only after a machine check appropriate to its shape — the
+   deciding position's character on the expected side of the cache/recompute
+   diff, and the cell on `scripts/stale_cache_cells.json` — and each entry's
+   `evidence` names its shape, its cell, its position, and the charsets. The
+   decisive test is shape-independent and was run on every one: emptying the
    cell in a rolled-back transaction made the oracle reproduce ultravin
-   byte-for-byte on **159/159**, cache restored to its shipped 8,809,229 rows.
+   byte-for-byte on **182/182**, cache restored to its shipped 8,809,229 rows.
 
 **Per-VIN registration for this class covers only the `clean-decode` members.** A
 divergence is adjudicated against the cell list by `scripts/parity/stale_cache.py`
