@@ -236,8 +236,8 @@ result — so the list is always this month's dump; the full report rides out as
 run's `data-refresh-report` artifact. A month-over-month change in the list is the
 expected signal, not a failure — it self-documents in the refresh PR diff.
 
-Two cells worked through, both of them the ones the registered `clean-decode`
-VINs land on:
+Two cells worked through, the ones the first two registered `clean-decode` VINs
+land on:
 
 | cell (`wmi`, `year`) | position | cache | recomputed from `pattern` | stale extras |
 |---|---:|---|---|---|
@@ -287,7 +287,8 @@ at, and the registry records it as each entry's `scope`:
    observation names no VIN position, so the cell list cannot excuse it; those
    VINs are registered individually (see §4).
 
-3. **The whole decode** (`clean-decode`, `MLHAE041XKA111111` and
+3. **The whole decode** (`clean-decode`, 161 VINs registered individually; the
+   two worked through here are `MLHAE041XKA111111` and
    `JH2RD1613RA111111`). Same cells, but these VINs have an *inconclusive* model
    year — `fVinModelYear2` cannot choose between the two halves of position 10's
    30-year cycle, so both years get a decode pass and the best-of scoring picks
@@ -310,6 +311,18 @@ at, and the registry records it as each entry's `scope`:
    Note what is *not* different: both engines consider exactly the same two
    candidate years and run a pass for each. Only the error code one of those
    passes earns differs, and that comes from the charset.
+
+   The 2026_08 answer key made the size of this sub-class visible for the first
+   time: **159 further `clean-decode` VINs**, spread over **16 cells** — `(JH2,
+   2019…2026)`, `(MLH, 2025)`, `(MLH, 2026)`, `(10T, 2024)`, `(2HJ, 2025)`,
+   `(3H1, 2025)`, `(5J7, 2025)`, `(JH1, 2025)`, `(JYA, 2027)` — every one of them
+   a position-10 30-year ambiguity resolved by the cache. Each was admitted only
+   after a machine check that the deciding position's character is in the cell's
+   *shipped* charset and not in `fExtractValidCharsPerWmiYear` over the same
+   dump, and that the cell is on `scripts/stale_cache_cells.json`; each entry's
+   `evidence` carries its own cell, position, and the two charsets. Emptying each
+   cell in a rolled-back transaction made the oracle reproduce ultravin
+   byte-for-byte on **159/159**, cache restored to its shipped 8,809,229 rows.
 
 **Per-VIN registration for this class covers only the `clean-decode` members.** A
 divergence is adjudicated against the cell list by `scripts/parity/stale_cache.py`
@@ -351,9 +364,9 @@ legitimately stale. Three controls stand against that, none of them this list:
 What the list itself contributes is narrowness, not proof: the excuse it buys is
 bounded to the five elements the cache feeds, on the one cell that VIN's decode
 reads, at a VIN position that cell is actually stale at. A defect that reaches
-further is outside the class by construction. That is why the two `clean-decode`
-VINs above stay registered individually: their whole decode changes, which no
-cell list may excuse.
+further is outside the class by construction. That is why the `clean-decode`
+members stay registered individually: their whole decode changes, which no cell
+list may excuse.
 
 **Decision: keep ultravin's source-consistent computation.** Matching the oracle
 here would mean shipping the 8.8M-row cache — or its delta — purely to reproduce
