@@ -185,12 +185,144 @@ def test_other_elements_keep_their_order() -> None:
     assert normalize.collation_agnostic(rows) == rows
 
 
-def _write_key(path: Path, pairs: list[tuple[str, str]]) -> Path:
+# ------------------------------------------------- the build-time deviation excuse
+
+
+def _canonical(vin: str) -> list[dict]:
+    """ultravin's own canonical rows for a VIN — a stand-in for the oracle's."""
+    return normalize.ultravin_rows(ultravin.decode(vin, full=True))
+
+
+def _diverging(vin: str) -> list[dict]:
+    """Rows an oracle would have to have produced for the two to disagree."""
+    rows = _canonical(vin)
+    return [{**rows[0], "value": "SOMETHING ELSE"}, *rows[1:]]
+
+
+VIN = "1HGCM82633A004352"
+
+
+def test_agreement_freezes_the_oracles_hash() -> None:
+    rows = _canonical(VIN)
+    assert answerkey.answer_for(VIN, rows) == (answerkey.ultravin_hashes([VIN])[0], True)
+
+
+def test_an_unexplained_divergence_freezes_the_oracles_hash_and_is_counted() -> None:
+    # It will fail `verify`, which is the point: nothing excuses it.
+    rows = _diverging(VIN)
+    digest, agreed = answerkey.answer_for(VIN, rows)
+    assert not agreed
+    assert digest == answerkey.hash_rows(rows)
+    assert not digest.startswith(answerkey.DEVIATION)
+
+
+def test_a_documented_divergence_freezes_ultravins_own_hash(monkeypatch) -> None:
+    # The classification itself is `stale_cache`'s to make (and is tested there);
+    # what the key owes is to pin *our* answer when it says yes, not the oracle's.
+    monkeypatch.setattr(answerkey.stale_cache, "is_expected_divergence", lambda *a, **k: True)
+    digest, agreed = answerkey.answer_for(VIN, _diverging(VIN))
+    assert not agreed
+    assert digest == answerkey.DEVIATION + answerkey.ultravin_hashes([VIN])[0]
+
+
+def test_a_per_vin_known_problem_is_never_turned_into_a_class_deviation(monkeypatch) -> None:
+    # scripts/known_problems.json registers those VINs one by one and `verify`
+    # skips them; the class excuse must not quietly re-file them as its own.
+    monkeypatch.setattr(answerkey.stale_cache, "is_expected_divergence", lambda *a, **k: True)
+    vin = min(answerkey.KNOWN_DEVIATIONS)
+    digest, agreed = answerkey.answer_for(vin, _diverging(vin))
+    assert agreed
+    assert not digest.startswith(answerkey.DEVIATION)
+
+
+def test_the_classifier_sees_the_oracles_rows(monkeypatch) -> None:
+    # Without them `is_expected_divergence` cannot run its second-order model-year
+    # test at all and fails closed on every year flip.
+    seen: list = []
+    monkeypatch.setattr(
+        answerkey.stale_cache,
+        "is_expected_divergence",
+        lambda *a, **k: seen.append(k.get("oracle_rows")) or False,
+    )
+    rows = _diverging(VIN)
+    answerkey.answer_for(VIN, rows)
+    assert seen == [rows]
+
+
+def _write_key(path: Path, pairs: list[tuple[str, str]], **header) -> Path:
     with path.open("w") as fh:
-        fh.write(json.dumps({"month": "m", "artifact_blake3": "art"}) + "\n")
+        fh.write(json.dumps({"month": "m", "artifact_blake3": "art", **header}) + "\n")
         for vin, digest in pairs:
             fh.write(json.dumps([vin, digest]) + "\n")
     return path
+
+
+def _real_key(path: Path, pairs: list[tuple[str, str]]) -> Path:
+    """A key `verify` will accept as built against the data this tree pins."""
+    manifest = json.loads(answerkey.MANIFEST.read_text())
+    return _write_key(path, pairs, month=manifest["month"], artifact_blake3=manifest["artifact_blake3"])
+
+
+def test_read_key_merges_the_trailer_tallies_into_the_header(tmp_path: Path) -> None:
+    # The build only knows how many divergences it excused once the pool has
+    # drained, so it writes them in a trailer; both halves describe one shard.
+    key = tmp_path / "key.jsonl"
+    with key.open("w") as fh:
+        fh.write(json.dumps({"month": "m", "artifact_blake3": "art", "count": 2}) + "\n")
+        fh.write(json.dumps(["V1", "h1"]) + "\n")
+        fh.write(json.dumps({"month": "m", "artifact_blake3": "art", "excused": 7, "unexcused": 0}) + "\n")
+    header, entries = answerkey.read_key(key)
+    assert entries == [("V1", "h1")]
+    assert (header["count"], header["excused"], header["unexcused"]) == (2, 7, 0)
+
+
+def test_a_trailer_from_another_build_is_still_refused(tmp_path: Path) -> None:
+    key = tmp_path / "key.jsonl"
+    with key.open("w") as fh:
+        fh.write(json.dumps({"month": "m", "artifact_blake3": "art"}) + "\n")
+        fh.write(json.dumps({"month": "m", "artifact_blake3": "OTHER"}) + "\n")
+    with pytest.raises(ValueError, match="mixes shards from different builds"):
+        answerkey.read_key(key)
+
+
+def test_verify_counts_a_pinned_deviation_and_still_passes(tmp_path: Path, capsys) -> None:
+    vins = ultravin.generate(4, seed=21)
+    hashes = answerkey.ultravin_hashes(vins)
+    pairs = [(v, (answerkey.DEVIATION + h) if i == 1 else h) for i, (v, h) in enumerate(zip(vins, hashes, strict=True))]
+    key = _real_key(tmp_path / "key.jsonl", pairs)
+    answerkey.verify(key=str(key), strict_artifact=True, workers=1)  # no raise == green
+    out = capsys.readouterr().out
+    assert "1 pinned as documented deviations" in out
+    assert "every answer matches" in out
+
+
+def test_a_pinned_deviation_that_moved_still_fails(tmp_path: Path, capsys) -> None:
+    # `~` is a regression pin, not a skip: the VIN's decode is still checked, and
+    # a change to ultravin's own answer for it is still a failure.
+    vins = ultravin.generate(3, seed=22)
+    hashes = answerkey.ultravin_hashes(vins)
+    pairs = [(vins[0], hashes[0]), (vins[1], answerkey.DEVIATION + "0" * 16), (vins[2], hashes[2])]
+    key = _real_key(tmp_path / "key.jsonl", pairs)
+    with pytest.raises(typer.Exit) as exc:
+        answerkey.verify(key=str(key), strict_artifact=True, workers=1)
+    assert exc.value.exit_code == 1
+    err = capsys.readouterr().err
+    assert "1 MISMATCH against a pinned documented deviation" in err
+    assert vins[1] in err
+    assert "the oracle's frozen answer" not in err
+
+
+def test_verify_reports_the_two_kinds_of_failure_apart(tmp_path: Path, capsys) -> None:
+    vins = ultravin.generate(3, seed=23)
+    hashes = answerkey.ultravin_hashes(vins)
+    pairs = [(vins[0], "0" * 16), (vins[1], answerkey.DEVIATION + "0" * 16), (vins[2], hashes[2])]
+    key = _real_key(tmp_path / "key.jsonl", pairs)
+    with pytest.raises(typer.Exit) as exc:
+        answerkey.verify(key=str(key), strict_artifact=True, workers=1)
+    assert exc.value.exit_code == 1
+    err = capsys.readouterr().err
+    assert "1 MISMATCH against the oracle's frozen answer" in err
+    assert "1 MISMATCH against a pinned documented deviation" in err
 
 
 def test_compare_agrees_on_identical_keys(tmp_path: Path, capsys) -> None:

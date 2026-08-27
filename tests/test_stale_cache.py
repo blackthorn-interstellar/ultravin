@@ -14,7 +14,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from scripts.parity import stale_cache
+from scripts.parity import normalize, stale_cache
 
 # Two cells, as the committed list stores them: each stale at position 11.
 CELLS = {("MLH", 2019): frozenset({11}), ("1F9123", 2020): frozenset({11})}
@@ -282,6 +282,152 @@ def test_diff_positions_is_empty_when_nothing_names_a_position() -> None:
     assert stale_cache.diff_positions(one_sided_142) == set()
     vin, listed = "MLHAE041XKA111111", {"model_year": 2019}
     assert not stale_cache.is_expected_divergence(vin, summaries, listed, CELLS)
+
+
+# ------------------------------------------------------------------- the year flip
+
+
+def _row(element_id: int, value: str) -> dict[str, Any]:
+    """One canonical row, carrying only the fields these fixtures need to differ in.
+
+    Built through `from_ultravin` so both sides of the diff below are canonicalized
+    the same way — the decode fixtures are fed through it for real.
+    """
+    return normalize.from_ultravin({"element_id": element_id, "value": value})
+
+
+def _year_flip(oracle_year: int, ultravin_year: int, at: int = 11) -> dict[str, Any]:
+    """A diff where the two disagree about the model year *and* about a charset."""
+    return {
+        "field_diffs": [
+            [29, "value", str(oracle_year), str(ultravin_year)],
+            [144, "value", f"({at}:AB)", f"({at}:B)"],
+        ],
+        "missing": [],
+        "extra": [],
+        "order_ok": True,
+    }
+
+
+def test_a_year_flip_is_not_the_class_without_the_oracles_rows() -> None:
+    """The default is the old contract: no oracle rows, no second-order test, and
+    element 29 is outside everything the cache can print — so this is a bug."""
+    assert not stale_cache.is_expected_divergence(
+        "MLHAE041XKA111111", _year_flip(2019, 1989), {"model_year": 1989}, CELLS
+    )
+
+
+def test_oracle_model_year_reads_the_flip_off_the_diff() -> None:
+    assert stale_cache.oracle_model_year(_year_flip(2019, 1989)) == 2019
+    # A row present only on the oracle's side is still the oracle naming a year.
+    missing = {"field_diffs": [], "missing": [[29, "2019"]], "extra": [], "order_ok": True}
+    assert stale_cache.oracle_model_year(missing) == 2019
+    # Agreement, and a non-year value, are both "no flip to test".
+    assert stale_cache.oracle_model_year(_diff(144)) is None
+    same = {"field_diffs": [[29, "value", "2019", "2019"]], "missing": [], "extra": [], "order_ok": True}
+    assert stale_cache.oracle_model_year(same) is None
+    junk = {"field_diffs": [[29, "value", "", "1989"]], "missing": [], "extra": [], "order_ok": True}
+    assert stale_cache.oracle_model_year(junk) is None
+
+
+def test_a_year_flip_is_the_class_when_pinning_the_oracles_year_collapses_it(monkeypatch) -> None:
+    """The second-order route. The oracle's error byte — built from the stale
+    cell — is what chose its model year, so ultravin lands on a different one.
+    Pin ultravin to the oracle's year and everything left is one charset, at the
+    position the cell keyed by *the oracle's* year is stale at."""
+    vin = "MLHAE041XKA111111"
+    oracle_rows = [_row(29, "2019"), _row(144, "(11:AB)")]
+    monkeypatch.setattr(
+        stale_cache,
+        "_decode",
+        lambda _vin, year=None: {"model_year": year, "elements": [_row(29, "2019"), _row(144, "(11:B)")]},
+    )
+    assert stale_cache.is_expected_divergence(
+        vin, _year_flip(2019, 1989), {"model_year": 1989}, CELLS, oracle_rows=oracle_rows
+    )
+
+
+def test_a_year_flip_stays_a_bug_when_the_pinned_cell_is_not_stale(monkeypatch) -> None:
+    """Same collapse, but the cell keyed by the oracle's year is not on the list.
+    Reading ultravin's (listed) year instead would have laundered it."""
+    vin = "MLHAE041XKA111111"
+    oracle_rows = [_row(29, "1989"), _row(144, "(11:AB)")]
+    monkeypatch.setattr(
+        stale_cache,
+        "_decode",
+        lambda _vin, year=None: {"model_year": year, "elements": [_row(29, "1989"), _row(144, "(11:B)")]},
+    )
+    assert stale_cache.is_known_stale_cell(vin, {"model_year": 2019}, CELLS)
+    assert not stale_cache.is_expected_divergence(
+        vin, _year_flip(1989, 2019), {"model_year": 2019}, CELLS, oracle_rows=oracle_rows
+    )
+
+
+def test_a_year_flip_stays_a_bug_when_something_else_survives_the_pin(monkeypatch) -> None:
+    """Pinning the year has to leave *only* the cell's own stale positions. Here
+    a pattern element still differs, which no cache cell can explain."""
+    vin = "MLHAE041XKA111111"
+    oracle_rows = [_row(29, "2019"), _row(144, "(11:AB)"), _row(5, "Civic")]
+    monkeypatch.setattr(
+        stale_cache,
+        "_decode",
+        lambda _vin, year=None: {
+            "model_year": year,
+            "elements": [_row(29, "2019"), _row(144, "(11:B)"), _row(5, "Accord")],
+        },
+    )
+    assert not stale_cache.is_expected_divergence(
+        vin, _year_flip(2019, 1989), {"model_year": 1989}, CELLS, oracle_rows=oracle_rows
+    )
+
+
+def test_a_year_ultravin_refuses_to_take_stays_a_bug(monkeypatch) -> None:
+    """The pin is a request, not a command — an out-of-window year is ignored and
+    element 29 still differs afterwards. That is not a collapse, so not the class."""
+    vin = "MLHAE041XKA111111"
+    oracle_rows = [_row(29, "2019"), _row(144, "(11:AB)")]
+    monkeypatch.setattr(
+        stale_cache,
+        "_decode",
+        lambda _vin, year=None: {"model_year": 1989, "elements": [_row(29, "1989"), _row(144, "(11:B)")]},
+    )
+    assert not stale_cache.is_expected_divergence(
+        vin, _year_flip(2019, 1989), {"model_year": 1989}, CELLS, oracle_rows=oracle_rows
+    )
+
+
+def test_the_second_order_test_pins_the_year_the_oracle_chose(monkeypatch) -> None:
+    """What gets handed to `decode(..., year=)`: the oracle's year, never ours."""
+    seen: list[int | None] = []
+
+    def fake(_vin: str, year: int | None = None) -> dict[str, Any]:
+        seen.append(year)
+        return {"model_year": year, "elements": [_row(29, "2019"), _row(144, "(11:B)")]}
+
+    monkeypatch.setattr(stale_cache, "_decode", fake)
+    stale_cache.is_expected_divergence(
+        "MLHAE041XKA111111",
+        _year_flip(2019, 1989),
+        {"model_year": 1989},
+        CELLS,
+        oracle_rows=[_row(29, "2019"), _row(144, "(11:AB)")],
+    )
+    assert seen == [2019]
+
+
+def test_a_wholly_agreeing_repin_is_still_not_the_class(monkeypatch) -> None:
+    """If pinning the year makes the two identical, the year *was* the whole
+    divergence — and element 29 is not something a cache cell can move by itself.
+    No position in evidence, so the verdict stays no."""
+    vin = "MLHAE041XKA111111"
+    oracle_rows = [_row(29, "2019"), _row(144, "(11:AB)")]
+    monkeypatch.setattr(
+        stale_cache,
+        "_decode",
+        lambda _vin, year=None: {"model_year": year, "elements": [_row(29, "2019"), _row(144, "(11:AB)")]},
+    )
+    year_only = {"field_diffs": [[29, "value", "2019", "1989"]], "missing": [], "extra": [], "order_ok": True}
+    assert not stale_cache.is_expected_divergence(vin, year_only, {"model_year": 1989}, CELLS, oracle_rows=oracle_rows)
 
 
 def test_expected_in_sweep_and_corpus_pick_out_the_class(monkeypatch) -> None:

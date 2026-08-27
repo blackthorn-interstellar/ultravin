@@ -18,6 +18,14 @@ does not determine the order of rows inside a group, so the raw rows genuinely
 vary between runs and a naive hash would be flaky. `normalize` already excludes
 that ordering.
 
+The oracle is not right everywhere, and the key says so. Two prefixes, neither a
+hex digit, mark the entries that are not a plain "the oracle answered this":
+`!` for a VIN it raised on, and `~` for one where ultravin deliberately differs
+by the documented stale-`WMIYearValidChars` class — there the frozen hash is
+*ultravin's*, decided at build time where the field-level diff still exists
+(`answer_for`). `verify` still checks those VINs and still fails on them; what it
+no longer does is demand ultravin reproduce a defect it is documented not to.
+
     make oracle-up && make oracle-load DUMP=downloads/vPICList_lite_2026_07.plain.zip
     uv run -- python -m scripts.parity.answerkey build --out target/answerkey.jsonl
     uv run -- python -m scripts.parity.answerkey verify --key target/answerkey.jsonl
@@ -37,7 +45,7 @@ from typing import Any
 import typer
 import ultravin
 
-from scripts.parity import normalize, oracle
+from scripts.parity import normalize, oracle, stale_cache
 from scripts.refresh import KNOWN_DEVIATION_VINS, ORACLE_CRASH_VINS
 
 REPO = Path(__file__).resolve().parents[2]
@@ -49,13 +57,19 @@ PIN = REPO / "tests" / "answerkey.json"
 # compare them. Both kinds, because a key built here must not re-freeze either.
 KNOWN_DEVIATIONS = ORACLE_CRASH_VINS | KNOWN_DEVIATION_VINS
 
+# An entry's hash carries at most one prefix, and neither can be a hex digit.
+# `!` — the oracle raised on this VIN and there is no answer to compare.
+# `~` — the two disagreed and the disagreement is the documented stale-cache
+#       class, so what is frozen is *ultravin's* answer, not the oracle's.
+UNANSWERED = "!"
+DEVIATION = "~"
+
 app = typer.Typer(add_completion=False, help="Build and check the frozen oracle answer key.")
 
 
-def canonical_hash(rows: list[dict[str, Any]]) -> str:
-    """A stable digest of one decode, order-insensitive within a group."""
-    norm = normalize.collation_agnostic([normalize.from_oracle(r) for r in rows])
-    flat = sorted(json.dumps(r, sort_keys=True, default=str) for r in norm)
+def hash_rows(rows: list[dict[str, Any]]) -> str:
+    """A stable digest of one decode's canonical rows, order-insensitive in a group."""
+    flat = sorted(json.dumps(r, sort_keys=True, default=str) for r in normalize.collation_agnostic(rows))
     return hashlib.blake2b("\n".join(flat).encode(), digest_size=8).hexdigest()
 
 
@@ -66,12 +80,7 @@ def ultravin_hashes(vins: list[str]) -> list[str]:
     Python boundary, and the key is millions of rows long.
     """
     results: Any = ultravin.decode_batch(vins, full=True)
-    out = []
-    for result in results:
-        rows = normalize.collation_agnostic(normalize.ultravin_rows(result))
-        flat = sorted(json.dumps(r, sort_keys=True, default=str) for r in rows)
-        out.append(hashlib.blake2b("\n".join(flat).encode(), digest_size=8).hexdigest())
-    return out
+    return [hash_rows(normalize.ultravin_rows(result)) for result in results]
 
 
 def _check_chunk(chunk: list[tuple[str, str]]) -> list[str]:
@@ -88,14 +97,50 @@ def _init() -> None:
     _conn = oracle.connect()
 
 
-def _ask(vin: str) -> tuple[str, str]:
+def answer_for(vin: str, oracle_rows: list[dict[str, Any]]) -> tuple[str, bool]:
+    """The key's entry for one VIN, given the oracle's canonical rows.
+
+    Normally the oracle's hash. But where the two differ *and* the difference is
+    the documented stale-`WMIYearValidChars` class (docs/KNOWN_DEVIATIONS.md), the
+    oracle's answer is the wrong thing to freeze: the key would then demand that
+    ultravin reproduce a defect it deliberately does not reproduce, and `verify`
+    would report thousands of expected divergences as failures forever. Freezing
+    ultravin's own answer under a `~` keeps the VIN pinned — a later change to it
+    still fails `verify` — without asserting the oracle was right.
+
+    Build time is the only place this can be decided: the classification needs
+    the field-level diff, and `verify` deliberately has no oracle to diff against.
+
+    Returns the entry and whether the two agreed, so the build can tally the
+    divergences it did *not* excuse — a count the file itself cannot carry,
+    because an unexcused one is stored as the plain oracle hash.
+    """
+    mine = normalize.ultravin_rows(ultravin.decode(vin, full=True))
+    theirs = hash_rows(oracle_rows)
+    ours = hash_rows(mine)
+    if ours == theirs:
+        return theirs, True
+    if vin in KNOWN_DEVIATIONS:
+        # Registered per VIN in scripts/known_problems.json, and `verify` skips
+        # them outright. Keep the two registries disjoint rather than quietly
+        # converting a per-VIN entry into a class one.
+        return theirs, True
+    diff = normalize.fingerprint(normalize.diff_rows(oracle_rows, mine))
+    if stale_cache.is_expected_divergence(vin, diff, oracle_rows=oracle_rows):
+        return f"{DEVIATION}{ours}", False
+    return theirs, False
+
+
+def _ask(vin: str) -> tuple[str, str, bool]:
     """The oracle's answer for one VIN. An oracle crash is recorded, not raised —
     it means the reference implementation cannot answer, which is itself the fact
     worth freezing."""
     try:
-        return vin, canonical_hash(oracle.decode(_conn, vin))
+        rows = [normalize.from_oracle(r) for r in oracle.decode(_conn, vin)]
     except Exception as e:  # noqa: BLE001 — a VIN the oracle dies on must not stop the build
-        return vin, f"!{type(e).__name__}"
+        return vin, f"{UNANSWERED}{type(e).__name__}", True
+    digest, agreed = answer_for(vin, rows)
+    return vin, digest, agreed
 
 
 def sample_selected(vin: str, mod: int) -> bool:
@@ -148,17 +193,26 @@ def build(
     typer.echo(f"corpus: {len(vins):,} VINs ({where})", err=True)
 
     manifest = json.loads(MANIFEST.read_text())
+    identity = {
+        "month": manifest["month"],
+        "dump_sha256": manifest["dump_sha256"],
+        "artifact_blake3": manifest["artifact_blake3"],
+    }
     started = time.time()
     path = Path(out)
     path.parent.mkdir(parents=True, exist_ok=True)
+    excused = unexcused = unanswered = 0
     with path.open("w") as fh, mp.Pool(workers, initializer=_init) as pool:
         fh.write(
             json.dumps(
                 {
-                    "_about": "Frozen oracle answers. Each line is [vin, hash of the canonical response].",
-                    "month": manifest["month"],
-                    "dump_sha256": manifest["dump_sha256"],
-                    "artifact_blake3": manifest["artifact_blake3"],
+                    "_about": (
+                        "Frozen oracle answers. Each line is [vin, hash of the canonical response]; "
+                        f"{UNANSWERED} means the oracle raised instead of answering, and {DEVIATION} "
+                        "means the hash is ultravin's own, pinned because the two differ by the "
+                        "documented stale-WMIYearValidChars class (docs/KNOWN_DEVIATIONS.md)."
+                    ),
+                    **identity,
                     "shard": shard,
                     "shards": shards,
                     "sample_mod": sample_mod,
@@ -167,16 +221,24 @@ def build(
             )
             + "\n"
         )
-        for done, (vin, digest) in enumerate(pool.imap(_ask, vins, chunksize=16), start=1):
+        for done, (vin, digest, agreed) in enumerate(pool.imap(_ask, vins, chunksize=16), start=1):
             fh.write(json.dumps([vin, digest]) + "\n")
+            unanswered += digest.startswith(UNANSWERED)
+            if not agreed:
+                excused += digest.startswith(DEVIATION)
+                unexcused += not digest.startswith(DEVIATION)
             if done % 20_000 == 0:
                 rate = done / (time.time() - started)
                 typer.echo(f"  {done:,}/{len(vins):,} at {rate:.0f} VIN/s", err=True)
-    unanswered = sum(1 for _, h in read_key(path)[1] if h.startswith("!"))
+        # A trailer, not a second file: the tallies are only known once the pool
+        # has drained, and `read_key` merges every header object it meets, so the
+        # opening line stays where anyone reading `head -1` expects it.
+        fh.write(json.dumps({**identity, "excused": excused, "unexcused": unexcused}) + "\n")
     share = unanswered / max(len(vins), 1)
     typer.echo(
         f"wrote {path} in {(time.time() - started) / 60:.1f} min "
-        f"({len(vins) - unanswered:,} answered, {unanswered:,} not)",
+        f"({len(vins) - unanswered:,} answered, {unanswered:,} not; "
+        f"{excused:,} pinned as documented deviations, {unexcused:,} diverging)",
         err=True,
     )
     # A handful of VINs genuinely kill the oracle (see KNOWN_DEVIATIONS). A large
@@ -192,7 +254,9 @@ def read_key(path: Path) -> tuple[dict[str, Any], list[tuple[str, str]]]:
     """Headers and answers out of a key file.
 
     A published key is the shards concatenated, so headers appear throughout it,
-    not just on line one. Objects are headers, arrays are answers.
+    not just on line one — and each shard closes with a trailer carrying the
+    tallies it could only know once it had finished. Objects are headers, arrays
+    are answers; headers merge, so the result describes the whole file.
     """
     header: dict[str, Any] = {}
     entries: list[tuple[str, str]] = []
@@ -209,7 +273,7 @@ def read_key(path: Path) -> tuple[dict[str, Any], list[tuple[str, str]]]:
                 ):
                     msg = f"{path.name} mixes shards from different builds"
                     raise ValueError(msg)
-                header = row
+                header = {**header, **row}
             else:
                 entries.append((row[0], row[1]))
     return header, entries
@@ -239,8 +303,16 @@ def verify(
         entries.extend(part)
 
     started = time.time()
-    oracle_failures = sum(1 for _, h in entries if h.startswith("!"))
-    comparable = [(v, h) for v, h in entries if v not in KNOWN_DEVIATIONS and not h.startswith("!")]
+    oracle_failures = sum(1 for _, h in entries if h.startswith(UNANSWERED))
+    # A `~` entry pins ultravin's own answer instead of the oracle's (see
+    # `answer_for`). The comparison is identical — this run's decode against the
+    # frozen hash — so strip the marker and check it with everything else; only
+    # the reporting differs, because a `~` failure means ultravin moved on a VIN
+    # whose deviation was documented, not that it disagrees with the oracle.
+    comparable = [
+        (v, h.removeprefix(DEVIATION)) for v, h in entries if v not in KNOWN_DEVIATIONS and not h.startswith(UNANSWERED)
+    ]
+    pinned = {v for v, h in entries if h.startswith(DEVIATION) and v not in KNOWN_DEVIATIONS}
     chunks = [comparable[i : i + 20_000] for i in range(0, len(comparable), 20_000)]
 
     mismatches: list[str] = []
@@ -256,6 +328,8 @@ def verify(
     typer.echo(
         f"{len(entries):,} frozen answers checked in {elapsed:.1f}s ({len(entries) / max(elapsed, 1e-9):,.0f} VIN/s)"
     )
+    if pinned:
+        typer.echo(f"{len(pinned):,} pinned as documented deviations (stale WMIYearValidChars cache)")
     if oracle_failures:
         share = oracle_failures / max(len(entries), 1)
         typer.echo(f"{oracle_failures:,} ({share:.1%}) the oracle itself could not answer, so not compared")
@@ -266,9 +340,15 @@ def verify(
             )
             raise typer.Exit(2)
     if mismatches:
-        typer.echo(f"{len(mismatches):,} MISMATCH against the oracle's frozen answer:", err=True)
-        for vin in mismatches[:20]:
-            typer.echo(f"  {vin}", err=True)
+        for what, vins in (
+            ("the oracle's frozen answer", [v for v in mismatches if v not in pinned]),
+            ("a pinned documented deviation", [v for v in mismatches if v in pinned]),
+        ):
+            if not vins:
+                continue
+            typer.echo(f"{len(vins):,} MISMATCH against {what}:", err=True)
+            for vin in vins[:20]:
+                typer.echo(f"  {vin}", err=True)
         raise typer.Exit(1)
     typer.echo("every answer matches")
 
@@ -297,6 +377,10 @@ def compare(
     print and pass. Exit 1 means the two genuinely disagree (a VIN's hash differs,
     or one side is missing VINs the other has); exit 2 means the comparison could
     not be trusted (a malformed key, or no VINs in common at all).
+
+    Entries compare verbatim, marker and all, so a VIN excused on one side and not
+    the other counts as a disagreement — which is exactly right: the rewrite has
+    then changed which VINs land in the documented class.
     """
     _, left = read_key(Path(a))
     _, right = read_key(Path(b))

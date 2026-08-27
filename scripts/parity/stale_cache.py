@@ -28,6 +28,14 @@ decode reads (`fVinWMI` + the model year the decode chose), and must point at a
 VIN position the cache and the recompute actually disagree at. Anything wider —
 a different vehicle, a different model year, a different position — stays a bug,
 or stays registered per VIN in `scripts/known_problems.json`.
+
+**The one indirect route.** The error byte `spvindecode_errorcode` builds out of
+the cache is also what `spvindecode` uses to choose between candidate model
+years, so a stale cell can move element 29 — an element it can never print. That
+divergence is the same defect one step removed, and `is_expected_divergence`
+admits it only by proving it: pin ultravin to the year the oracle chose and
+require everything that survives to be confined to the stale positions of the
+cell keyed by *that* year. Nothing else about the excuse is relaxed.
 """
 
 from __future__ import annotations
@@ -40,7 +48,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from scripts.parity.normalize import ERROR_ELEMENTS
+from scripts.parity import normalize
 
 ROOT = Path(__file__).resolve().parents[2]
 CELLS = ROOT / "scripts" / "stale_cache_cells.json"
@@ -263,7 +271,7 @@ def error_fields_only(diff: dict[str, Any]) -> bool:
         rows += list(part)
     if not rows or diff.get("order_ok", True) is False:
         return False
-    return all(_element_id(r) in ERROR_ELEMENTS for r in rows)
+    return all(_element_id(r) in normalize.ERROR_ELEMENTS for r in rows)
 
 
 # One element-144 group, `(VIN position:allowed chars)`. The proc builds it as
@@ -354,13 +362,13 @@ def diff_positions(diff: dict[str, Any]) -> set[int]:
     return out
 
 
-def is_expected_divergence(
+def confined_to_stale_cell(
     vin: str,
     diff: dict[str, Any],
     decoded: dict[str, Any] | None = None,
     cells: dict[tuple[str, int], frozenset[int]] | None = None,
 ) -> bool:
-    """True when this divergence *is* the documented stale-cache class.
+    """True when this difference sits entirely inside one stale cell's blast radius.
 
     All three conditions are required, cheapest first (the second needs a
     decode): only error/correction fields differ, at all — that is everything the
@@ -380,12 +388,95 @@ def is_expected_divergence(
     return bool(at) and at <= stale_positions(vin, decoded, cells)
 
 
-def _decode(vin: str) -> dict[str, Any]:
+# `vpic.spvindecode`'s model-year element. Not an error element — the cache
+# cannot print it — but the cache can still decide it: see `is_expected_divergence`.
+MODEL_YEAR_ELEMENT = 29
+
+
+def _as_year(value: Any) -> int | None:
+    """`value` as a model year, or `None` if it is not one."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return None
+
+
+def oracle_model_year(diff: dict[str, Any]) -> int | None:
+    """The model year the oracle chose, when this difference is a year flip.
+
+    `None` when the two agree on the year (or when the oracle named none), which
+    is the only case the second-order test below has nothing to say about.
+    """
+    diff = diff_view(diff)
+    for row in diff.get("field_diffs") or ():
+        element_id, oracle, mine = _sides(row)
+        if element_id == MODEL_YEAR_ELEMENT and oracle != mine:
+            year = _as_year(oracle)
+            if year is not None:
+                return year
+    for row in diff.get("missing") or ():
+        element_id, value = _one_sided(row)
+        if element_id == MODEL_YEAR_ELEMENT:
+            year = _as_year(value)
+            if year is not None:
+                return year
+    return None
+
+
+def is_expected_divergence(
+    vin: str,
+    diff: dict[str, Any],
+    decoded: dict[str, Any] | None = None,
+    cells: dict[tuple[str, int], frozenset[int]] | None = None,
+    oracle_rows: list[dict[str, Any]] | None = None,
+) -> bool:
+    """True when this divergence *is* the documented stale-cache class.
+
+    Two ways in. Directly: the difference is confined to the stale positions of
+    the cell this decode reads (`confined_to_stale_cell`). Second order: the two
+    disagree about the *model year* itself, because the cache feeds
+    `spvindecode_errorcode` and the error byte is what picks between candidate
+    years — a stale cell can therefore move element 29, which it can never
+    *print*. `confined_to_stale_cell` alone reads the cell keyed by ultravin's
+    year, which on a flip is the wrong cell entirely, so it can only ever say no.
+
+    The second-order test needs the oracle's own rows, and so runs only when
+    `oracle_rows` is supplied: pin ultravin to the year the oracle chose, re-diff
+    against those same oracle rows, and require the remainder to be confined to
+    the cell keyed by the **oracle's** year. If the whole disagreement dissolves
+    into that one cell's stale positions once the year is agreed, the year flip
+    was downstream of the cell; if anything else survives — a year ultravin will
+    not take, a difference outside the error elements, a position the cell is not
+    stale at — it stays a bug.
+
+    Fails closed on every axis: no oracle rows, no year flip, a re-decode that
+    still differs anywhere else, or a difference naming no position at all, and
+    the answer is no.
+    """
+    if confined_to_stale_cell(vin, diff, decoded, cells):
+        return True
+    if oracle_rows is None:
+        return False
+    year = oracle_model_year(diff)
+    if year is None:
+        return False
+    repinned = normalize.fingerprint(normalize.diff_rows(oracle_rows, normalize.ultravin_rows(_decode(vin, year))))
+    return confined_to_stale_cell(vin, repinned, {"model_year": year}, cells)
+
+
+def _decode(vin: str, year: int | None = None) -> dict[str, Any]:
     # Lazy: reading and checking the list needs no built extension, and
     # scripts/refresh.py imports this module under a bare `python3`.
     import ultravin  # noqa: PLC0415
 
-    return ultravin.decode(vin)
+    # `full=True` only when the rows are wanted: `cell_for` needs the model year
+    # and nothing else, and the provenance rows are the expensive half.
+    if year is None:
+        return ultravin.decode(vin)
+    return ultravin.decode(vin, full=True, year=year)
 
 
 # --------------------------------------------------------------------------- cli
