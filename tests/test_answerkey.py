@@ -367,14 +367,35 @@ def test_the_same_divergence_is_excused_once_a_human_registers_it(monkeypatch) -
     assert answerkey.REGISTERED in answerkey.EXCUSED
 
 
-def test_a_registered_vin_the_cache_does_not_explain_is_not_pinned(monkeypatch) -> None:
-    # Registration says the oracle is wrong here, not that ultravin's answer is
-    # frozen. Without the counterfactual there is nothing to pin it to, so the
-    # entry stays the oracle's hash and `verify` goes on skipping the VIN.
-    a = ultravin.generate(1, seed=46)[0]
+def test_a_null_bearing_diff_does_not_take_the_shard_down(monkeypatch) -> None:
+    # `fingerprint` sorts each row as a list, so two rows agreeing on element and
+    # field fall through to comparing values, and None against an int raises.
+    # Real rows carry nulls; one of them killing a whole shard of a 1.7M-VIN
+    # build is not acceptable, and neither is forgiving it silently.
+    def row(value: str, pattern_id: object) -> dict:
+        return normalize.from_ultravin({"element_id": 144, "value": value, "pattern_id": pattern_id})
+
+    oracle_rows = [row("a", None), row("b", 12345)]
+    with pytest.raises(TypeError, match="not supported between instances of"):
+        normalize.fingerprint(normalize.diff_rows(oracle_rows, [row("a", 1), row("b", 2)]))
+
+    monkeypatch.setattr(answerkey.oracle, "decode", lambda _conn, _vin: _as_oracle(oracle_rows))
+    _, _digest, divergence = answerkey._ask(VIN)
+    assert divergence is not None
+    # Fails closed: out of scope for a machine excuse, so it needs a human.
+    assert not divergence.error_fields_only
+
+
+def test_a_registered_vin_the_cache_cannot_explain_is_not_marked_as_failing(monkeypatch) -> None:
+    # It keeps the oracle's hash and `verify` skips it, exactly as before any of
+    # this. Printing "will fail verify" beside it would be a lie the build tells
+    # about its own output.
+    a = ultravin.generate(1, seed=48)[0]
     monkeypatch.setattr(answerkey, "KNOWN_DEVIATIONS", frozenset({a}))
     _classifier(monkeypatch, {a: _diverging(a)})
-    assert answerkey.classify({a: _diverged(a, error_fields_only=False)}) == {a: answerkey.NOT_CACHE_CAUSED}
+    assert answerkey.classify({a: _diverged(a, error_fields_only=False)}) == {a: answerkey.REGISTERED_UNPINNED}
+    assert answerkey.REGISTERED_UNPINNED not in answerkey.EXCUSED
+    assert answerkey.REGISTERED_UNPINNED not in answerkey.FAILS_VERIFY
 
 
 def test_a_cell_list_that_drifts_from_the_dump_stops_the_build(monkeypatch) -> None:
@@ -435,6 +456,30 @@ def test_a_pinned_deviation_that_moved_still_fails(tmp_path: Path, capsys) -> No
     assert "1 MISMATCH against a pinned documented deviation" in err
     assert vins[1] in err
     assert "the oracle's frozen answer" not in err
+
+
+def test_a_pinned_registered_vin_is_still_compared(tmp_path: Path, capsys) -> None:
+    # The registry means "do not trust the oracle here"; a `~` entry is not the
+    # oracle's answer, it is ultravin's, and pinning it is the only regression
+    # cover those VINs have. Skipping it because the VIN is also registered would
+    # make the pin inert — and the suite used to pass with that clause removed.
+    registered = min(answerkey.KNOWN_DEVIATIONS)
+    key = _real_key(tmp_path / "key.jsonl", [(registered, answerkey.DEVIATION + "0" * 16)])
+    with pytest.raises(typer.Exit) as exc:
+        answerkey.verify(key=str(key), strict_artifact=True, workers=1)
+    assert exc.value.exit_code == 1
+    err = capsys.readouterr().err
+    assert "1 MISMATCH against a pinned documented deviation" in err
+    assert registered in err
+
+
+def test_an_unpinned_registered_vin_is_still_skipped(tmp_path: Path, capsys) -> None:
+    # The other half of the same clause: without a `~` there is nothing to pin
+    # ultravin's answer to, so the VIN stays uncompared as it always was.
+    registered = min(answerkey.KNOWN_DEVIATIONS)
+    key = _real_key(tmp_path / "key.jsonl", [(registered, "0" * 16)])
+    answerkey.verify(key=str(key), strict_artifact=True, workers=1)  # no raise == skipped
+    assert "every answer matches" in capsys.readouterr().out
 
 
 def test_verify_reports_the_two_kinds_of_failure_apart(tmp_path: Path, capsys) -> None:

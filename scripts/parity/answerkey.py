@@ -129,18 +129,35 @@ def _ask(vin: str) -> tuple[str, str, Divergence | None]:
     theirs, ours = hash_rows(rows), hash_rows(mine)
     if theirs == ours:
         return vin, theirs, None
-    diff = normalize.fingerprint(normalize.diff_rows(rows, mine))
+    try:
+        diff = normalize.fingerprint(normalize.diff_rows(rows, mine))
+    except TypeError:
+        # `fingerprint` sorts each row as a list, so two rows agreeing on element
+        # and field fall through to comparing their values — and `None` against a
+        # str or an int raises. Real rows carry nulls (a pattern_id of None is in
+        # the frozen corpus), and one of them must not take a whole shard of a
+        # 1.7M-VIN build down. Its sort key is load-bearing for the frozen
+        # `expected_diff` baselines, so widen nothing: record the divergence as
+        # out of scope for a machine excuse, which fails it closed into needing a
+        # human rather than into being silently forgiven.
+        return vin, theirs, Divergence(ours, error_fields_only=False)
     return vin, theirs, Divergence(ours, stale_cache.error_fields_only(diff))
 
 
-# What the classifier decided about one divergence. The first three earn a `~`;
-# the last two do not and fail `verify`, which is the point of them.
+# What the classifier decided about one divergence.
 MACHINE_EXCUSED = "error-fields, cache-caused"
 REPIN_EXCUSED = "year flip, collapses on the oracle's year"
 REGISTERED = "clean-decode, registered per VIN"
 NEEDS_REGISTRATION = "clean-decode, cache-caused, NOT registered"
 NOT_CACHE_CAUSED = "not reproduced by a freshened cache"
+REGISTERED_UNPINNED = "registered, not pinned (not compared)"
+# The first three are frozen under `~`. `REGISTERED_UNPINNED` is neither pinned
+# nor compared: the entry keeps the oracle's hash and `verify` skips the VIN, as
+# it did before any of this — there is no counterfactual to pin ultravin's answer
+# to, and the per-VIN registry is the only thing excusing it. Only the last two
+# reach `verify` and fail there, which is what they are for.
 EXCUSED = frozenset({MACHINE_EXCUSED, REPIN_EXCUSED, REGISTERED})
+FAILS_VERIFY = frozenset({NEEDS_REGISTRATION, NOT_CACHE_CAUSED})
 
 
 def classify(divergences: dict[str, Divergence]) -> dict[str, str]:
@@ -203,7 +220,7 @@ def classify(divergences: dict[str, Divergence]) -> dict[str, str]:
         verdicts = {}
         for vin in vins:
             if vin not in reproduced:
-                verdicts[vin] = NOT_CACHE_CAUSED
+                verdicts[vin] = REGISTERED_UNPINNED if vin in KNOWN_DEVIATIONS else NOT_CACHE_CAUSED
             elif divergences[vin].error_fields_only:
                 verdicts[vin] = MACHINE_EXCUSED
             elif stale_cache.repin_verdict(vin, _shipped_rows(scan, vin)) == stale_cache.COLLAPSED:
@@ -308,7 +325,7 @@ def build(
     entries = [(vin, (DEVIATION + diverging[vin].ours) if vin in excused else digest) for vin, digest in entries]
     unanswered = sum(1 for _, digest in entries if digest.startswith(UNANSWERED))
     for why, n in sorted(tally.items()):
-        typer.echo(f"  {n:7,}  {why}{'' if why in EXCUSED else '   <- will fail verify'}", err=True)
+        typer.echo(f"  {n:7,}  {why}{'   <- will fail verify' if why in FAILS_VERIFY else ''}", err=True)
 
     with path.open("w") as fh:
         fh.write(
@@ -403,7 +420,7 @@ def verify(
     started = time.time()
     oracle_failures = sum(1 for _, h in entries if h.startswith(UNANSWERED))
     # A `~` entry pins ultravin's own answer instead of the oracle's (see
-    # `excused_by_a_freshened_cache`). The comparison is identical — this run's decode against the
+    # `classify`). The comparison is identical — this run's decode against the
     # frozen hash — so strip the marker and check it with everything else; only
     # the reporting differs, because a `~` failure means ultravin moved on a VIN
     # whose deviation was documented, not that it disagrees with the oracle.

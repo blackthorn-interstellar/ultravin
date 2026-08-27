@@ -494,7 +494,11 @@ def repin_verdict(
     evidence this probe can produce being read as the weakest.
     """
     year = oracle_model_year(oracle_rows)
-    if year is None:
+    if year is None or _decode(vin).get("model_year") == year:
+        # No flip to explain. Checked here rather than left to the caller: the
+        # pin would be a no-op, the diff would come back unchanged, and the
+        # verdict would read as a considered NOT_THIS_CLASS when nothing was
+        # actually probed.
         return NO_YEAR_FLIP
     mine = _decode(vin, year)
     if mine.get("model_year") != year:
@@ -518,10 +522,14 @@ _FILL_CELL = (
     "select %s - row_number() over (), %s, %s, p, c from unnest(%s::int[], %s::varchar[]) as t(p, c)"
 )
 
-# Decodes per rolled-back transaction. The stock procs create and drop nine temp
-# tables per decode and hold every one of those locks until the transaction ends,
-# so an unbounded batch exhausts the shared lock table; the rollback releases
-# them. Small enough to stay polite beside other users of the same instance.
+# Decodes per rolled-back transaction. Sized for the worst case, which is the
+# *stock* procs: they create and drop 9-20 temp tables per decode (see
+# docker-compose.yml, which keeps autovacuum on for exactly this reason) and hold
+# every one of those locks until the transaction ends, so an unbounded batch
+# exhausts the shared lock table. The rollback releases them. The key lane loads
+# with ULTRAVIN_ORACLE_FAST_PROCS=1, whose procs empty their temp tables instead
+# of dropping them and so barely churn at all — but a local oracle is usually
+# stock, and 200 is small enough to stay polite on either.
 COUNTERFACTUAL_BATCH = 200
 
 
@@ -555,9 +563,10 @@ def stale_cells_of(
 
     Writes nothing, and much prefers an autocommit connection: every
     `fExtractValidCharsPerWmiYear` call creates and drops a temp table, and
-    thousands of those inside one transaction hold thousands of locks and cost
-    about four times as much per call. On a transactional connection it ends each
-    WMI with a rollback for that reason — free, because there is nothing to undo.
+    thousands of those inside one transaction hold thousands of locks and stop
+    autovacuum reclaiming any of them: measured over 111 WMIs, 52 minutes in one
+    transaction against 1.7 with autocommit. On a transactional connection it
+    ends each WMI with a rollback for that reason — free, nothing to undo.
     """
     listed = {(w, y) for w, y in (load_cells() if cells is None else cells) if w in set(wmis)}
     stale: dict[tuple[str, int], list[tuple[int, str]]] = {}
@@ -590,7 +599,12 @@ def counterfactual_rows(
 
     The experiment the class's registration rests on, run per VIN: replace the
     stale cells with what the dump's own pattern rows say they should hold, ask
-    the oracle again, and let the caller compare that answer with ultravin's. No
+    the oracle again, and let the caller compare that answer with ultravin's.
+    Registered as "delete the stale rows so the proc's fallback recomputes"; this
+    deletes *and* refills, which is the same answer by construction — the refill
+    is `fExtractValidCharsPerWmiYear`'s own output, the very charset that fallback
+    would compute, and materialising it once per cell beats recomputing it on
+    every errorcode call (measured 14 VIN/s against 0.5). No
     model of the proc's branch logic is involved, which is what makes it able to
     recognise the divergences a printed-position test cannot — an error count
     that flipped a branch, a model year that moved — and what makes it fail

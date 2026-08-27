@@ -400,16 +400,36 @@ def _row(element_id: int, value: str) -> dict[str, Any]:
     return normalize.from_ultravin({"element_id": element_id, "value": value})
 
 
-def _decoding(year: int | None, rows: list[dict[str, Any]]):
-    """A stand-in for `ultravin.decode(vin, full=True, year=...)`."""
-    return lambda _vin, _year=None: {"model_year": year, "elements": rows}
+def _decoding(unpinned: int | None, pinned: int | None, rows: list[dict[str, Any]]):
+    """A stand-in for `ultravin.decode`, which the probe calls twice.
+
+    Once with no year, to see what ultravin chose on its own, and once pinned to
+    the oracle's year. `pinned` is what ultravin *actually* returns for that
+    second call, which is not always what was asked for.
+    """
+
+    def decode(_vin: str, year: int | None = None) -> dict[str, Any]:
+        if year is None:
+            return {"model_year": unpinned}
+        return {"model_year": pinned, "elements": rows}
+
+    return decode
 
 
 ORACLE_2019 = [_row(29, "2019"), _row(144, "(11:AB)")]
+REPINNED_2019 = [_row(29, "2019"), _row(144, "(11:B)")]
 
 
 def test_no_year_in_the_oracles_answer_is_nothing_to_repin() -> None:
     assert stale_cache.repin_verdict("MLHAE041XKA111111", [_row(144, "(11:AB)")]) == stale_cache.NO_YEAR_FLIP
+
+
+def test_a_year_both_engines_already_agree_on_is_nothing_to_repin(monkeypatch) -> None:
+    """Pinning a year ultravin already chose is a no-op: the diff comes back
+    unchanged and the verdict would read as a considered NOT_THIS_CLASS when
+    nothing was probed at all. Say so instead."""
+    monkeypatch.setattr(stale_cache, "_decode", _decoding(2019, 2019, REPINNED_2019))
+    assert stale_cache.repin_verdict("MLHAE041XKA111111", ORACLE_2019, CELLS) == stale_cache.NO_YEAR_FLIP
 
 
 def test_a_repin_that_collapses_into_one_stale_cell(monkeypatch) -> None:
@@ -417,7 +437,7 @@ def test_a_repin_that_collapses_into_one_stale_cell(monkeypatch) -> None:
     cell — is what chose its model year, so ultravin landed on a different one.
     Agree on the year and all that is left is one charset, at the position the
     cell keyed by *the oracle's* year is stale at."""
-    monkeypatch.setattr(stale_cache, "_decode", _decoding(2019, [_row(29, "2019"), _row(144, "(11:B)")]))
+    monkeypatch.setattr(stale_cache, "_decode", _decoding(1989, 2019, REPINNED_2019))
     assert stale_cache.repin_verdict("MLHAE041XKA111111", ORACLE_2019, CELLS) == stale_cache.COLLAPSED
 
 
@@ -427,7 +447,7 @@ def test_a_pin_that_does_not_take_is_inconclusive_not_a_negative(monkeypatch) ->
     stick — ultravin answers about a different year than the one asked for and
     the probe never ran. Calling that "not this class" is what left 182 VINs
     misfiled as decoder bugs in the parity backlog; it has to say so instead."""
-    monkeypatch.setattr(stale_cache, "_decode", _decoding(1989, [_row(29, "1989"), _row(144, "(11:B)")]))
+    monkeypatch.setattr(stale_cache, "_decode", _decoding(1989, 1989, [_row(29, "1989"), _row(144, "(11:B)")]))
     verdict = stale_cache.repin_verdict("MLHAE041XKA111111", ORACLE_2019, CELLS)
     assert verdict == stale_cache.PIN_DID_NOT_TAKE
     assert verdict != stale_cache.NOT_THIS_CLASS
@@ -436,8 +456,7 @@ def test_a_pin_that_does_not_take_is_inconclusive_not_a_negative(monkeypatch) ->
 def test_a_stuck_pin_that_still_differs_is_not_this_class(monkeypatch) -> None:
     """Pinning the year has to leave *only* the cell's own stale positions. Here
     a vehicle element still differs, which no cache cell can explain."""
-    surviving = [_row(29, "2019"), _row(144, "(11:B)"), _row(5, "Accord")]
-    monkeypatch.setattr(stale_cache, "_decode", _decoding(2019, surviving))
+    monkeypatch.setattr(stale_cache, "_decode", _decoding(1989, 2019, [*REPINNED_2019, _row(5, "Accord")]))
     oracle = [*ORACLE_2019, _row(5, "Civic")]
     assert stale_cache.repin_verdict("MLHAE041XKA111111", oracle, CELLS) == stale_cache.NOT_THIS_CLASS
 
@@ -445,7 +464,7 @@ def test_a_stuck_pin_that_still_differs_is_not_this_class(monkeypatch) -> None:
 def test_a_repin_reads_the_cell_keyed_by_the_oracles_year(monkeypatch) -> None:
     """Reading ultravin's (listed) year instead would launder the verdict: the
     same collapse against an unlisted cell explains nothing."""
-    monkeypatch.setattr(stale_cache, "_decode", _decoding(1989, [_row(29, "1989"), _row(144, "(11:B)")]))
+    monkeypatch.setattr(stale_cache, "_decode", _decoding(2019, 1989, [_row(29, "1989"), _row(144, "(11:B)")]))
     oracle_1989 = [_row(29, "1989"), _row(144, "(11:AB)")]
     assert ("MLH", 2019) in CELLS
     assert stale_cache.repin_verdict("MLHAE041XKA111111", oracle_1989, CELLS) == stale_cache.NOT_THIS_CLASS
@@ -456,11 +475,11 @@ def test_the_probe_asks_for_the_year_the_oracle_chose(monkeypatch) -> None:
 
     def fake(_vin, year=None):
         asked.append(year)
-        return {"model_year": year, "elements": [_row(29, "2019"), _row(144, "(11:B)")]}
+        return {"model_year": 1989 if year is None else 2019, "elements": REPINNED_2019}
 
     monkeypatch.setattr(stale_cache, "_decode", fake)
     stale_cache.repin_verdict("MLHAE041XKA111111", ORACLE_2019, CELLS)
-    assert asked == [2019]
+    assert asked == [None, 2019]  # what ultravin chose alone, then the oracle's year
 
 
 def test_a_total_collapse_is_the_strongest_case_not_the_weakest(monkeypatch) -> None:
@@ -472,14 +491,14 @@ def test_a_total_collapse_is_the_strongest_case_not_the_weakest(monkeypatch) -> 
     reason a bug with no positional tie names none — so putting both through the
     same test made a total collapse read as no collapse at all.
     """
-    monkeypatch.setattr(stale_cache, "_decode", _decoding(2019, list(ORACLE_2019)))
+    monkeypatch.setattr(stale_cache, "_decode", _decoding(1989, 2019, list(ORACLE_2019)))
     assert stale_cache.repin_verdict("MLHAE041XKA111111", ORACLE_2019, CELLS) == stale_cache.COLLAPSED
 
 
 def test_a_total_collapse_does_not_need_the_cell_to_be_listed(monkeypatch) -> None:
     """Nothing survived, so there is no residue for a cell to have to explain.
     The counterfactual has already proved the cache caused it."""
-    monkeypatch.setattr(stale_cache, "_decode", _decoding(2019, list(ORACLE_2019)))
+    monkeypatch.setattr(stale_cache, "_decode", _decoding(1989, 2019, list(ORACLE_2019)))
     assert stale_cache.repin_verdict("MLHAE041XKA111111", ORACLE_2019, {}) == stale_cache.COLLAPSED
 
 
