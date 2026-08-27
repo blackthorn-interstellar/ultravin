@@ -2510,6 +2510,36 @@
       "first_observed": "2026_08",
       "evidence": "cache cell (wmiyearvalidchars, ZDM, 2018) pos 5 = 'AB' vs fextractvalidcharsperwmiyear 'A'; vpic.fvincheckdigit('ZDMAAENT2JB011111')='2' (matches pos 9) while 'ZDMABENT2JB011111'='6' (does not). Deleting the cell's 50 rows inside a rolled-back transaction makes the dump's own fallback run and the oracle then returns codes 2,14, matching ultravin byte-for-byte.",
       "doc": "KNOWN_DEVIATIONS.md#stale-cache-code-2-vs-3"
+    },
+    {
+      "vin": "1GD67MHFXPA077111",
+      "kind": "deviation",
+      "class": "stale-cache-code-3-vs-5",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (1GD, 2023) cell still lists F and H at position 8 while vpic.fextractvalidcharsperwmiyear over the same dump's pattern rows allows only 178DKLPTY. The VIN has F at position 8, so the oracle sees one error (position 11) and takes the check-digit auto-correct rung (error code 3), while ultravin, recomputing from those pattern rows, sees two errors and takes the multi-position rung (error code 5). Position 11 is not stale — the Suggested VIN difference there is the cascade of the extra error, so the machine-enumerated stale-cache class, which requires every named VIN position to be one the cell is stale at, cannot excuse it.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1GD, 2023) pos 8 = '178DFHKLPTY' vs fextractvalidcharsperwmiyear '178DKLPTY'; no 2023 1GD pattern key contributes F or H at key index 5. Deleting the cell's 64 rows inside a rolled-back transaction makes the dump's own fallback run and the oracle then returns codes 5,14 with Suggested VIN matching ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-cache-code-3-vs-5"
+    },
+    {
+      "vin": "1GTW7NFH5PA077131",
+      "kind": "deviation",
+      "class": "stale-cache-code-3-vs-5",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (1GT, 2023) cell still lists F and H at position 8 while vpic.fextractvalidcharsperwmiyear over the same dump's pattern rows allows only 178ADKLPTY. The VIN has H at position 8, so the oracle sees one error (position 11) and takes the check-digit auto-correct rung (error code 3), while ultravin, recomputing from those pattern rows, sees two errors and takes the multi-position rung (error code 5). Position 11 is not stale — the Suggested VIN difference there is the cascade of the extra error, so the machine-enumerated stale-cache class, which requires every named VIN position to be one the cell is stale at, cannot excuse it.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1GT, 2023) pos 8 = '178ADFHKLPTY' vs fextractvalidcharsperwmiyear '178ADKLPTY'; no 2023 1GT pattern key contributes F or H at key index 5. Deleting the cell's 68 rows inside a rolled-back transaction makes the dump's own fallback run and the oracle then returns codes 1,5,14 with Suggested VIN matching ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-cache-code-3-vs-5"
+    },
+    {
+      "vin": "1GD67LHF3RA077111",
+      "kind": "deviation",
+      "class": "stale-cache-code-3-vs-5",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (1GD, 2024) cell still lists F, H, and T at position 8 while vpic.fextractvalidcharsperwmiyear over the same dump's pattern rows allows only 178CDKLPY. The VIN has F at position 8, so the oracle sees one error (position 11) and takes the check-digit auto-correct rung (error code 3), while ultravin, recomputing from those pattern rows, sees two errors and takes the multi-position rung (error code 5). Position 11 is not stale — the Suggested VIN difference there is the cascade of the extra error, so the machine-enumerated stale-cache class, which requires every named VIN position to be one the cell is stale at, cannot excuse it.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 1GD, 2024) pos 8 = '178CDFHKLPTY' vs fextractvalidcharsperwmiyear '178CDKLPY'; no 2024 1GD pattern key contributes F or H at key index 5. Deleting the cell's 68 rows inside a rolled-back transaction makes the dump's own fallback run and the oracle then returns codes 5,14 with Suggested VIN matching ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-cache-code-3-vs-5"
     }
   ]
 }

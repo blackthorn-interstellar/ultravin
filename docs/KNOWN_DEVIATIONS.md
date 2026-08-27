@@ -553,6 +553,112 @@ rows, sees `{A}` at position 5, and takes the `cntErrors == 1 &&
 last_replacements.len() == 1` branch (code 2). That is the source-consistent
 answer, and it is what the oracle itself produces once the stale cell is gone.
 
+<a id="stale-cache-code-3-vs-5"></a>
+
+## 5. Stale cache extra error takes the multi-position rung — WMI `1GD`/`1GT`
+
+The same defective artifact as §2 — the shipped `vpic.WMIYearValidChars` cell —
+can add an extra flagged position, which moves `spvindecode_errorcode` from the
+single-error check-digit rung (error code 3) onto the multi-error rung (error
+code 5). Code 3 rewrites the one bad character; code 5 stamps `!` on every
+flagged position. The Suggested VIN therefore differs at a position the cell is
+*not* stale at, so the machine-enumerated class in §2 fails closed on
+containment — `stale_cache.diff_positions` is a strict subset of the cell's
+stale positions, and an extra named position is a verdict of *not* that class —
+and the VIN has to be registered here.
+
+**The offending datum.** Cells `(1GD, 2023)`, `(1GT, 2023)`, and `(1GD, 2024)`
+are already on the §2 list, each stale at position 8 only
+(`scripts/stale_cache_cells.json`). Position 11, which the Suggested VIN also
+rewrites, is identical in both columns. Both columns come out of the same loaded
+dump:
+
+```sql
+select wmi, year, position, string_agg("char", '' order by "char")
+  from vpic.wmiyearvalidchars
+  where (wmi, year) in (('1GD',2023),('1GT',2023),('1GD',2024))
+    and position in (8, 11)
+  group by wmi, year, position;
+select '1GD' as wmi, 2023 as year, p, string_agg(distinct c, '' order by c)
+  from vpic.fextractvalidcharsperwmiyear('1GD', 2023::smallint)
+  where p in (8, 11) group by p;
+-- and the same extract for ('1GT', 2023) and ('1GD', 2024)
+```
+
+```
+ source  | wmi | year | position | chars
+---------+-----+------+----------+--------------
+ cache   | 1GD | 2023 |        8 | 178DFHKLPTY
+ extract | 1GD | 2023 |        8 | 178DKLPTY
+ cache   | 1GT | 2023 |        8 | 178ADFHKLPTY
+ extract | 1GT | 2023 |        8 | 178ADKLPTY
+ cache   | 1GD | 2024 |        8 | 178CDFHKLPTY
+ extract | 1GD | 2024 |        8 | 178CDKLPY
+ cache   | *   |    * |       11 | 1FZ / 1FUZ   -- identical to extract
+```
+
+The extract is the pattern table speaking. No 2023 or 2024 `1GD`/`1GT` key
+contributes `F` or `H` at key index 5 (VIN position 8): `fValidCharsInKey` over
+every pattern row of every schema covering those cells returns zero rows for
+those two characters. They are leftovers in the cache, not a current rule. The
+2024 `1GD` cell also leftover-lists `T` there.
+
+**The mechanism.** Each probe VIN is on-charset everywhere in the VDS except
+position 11 (plant; charset `1FZ` / `1FUZ`, input `A`) *and*, under the extract
+only, position 8 (the cache's extra `F`/`H` is the character sitting there):
+
+| VIN | cell | pos 8 | cache sees | extract sees |
+|---|---|---|---|---|
+| `1GD67MHFXPA077111` | `(1GD, 2023)` | `F` | valid | invalid |
+| `1GTW7NFH5PA077131` | `(1GT, 2023)` | `H` | valid | invalid |
+| `1GD67LHF3RA077111` | `(1GD, 2024)` | `F` | valid | invalid |
+
+Position 11 is invalid on both sides, so the oracle's `cntErrors = 1` and
+ultravin's `cntErrors = 2`. That is the rung:
+
+| charset read | `cntErrors` | rung | codes | Suggested VIN |
+|---|---|---|---|---|
+| cache (pos 8 extra `F`/`H`) | 1 | check-digit filter of the pos-11 charset | 3, then 14 | pos 11 rewritten to the unique surviving candidate |
+| extract (no `F`/`H`) | 2 | multi-position (`!` stamp) | 5, then 14 | `!` at pos 8 *and* pos 11 |
+
+The filter is why Suggested VIN differs at a *fresh* position. Position 11's
+charset is `1FZ` (or `1FUZ` on `1GT`) in both the cache and the extract, so it
+is not a stale-charset disagreement. Substituting each candidate into
+`1GD67MHFXPA077111` and asking `vpic.fVINCheckDigit` keeps only `1` (matches
+the input's `X` at position 9); `F` computes to `6` and `Z` to `8`. The oracle
+therefore emits Possible Values `(11:1)` and a Suggested VIN with position 11
+rewritten to `1`. Ultravin never enters that rung: two errors means code 5,
+Possible Values `(8:178DKLPTY)(11:1FZ)`, and `!` in both slots. The same
+split, with the `1GT` check digit keeping `Z` and the 2024 `1GD` check digit
+keeping `1`, is the other two VINs.
+
+**The cache is what makes the oracle's answer, demonstrably.** Deleting each
+cell inside a transaction takes `tmpRowCount` to 0, so the proc runs its own
+`fExtractValidCharsPerWmiYear` fallback — and the oracle then returns codes
+`5,14` (plus the pre-existing check-digit code 1 on the `1GT` VIN) with the
+same `!`-stamped Suggested VIN and the same two-group Possible Values,
+byte-for-byte with ultravin. 64 rows for `(1GD, 2023)`, 68 for `(1GT, 2023)`,
+68 for `(1GD, 2024)`. Rolled back afterwards; the cache is left at its shipped
+8,809,229 rows.
+
+**Why this is not §2's enumerated class.** `scripts/parity/stale_cache.py`
+excuses a divergence only when **every** VIN position the difference points at
+is one that cell is actually stale at. These cells are stale at position 8
+only. Element 142 differs at positions 8 *and* 11, and element 144 prints a
+group for both, so `diff_positions == {8, 11}` which is not a subset of `{8}`.
+A cell stale at 8 explains the extra error at 8 and nothing about the
+Suggested VIN character printed for 11 — even though 11 moved only because 8
+did. That containment is load-bearing: otherwise any bug that happened to
+share a VIN with a stale cell would be laundered as soon as one overlapping
+position appeared. The defect is still the stale cell; the observation is just
+one the cell list is forbidden to forgive. Matching the oracle here would mean
+teaching ultravin to read that cell, which §2 already rejected.
+
+**What ultravin does.** `errors.rs::valid_charset` recomputes from the pattern
+rows, does not see `F`/`H` at position 8, and takes the `cntErrors > 1` branch
+(code 5). That is the source-consistent answer, and it is what the oracle
+itself produces once the stale cell is gone.
+
 ---
 
 ## How the answer key carries these deviations
