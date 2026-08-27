@@ -463,12 +463,40 @@ def test_the_probe_asks_for_the_year_the_oracle_chose(monkeypatch) -> None:
     assert asked == [2019]
 
 
-def test_a_repin_that_agrees_entirely_is_still_not_the_class(monkeypatch) -> None:
-    """If agreeing on the year makes the two identical then the year *was* the
-    whole divergence, and element 29 is not something a cell can move by itself.
-    No position in evidence, so the verdict stays negative."""
+def test_a_total_collapse_is_the_strongest_case_not_the_weakest(monkeypatch) -> None:
+    """Agreeing on the year leaves the two byte-for-byte identical: the flip was
+    the whole divergence and the cell accounts for all of it.
+
+    This has to be checked before `is_expected_divergence`, which demands the
+    difference name a position. An empty diff names none — for the opposite
+    reason a bug with no positional tie names none — so putting both through the
+    same test made a total collapse read as no collapse at all.
+    """
     monkeypatch.setattr(stale_cache, "_decode", _decoding(2019, list(ORACLE_2019)))
-    assert stale_cache.repin_verdict("MLHAE041XKA111111", ORACLE_2019, CELLS) == stale_cache.NOT_THIS_CLASS
+    assert stale_cache.repin_verdict("MLHAE041XKA111111", ORACLE_2019, CELLS) == stale_cache.COLLAPSED
+
+
+def test_a_total_collapse_does_not_need_the_cell_to_be_listed(monkeypatch) -> None:
+    """Nothing survived, so there is no residue for a cell to have to explain.
+    The counterfactual has already proved the cache caused it."""
+    monkeypatch.setattr(stale_cache, "_decode", _decoding(2019, list(ORACLE_2019)))
+    assert stale_cache.repin_verdict("MLHAE041XKA111111", ORACLE_2019, {}) == stale_cache.COLLAPSED
+
+
+def test_the_positionless_rule_still_rejects_a_residue_that_points_nowhere() -> None:
+    """The unpinned path is untouched. A difference that survives but names no
+    position has no tie to any cell and is still not this class — that rule is
+    what keeps the excuse narrow, and the total-collapse case must not widen it."""
+    vin, listed = "MLHAE041XKA111111", {"model_year": 2019}
+    summaries = {
+        "field_diffs": [[143, "value", "0,14", "3,14"], [191, "value", "a", "b"]],
+        "missing": [],
+        "extra": [],
+        "order_ok": True,
+    }
+    assert stale_cache.error_fields_only(summaries)
+    assert stale_cache.diff_positions(summaries) == set()
+    assert not stale_cache.is_expected_divergence(vin, summaries, listed, CELLS)
 
 
 # ------------------------------------------------------- the counterfactual decode

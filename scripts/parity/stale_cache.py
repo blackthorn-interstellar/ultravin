@@ -480,7 +480,18 @@ def repin_verdict(
       clean "not this class": the probe did not run. Reporting it as a negative
       is how 182 VINs sat in the parity backlog misfiled as decoder bugs.
     - `NOT_THIS_CLASS` — the pin stuck and a real difference survived it.
-    - `COLLAPSED` — the pin stuck and everything left sits inside one stale cell.
+    - `COLLAPSED` — the pin stuck and nothing survived it that the cell does not
+      account for. Two shapes of that, and both count: a residue confined to the
+      cell's stale positions, and no residue at all.
+
+    The second shape has to be checked first, and separately, because
+    `is_expected_divergence` cannot express it. That test requires the difference
+    to *name a position*, and rightly so — on the unpinned path a difference that
+    points nowhere is a bug with no tie to any cell, and the rule that rejects it
+    is load-bearing. But an empty diff names no position for the opposite reason:
+    there is nothing left to point at. Running the two through the same test made
+    a total collapse indistinguishable from no collapse, which is the strongest
+    evidence this probe can produce being read as the weakest.
     """
     year = oracle_model_year(oracle_rows)
     if year is None:
@@ -488,8 +499,10 @@ def repin_verdict(
     mine = _decode(vin, year)
     if mine.get("model_year") != year:
         return PIN_DID_NOT_TAKE
-    repinned = fingerprint(diff_rows(oracle_rows, ultravin_rows(mine)))
-    if is_expected_divergence(vin, repinned, {"model_year": year}, cells):
+    repinned = diff_rows(oracle_rows, ultravin_rows(mine))
+    if repinned["ok"]:
+        return COLLAPSED
+    if is_expected_divergence(vin, fingerprint(repinned), {"model_year": year}, cells):
         return COLLAPSED
     return NOT_THIS_CLASS
 
