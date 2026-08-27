@@ -1,8 +1,9 @@
 # ultravin benchmarks
 
 Latest verified results are at the top; the **W3 baseline** (the starting point,
-before the zero-copy / artifact-slimming / hot-path optimizations) is kept lower
-down for comparison. All numbers are deliberately honest and reproducible.
+before the zero-copy / artifact-slimming / hot-path optimizations) is carried in
+the `baseline` column for comparison. All numbers are deliberately honest and
+reproducible.
 
 Host: Apple Silicon (aarch64-apple-darwin), `cargo 1.90`, release profile
 (`opt-level=3`, `lto="thin"`, `codegen-units=1`). Artifact:
@@ -227,44 +228,10 @@ uv run -- python -m scripts.bench.throughput mssql --seconds 60
 uv run -- python -m scripts.bench.make_chart
 ```
 
-## Acceptance targets vs baseline
-
-| metric | target | baseline | status |
-|---|---|---|---|
-| warm single-decode | < 50 us | **4204 us** (4.20 ms) | far off |
-| cold-start (fresh process, load + 1 decode) | < 5 ms | **29.3 ms** (in-proc, Rust) | far off |
-| batch throughput (1 core) | > 100k VIN/s | **~325 VIN/s** | far off |
-| artifact download (compressed) | <= ~21 MB | **20.0 MB** gzip-9 / 14.5 MB zstd-19 | within target |
-
-The compute and load numbers are the levers W3 has to move (deserialize-to-owned
-on load + an alloc-heavy hot path). The compressed artifact already lands under
-21 MB; slimming the format (keys_regex only for bracket patterns, share interned
-keys) is expected to shrink both download and load further.
-
-## Phase 2 (batch + hot-path micro-opt)
-
-Behaviour-preserving; parity fence green (`make check` 226 passed; live sweep
-300/300 exact, 0 diverged). Changes: per-thread cache of compiled bracket-pattern
-regexes (keyed by interned `keys_regex` id) so the hot path compiles each
-distinct pattern once per worker instead of once per pattern per decode;
-`decode_batch` now runs rayon over the shared immutable archive; the PyO3 batch
-path releases the GIL during decode and only re-takes it to marshal dicts;
-`dedup_cmp` compares bracket-stripped keys without allocating.
-
-| metric | before | after |
-|---|---|---|
-| warm single-decode | 4204 us | **200 us** (21x) |
-| batch, 1 core (criterion corpus) | 325 VIN/s | **4371 VIN/s** (13x) |
-| batch, multi-core (10 cores, `--example batch`) | n/a | **~31k VIN/s** |
-
-Notes: the regex-compile-per-pattern was the dominant warm cost; caching it is
-the bulk of both wins. Multi-core scaling is limited by per-decode `String`
-allocations (allocator contention). The Python `decode_batch` total is gated by
-PyDict marshalling under the GIL (~2.4k VIN/s for 66.9k VINs), not decode
-compute; the GIL-released parallel decode still cuts the compute portion. The
-< 100k VIN/s/core acceptance target needs further per-decode compute work
-(beyond batch parallelism) and is not reached here. Reproduce the multi-core
-number: `cargo run -p ultravin --example batch --release`.
+The MSSQL steps pin `2026_06` while the Postgres oracle runs the current dump.
+That one-month skew is deliberate and irrelevant for throughput — the row counts
+are near-identical, and the two engines are never compared row-for-row here (see
+[ORACLE_TUNING.md](ORACLE_TUNING.md)).
 
 ## Methodology
 
@@ -338,6 +305,6 @@ zstd -19 -c crates/ultravin/data/vpic.rkyv | wc -c
 ```
 
 ## Parity fence (must stay green after every change)
-- `make check` — 226 passing (incl. 224-VIN frozen corpus, no oracle).
+- `make check` — full suite green, including the frozen parity corpus (no oracle).
 - `uv run -- python -m scripts.parity.sweep --sample 2 --limit 500` — 500/500
   exact, 0 diverged (live oracle).

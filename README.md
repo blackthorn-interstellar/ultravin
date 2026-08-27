@@ -157,7 +157,7 @@ df = pd.DataFrame({"vin": ["1HGCM82633A004352", "5YJ3E1EA7KF328931"]})
 
 pl.DataFrame(ultravin.decode_stream(df))  # -> polars
 pa.table(ultravin.decode_stream(df))  # -> pyarrow
-ultravin.decode_stream(df).to_pandas()  # -> pandas (needs pyarrow)
+ultravin.decode_stream(df).to_pandas()  # -> pandas (needs pandas + pyarrow)
 
 stream = ultravin.decode_stream(df)  # duckdb resolves the name from scope
 duckdb.sql("select Make, count(*) from stream group by 1")
@@ -262,6 +262,16 @@ hardware — ultravin is still ~1,314× faster. The NHTSA vPIC web API row is it
 [published](https://cardog.app/blog/corgi-vin-decoder) ~10 req/s rate limit, not
 a decode time — a hard ceiling regardless of hardware. Methodology and
 reproduction: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+
+## Documentation
+
+- [Vision](docs/VISION.md) — what this is, and what it deliberately is not
+- [Benchmarks](docs/BENCHMARKS.md) — the numbers, the methodology, how to reproduce them
+- [Acceptance](docs/ACCEPTANCE.md) — the parity policy: what counts as passing, how a divergence is adjudicated
+- [Known deviations](docs/KNOWN_DEVIATIONS.md) — the vPIC defects ultravin does not reproduce, with evidence
+- [Corpora](docs/CORPUS.md) — `generate`, `cover_vins`, `sweep`: hitting every decode behaviour with the fewest VINs
+- [Data refresh](docs/DATA_REFRESH.md) — how the monthly NHTSA dump is integrated behind parity gates
+- [Release](docs/RELEASE.md) — tags, wheels, the embedded artifact, crates.io
 
 ## License
 

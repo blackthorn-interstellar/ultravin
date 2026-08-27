@@ -9,8 +9,8 @@ There is no version-bump commit.
 ## Make a release
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
+git tag vX.Y.Z          # e.g. v2.1.1
+git push origin vX.Y.Z
 ```
 
 That's it. `.github/workflows/release.yaml` runs the Rust gate (fmt/clippy/test),
@@ -81,7 +81,7 @@ them behind parity gates, and opens a classified PR (see
 [DATA_REFRESH.md](DATA_REFRESH.md)). The manual equivalent:
 
 ```bash
-make refresh MONTH=2026_07   # download + import + re-freeze corpus + parity gates
+make refresh MONTH=YYYY_MM   # download + import + re-freeze corpus + parity gates
 ```
 
 That rewrites `vpic/` (committed schema/procs/manifest), the gitignored

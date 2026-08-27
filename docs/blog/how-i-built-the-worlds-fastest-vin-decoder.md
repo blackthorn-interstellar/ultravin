@@ -1,8 +1,8 @@
 # how i built the world's fastest VIN decoder
 
 ok so this is a fun one. i built a VIN decoder that's ~1000x faster than the
-official government one, and i shipped the whole vehicle database inside a 19 MB
-`pip install`. no server, no network, no nothing. 45 microseconds per decode.
+official government one, and i shipped the whole vehicle database inside a 19.4 MB
+`pip install`. no server, no network, no nothing. 38 microseconds per decode.
 
 and here's the kicker: i didn't write a single line. claude code wrote all of it in
 ultracode mode. i just pointed it at the right problems and pressed enter.
@@ -99,21 +99,21 @@ documented those two as "we're more correct than the reference" and moved on.
 
 ## the numbers
 
-after the speed pass: warm decode went **4204 µs → 44.8 µs.** cold start (fresh
-process, load the whole db, decode one VIN) went **29.3 ms → 0.635 ms.**
+after the speed pass: warm decode went **4204 µs → 38.4 µs.** cold start (fresh
+process, load the whole db, decode one VIN) went **29.3 ms → 0.753 ms.**
 
 VINs per second, same machine, same test corpus:
 
 | engine | VIN/s |
 |---|---|
-| **mine, batched across 10 cores** | **111,496** |
-| **mine, 1 core** | **19,331** |
+| **mine, batched across 4 cores** | **94,030** |
+| **mine, 1 core** | **29,568** |
 | best open-source (corgi v3) | ~83 |
 | NHTSA SQL Server | 22.5 |
 | NHTSA Postgres | 19.5 |
 | NHTSA web API (rate limited) | ~10 |
 
-~1000x faster than the SQL procedures it copies. whole database in a 19 MB wheel.
+~1000x faster than the SQL procedures it copies. whole database in a 19.4 MB wheel.
 `pip install ultravin`, done. it's live on PyPI.
 
 ## the takeaways (the actual point of this post)

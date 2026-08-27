@@ -44,7 +44,8 @@ Either supply the file yourself — the build script validates and embeds it and
 attempts no download:
 
 ```bash
-gh release download v2.1.0 --repo blackthorn-interstellar/ultravin --pattern vpic.rkyv
+# v<this crate version> — the release whose asset matches the pin in data/manifest.json
+gh release download v$VERSION --repo blackthorn-interstellar/ultravin --pattern vpic.rkyv
 ULTRAVIN_DATA=/abs/path/to/vpic.rkyv cargo build --release
 ```
 
