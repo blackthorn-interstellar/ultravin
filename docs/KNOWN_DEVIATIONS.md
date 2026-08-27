@@ -594,7 +594,7 @@ asks two questions in order, and a VIN must pass both:
    excused by machine, because that is the blast radius the class is defined
    over. One that reaches the **vehicle** may not.
 
-The five verdicts that fall out, three of which earn a `~`:
+The six verdicts that fall out, three of which earn a `~`:
 
 | verdict | what it means |
 |---|---|
@@ -603,6 +603,7 @@ The five verdicts that fall out, three of which earn a `~`:
 | `clean-decode, registered per VIN` | a different vehicle, argued for this VIN in `scripts/known_problems.json` |
 | `clean-decode, cache-caused, NOT registered` | the same thing with nobody's name on it — fails `verify`, and says so by name |
 | `not reproduced by a freshened cache` | the counterfactual did not hold, so this is not the class at all — fails `verify` |
+| `registered, not pinned (not compared)` | registered, but the counterfactual did not hold, so there is no defensible answer to pin — kept out of the comparison rather than silently forgiven |
 
 **The policy line is the third row.** A clean-decode change is excused by a
 *human*, one VIN at a time, never by the machine — the cell list in
