@@ -14,8 +14,10 @@
 # classes those rules distinguish), never from ultravin's own behaviour — an
 # answer key selected by our decoder could only confirm what we already test.
 #
-# Dispatched by .github/actions/merge-data-pr the moment a data month lands on
-# master, so the key is always built from the data it will be used to check.
+# Two ways in, so the key is always built from the data it will be used to
+# check: .github/actions/merge-data-pr dispatches this the moment the pipeline
+# merges a data month onto master, and the push trigger below catches the month
+# landing any other way.
 # The build uses the temp-table rewrite (ULTRAVIN_ORACLE_FAST_PROCS), and pays for
 # the privilege: the `equivalence` job below rebuilds a sample both ways against
 # this month's data and fails unless every hash matches. That turns "equivalent,
@@ -27,6 +29,19 @@
 name: Answer Key
 
 on:
+  # The pipeline's own merges emit no push event (GITHUB_TOKEN never triggers
+  # workflows), which is why merge-data-pr dispatches this explicitly. A human
+  # merging a data PR by hand emits one and dispatches nothing — without this
+  # trigger that month gets no key, and ci.yaml's answerkey job skips green
+  # forever on the month mismatch. The two manifests are kept byte-identical;
+  # either one moving means the data month moved.
+  push:
+    branches: [master]
+    paths:
+      - crates/ultravin/data/manifest.json
+      - vpic/manifest.json
+  # No month input on a push: the steps below default to the pinned manifest,
+  # which on master is the month that just landed.
   workflow_dispatch:
     inputs:
       month:
