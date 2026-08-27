@@ -1007,16 +1007,7 @@ fn covering_array(levels: &[usize]) -> Vec<Vec<usize>> {
     // Ordered, not hashed: HashSet iteration is randomized per process, so a
     // hashed set here would make the corpus differ between runs — and an answer
     // key built on one machine would not verify on another.
-    let mut uncovered: BTreeSet<(usize, usize, usize, usize)> = BTreeSet::new();
-    for i in 0..n {
-        for j in (i + 1)..n {
-            for a in 0..levels[i] {
-                for b in 0..levels[j] {
-                    uncovered.insert((i, a, j, b));
-                }
-            }
-        }
-    }
+    let mut uncovered = all_pairs(levels);
     if uncovered.is_empty() {
         return vec![vec![0; n]];
     }
@@ -1086,18 +1077,7 @@ pub fn pairwise(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
         let levels: Vec<usize> = classes.iter().map(|c| c.len()).collect();
         let year = pick_year(yearfrom, yearto, current_year);
         for row in covering_array(&levels) {
-            // Lay the row back out over var_keys, keeping `|` at index 5 and the
-            // model-year character at index 6 free for `build_vin` to set.
-            let mut keys = [b'*'; 14];
-            keys[5] = b'|';
-            for (slot, &c) in row.iter().enumerate() {
-                keys[VARYING[slot].1] = classes[slot][c];
-            }
-            out.extend(build_vin(
-                wmi,
-                std::str::from_utf8(&keys).unwrap_or("*****"),
-                year,
-            ));
+            out.extend(emit(wmi, &classes, &row, year));
         }
     }
     if limit > 0 {

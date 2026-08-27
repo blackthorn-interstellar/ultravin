@@ -471,11 +471,15 @@ fn errorcode(
         }
         let chr = vb[(i - 1) as usize];
         if !ty.contains(&(i - 3, chr)) {
-            unused.push(' ');
-            unused.push_str(&i.to_string());
+            // Comma-joined as it is built. The SQL accumulates " N" and then
+            // trims + replaces ' ' with ',', which yields exactly this — every
+            // part is a bare decimal, so there is no interior space to convert.
+            if !unused.is_empty() {
+                unused.push(',');
+            }
+            let _ = std::fmt::Write::write_fmt(&mut unused, format_args!("{i}"));
         }
     }
-    let unused = unused.trim().replace(' ', ",");
     if !unused.is_empty() {
         codes.push(14);
         unused_positions = Some(unused);
@@ -596,7 +600,10 @@ pub fn compute_errors(
             if cv.is_empty() {
                 cv = vb.clone();
             }
-            invalid_chars.push_str(&format!(", {}:{}", j, vb[j - 1]));
+            let _ = std::fmt::Write::write_fmt(
+                &mut invalid_chars,
+                format_args!(", {}:{}", j, vb[j - 1]),
+            );
             // CorrectedVIN = left(cv, j-1) || '!' || substring(cv, j+1, 100).
             // For a monotonically increasing `j` that prefix+'!'+suffix rebuild is
             // exactly an in-place stamp of `!` at index j-1 — O(1) here instead of

@@ -604,10 +604,17 @@ pub fn serialize_artifact(data: &VpicData, builder_version: u32) -> Vec<u8> {
 }
 
 /// The blake3 digest recorded in an artifact header, as lowercase hex.
+///
+/// Empty for anything too short to hold a header, matching the builder's twin
+/// (`build.rs::artifact_blake3`) rather than panicking on a truncated file.
 pub fn artifact_blake3_hex(bytes: &[u8]) -> String {
+    use std::fmt::Write;
+    if bytes.len() < HEADER_LEN {
+        return String::new();
+    }
     let mut s = String::with_capacity(64);
     for b in &bytes[14..46] {
-        s.push_str(&format!("{b:02x}"));
+        let _ = write!(s, "{b:02x}");
     }
     s
 }

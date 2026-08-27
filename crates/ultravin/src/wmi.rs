@@ -24,8 +24,7 @@ pub fn vin_wmi(vin: &str) -> String {
 /// chars (14 for low-volume VINs where position 3 is `'9'`). Upper-cased.
 pub fn vin_descriptor(vin: &str) -> String {
     let mut p: Vec<u8> = vin.trim().bytes().collect();
-    p.resize(17, b'*');
-    p.truncate(17);
+    p.resize(17, b'*'); // pads *and* truncates to exactly 17
     p[8] = b'*'; // position 9 (0-based 8)
     let take = if p.get(2) == Some(&b'9') { 14 } else { 11 };
     String::from_utf8_lossy(&p[..take]).to_ascii_uppercase()

@@ -83,7 +83,8 @@ fn is_vin_like(s: &str) -> bool {
         })
 }
 
-/// Ratio test: ≥90% of the non-null sampled values pass `pred`, at least one.
+/// Ratio test: at least one non-null value was sampled, and `n_hits` is ≥90% of
+/// the `n_total` that were.
 /// Shared by both sniffers so the "vast majority" bar lives in one place.
 fn ratio_ok(n_total: usize, n_hits: usize) -> bool {
     n_total > 0 && n_hits * SNIFF_RATIO_DEN >= n_total * SNIFF_RATIO_NUM

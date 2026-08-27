@@ -72,7 +72,7 @@ pub fn token_signature(
     t.insert(format!("corrected|{}", !result.corrected_vin.is_empty()));
 
     let pos7_digit = vin.as_bytes().get(6).is_some_and(u8::is_ascii_digit);
-    let car_lt = veh_type == "2" || veh_type == "7";
+    let car_lt = is_car_or_mpv_attr(&veh_type);
     let conclusive = car_lt || raw_year(vin).is_some_and(|y| y > current_year + 2);
     t.insert(format!(
         "year|{}|{conclusive}",
@@ -80,6 +80,15 @@ pub fn token_signature(
     ));
     t.insert(format!("year_pass|{car_lt}|{pos7_digit}"));
     t
+}
+
+/// Vehicle type 2/7 (car / MPV), read off the decoded element rather than the
+/// WMI row. `attribute_id` is an `i32::to_string`, so the parse is exact — no
+/// padding or sign to trim — and the class itself stays in `tables`.
+fn is_car_or_mpv_attr(veh_type: &str) -> bool {
+    veh_type
+        .parse::<i32>()
+        .is_ok_and(crate::tables::is_car_or_mpv)
 }
 
 /// Decimal places, sign and zero-ness of a computed value — what a unit
@@ -122,7 +131,7 @@ fn year_kind(
     if veh_type == "3" && pos7_digit {
         return "ambiguous";
     }
-    let mut expected = if (veh_type == "2" || veh_type == "7") && pos7_digit {
+    let mut expected = if is_car_or_mpv_attr(veh_type) && pos7_digit {
         raw - 30
     } else {
         raw
@@ -248,10 +257,6 @@ fn keys_match(var_keys: &str, keys: &str) -> bool {
         .all(|(set, &c)| set.as_ref().is_none_or(|s| s.contains(&c)))
 }
 
-fn len_no_star(keys: &str) -> usize {
-    keys.bytes().filter(|&c| c != b'*').count()
-}
-
 /// VINs where two patterns for one element tie all the way down `dedup_cmp`, so
 /// `cmp_keys_no_brackets` decides the winner.
 ///
@@ -288,7 +293,7 @@ fn dedup_tie_candidates(db: &Db, current_year: i32) -> Vec<(String, i32)> {
                 (
                     p.elementid.to_native(),
                     p.createdon_key.to_native(),
-                    len_no_star(keys),
+                    crate::decode::len_no_star(keys),
                     keys,
                 )
             })

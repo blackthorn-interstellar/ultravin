@@ -104,10 +104,10 @@ pub fn decode_core(
                 continue;
             }
         }
-        schema_yearfrom
-            .entry(wvs.vinschemaid.to_native())
-            .or_insert(wvs.yearfrom.to_native());
         let sid = wvs.vinschemaid.to_native();
+        schema_yearfrom
+            .entry(sid)
+            .or_insert(wvs.yearfrom.to_native());
         let Some(vs) = db.vinschema_by_id(sid) else {
             continue;
         };
@@ -413,7 +413,9 @@ fn created_desc_nulls_first(a: i64, b: i64) -> Ordering {
     }
 }
 
-fn len_no_star(keys: &str) -> usize {
+/// Key length ignoring `*`, the third rung of [`dedup_cmp`]. `cover` reproduces
+/// the same grouping, so both must count identically — hence one function.
+pub(crate) fn len_no_star(keys: &str) -> usize {
     keys.chars().filter(|c| *c != '*').count()
 }
 

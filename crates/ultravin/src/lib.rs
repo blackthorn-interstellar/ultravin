@@ -609,7 +609,8 @@ pub fn decode_full<'a>(
     if let Some(yc) = caller_year {
         if (1980..=v_limit).contains(&yc) {
             if Some(yc) == plan.rmy || Some(yc) == plan.omy {
-                do3and4 = true;
+                // SQL sets @do3and4 = 1 here; it is already 1, so this arm is a
+                // no-op. Kept explicit to mirror spvindecode.sql line-for-line.
             } else {
                 model_year_source = yc.to_string();
                 let p = run_pass(
@@ -865,13 +866,16 @@ fn project(db: &Db, items: Vec<decode::DecodingItem>) -> Vec<DecodedElement<'_>>
 
 /// Build the element-191 error text: error-code names joined by `; `.
 fn error_messages(db: &Db, err: &errors::ErrorState) -> String {
-    let tag = tables::element_lookup_tag(143);
+    // Loop-invariant: with no tag the old per-iteration `break` left the buffer
+    // empty on the first pass, so bail here for the same "".
+    let Some(t) = tables::element_lookup_tag(143) else {
+        return String::new();
+    };
     // Push straight into one buffer (`; ` separators) instead of a Vec<String> +
     // per-name owned copies + join — same bytes, far fewer allocations.
     let mut out = String::new();
     let mut first = true;
     for &code in &err.codes {
-        let Some(t) = tag else { break };
         let Some(name) = db.lookup(t, code) else {
             continue;
         };
