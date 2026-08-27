@@ -276,5 +276,7 @@ class DecodeStream:
         """The decode as a pandas ``DataFrame``, via pyarrow.
 
         pyarrow is imported lazily and is not an ultravin dependency; without it
-        this raises ``ImportError``.
+        this raises ``ImportError``. pandas is needed too — pyarrow's
+        ``Table.to_pandas()`` is what builds the frame — and is likewise not a
+        dependency.
         """

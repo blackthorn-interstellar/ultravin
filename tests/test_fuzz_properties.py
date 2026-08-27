@@ -30,7 +30,7 @@ from tests.vin_samples import VINS
 CRASHERS = ["AAé", "1HGCM8263Ł3A00435", "1HGCM82633A0043é2"]
 
 # Multibyte chars of length 2/3/4 bytes, so an insertion lands boundaries at a
-# spread of byte offsets. Includes a non-ASCII *whitespace* char (U+00A0).
+# spread of byte offsets. The one single-byte member is a plain ASCII space.
 NON_ASCII = "éŁçñ —€日本語\U0001f600"
 
 # Char positions biased toward the engine's byte slice/index boundaries: 3, 8, 9,

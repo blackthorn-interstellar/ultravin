@@ -131,7 +131,13 @@ def test_a_decode_that_raises_propagates_rather_than_excusing_itself(monkeypatch
 # --------------------------------------------------------------------------- the registry
 
 
-def test_every_registered_member_satisfies_the_decode_condition() -> None:
+@pytest.fixture(scope="module")
+def members() -> list[dict[str, Any]]:
+    """Whatever the registry currently holds for this class."""
+    return [e for e in refresh.load_known_problems() if e["class"] == "regex-crash-7t0"]
+
+
+def test_every_registered_member_satisfies_the_decode_condition(members: list[dict[str, Any]]) -> None:
     """The predicate must cover the class the registry sampled, not a subset of it.
 
     Intake now drops what these entries were filed one at a time to record, so a
@@ -139,16 +145,14 @@ def test_every_registered_member_satisfies_the_decode_condition() -> None:
     disagree about what this class *is* — and the next fuzzer encounter would be
     filed as a 66th, 67th sample. Iterates whatever the registry holds: a member
     added by a backlog-drain PR has to satisfy it too."""
-    members = [e for e in refresh.load_known_problems() if e["class"] == "regex-crash-7t0"]
     assert members, "the class vanished from the registry — its evidence section still claims it"
     missed = [e["vin"] for e in members if not regex_crash.selects_defective_schema(e["vin"])]
     assert not missed, f"registered members whose decode selects no {regex_crash.HOSTILE_KEY} pattern: {missed}"
 
 
-def test_every_registered_member_is_an_oracle_crash() -> None:
+def test_every_registered_member_is_an_oracle_crash(members: list[dict[str, Any]]) -> None:
     """The predicate only ever judges crash records, so a `deviation` in this
     class would be a member it structurally cannot recognise."""
-    members = [e for e in refresh.load_known_problems() if e["class"] == "regex-crash-7t0"]
     assert {e["kind"] for e in members} == {"oracle-crash"}
 
 

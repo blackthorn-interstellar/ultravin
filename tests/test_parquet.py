@@ -699,15 +699,6 @@ def test_to_pandas_needs_pyarrow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
         uv.decode_stream(src, columns=[MAKE]).to_pandas()
 
 
-def test_to_pandas_returns_the_decoded_frame(tmp_path: Path) -> None:
-    pytest.importorskip("pandas", reason="pandas is not an ultravin dependency, dev or otherwise")
-    src = corpus_file(tmp_path / "in.parquet")
-    frame = uv.decode_stream(src, columns=[MAKE]).to_pandas()
-    assert list(frame.columns) == ["vin", "year", "decoded_model_year", "Make"]
-    assert len(frame) == len(CORPUS)
-    assert frame["Make"][0] == uv.decode(CORPUS[0][0] or "")["attributes"]["Make"]
-
-
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 

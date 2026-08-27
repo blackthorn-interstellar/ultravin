@@ -50,7 +50,7 @@ def test_sharding_partitions_the_corpus_exactly() -> None:
     whole = answerkey.corpus(limit=2000, shard=0, shards=1)
     parts = [answerkey.corpus(limit=2000, shard=i, shards=4) for i in range(4)]
     assert sum(len(p) for p in parts) == len(whole)
-    rejoined = [v for i in range(len(whole)) for v in [parts[i % 4][i // 4]]]
+    rejoined = [parts[i % 4][i // 4] for i in range(len(whole))]
     assert rejoined == whole
 
 

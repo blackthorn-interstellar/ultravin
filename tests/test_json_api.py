@@ -9,7 +9,6 @@ path is silently wrong — assert they don't.
 from __future__ import annotations
 
 import json
-from pathlib import Path
 
 import pytest
 import ultravin as uv
@@ -32,10 +31,6 @@ def test_decode_batch_json_empty() -> None:
     assert json.loads(uv.decode_batch_json([])) == []
 
 
-def test_json_matches_over_corpus() -> None:
+def test_json_matches_over_corpus(bench_corpus: list[str]) -> None:
     """Lock the equivalence over the full benchmark corpus, not just samples."""
-    corpus = Path(__file__).parent.parent / "scripts" / "bench" / "corpus.txt"
-    if not corpus.exists():
-        pytest.skip("benchmark corpus not present (scripts/bench/corpus.txt)")
-    vins = [ln.strip() for ln in corpus.read_text().splitlines() if len(ln.strip()) == 17]
-    assert json.loads(uv.decode_batch_json(vins)) == uv.decode_batch(vins)
+    assert json.loads(uv.decode_batch_json(bench_corpus)) == uv.decode_batch(bench_corpus)

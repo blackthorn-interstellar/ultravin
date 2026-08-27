@@ -121,11 +121,11 @@ def test_every_evidence_section_is_claimed_by_an_entry(entries: list[dict[str, s
     assert _anchors(DOC.read_text()) == claimed
 
 
-def test_vins_named_in_an_anchored_section_are_registered() -> None:
+def test_vins_named_in_an_anchored_section_are_registered(entries: list[dict[str, str]]) -> None:
     """A VIN argued in an anchored section but missing from the registry is an
     excuse no gate enforces. Unanchored sections (the unbounded element-144
     collation class) quote VINs as examples and are deliberately out of scope."""
-    registered = {e["vin"] for e in refresh.load_known_problems()}
+    registered = {e["vin"] for e in entries}
     # An anchored section runs from its anchor to the next anchor or heading.
     section_re = re.compile(r'<a id="[^"]+"></a>\s*\n## .*?(?=\n<a id="|\n## |\Z)', re.DOTALL)
     sections = section_re.findall(DOC.read_text())

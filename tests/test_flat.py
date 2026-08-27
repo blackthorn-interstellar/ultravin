@@ -9,9 +9,6 @@ across vPIC data refreshes.
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
-
 import pytest
 import ultravin as uv
 
@@ -48,13 +45,9 @@ def test_attributes_equal_collapsed_elements(vin: str) -> None:
     assert {k: v for k, v in flat.items() if k != "attributes"} == {k: v for k, v in full.items() if k != "elements"}
 
 
-def test_attributes_match_over_corpus() -> None:
+def test_attributes_match_over_corpus(bench_corpus: list[str]) -> None:
     """Lock the equivalence over the full benchmark corpus, not just samples."""
-    corpus = Path(__file__).parent.parent / "scripts" / "bench" / "corpus.txt"
-    if not corpus.exists():
-        pytest.skip("benchmark corpus not present (scripts/bench/corpus.txt)")
-    vins = [ln.strip() for ln in corpus.read_text().splitlines() if len(ln.strip()) == 17]
-    for flat, full in zip(uv.decode_batch(vins), uv.decode_batch(vins, full=True)):
+    for flat, full in zip(uv.decode_batch(bench_corpus), uv.decode_batch(bench_corpus, full=True)):
         assert flat["attributes"] == collapse(full)
 
 
@@ -76,14 +69,6 @@ def test_attributes_preserve_element_order() -> None:
     flat = uv.decode("1HGCM82633A004352")
     expected = list(dict.fromkeys(e["variable"] for e in full["elements"]))
     assert list(flat["attributes"]) == expected
-
-
-def test_json_matches_the_dict_in_both_shapes() -> None:
-    for vin in VINS:
-        assert json.loads(uv.decode_json(vin)) == uv.decode(vin)
-        assert json.loads(uv.decode_json(vin, full=True)) == uv.decode(vin, full=True)
-    assert json.loads(uv.decode_batch_json(VINS)) == uv.decode_batch(VINS)
-    assert json.loads(uv.decode_batch_json(VINS, full=True)) == uv.decode_batch(VINS, full=True)
 
 
 def test_the_default_shape_is_header_plus_attributes() -> None:
