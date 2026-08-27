@@ -58,7 +58,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from scripts.parity.normalize import ERROR_ELEMENTS, from_oracle
+from scripts.parity.normalize import ERROR_ELEMENTS, diff_rows, fingerprint, from_oracle, ultravin_rows
 
 ROOT = Path(__file__).resolve().parents[2]
 CELLS = ROOT / "scripts" / "stale_cache_cells.json"
@@ -244,8 +244,8 @@ def diff_view(record: dict[str, Any]) -> dict[str, Any]:
     a `fingerprint` (campaign, sweep, and the frozen corpus's `expected_diff`)
     never does. Prefer it, or a truncated wide diff could pass for a narrow one.
     """
-    fingerprint = record.get("fingerprint")
-    return fingerprint if isinstance(fingerprint, dict) else record
+    whole = record.get("fingerprint")
+    return whole if isinstance(whole, dict) else record
 
 
 def _element_id(row: Any) -> Any:
@@ -407,12 +407,91 @@ def is_expected_divergence(
     return bool(at) and at <= stale_positions(vin, decoded, cells)
 
 
-def _decode(vin: str) -> dict[str, Any]:
+def _decode(vin: str, year: int | None = None) -> dict[str, Any]:
     # Lazy: reading and checking the list needs no built extension, and
     # scripts/refresh.py imports this module under a bare `python3`.
     import ultravin  # noqa: PLC0415
 
-    return ultravin.decode(vin)
+    # `full=True` only when the rows are wanted: `cell_for` needs the model year
+    # and nothing else, and the provenance rows are the expensive half.
+    if year is None:
+        return ultravin.decode(vin)
+    return ultravin.decode(vin, full=True, year=year)
+
+
+# ------------------------------------------------------------------------ the repin
+
+# `vpic.spvindecode`'s model-year element. Not an error element — the cache
+# cannot print it — but the cache can still decide it, so a year flip can be this
+# defect one step removed. See `repin_verdict`.
+MODEL_YEAR_ELEMENT = 29
+
+COLLAPSED = "collapsed"
+NOT_THIS_CLASS = "not-this-class"
+PIN_DID_NOT_TAKE = "pin-did-not-take"
+NO_YEAR_FLIP = "no-year-flip"
+
+
+def _as_year(value: Any) -> int | None:
+    """`value` as a model year, or `None` if it is not one."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return None
+
+
+def oracle_model_year(rows: list[dict[str, Any]]) -> int | None:
+    """The model year this oracle response settled on; `None` if it named none."""
+    for row in rows:
+        if row.get("element_id") == MODEL_YEAR_ELEMENT:
+            year = _as_year(row.get("value"))
+            if year is not None:
+                return year
+    return None
+
+
+def repin_verdict(
+    vin: str,
+    oracle_rows: list[dict[str, Any]],
+    cells: dict[tuple[str, int], frozenset[int]] | None = None,
+) -> str:
+    """Whether agreeing on the oracle's model year collapses this divergence.
+
+    The cache feeds `spvindecode_errorcode`, and the error byte that proc builds
+    is what `spvindecode` uses to pick between candidate model years. A stale
+    cell can therefore move element 29 — an element it can never itself print —
+    and drag the whole decode with it. `is_expected_divergence` reads the cell
+    keyed by *ultravin's* year, which on a flip is the wrong cell entirely, so it
+    can only ever say no. This pins ultravin to the year the oracle chose and
+    asks whether what is left is confined to the stale positions of the cell
+    keyed by the **oracle's** year.
+
+    Four verdicts, and only `COLLAPSED` is an excuse:
+
+    - `NO_YEAR_FLIP` — the oracle named no year, or ultravin already agrees, so
+      there is nothing here for a repin to explain.
+    - `PIN_DID_NOT_TAKE` — ultravin was asked for that year and chose another.
+      The caller-year hint is only the fourth sort key, behind the error code, so
+      an oracle year reached through a position-10 candidate simply will not
+      stick. **This is not evidence of anything** and must never be read as a
+      clean "not this class": the probe did not run. Reporting it as a negative
+      is how 182 VINs sat in the parity backlog misfiled as decoder bugs.
+    - `NOT_THIS_CLASS` — the pin stuck and a real difference survived it.
+    - `COLLAPSED` — the pin stuck and everything left sits inside one stale cell.
+    """
+    year = oracle_model_year(oracle_rows)
+    if year is None:
+        return NO_YEAR_FLIP
+    mine = _decode(vin, year)
+    if mine.get("model_year") != year:
+        return PIN_DID_NOT_TAKE
+    repinned = fingerprint(diff_rows(oracle_rows, ultravin_rows(mine)))
+    if is_expected_divergence(vin, repinned, {"model_year": year}, cells):
+        return COLLAPSED
+    return NOT_THIS_CLASS
 
 
 # ------------------------------------------------------------------ the counterfactual

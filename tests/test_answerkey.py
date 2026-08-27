@@ -12,7 +12,7 @@ import pytest
 import typer
 import ultravin
 
-from scripts.parity import answerkey, normalize
+from scripts.parity import answerkey, normalize, stale_cache
 
 
 def test_a_hash_is_stable_for_the_same_vin() -> None:
@@ -194,9 +194,26 @@ def _canonical(vin: str) -> list[dict]:
 
 
 def _diverging(vin: str) -> list[dict]:
-    """Rows an oracle would have to have produced for the two to disagree."""
+    """Rows an oracle would have to have produced to disagree about the *vehicle*.
+
+    Deliberately not an error element: this is the clean-decode shape, the one
+    the policy boundary says a machine may not excuse on its own.
+    """
     rows = _canonical(vin)
-    return [{**rows[0], "value": "SOMETHING ELSE"}, *rows[1:]]
+    i = next(i for i, r in enumerate(rows) if r["element_id"] not in normalize.ERROR_ELEMENTS)
+    return [*rows[:i], {**rows[i], "value": "SOMETHING ELSE"}, *rows[i + 1 :]]
+
+
+def _diverging_error_field(vin: str) -> list[dict]:
+    """The same, but confined to the error/correction elements the cache feeds.
+
+    A changed value rather than an added row: `diff_rows` compares the two
+    GroupName-rank *sequences*, so a row present on one side only makes
+    `order_ok` false and no diff of that shape is ever read as narrow.
+    """
+    rows = _canonical(vin)
+    i = next(i for i, r in enumerate(rows) if r["element_id"] in normalize.ERROR_ELEMENTS)
+    return [*rows[:i], {**rows[i], "value": "SOMETHING ELSE"}, *rows[i + 1 :]]
 
 
 VIN = "1HGCM82633A004352"
@@ -232,28 +249,41 @@ def _answers(monkeypatch, rows_for) -> None:
 
 def test_agreement_leaves_nothing_for_the_second_pass(monkeypatch) -> None:
     _answers(monkeypatch, _canonical)
-    assert answerkey._ask(VIN) == (VIN, answerkey.ultravin_hashes([VIN])[0], "")
+    assert answerkey._ask(VIN) == (VIN, answerkey.ultravin_hashes([VIN])[0], None)
 
 
-def test_a_divergence_is_handed_to_the_second_pass_with_our_answer(monkeypatch) -> None:
-    # The entry stays the oracle's hash for now; the third value is what the
-    # freshened-cache pass will compare against, and the only thing that can
-    # turn this entry into a `~`.
+def test_a_divergence_is_described_for_the_second_pass(monkeypatch) -> None:
+    # The entry stays the oracle's hash for now; the third value carries what the
+    # classifier needs — our answer, and whether the diff stays inside the error
+    # elements, which is the one thing only this pass has both sides for.
     rows = _diverging(VIN)
     _answers(monkeypatch, lambda _vin: rows)
-    vin, digest, ours = answerkey._ask(VIN)
+    vin, digest, divergence = answerkey._ask(VIN)
     assert (vin, digest) == (VIN, answerkey.hash_rows(rows))
-    assert ours == answerkey.ultravin_hashes([VIN])[0]
+    assert divergence is not None
+    assert divergence.ours == answerkey.ultravin_hashes([VIN])[0]
 
 
-def test_a_per_vin_known_problem_is_never_handed_over(monkeypatch) -> None:
-    # scripts/known_problems.json registers those VINs one by one and `verify`
-    # skips them; the class excuse must not quietly re-file them as its own.
+def test_the_error_field_scope_is_decided_where_both_sides_exist(monkeypatch) -> None:
+    # A difference on an error element is inside the class's blast radius; one on
+    # a vehicle element is a clean-decode deviation and needs a human.
+    def scope(rows_for) -> bool:
+        _answers(monkeypatch, rows_for)
+        divergence = answerkey._ask(VIN)[2]
+        assert divergence is not None, "the fixture did not diverge"
+        return divergence.error_fields_only
+
+    assert scope(_diverging_error_field)
+    assert not scope(_diverging)
+
+
+def test_a_registered_vin_is_still_described(monkeypatch) -> None:
+    # It used to be dropped here. The registry is what decides a *clean-decode*
+    # divergence, and only the classifier knows whether this is one — so the
+    # judgement belongs there, with the evidence.
     _answers(monkeypatch, _diverging)
     vin = min(answerkey.KNOWN_DEVIATIONS)
-    _, digest, ours = answerkey._ask(vin)
-    assert ours == ""
-    assert digest == answerkey.hash_rows(_diverging(vin))
+    assert answerkey._ask(vin)[2] is not None
 
 
 def test_an_oracle_crash_is_recorded_not_raised(monkeypatch) -> None:
@@ -262,11 +292,11 @@ def test_an_oracle_crash_is_recorded_not_raised(monkeypatch) -> None:
         raise RuntimeError(msg)
 
     monkeypatch.setattr(answerkey.oracle, "decode", boom)
-    assert answerkey._ask(VIN) == (VIN, answerkey.UNANSWERED + "RuntimeError", "")
+    assert answerkey._ask(VIN) == (VIN, answerkey.UNANSWERED + "RuntimeError", None)
 
 
 class _NullConn:
-    """Enough connection for `excused_by_a_freshened_cache` to hand onwards."""
+    """Enough connection for `classify` to hand onwards."""
 
     def rollback(self) -> None:
         return None
@@ -275,33 +305,85 @@ class _NullConn:
         return None
 
 
-def _freshened(monkeypatch, rows_by_vin: dict[str, list[dict]], drift: list[str] | None = None) -> None:
+def _classifier(
+    monkeypatch,
+    freshened: dict[str, list[dict]],
+    drift: list[str] | None = None,
+    repin: str = "not-this-class",
+) -> None:
     monkeypatch.setattr(answerkey.oracle, "connect", lambda **_: _NullConn())
+    monkeypatch.setattr(answerkey.oracle, "decode", lambda _conn, vin: _as_oracle(_canonical(vin)))
     monkeypatch.setattr(answerkey.stale_cache, "stale_cells_of", lambda *_a, **_k: ({("MLH", 2019): []}, drift or []))
+    monkeypatch.setattr(answerkey.stale_cache, "repin_verdict", lambda *_a, **_k: repin)
     monkeypatch.setattr(
         answerkey.stale_cache,
         "counterfactual_rows",
-        lambda _conn, vins, _stale, **_k: iter([(v, rows_by_vin[v]) for v in vins]),
+        lambda _conn, vins, _stale, **_k: iter([(v, freshened[v]) for v in vins]),
     )
 
 
-def test_only_a_byte_for_byte_match_earns_the_excuse(monkeypatch) -> None:
-    # The whole classifier: the freshened oracle either reproduces ultravin
-    # exactly or it does not explain the divergence. No partial credit.
-    a, b = sorted(ultravin.generate(2, seed=31))
-    unresolved = dict(zip([a, b], answerkey.ultravin_hashes([a, b]), strict=True))
-    _freshened(monkeypatch, {a: _canonical(a), b: _diverging(b)})
-    assert answerkey.excused_by_a_freshened_cache(unresolved) == {a}
+def _diverged(vin: str, *, error_fields_only: bool) -> answerkey.Divergence:
+    return answerkey.Divergence(answerkey.ultravin_hashes([vin])[0], error_fields_only)
+
+
+def test_an_error_field_divergence_the_cache_explains_is_machine_excused(monkeypatch) -> None:
+    a = ultravin.generate(1, seed=41)[0]
+    _classifier(monkeypatch, {a: _canonical(a)})
+    assert answerkey.classify({a: _diverged(a, error_fields_only=True)}) == {a: answerkey.MACHINE_EXCUSED}
+
+
+def test_nothing_the_freshened_cache_fails_to_reproduce_is_excused(monkeypatch) -> None:
+    # The counterfactual comes first and outranks every other consideration: an
+    # error-field diff the cache does not account for is still a hard mismatch.
+    a = ultravin.generate(1, seed=42)[0]
+    _classifier(monkeypatch, {a: _diverging(a)})
+    verdicts = answerkey.classify({a: _diverged(a, error_fields_only=True)})
+    assert verdicts == {a: answerkey.NOT_CACHE_CAUSED}
+    assert answerkey.NOT_CACHE_CAUSED not in answerkey.EXCUSED
+
+
+def test_a_year_flip_that_collapses_on_the_oracles_year_is_machine_excused(monkeypatch) -> None:
+    a = ultravin.generate(1, seed=43)[0]
+    _classifier(monkeypatch, {a: _canonical(a)}, repin=stale_cache.COLLAPSED)
+    assert answerkey.classify({a: _diverged(a, error_fields_only=False)}) == {a: answerkey.REPIN_EXCUSED}
+
+
+def test_a_clean_decode_divergence_needs_a_human_even_when_cache_caused(monkeypatch) -> None:
+    # The policy boundary. The cache really did cause it, and it is still not the
+    # machine's to excuse, because it moved the vehicle rather than the error text.
+    a = ultravin.generate(1, seed=44)[0]
+    _classifier(monkeypatch, {a: _canonical(a)}, repin=stale_cache.NOT_THIS_CLASS)
+    assert answerkey.classify({a: _diverged(a, error_fields_only=False)}) == {a: answerkey.NEEDS_REGISTRATION}
+    assert answerkey.NEEDS_REGISTRATION not in answerkey.EXCUSED
+
+
+def test_the_same_divergence_is_excused_once_a_human_registers_it(monkeypatch) -> None:
+    # Read live out of scripts/known_problems.json, never hardcoded: registering
+    # the VIN is the whole difference between the previous test and this one.
+    a = ultravin.generate(1, seed=45)[0]
+    monkeypatch.setattr(answerkey, "KNOWN_DEVIATIONS", frozenset({a}))
+    _classifier(monkeypatch, {a: _canonical(a)}, repin=stale_cache.NOT_THIS_CLASS)
+    assert answerkey.classify({a: _diverged(a, error_fields_only=False)}) == {a: answerkey.REGISTERED}
+    assert answerkey.REGISTERED in answerkey.EXCUSED
+
+
+def test_a_registered_vin_the_cache_does_not_explain_is_not_pinned(monkeypatch) -> None:
+    # Registration says the oracle is wrong here, not that ultravin's answer is
+    # frozen. Without the counterfactual there is nothing to pin it to, so the
+    # entry stays the oracle's hash and `verify` goes on skipping the VIN.
+    a = ultravin.generate(1, seed=46)[0]
+    monkeypatch.setattr(answerkey, "KNOWN_DEVIATIONS", frozenset({a}))
+    _classifier(monkeypatch, {a: _diverging(a)})
+    assert answerkey.classify({a: _diverged(a, error_fields_only=False)}) == {a: answerkey.NOT_CACHE_CAUSED}
 
 
 def test_a_cell_list_that_drifts_from_the_dump_stops_the_build(monkeypatch) -> None:
     # Excusing on the strength of a stale cell nobody recorded would make the
     # committed list — which every other gate reasons about — a fiction.
-    a = ultravin.generate(1, seed=32)[0]
-    unresolved = {a: answerkey.ultravin_hashes([a])[0]}
-    _freshened(monkeypatch, {a: _canonical(a)}, drift=["1 cell(s) not listed as stale: [('MLH', 2019)]"])
+    a = ultravin.generate(1, seed=47)[0]
+    _classifier(monkeypatch, {a: _canonical(a)}, drift=["1 cell(s) not listed as stale: [('MLH', 2019)]"])
     with pytest.raises(typer.Exit) as exc:
-        answerkey.excused_by_a_freshened_cache(unresolved)
+        answerkey.classify({a: _diverged(a, error_fields_only=True)})
     assert exc.value.exit_code == 2
 
 
