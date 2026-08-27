@@ -212,6 +212,24 @@ port verified byte-equal to that function); the oracle reads the first. **When
 they disagree, the dump contradicts itself** — and only one of the two answers is
 consistent with the `pattern` rows the same file ships.
 
+The disagreement takes **three shapes**, and every registered member of this class
+is one of them. They differ only in which side of the diff the deciding position
+sits on, so the cell list enumerates all three identically — but the direction
+decides *which* year's cell is the defective one, so an entry's evidence has to
+name its shape:
+
+| shape | at the deciding position | effect on the oracle | defective cell keyed by |
+|---|---|---|---|
+| **permissive** | cache lists a character the recompute does not | accepts a character the pattern rows reject, so that pass takes no correction code | the oracle's model year |
+| **restrictive** | cache is missing a character the recompute has | penalizes a pass the pattern rows say is clean, so that pass loses | ultravin's model year |
+| **omitted-row** | cache has no row for the position at all | validates nothing there — an absent charset is not an empty one | the oracle's model year |
+
+The omitted-row shape is the one worth pausing on: `spvindecode_errorcode`'s scan
+does `if allowed then ... end if`, so a position the cache never wrote is not
+checked, which makes an absent row strictly *more* permissive than any extra
+character. The cell list records those positions on its `only_in_recompute` side,
+so they are enumerated exactly like the other two.
+
 (The exceptions subquery does not do what it reads like. The only WMI-named
 column of `WMIYearValidChars_CacheExceptions` is the quoted, upper-case `"WMI"`,
 so the unquoted `wmi` in the subquery matches nothing in its own `FROM` and
@@ -236,8 +254,8 @@ result — so the list is always this month's dump; the full report rides out as
 run's `data-refresh-report` artifact. A month-over-month change in the list is the
 expected signal, not a failure — it self-documents in the refresh PR diff.
 
-Two cells worked through, both of them the ones the registered `clean-decode`
-VINs land on:
+Two cells worked through, the ones the first two registered `clean-decode` VINs
+land on:
 
 | cell (`wmi`, `year`) | position | cache | recomputed from `pattern` | stale extras |
 |---|---:|---|---|---|
@@ -287,7 +305,8 @@ at, and the registry records it as each entry's `scope`:
    observation names no VIN position, so the cell list cannot excuse it; those
    VINs are registered individually (see §4).
 
-3. **The whole decode** (`clean-decode`, `MLHAE041XKA111111` and
+3. **The whole decode** (`clean-decode`, 184 VINs registered individually; the
+   two worked through here are `MLHAE041XKA111111` and
    `JH2RD1613RA111111`). Same cells, but these VINs have an *inconclusive* model
    year — `fVinModelYear2` cannot choose between the two halves of position 10's
    30-year cycle, so both years get a decode pass and the best-of scoring picks
@@ -310,6 +329,31 @@ at, and the registry records it as each entry's `scope`:
    Note what is *not* different: both engines consider exactly the same two
    candidate years and run a pass for each. Only the error code one of those
    passes earns differs, and that comes from the charset.
+
+   The 2026_08 answer key made the size of this sub-class visible for the first
+   time: **182 further `clean-decode` VINs**, spread over **19 cells**, every one
+   of them a position-10 30-year ambiguity resolved by the cache. All three
+   shapes are represented:
+
+   - **permissive**, 159 VINs over 16 cells — `(JH2, 2019…2026)`, `(MLH, 2025)`,
+     `(MLH, 2026)`, `(10T, 2024)`, `(2HJ, 2025)`, `(3H1, 2025)`, `(5J7, 2025)`,
+     `(JH1, 2025)`, `(JYA, 2027)`. The MLH/JH2 walkthrough above is this shape.
+   - **restrictive**, 18 VINs over `(JKA, 2025)` and `(JKB, 2025)`, both stale at
+     position 11 with cache `ABJT` against recompute `ABDJT`. Each VIN carries
+     `D` there, so the oracle penalizes its own 2025 pass and falls back to 1995
+     while ultravin keeps 2025 — the flip runs the *other* way, and the
+     defective cell is the one keyed by ultravin's year.
+   - **omitted-row**, 5 VINs on `(JKA, 2021)`, whose 69 rows cover only positions
+     4–8. The recompute yields `ABDJ` at position 11; each VIN carries `C`, which
+     ultravin rejects and the oracle never looks at.
+
+   Each was admitted only after a machine check appropriate to its shape — the
+   deciding position's character on the expected side of the cache/recompute
+   diff, and the cell on `scripts/stale_cache_cells.json` — and each entry's
+   `evidence` names its shape, its cell, its position, and the charsets. The
+   decisive test is shape-independent and was run on every one: emptying the
+   cell in a rolled-back transaction made the oracle reproduce ultravin
+   byte-for-byte on **182/182**, cache restored to its shipped 8,809,229 rows.
 
 **Per-VIN registration for this class covers only the `clean-decode` members.** A
 divergence is adjudicated against the cell list by `scripts/parity/stale_cache.py`
@@ -351,9 +395,9 @@ legitimately stale. Three controls stand against that, none of them this list:
 What the list itself contributes is narrowness, not proof: the excuse it buys is
 bounded to the five elements the cache feeds, on the one cell that VIN's decode
 reads, at a VIN position that cell is actually stale at. A defect that reaches
-further is outside the class by construction. That is why the two `clean-decode`
-VINs above stay registered individually: their whole decode changes, which no
-cell list may excuse.
+further is outside the class by construction. That is why the `clean-decode`
+members stay registered individually: their whole decode changes, which no cell
+list may excuse.
 
 **Decision: keep ultravin's source-consistent computation.** Matching the oracle
 here would mean shipping the 8.8M-row cache — or its delta — purely to reproduce
@@ -614,3 +658,65 @@ teaching ultravin to read that cell, which §2 already rejected.
 rows, does not see `F`/`H` at position 8, and takes the `cntErrors > 1` branch
 (code 5). That is the source-consistent answer, and it is what the oracle
 itself produces once the stale cell is gone.
+
+---
+
+## How the answer key carries these deviations
+
+The monthly answer key (`scripts/parity/answerkey.py`, policy in
+`docs/ACCEPTANCE.md`) freezes one hash per VIN and re-checks it on every PR with
+no Postgres anywhere. That works only if the key has something to say about the
+VINs on this page, where the oracle's answer is the defect. It says it with two
+prefixes, neither of them a hex digit:
+
+| marker | meaning | compared by `verify`? |
+|---|---|---|
+| `!` | the oracle raised instead of answering, so there is no answer to freeze | no — nothing to compare against |
+| `~` | the two disagreed and the disagreement was proven to be the stale-cache class, so the frozen hash is **ultravin's own** | yes |
+
+**A `~` is a pin, not a skip.** It is the easiest thing on this page to
+misread. The marker does not mean "stop checking this VIN"; it means "stop
+asserting the oracle was right about it". The frozen hash is ultravin's answer,
+`verify` compares it like any other, and a later change to that VIN's decode
+fails exactly as a plain mismatch would — the only difference is the report,
+which says ultravin moved on a documented deviation rather than that it
+disagrees with the oracle. A `~` is compared **even when the VIN is also
+registered** in `scripts/known_problems.json`: the registry means "do not trust
+the oracle here", and ultravin's own pinned answer is not the oracle's, so
+skipping it would leave those VINs with no regression cover at all. Build time
+is the only place the marker can be decided, because the classification needs
+the field-level diff and `verify` deliberately has no oracle to diff against.
+
+**Every `~` is earned by counterfactual, not by argument.** `answerkey.classify`
+asks two questions in order, and a VIN must pass both:
+
+1. *Is it caused by the stale cache?* Put the stale cells back to what the
+   dump's own `pattern` rows say they hold — `stale_cache.counterfactual_rows`,
+   the same rolled-back freshening the sections above use as evidence — ask the
+   oracle again, and require its answer to be ultravin's byte for byte. Nothing
+   that fails this is ever excused, whatever else is true of it.
+2. *Is it in scope for a machine excuse?* Policy rather than physics. A
+   divergence confined to the error/correction elements the cache feeds may be
+   excused by machine, because that is the blast radius the class is defined
+   over. One that reaches the **vehicle** may not.
+
+The six verdicts that fall out, three of which earn a `~`:
+
+| verdict | what it means |
+|---|---|
+| `error-fields, cache-caused` | the diff stays inside elements 142/143/144/156/191 — the machine excuse, and the common case |
+| `year flip, collapses on the oracle's year` | the vehicle is not really in dispute; once both sides agree on the model year the residue sits inside one stale cell (`stale_cache.repin_verdict`) |
+| `clean-decode, registered per VIN` | a different vehicle, argued for this VIN in `scripts/known_problems.json` |
+| `clean-decode, cache-caused, NOT registered` | the same thing with nobody's name on it — fails `verify`, and says so by name |
+| `not reproduced by a freshened cache` | the counterfactual did not hold, so this is not the class at all — fails `verify` |
+| `registered, not pinned (not compared)` | registered, but the counterfactual did not hold, so there is no defensible answer to pin — kept out of the comparison rather than silently forgiven |
+
+**The policy line is the third row.** A clean-decode change is excused by a
+*human*, one VIN at a time, never by the machine — the cell list in
+`scripts/stale_cache_cells.json` may forgive only what stays inside the five
+elements the cache feeds (§2). The single exception is the second row, and it
+is narrow for a reason: a flip that dissolves the moment both engines agree on
+the year is not a disagreement about the car, only about which year's cell was
+read. The registry is read live from `scripts/known_problems.json`, never
+hardcoded, so registering a VIN is what moves it from the fourth row to the
+third — and retiring one moves it back.

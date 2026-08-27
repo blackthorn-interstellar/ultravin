@@ -35,6 +35,10 @@ x-oracle: &oracle
   #     113k shard. Worth far more than the fraction of +6% it costs.
   # NOTE: `command: >` is a folded scalar. Every line below joins into the
   # argument string, so comments belong up here, not among the flags.
+  # max_wal_size must stay well under the primary's 8g tmpfs: with
+  # checkpoint_timeout=1d, WAL is the only thing that forces a checkpoint, and
+  # sustained decoding once grew it to fill the volume and kill the server
+  # (2.2 GB data + 2 GB WAL cap leaves ~4 GB headroom).
   command: >
     postgres
     -c fsync=off
@@ -46,7 +50,7 @@ x-oracle: &oracle
     -c work_mem=64MB
     -c temp_buffers=64MB
     -c checkpoint_timeout=1d
-    -c max_wal_size=8GB
+    -c max_wal_size=2GB
     -c jit=off
     -c client_min_messages=warning
     -c max_locks_per_transaction=4096

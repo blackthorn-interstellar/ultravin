@@ -10,11 +10,14 @@ here, together and apart, on synthetic fixtures rather than the 500 MB dump.
 
 from __future__ import annotations
 
+import contextlib
 import json
 from pathlib import Path
 from typing import Any
 
-from scripts.parity import stale_cache
+import pytest
+
+from scripts.parity import normalize, stale_cache
 
 # Two cells, as the committed list stores them: each stale at position 11.
 CELLS = {("MLH", 2019): frozenset({11}), ("1F9123", 2020): frozenset({11})}
@@ -383,3 +386,307 @@ def test_the_committed_list_is_internally_consistent() -> None:
     # The scan's own premise: the proc's cache-exception list is empty, so the
     # cache really is what every listed cell's decode reads.
     assert doc["summary"]["cache_exception_wmis"] == 0
+
+
+# ------------------------------------------------------------------- the repin probe
+
+
+def _row(element_id: int, value: str) -> dict[str, Any]:
+    """One canonical row, carrying only the fields these fixtures differ in.
+
+    Built through `from_ultravin` so both sides of the diff are canonicalized the
+    same way — the decode fixtures below are fed through it for real.
+    """
+    return normalize.from_ultravin({"element_id": element_id, "value": value})
+
+
+def _decoding(unpinned: int | None, pinned: int | None, rows: list[dict[str, Any]]):
+    """A stand-in for `ultravin.decode`, which the probe calls twice.
+
+    Once with no year, to see what ultravin chose on its own, and once pinned to
+    the oracle's year. `pinned` is what ultravin *actually* returns for that
+    second call, which is not always what was asked for.
+    """
+
+    def decode(_vin: str, year: int | None = None) -> dict[str, Any]:
+        if year is None:
+            return {"model_year": unpinned}
+        return {"model_year": pinned, "elements": rows}
+
+    return decode
+
+
+ORACLE_2019 = [_row(29, "2019"), _row(144, "(11:AB)")]
+REPINNED_2019 = [_row(29, "2019"), _row(144, "(11:B)")]
+
+
+def test_no_year_in_the_oracles_answer_is_nothing_to_repin() -> None:
+    assert stale_cache.repin_verdict("MLHAE041XKA111111", [_row(144, "(11:AB)")]) == stale_cache.NO_YEAR_FLIP
+
+
+def test_a_year_both_engines_already_agree_on_is_nothing_to_repin(monkeypatch) -> None:
+    """Pinning a year ultravin already chose is a no-op: the diff comes back
+    unchanged and the verdict would read as a considered NOT_THIS_CLASS when
+    nothing was probed at all. Say so instead."""
+    monkeypatch.setattr(stale_cache, "_decode", _decoding(2019, 2019, REPINNED_2019))
+    assert stale_cache.repin_verdict("MLHAE041XKA111111", ORACLE_2019, CELLS) == stale_cache.NO_YEAR_FLIP
+
+
+def test_a_repin_that_collapses_into_one_stale_cell(monkeypatch) -> None:
+    """The second-order route. The oracle's error byte — built from the stale
+    cell — is what chose its model year, so ultravin landed on a different one.
+    Agree on the year and all that is left is one charset, at the position the
+    cell keyed by *the oracle's* year is stale at."""
+    monkeypatch.setattr(stale_cache, "_decode", _decoding(1989, 2019, REPINNED_2019))
+    assert stale_cache.repin_verdict("MLHAE041XKA111111", ORACLE_2019, CELLS) == stale_cache.COLLAPSED
+
+
+def test_a_pin_that_does_not_take_is_inconclusive_not_a_negative(monkeypatch) -> None:
+    """The hardening. `year=` is only the fourth sort key, behind the error code,
+    so an oracle year reached through a position-10 candidate simply will not
+    stick — ultravin answers about a different year than the one asked for and
+    the probe never ran. Calling that "not this class" is what left 182 VINs
+    misfiled as decoder bugs in the parity backlog; it has to say so instead."""
+    monkeypatch.setattr(stale_cache, "_decode", _decoding(1989, 1989, [_row(29, "1989"), _row(144, "(11:B)")]))
+    verdict = stale_cache.repin_verdict("MLHAE041XKA111111", ORACLE_2019, CELLS)
+    assert verdict == stale_cache.PIN_DID_NOT_TAKE
+    assert verdict != stale_cache.NOT_THIS_CLASS
+
+
+def test_a_stuck_pin_that_still_differs_is_not_this_class(monkeypatch) -> None:
+    """Pinning the year has to leave *only* the cell's own stale positions. Here
+    a vehicle element still differs, which no cache cell can explain."""
+    monkeypatch.setattr(stale_cache, "_decode", _decoding(1989, 2019, [*REPINNED_2019, _row(5, "Accord")]))
+    oracle = [*ORACLE_2019, _row(5, "Civic")]
+    assert stale_cache.repin_verdict("MLHAE041XKA111111", oracle, CELLS) == stale_cache.NOT_THIS_CLASS
+
+
+def test_a_repin_reads_the_cell_keyed_by_the_oracles_year(monkeypatch) -> None:
+    """Reading ultravin's (listed) year instead would launder the verdict: the
+    same collapse against an unlisted cell explains nothing."""
+    monkeypatch.setattr(stale_cache, "_decode", _decoding(2019, 1989, [_row(29, "1989"), _row(144, "(11:B)")]))
+    oracle_1989 = [_row(29, "1989"), _row(144, "(11:AB)")]
+    assert ("MLH", 2019) in CELLS
+    assert stale_cache.repin_verdict("MLHAE041XKA111111", oracle_1989, CELLS) == stale_cache.NOT_THIS_CLASS
+
+
+def test_the_probe_asks_for_the_year_the_oracle_chose(monkeypatch) -> None:
+    asked = []
+
+    def fake(_vin, year=None):
+        asked.append(year)
+        return {"model_year": 1989 if year is None else 2019, "elements": REPINNED_2019}
+
+    monkeypatch.setattr(stale_cache, "_decode", fake)
+    stale_cache.repin_verdict("MLHAE041XKA111111", ORACLE_2019, CELLS)
+    assert asked == [None, 2019]  # what ultravin chose alone, then the oracle's year
+
+
+def test_a_total_collapse_is_the_strongest_case_not_the_weakest(monkeypatch) -> None:
+    """Agreeing on the year leaves the two byte-for-byte identical: the flip was
+    the whole divergence and the cell accounts for all of it.
+
+    This has to be checked before `is_expected_divergence`, which demands the
+    difference name a position. An empty diff names none — for the opposite
+    reason a bug with no positional tie names none — so putting both through the
+    same test made a total collapse read as no collapse at all.
+    """
+    monkeypatch.setattr(stale_cache, "_decode", _decoding(1989, 2019, list(ORACLE_2019)))
+    assert stale_cache.repin_verdict("MLHAE041XKA111111", ORACLE_2019, CELLS) == stale_cache.COLLAPSED
+
+
+def test_a_total_collapse_does_not_need_the_cell_to_be_listed(monkeypatch) -> None:
+    """Nothing survived, so there is no residue for a cell to have to explain.
+    The counterfactual has already proved the cache caused it."""
+    monkeypatch.setattr(stale_cache, "_decode", _decoding(1989, 2019, list(ORACLE_2019)))
+    assert stale_cache.repin_verdict("MLHAE041XKA111111", ORACLE_2019, {}) == stale_cache.COLLAPSED
+
+
+def test_the_positionless_rule_still_rejects_a_residue_that_points_nowhere() -> None:
+    """The unpinned path is untouched. A difference that survives but names no
+    position has no tie to any cell and is still not this class — that rule is
+    what keeps the excuse narrow, and the total-collapse case must not widen it."""
+    vin, listed = "MLHAE041XKA111111", {"model_year": 2019}
+    summaries = {
+        "field_diffs": [[143, "value", "0,14", "3,14"], [191, "value", "a", "b"]],
+        "missing": [],
+        "extra": [],
+        "order_ok": True,
+    }
+    assert stale_cache.error_fields_only(summaries)
+    assert stale_cache.diff_positions(summaries) == set()
+    assert not stale_cache.is_expected_divergence(vin, summaries, listed, CELLS)
+
+
+# ------------------------------------------------------- the counterfactual decode
+#
+# A miniature of the oracle: it holds a cache, answers the recompute, applies the
+# writes `counterfactual_rows` makes, and renders a "decode" out of whatever the
+# cache says at that moment. That is enough to pin the whole contract — which
+# cells get replaced, that the writes are rolled back, and that what the caller
+# sees is the freshened answer — without Postgres anywhere near it.
+
+SHIPPED = {
+    ("MLH", 2019): {(11, "A"), (11, "J")},  # stale: the cache offers an `A` no pattern allows
+    ("MLH", 2020): {(11, "J")},
+    ("JH2", 1994): {(4, "B")},
+}
+RECOMPUTED = {
+    ("MLH", 2019): {(11, "J")},
+    ("MLH", 2020): {(11, "J")},
+    ("JH2", 1994): {(4, "B")},
+}
+
+
+def _oracle_row(value: str) -> dict[str, Any]:
+    """One raw spvindecode row, the shape `normalize.from_oracle` expects."""
+    return {
+        "groupname": "",
+        "variable": "",
+        "value": value,
+        "itempatternid": None,
+        "itemvinschemaid": None,
+        "itemkeys": "",
+        "itemelementid": 144,
+        "itemattributeid": "",
+        "itemcreatedon": None,
+        "itemwmiid": None,
+        "code": "",
+        "datatype": "",
+        "decode": "",
+        "itemsource": "",
+        "itemtobeqced": None,
+    }
+
+
+class _FakeCursor:
+    def __init__(self, db: _FakeOracle) -> None:
+        self.db = db
+
+    def execute(self, sql: str, args: tuple = ()) -> None:
+        if sql == stale_cache._CACHED:
+            self.rows = [
+                {"year": y, "position": p, "char": c}
+                for (w, y), pairs in self.db.cache.items()
+                if w == args[0]
+                for p, c in pairs
+            ]
+        elif sql == stale_cache._RECOMPUTE:
+            self.rows = [{"p": p, "c": c} for p, c in sorted(RECOMPUTED[(args[0], args[1])])]
+        elif sql == stale_cache._DROP_CELL:
+            self.db.cache.pop((args[0], args[1]), None)
+            self.rows = []
+        elif sql == stale_cache._FILL_CELL:
+            base, wmi, year, positions, chars = args
+            self.db.ids += [base - i for i in range(1, len(positions) + 1)]
+            self.db.cache[(wmi, year)] = set(zip(positions, chars, strict=True))
+            self.db.filled.append((wmi, year))
+            self.rows = []
+        elif sql == stale_cache._DECODE:
+            # The "decode": whatever the cell this VIN reads holds right now.
+            cell = (stale_cache.vin_wmi(args[0]), 2019)
+            self.db.decoded.append(args[0])
+            self.rows = [_oracle_row("".join(sorted(c for _, c in self.db.cache.get(cell, ()))))]
+        else:  # pragma: no cover - a query the fixture does not know is a test bug
+            raise AssertionError(sql)
+
+    def fetchall(self) -> list[dict[str, Any]]:
+        return self.rows
+
+
+class _FakeOracle:
+    def __init__(self, autocommit: bool = False) -> None:
+        self.autocommit = autocommit
+        self.cache = {k: set(v) for k, v in SHIPPED.items()}
+        self.ids: list[int] = []
+        self.filled: list[tuple[str, int]] = []
+        self.decoded: list[str] = []
+        self.rollbacks = 0
+
+    @contextlib.contextmanager
+    def cursor(self) -> Any:
+        yield _FakeCursor(self)
+
+    def rollback(self) -> None:
+        self.rollbacks += 1
+        self.cache = {k: set(v) for k, v in SHIPPED.items()}
+
+
+def test_stale_cells_of_finds_the_cells_the_recompute_contradicts() -> None:
+    stale, drift = stale_cache.stale_cells_of(_FakeOracle(), ["MLH", "JH2"], {("MLH", 2019): frozenset({11})})
+    assert stale == {("MLH", 2019): [(11, "J")]}
+    assert drift == []
+
+
+def test_an_unlisted_stale_cell_is_drift() -> None:
+    """The committed list under-reports the defect, so an excuse would be resting
+    on a cell nobody recorded. Loud, not silent."""
+    _, drift = stale_cache.stale_cells_of(_FakeOracle(), ["MLH", "JH2"], {})
+    assert drift == ["1 cell(s) not listed as stale: [('MLH', 2019)]"]
+
+
+def test_a_listed_cell_that_is_not_stale_is_drift() -> None:
+    """The other direction: the list is describing a dump this is not."""
+    cells = {("MLH", 2019): frozenset({11}), ("JH2", 1994): frozenset({4})}
+    _, drift = stale_cache.stale_cells_of(_FakeOracle(), ["MLH", "JH2"], cells)
+    assert drift == ["1 cell(s) listed but not stale: [('JH2', 1994)]"]
+
+
+def test_a_listed_cell_for_another_wmi_is_not_drift() -> None:
+    """Only the WMIs being classified are in scope; the rest of the list is not
+    evidence about them either way."""
+    cells = {("MLH", 2019): frozenset({11}), ("ZZZ", 2001): frozenset({7})}
+    _, drift = stale_cache.stale_cells_of(_FakeOracle(), ["MLH"], cells)
+    assert drift == []
+
+
+def test_the_counterfactual_decode_sees_the_freshened_cell() -> None:
+    db = _FakeOracle()
+    stale, _ = stale_cache.stale_cells_of(db, ["MLH"], {("MLH", 2019): frozenset({11})})
+    rows = dict(stale_cache.counterfactual_rows(db, ["MLHAE041XKA111111"], stale))
+    assert [r["value"] for r in rows["MLHAE041XKA111111"]] == ["J"]  # freshened; the cache ships "AJ"
+
+
+def test_every_batch_is_rolled_back() -> None:
+    db = _FakeOracle()
+    vins = [f"MLH{i:014d}" for i in range(5)]
+    list(stale_cache.counterfactual_rows(db, vins, {("MLH", 2019): [(11, "J")]}, batch=2))
+    assert db.rollbacks == 3  # ceil(5 / 2)
+    assert db.cache == {k: set(v) for k, v in SHIPPED.items()}
+
+
+def test_an_abandoned_run_still_rolls_back() -> None:
+    """The generator is the only thing holding the transaction open, so giving up
+    part way through must not leave a mutated oracle behind."""
+    db = _FakeOracle()
+    rows = stale_cache.counterfactual_rows(db, [f"MLH{i:014d}" for i in range(5)], {("MLH", 2019): [(11, "J")]})
+    next(rows)
+    rows.close()
+    assert db.rollbacks == 1
+    assert db.cache == {k: set(v) for k, v in SHIPPED.items()}
+
+
+def test_only_the_batchs_own_wmis_are_freshened() -> None:
+    """Replacing cells for WMIs this batch will not decode is write traffic and
+    lock footprint on a shared instance for nothing."""
+    db = _FakeOracle()
+    stale = {("MLH", 2019): [(11, "J")], ("JH2", 1994): [(4, "B")]}
+    list(stale_cache.counterfactual_rows(db, ["MLHAE041XKA111111"], stale))
+    assert db.filled == [("MLH", 2019)]
+
+
+def test_the_rows_it_writes_never_draw_on_the_tables_sequence() -> None:
+    """A sequence keeps going across a rollback — it is the one piece of state the
+    rollback does not put back — so the ids have to come from somewhere else."""
+    db = _FakeOracle()
+    stale = {("MLH", 2019): [(11, "J"), (11, "K")], ("MLH", 2020): [(11, "J")]}
+    list(stale_cache.counterfactual_rows(db, ["MLHAE041XKA111111"], stale))
+    assert db.ids
+    assert all(i < 0 for i in db.ids)
+    assert len(set(db.ids)) == len(db.ids)
+
+
+def test_an_autocommit_connection_is_refused() -> None:
+    """Autocommit would make the freshening permanent on whatever oracle this is."""
+    with pytest.raises(ValueError, match="rolls its writes back"):
+        list(stale_cache.counterfactual_rows(_FakeOracle(autocommit=True), ["MLHAE041XKA111111"], {}))

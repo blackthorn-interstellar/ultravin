@@ -12,7 +12,7 @@ import pytest
 import typer
 import ultravin
 
-from scripts.parity import answerkey, normalize
+from scripts.parity import answerkey, normalize, stale_cache
 
 
 def test_a_hash_is_stable_for_the_same_vin() -> None:
@@ -185,12 +185,314 @@ def test_other_elements_keep_their_order() -> None:
     assert normalize.collation_agnostic(rows) == rows
 
 
-def _write_key(path: Path, pairs: list[tuple[str, str]]) -> Path:
+# ------------------------------------------------- the build-time deviation excuse
+
+
+def _canonical(vin: str) -> list[dict]:
+    """ultravin's own canonical rows for a VIN — a stand-in for the oracle's."""
+    return normalize.ultravin_rows(ultravin.decode(vin, full=True))
+
+
+def _diverging(vin: str) -> list[dict]:
+    """Rows an oracle would have to have produced to disagree about the *vehicle*.
+
+    Deliberately not an error element: this is the clean-decode shape, the one
+    the policy boundary says a machine may not excuse on its own.
+    """
+    rows = _canonical(vin)
+    i = next(i for i, r in enumerate(rows) if r["element_id"] not in normalize.ERROR_ELEMENTS)
+    return [*rows[:i], {**rows[i], "value": "SOMETHING ELSE"}, *rows[i + 1 :]]
+
+
+def _diverging_error_field(vin: str) -> list[dict]:
+    """The same, but confined to the error/correction elements the cache feeds.
+
+    A changed value rather than an added row: `diff_rows` compares the two
+    GroupName-rank *sequences*, so a row present on one side only makes
+    `order_ok` false and no diff of that shape is ever read as narrow.
+    """
+    rows = _canonical(vin)
+    i = next(i for i, r in enumerate(rows) if r["element_id"] in normalize.ERROR_ELEMENTS)
+    return [*rows[:i], {**rows[i], "value": "SOMETHING ELSE"}, *rows[i + 1 :]]
+
+
+VIN = "1HGCM82633A004352"
+
+# The canonical->raw column map, so a fixture can hand `_ask` rows in the shape
+# `spvindecode` really returns rather than the shape parity has normalized them to.
+_ORACLE_COLUMN = {
+    "group_name": "groupname",
+    "variable": "variable",
+    "value": "value",
+    "pattern_id": "itempatternid",
+    "vin_schema_id": "itemvinschemaid",
+    "keys": "itemkeys",
+    "element_id": "itemelementid",
+    "attribute_id": "itemattributeid",
+    "created_on": "itemcreatedon",
+    "wmi_id": "itemwmiid",
+    "code": "code",
+    "data_type": "datatype",
+    "decode": "decode",
+    "source": "itemsource",
+    "to_be_qced": "itemtobeqced",
+}
+
+
+def _as_oracle(rows: list[dict]) -> list[dict]:
+    return [{_ORACLE_COLUMN[k]: v for k, v in row.items()} for row in rows]
+
+
+def _answers(monkeypatch, rows_for) -> None:
+    monkeypatch.setattr(answerkey.oracle, "decode", lambda _conn, vin: _as_oracle(rows_for(vin)))
+
+
+def test_agreement_leaves_nothing_for_the_second_pass(monkeypatch) -> None:
+    _answers(monkeypatch, _canonical)
+    assert answerkey._ask(VIN) == (VIN, answerkey.ultravin_hashes([VIN])[0], None)
+
+
+def test_a_divergence_is_described_for_the_second_pass(monkeypatch) -> None:
+    # The entry stays the oracle's hash for now; the third value carries what the
+    # classifier needs — our answer, and whether the diff stays inside the error
+    # elements, which is the one thing only this pass has both sides for.
+    rows = _diverging(VIN)
+    _answers(monkeypatch, lambda _vin: rows)
+    vin, digest, divergence = answerkey._ask(VIN)
+    assert (vin, digest) == (VIN, answerkey.hash_rows(rows))
+    assert divergence is not None
+    assert divergence.ours == answerkey.ultravin_hashes([VIN])[0]
+
+
+def test_the_error_field_scope_is_decided_where_both_sides_exist(monkeypatch) -> None:
+    # A difference on an error element is inside the class's blast radius; one on
+    # a vehicle element is a clean-decode deviation and needs a human.
+    def scope(rows_for) -> bool:
+        _answers(monkeypatch, rows_for)
+        divergence = answerkey._ask(VIN)[2]
+        assert divergence is not None, "the fixture did not diverge"
+        return divergence.error_fields_only
+
+    assert scope(_diverging_error_field)
+    assert not scope(_diverging)
+
+
+def test_a_registered_vin_is_still_described(monkeypatch) -> None:
+    # It used to be dropped here. The registry is what decides a *clean-decode*
+    # divergence, and only the classifier knows whether this is one — so the
+    # judgement belongs there, with the evidence.
+    _answers(monkeypatch, _diverging)
+    vin = min(answerkey.KNOWN_DEVIATIONS)
+    assert answerkey._ask(vin)[2] is not None
+
+
+def test_an_oracle_crash_is_recorded_not_raised(monkeypatch) -> None:
+    def boom(_conn, _vin):
+        msg = "server closed the connection"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(answerkey.oracle, "decode", boom)
+    assert answerkey._ask(VIN) == (VIN, answerkey.UNANSWERED + "RuntimeError", None)
+
+
+class _NullConn:
+    """Enough connection for `classify` to hand onwards."""
+
+    def rollback(self) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+
+def _classifier(
+    monkeypatch,
+    freshened: dict[str, list[dict]],
+    drift: list[str] | None = None,
+    repin: str = "not-this-class",
+) -> None:
+    monkeypatch.setattr(answerkey.oracle, "connect", lambda **_: _NullConn())
+    monkeypatch.setattr(answerkey.oracle, "decode", lambda _conn, vin: _as_oracle(_canonical(vin)))
+    monkeypatch.setattr(answerkey.stale_cache, "stale_cells_of", lambda *_a, **_k: ({("MLH", 2019): []}, drift or []))
+    monkeypatch.setattr(answerkey.stale_cache, "repin_verdict", lambda *_a, **_k: repin)
+    monkeypatch.setattr(
+        answerkey.stale_cache,
+        "counterfactual_rows",
+        lambda _conn, vins, _stale, **_k: iter([(v, freshened[v]) for v in vins]),
+    )
+
+
+def _diverged(vin: str, *, error_fields_only: bool) -> answerkey.Divergence:
+    return answerkey.Divergence(answerkey.ultravin_hashes([vin])[0], error_fields_only)
+
+
+def test_an_error_field_divergence_the_cache_explains_is_machine_excused(monkeypatch) -> None:
+    a = ultravin.generate(1, seed=41)[0]
+    _classifier(monkeypatch, {a: _canonical(a)})
+    assert answerkey.classify({a: _diverged(a, error_fields_only=True)}) == {a: answerkey.MACHINE_EXCUSED}
+
+
+def test_nothing_the_freshened_cache_fails_to_reproduce_is_excused(monkeypatch) -> None:
+    # The counterfactual comes first and outranks every other consideration: an
+    # error-field diff the cache does not account for is still a hard mismatch.
+    a = ultravin.generate(1, seed=42)[0]
+    _classifier(monkeypatch, {a: _diverging(a)})
+    verdicts = answerkey.classify({a: _diverged(a, error_fields_only=True)})
+    assert verdicts == {a: answerkey.NOT_CACHE_CAUSED}
+    assert answerkey.NOT_CACHE_CAUSED not in answerkey.EXCUSED
+
+
+def test_a_year_flip_that_collapses_on_the_oracles_year_is_machine_excused(monkeypatch) -> None:
+    a = ultravin.generate(1, seed=43)[0]
+    _classifier(monkeypatch, {a: _canonical(a)}, repin=stale_cache.COLLAPSED)
+    assert answerkey.classify({a: _diverged(a, error_fields_only=False)}) == {a: answerkey.REPIN_EXCUSED}
+
+
+def test_a_clean_decode_divergence_needs_a_human_even_when_cache_caused(monkeypatch) -> None:
+    # The policy boundary. The cache really did cause it, and it is still not the
+    # machine's to excuse, because it moved the vehicle rather than the error text.
+    a = ultravin.generate(1, seed=44)[0]
+    _classifier(monkeypatch, {a: _canonical(a)}, repin=stale_cache.NOT_THIS_CLASS)
+    assert answerkey.classify({a: _diverged(a, error_fields_only=False)}) == {a: answerkey.NEEDS_REGISTRATION}
+    assert answerkey.NEEDS_REGISTRATION not in answerkey.EXCUSED
+
+
+def test_the_same_divergence_is_excused_once_a_human_registers_it(monkeypatch) -> None:
+    # Read live out of scripts/known_problems.json, never hardcoded: registering
+    # the VIN is the whole difference between the previous test and this one.
+    a = ultravin.generate(1, seed=45)[0]
+    monkeypatch.setattr(answerkey, "KNOWN_DEVIATIONS", frozenset({a}))
+    _classifier(monkeypatch, {a: _canonical(a)}, repin=stale_cache.NOT_THIS_CLASS)
+    assert answerkey.classify({a: _diverged(a, error_fields_only=False)}) == {a: answerkey.REGISTERED}
+    assert answerkey.REGISTERED in answerkey.EXCUSED
+
+
+def test_a_null_bearing_diff_does_not_take_the_shard_down(monkeypatch) -> None:
+    # `fingerprint` sorts each row as a list, so two rows agreeing on element and
+    # field fall through to comparing values, and None against an int raises.
+    # Real rows carry nulls; one of them killing a whole shard of a 1.7M-VIN
+    # build is not acceptable, and neither is forgiving it silently.
+    def row(value: str, pattern_id: object) -> dict:
+        return normalize.from_ultravin({"element_id": 144, "value": value, "pattern_id": pattern_id})
+
+    oracle_rows = [row("a", None), row("b", 12345)]
+    with pytest.raises(TypeError, match="not supported between instances of"):
+        normalize.fingerprint(normalize.diff_rows(oracle_rows, [row("a", 1), row("b", 2)]))
+
+    monkeypatch.setattr(answerkey.oracle, "decode", lambda _conn, _vin: _as_oracle(oracle_rows))
+    _, _digest, divergence = answerkey._ask(VIN)
+    assert divergence is not None
+    # Fails closed: out of scope for a machine excuse, so it needs a human.
+    assert not divergence.error_fields_only
+
+
+def test_a_registered_vin_the_cache_cannot_explain_is_not_marked_as_failing(monkeypatch) -> None:
+    # It keeps the oracle's hash and `verify` skips it, exactly as before any of
+    # this. Printing "will fail verify" beside it would be a lie the build tells
+    # about its own output.
+    a = ultravin.generate(1, seed=48)[0]
+    monkeypatch.setattr(answerkey, "KNOWN_DEVIATIONS", frozenset({a}))
+    _classifier(monkeypatch, {a: _diverging(a)})
+    assert answerkey.classify({a: _diverged(a, error_fields_only=False)}) == {a: answerkey.REGISTERED_UNPINNED}
+    assert answerkey.REGISTERED_UNPINNED not in answerkey.EXCUSED
+    assert answerkey.REGISTERED_UNPINNED not in answerkey.FAILS_VERIFY
+
+
+def test_a_cell_list_that_drifts_from_the_dump_stops_the_build(monkeypatch) -> None:
+    # Excusing on the strength of a stale cell nobody recorded would make the
+    # committed list — which every other gate reasons about — a fiction.
+    a = ultravin.generate(1, seed=47)[0]
+    _classifier(monkeypatch, {a: _canonical(a)}, drift=["1 cell(s) not listed as stale: [('MLH', 2019)]"])
+    with pytest.raises(typer.Exit) as exc:
+        answerkey.classify({a: _diverged(a, error_fields_only=True)})
+    assert exc.value.exit_code == 2
+
+
+def _write_key(path: Path, pairs: list[tuple[str, str]], **header) -> Path:
     with path.open("w") as fh:
-        fh.write(json.dumps({"month": "m", "artifact_blake3": "art"}) + "\n")
+        fh.write(json.dumps({"month": "m", "artifact_blake3": "art", **header}) + "\n")
         for vin, digest in pairs:
             fh.write(json.dumps([vin, digest]) + "\n")
     return path
+
+
+def _real_key(path: Path, pairs: list[tuple[str, str]]) -> Path:
+    """A key `verify` will accept as built against the data this tree pins."""
+    manifest = json.loads(answerkey.MANIFEST.read_text())
+    return _write_key(path, pairs, month=manifest["month"], artifact_blake3=manifest["artifact_blake3"])
+
+
+def test_a_key_that_mixes_builds_is_refused(tmp_path: Path) -> None:
+    key = tmp_path / "key.jsonl"
+    with key.open("w") as fh:
+        fh.write(json.dumps({"month": "m", "artifact_blake3": "art"}) + "\n")
+        fh.write(json.dumps({"month": "m", "artifact_blake3": "OTHER"}) + "\n")
+    with pytest.raises(ValueError, match="mixes shards from different builds"):
+        answerkey.read_key(key)
+
+
+def test_verify_counts_a_pinned_deviation_and_still_passes(tmp_path: Path, capsys) -> None:
+    vins = ultravin.generate(4, seed=21)
+    hashes = answerkey.ultravin_hashes(vins)
+    pairs = [(v, (answerkey.DEVIATION + h) if i == 1 else h) for i, (v, h) in enumerate(zip(vins, hashes, strict=True))]
+    key = _real_key(tmp_path / "key.jsonl", pairs)
+    answerkey.verify(key=str(key), strict_artifact=True, workers=1)  # no raise == green
+    out = capsys.readouterr().out
+    assert "1 pinned as documented deviations" in out
+    assert "every answer matches" in out
+
+
+def test_a_pinned_deviation_that_moved_still_fails(tmp_path: Path, capsys) -> None:
+    # `~` is a regression pin, not a skip: the VIN's decode is still checked, and
+    # a change to ultravin's own answer for it is still a failure.
+    vins = ultravin.generate(3, seed=22)
+    hashes = answerkey.ultravin_hashes(vins)
+    pairs = [(vins[0], hashes[0]), (vins[1], answerkey.DEVIATION + "0" * 16), (vins[2], hashes[2])]
+    key = _real_key(tmp_path / "key.jsonl", pairs)
+    with pytest.raises(typer.Exit) as exc:
+        answerkey.verify(key=str(key), strict_artifact=True, workers=1)
+    assert exc.value.exit_code == 1
+    err = capsys.readouterr().err
+    assert "1 MISMATCH against a pinned documented deviation" in err
+    assert vins[1] in err
+    assert "the oracle's frozen answer" not in err
+
+
+def test_a_pinned_registered_vin_is_still_compared(tmp_path: Path, capsys) -> None:
+    # The registry means "do not trust the oracle here"; a `~` entry is not the
+    # oracle's answer, it is ultravin's, and pinning it is the only regression
+    # cover those VINs have. Skipping it because the VIN is also registered would
+    # make the pin inert — and the suite used to pass with that clause removed.
+    registered = min(answerkey.KNOWN_DEVIATIONS)
+    key = _real_key(tmp_path / "key.jsonl", [(registered, answerkey.DEVIATION + "0" * 16)])
+    with pytest.raises(typer.Exit) as exc:
+        answerkey.verify(key=str(key), strict_artifact=True, workers=1)
+    assert exc.value.exit_code == 1
+    err = capsys.readouterr().err
+    assert "1 MISMATCH against a pinned documented deviation" in err
+    assert registered in err
+
+
+def test_an_unpinned_registered_vin_is_still_skipped(tmp_path: Path, capsys) -> None:
+    # The other half of the same clause: without a `~` there is nothing to pin
+    # ultravin's answer to, so the VIN stays uncompared as it always was.
+    registered = min(answerkey.KNOWN_DEVIATIONS)
+    key = _real_key(tmp_path / "key.jsonl", [(registered, "0" * 16)])
+    answerkey.verify(key=str(key), strict_artifact=True, workers=1)  # no raise == skipped
+    assert "every answer matches" in capsys.readouterr().out
+
+
+def test_verify_reports_the_two_kinds_of_failure_apart(tmp_path: Path, capsys) -> None:
+    vins = ultravin.generate(3, seed=23)
+    hashes = answerkey.ultravin_hashes(vins)
+    pairs = [(vins[0], "0" * 16), (vins[1], answerkey.DEVIATION + "0" * 16), (vins[2], hashes[2])]
+    key = _real_key(tmp_path / "key.jsonl", pairs)
+    with pytest.raises(typer.Exit) as exc:
+        answerkey.verify(key=str(key), strict_artifact=True, workers=1)
+    assert exc.value.exit_code == 1
+    err = capsys.readouterr().err
+    assert "1 MISMATCH against the oracle's frozen answer" in err
+    assert "1 MISMATCH against a pinned documented deviation" in err
 
 
 def test_compare_agrees_on_identical_keys(tmp_path: Path, capsys) -> None:
