@@ -22,9 +22,15 @@ The oracle is not right everywhere, and the key says so. Two prefixes, neither a
 hex digit, mark the entries that are not a plain "the oracle answered this":
 `!` for a VIN it raised on, and `~` for one where ultravin deliberately differs
 by the documented stale-`WMIYearValidChars` class — there the frozen hash is
-*ultravin's*, decided at build time where the field-level diff still exists
-(`answer_for`). `verify` still checks those VINs and still fails on them; what it
+*ultravin's*. `verify` still checks those VINs and still fails on them; what it
 no longer does is demand ultravin reproduce a defect it is documented not to.
+
+Which VINs those are is settled here and nowhere else, because settling it needs
+an oracle and `verify` deliberately has none. The build asks the shipped oracle
+once, and then asks a *freshened* one — the stale cells put back to what the
+dump's own pattern rows say they hold — about the VINs that disagreed. A VIN whose
+freshened answer is ultravin's, byte for byte, gets the `~`; everything else keeps
+the oracle's hash and fails, correctly. See `excused_by_a_freshened_cache`.
 
     make oracle-up && make oracle-load DUMP=downloads/vPICList_lite_2026_07.plain.zip
     uv run -- python -m scripts.parity.answerkey build --out target/answerkey.jsonl
@@ -97,50 +103,77 @@ def _init() -> None:
     _conn = oracle.connect()
 
 
-def answer_for(vin: str, oracle_rows: list[dict[str, Any]]) -> tuple[str, bool]:
-    """The key's entry for one VIN, given the oracle's canonical rows.
+def _ask(vin: str) -> tuple[str, str, str]:
+    """The oracle's answer for one VIN, and ultravin's where the two disagree.
 
-    Normally the oracle's hash. But where the two differ *and* the difference is
-    the documented stale-`WMIYearValidChars` class (docs/KNOWN_DEVIATIONS.md), the
-    oracle's answer is the wrong thing to freeze: the key would then demand that
-    ultravin reproduce a defect it deliberately does not reproduce, and `verify`
-    would report thousands of expected divergences as failures forever. Freezing
-    ultravin's own answer under a `~` keeps the VIN pinned — a later change to it
-    still fails `verify` — without asserting the oracle was right.
+    An oracle crash is recorded, not raised — it means the reference
+    implementation cannot answer, which is itself the fact worth freezing.
 
-    Build time is the only place this can be decided: the classification needs
-    the field-level diff, and `verify` deliberately has no oracle to diff against.
-
-    Returns the entry and whether the two agreed, so the build can tally the
-    divergences it did *not* excuse — a count the file itself cannot carry,
-    because an unexcused one is stored as the plain oracle hash.
+    The third value is ultravin's hash when the two differ and it is worth asking
+    why, and empty otherwise. Empty for a VIN already registered in
+    scripts/known_problems.json: `verify` skips those outright, and a per-VIN
+    entry should not quietly become a class one.
     """
-    mine = normalize.ultravin_rows(ultravin.decode(vin, full=True))
-    theirs = hash_rows(oracle_rows)
-    ours = hash_rows(mine)
-    if ours == theirs:
-        return theirs, True
-    if vin in KNOWN_DEVIATIONS:
-        # Registered per VIN in scripts/known_problems.json, and `verify` skips
-        # them outright. Keep the two registries disjoint rather than quietly
-        # converting a per-VIN entry into a class one.
-        return theirs, True
-    diff = normalize.fingerprint(normalize.diff_rows(oracle_rows, mine))
-    if stale_cache.is_expected_divergence(vin, diff, oracle_rows=oracle_rows):
-        return f"{DEVIATION}{ours}", False
-    return theirs, False
-
-
-def _ask(vin: str) -> tuple[str, str, bool]:
-    """The oracle's answer for one VIN. An oracle crash is recorded, not raised —
-    it means the reference implementation cannot answer, which is itself the fact
-    worth freezing."""
     try:
         rows = [normalize.from_oracle(r) for r in oracle.decode(_conn, vin)]
     except Exception as e:  # noqa: BLE001 — a VIN the oracle dies on must not stop the build
-        return vin, f"{UNANSWERED}{type(e).__name__}", True
-    digest, agreed = answer_for(vin, rows)
-    return vin, digest, agreed
+        return vin, f"{UNANSWERED}{type(e).__name__}", ""
+    theirs = hash_rows(rows)
+    ours = hash_rows(normalize.ultravin_rows(ultravin.decode(vin, full=True)))
+    return vin, theirs, "" if ours == theirs or vin in KNOWN_DEVIATIONS else ours
+
+
+def excused_by_a_freshened_cache(unresolved: dict[str, str]) -> set[str]:
+    """Which of these divergences the stale `WMIYearValidChars` cache accounts for.
+
+    `unresolved` maps a diverging VIN to ultravin's hash for it. The verdict is a
+    counterfactual, not an argument: put back what the dump's own pattern rows say
+    the stale cells should hold, ask the oracle the same question again, and
+    excuse the VIN only if the answer is now ultravin's, byte for byte. That is
+    the experiment the class was registered on, and it is the only test that
+    recognises the divergences the cache causes without printing — an error count
+    that flipped `spvindecode_errorcode`'s branch, a model year the error byte
+    moved — while still failing closed on everything it does not explain.
+
+    Refuses to classify at all if freshening would move a set of cells other than
+    the one `scripts/stale_cache_cells.json` records. That list is what every
+    other gate in the repo reasons about; if the dump and the list disagree, the
+    honest thing is to stop rather than to quietly excuse on the strength of a
+    cell nobody wrote down.
+    """
+    vins = sorted(unresolved)
+    wmis = sorted({stale_cache.vin_wmi(v) for v in vins})
+    # Two connections, because the two halves want opposite things. The scan
+    # writes nothing and wants autocommit, so its thousands of temp-table
+    # create/drops do not pile up as locks in one endless transaction (measured:
+    # four times slower, and it is the expensive half). The re-decode has to hold
+    # its freshening open across a batch, so it must be transactional.
+    scan = oracle.connect()
+    try:
+        stale, drift = stale_cache.stale_cells_of(scan, wmis)
+    finally:
+        scan.close()
+    conn = oracle.connect(batch=2)  # batch >= 2 is what makes the connection transactional
+    try:
+        if drift:
+            typer.echo(f"the dump and {stale_cache.CELLS.name} disagree about these WMIs:", err=True)
+            for line in drift:
+                typer.echo(f"  {line}", err=True)
+            raise typer.Exit(2)
+        typer.echo(
+            f"classifying {len(vins):,} divergences against {len(stale):,} freshened cells across {len(wmis)} WMIs",
+            err=True,
+        )
+        started = time.time()
+        excused = set()
+        for done, (vin, rows) in enumerate(stale_cache.counterfactual_rows(conn, vins, stale), start=1):
+            if hash_rows(rows) == unresolved[vin]:
+                excused.add(vin)
+            if done % 1_000 == 0:
+                typer.echo(f"  {done:,}/{len(vins):,} at {done / (time.time() - started):.1f} VIN/s", err=True)
+        return excused
+    finally:
+        conn.close()
 
 
 def sample_selected(vin: str, mod: int) -> bool:
@@ -201,8 +234,30 @@ def build(
     started = time.time()
     path = Path(out)
     path.parent.mkdir(parents=True, exist_ok=True)
-    excused = unexcused = unanswered = 0
-    with path.open("w") as fh, mp.Pool(workers, initializer=_init) as pool:
+
+    # Two passes. The first asks the *shipped* oracle, untouched, and is the only
+    # thing that decides what a matching VIN's answer is. The second re-asks only
+    # the VINs that disagreed, against a freshened cache, and is allowed to change
+    # nothing but which of those get the `~`. Held in memory in between because a
+    # divergence found on the last VIN can still change an entry written near the
+    # first — a shard is ~110k entries, and even the whole 1.8M corpus is a few
+    # hundred MB of short strings.
+    entries: list[tuple[str, str]] = []
+    unresolved: dict[str, str] = {}
+    with mp.Pool(workers, initializer=_init) as pool:
+        for done, (vin, digest, ours) in enumerate(pool.imap(_ask, vins, chunksize=16), start=1):
+            entries.append((vin, digest))
+            if ours:
+                unresolved[vin] = ours
+            if done % 20_000 == 0:
+                rate = done / (time.time() - started)
+                typer.echo(f"  {done:,}/{len(vins):,} at {rate:.0f} VIN/s, {len(unresolved):,} diverging", err=True)
+
+    excused = excused_by_a_freshened_cache(unresolved) if unresolved else set()
+    entries = [(vin, (DEVIATION + unresolved[vin]) if vin in excused else digest) for vin, digest in entries]
+    unanswered = sum(1 for _, digest in entries if digest.startswith(UNANSWERED))
+
+    with path.open("w") as fh:
         fh.write(
             json.dumps(
                 {
@@ -217,28 +272,19 @@ def build(
                     "shards": shards,
                     "sample_mod": sample_mod,
                     "count": len(vins),
+                    "excused": len(excused),
+                    "unexcused": len(unresolved) - len(excused),
                 }
             )
             + "\n"
         )
-        for done, (vin, digest, agreed) in enumerate(pool.imap(_ask, vins, chunksize=16), start=1):
+        for vin, digest in entries:
             fh.write(json.dumps([vin, digest]) + "\n")
-            unanswered += digest.startswith(UNANSWERED)
-            if not agreed:
-                excused += digest.startswith(DEVIATION)
-                unexcused += not digest.startswith(DEVIATION)
-            if done % 20_000 == 0:
-                rate = done / (time.time() - started)
-                typer.echo(f"  {done:,}/{len(vins):,} at {rate:.0f} VIN/s", err=True)
-        # A trailer, not a second file: the tallies are only known once the pool
-        # has drained, and `read_key` merges every header object it meets, so the
-        # opening line stays where anyone reading `head -1` expects it.
-        fh.write(json.dumps({**identity, "excused": excused, "unexcused": unexcused}) + "\n")
     share = unanswered / max(len(vins), 1)
     typer.echo(
         f"wrote {path} in {(time.time() - started) / 60:.1f} min "
         f"({len(vins) - unanswered:,} answered, {unanswered:,} not; "
-        f"{excused:,} pinned as documented deviations, {unexcused:,} diverging)",
+        f"{len(excused):,} pinned as documented deviations, {len(unresolved) - len(excused):,} diverging)",
         err=True,
     )
     # A handful of VINs genuinely kill the oracle (see KNOWN_DEVIATIONS). A large
@@ -254,9 +300,7 @@ def read_key(path: Path) -> tuple[dict[str, Any], list[tuple[str, str]]]:
     """Headers and answers out of a key file.
 
     A published key is the shards concatenated, so headers appear throughout it,
-    not just on line one — and each shard closes with a trailer carrying the
-    tallies it could only know once it had finished. Objects are headers, arrays
-    are answers; headers merge, so the result describes the whole file.
+    not just on line one. Objects are headers, arrays are answers.
     """
     header: dict[str, Any] = {}
     entries: list[tuple[str, str]] = []
@@ -273,7 +317,7 @@ def read_key(path: Path) -> tuple[dict[str, Any], list[tuple[str, str]]]:
                 ):
                     msg = f"{path.name} mixes shards from different builds"
                     raise ValueError(msg)
-                header = {**header, **row}
+                header = row
             else:
                 entries.append((row[0], row[1]))
     return header, entries
@@ -305,7 +349,7 @@ def verify(
     started = time.time()
     oracle_failures = sum(1 for _, h in entries if h.startswith(UNANSWERED))
     # A `~` entry pins ultravin's own answer instead of the oracle's (see
-    # `answer_for`). The comparison is identical — this run's decode against the
+    # `excused_by_a_freshened_cache`). The comparison is identical — this run's decode against the
     # frozen hash — so strip the marker and check it with everything else; only
     # the reporting differs, because a `~` failure means ultravin moved on a VIN
     # whose deviation was documented, not that it disagrees with the oracle.

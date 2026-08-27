@@ -201,52 +201,108 @@ def _diverging(vin: str) -> list[dict]:
 
 VIN = "1HGCM82633A004352"
 
+# The canonical->raw column map, so a fixture can hand `_ask` rows in the shape
+# `spvindecode` really returns rather than the shape parity has normalized them to.
+_ORACLE_COLUMN = {
+    "group_name": "groupname",
+    "variable": "variable",
+    "value": "value",
+    "pattern_id": "itempatternid",
+    "vin_schema_id": "itemvinschemaid",
+    "keys": "itemkeys",
+    "element_id": "itemelementid",
+    "attribute_id": "itemattributeid",
+    "created_on": "itemcreatedon",
+    "wmi_id": "itemwmiid",
+    "code": "code",
+    "data_type": "datatype",
+    "decode": "decode",
+    "source": "itemsource",
+    "to_be_qced": "itemtobeqced",
+}
 
-def test_agreement_freezes_the_oracles_hash() -> None:
-    rows = _canonical(VIN)
-    assert answerkey.answer_for(VIN, rows) == (answerkey.ultravin_hashes([VIN])[0], True)
+
+def _as_oracle(rows: list[dict]) -> list[dict]:
+    return [{_ORACLE_COLUMN[k]: v for k, v in row.items()} for row in rows]
 
 
-def test_an_unexplained_divergence_freezes_the_oracles_hash_and_is_counted() -> None:
-    # It will fail `verify`, which is the point: nothing excuses it.
+def _answers(monkeypatch, rows_for) -> None:
+    monkeypatch.setattr(answerkey.oracle, "decode", lambda _conn, vin: _as_oracle(rows_for(vin)))
+
+
+def test_agreement_leaves_nothing_for_the_second_pass(monkeypatch) -> None:
+    _answers(monkeypatch, _canonical)
+    assert answerkey._ask(VIN) == (VIN, answerkey.ultravin_hashes([VIN])[0], "")
+
+
+def test_a_divergence_is_handed_to_the_second_pass_with_our_answer(monkeypatch) -> None:
+    # The entry stays the oracle's hash for now; the third value is what the
+    # freshened-cache pass will compare against, and the only thing that can
+    # turn this entry into a `~`.
     rows = _diverging(VIN)
-    digest, agreed = answerkey.answer_for(VIN, rows)
-    assert not agreed
-    assert digest == answerkey.hash_rows(rows)
-    assert not digest.startswith(answerkey.DEVIATION)
+    _answers(monkeypatch, lambda _vin: rows)
+    vin, digest, ours = answerkey._ask(VIN)
+    assert (vin, digest) == (VIN, answerkey.hash_rows(rows))
+    assert ours == answerkey.ultravin_hashes([VIN])[0]
 
 
-def test_a_documented_divergence_freezes_ultravins_own_hash(monkeypatch) -> None:
-    # The classification itself is `stale_cache`'s to make (and is tested there);
-    # what the key owes is to pin *our* answer when it says yes, not the oracle's.
-    monkeypatch.setattr(answerkey.stale_cache, "is_expected_divergence", lambda *a, **k: True)
-    digest, agreed = answerkey.answer_for(VIN, _diverging(VIN))
-    assert not agreed
-    assert digest == answerkey.DEVIATION + answerkey.ultravin_hashes([VIN])[0]
-
-
-def test_a_per_vin_known_problem_is_never_turned_into_a_class_deviation(monkeypatch) -> None:
+def test_a_per_vin_known_problem_is_never_handed_over(monkeypatch) -> None:
     # scripts/known_problems.json registers those VINs one by one and `verify`
     # skips them; the class excuse must not quietly re-file them as its own.
-    monkeypatch.setattr(answerkey.stale_cache, "is_expected_divergence", lambda *a, **k: True)
+    _answers(monkeypatch, _diverging)
     vin = min(answerkey.KNOWN_DEVIATIONS)
-    digest, agreed = answerkey.answer_for(vin, _diverging(vin))
-    assert agreed
-    assert not digest.startswith(answerkey.DEVIATION)
+    _, digest, ours = answerkey._ask(vin)
+    assert ours == ""
+    assert digest == answerkey.hash_rows(_diverging(vin))
 
 
-def test_the_classifier_sees_the_oracles_rows(monkeypatch) -> None:
-    # Without them `is_expected_divergence` cannot run its second-order model-year
-    # test at all and fails closed on every year flip.
-    seen: list = []
+def test_an_oracle_crash_is_recorded_not_raised(monkeypatch) -> None:
+    def boom(_conn, _vin):
+        msg = "server closed the connection"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr(answerkey.oracle, "decode", boom)
+    assert answerkey._ask(VIN) == (VIN, answerkey.UNANSWERED + "RuntimeError", "")
+
+
+class _NullConn:
+    """Enough connection for `excused_by_a_freshened_cache` to hand onwards."""
+
+    def rollback(self) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+
+def _freshened(monkeypatch, rows_by_vin: dict[str, list[dict]], drift: list[str] | None = None) -> None:
+    monkeypatch.setattr(answerkey.oracle, "connect", lambda **_: _NullConn())
+    monkeypatch.setattr(answerkey.stale_cache, "stale_cells_of", lambda *_a, **_k: ({("MLH", 2019): []}, drift or []))
     monkeypatch.setattr(
         answerkey.stale_cache,
-        "is_expected_divergence",
-        lambda *a, **k: seen.append(k.get("oracle_rows")) or False,
+        "counterfactual_rows",
+        lambda _conn, vins, _stale, **_k: iter([(v, rows_by_vin[v]) for v in vins]),
     )
-    rows = _diverging(VIN)
-    answerkey.answer_for(VIN, rows)
-    assert seen == [rows]
+
+
+def test_only_a_byte_for_byte_match_earns_the_excuse(monkeypatch) -> None:
+    # The whole classifier: the freshened oracle either reproduces ultravin
+    # exactly or it does not explain the divergence. No partial credit.
+    a, b = sorted(ultravin.generate(2, seed=31))
+    unresolved = dict(zip([a, b], answerkey.ultravin_hashes([a, b]), strict=True))
+    _freshened(monkeypatch, {a: _canonical(a), b: _diverging(b)})
+    assert answerkey.excused_by_a_freshened_cache(unresolved) == {a}
+
+
+def test_a_cell_list_that_drifts_from_the_dump_stops_the_build(monkeypatch) -> None:
+    # Excusing on the strength of a stale cell nobody recorded would make the
+    # committed list — which every other gate reasons about — a fiction.
+    a = ultravin.generate(1, seed=32)[0]
+    unresolved = {a: answerkey.ultravin_hashes([a])[0]}
+    _freshened(monkeypatch, {a: _canonical(a)}, drift=["1 cell(s) not listed as stale: [('MLH', 2019)]"])
+    with pytest.raises(typer.Exit) as exc:
+        answerkey.excused_by_a_freshened_cache(unresolved)
+    assert exc.value.exit_code == 2
 
 
 def _write_key(path: Path, pairs: list[tuple[str, str]], **header) -> Path:
@@ -263,20 +319,7 @@ def _real_key(path: Path, pairs: list[tuple[str, str]]) -> Path:
     return _write_key(path, pairs, month=manifest["month"], artifact_blake3=manifest["artifact_blake3"])
 
 
-def test_read_key_merges_the_trailer_tallies_into_the_header(tmp_path: Path) -> None:
-    # The build only knows how many divergences it excused once the pool has
-    # drained, so it writes them in a trailer; both halves describe one shard.
-    key = tmp_path / "key.jsonl"
-    with key.open("w") as fh:
-        fh.write(json.dumps({"month": "m", "artifact_blake3": "art", "count": 2}) + "\n")
-        fh.write(json.dumps(["V1", "h1"]) + "\n")
-        fh.write(json.dumps({"month": "m", "artifact_blake3": "art", "excused": 7, "unexcused": 0}) + "\n")
-    header, entries = answerkey.read_key(key)
-    assert entries == [("V1", "h1")]
-    assert (header["count"], header["excused"], header["unexcused"]) == (2, 7, 0)
-
-
-def test_a_trailer_from_another_build_is_still_refused(tmp_path: Path) -> None:
+def test_a_key_that_mixes_builds_is_refused(tmp_path: Path) -> None:
     key = tmp_path / "key.jsonl"
     with key.open("w") as fh:
         fh.write(json.dumps({"month": "m", "artifact_blake3": "art"}) + "\n")

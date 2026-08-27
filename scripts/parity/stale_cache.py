@@ -29,13 +29,23 @@ VIN position the cache and the recompute actually disagree at. Anything wider �
 a different vehicle, a different model year, a different position — stays a bug,
 or stays registered per VIN in `scripts/known_problems.json`.
 
-**The one indirect route.** The error byte `spvindecode_errorcode` builds out of
-the cache is also what `spvindecode` uses to choose between candidate model
-years, so a stale cell can move element 29 — an element it can never print. That
-divergence is the same defect one step removed, and `is_expected_divergence`
-admits it only by proving it: pin ultravin to the year the oracle chose and
-require everything that survives to be confined to the stale positions of the
-cell keyed by *that* year. Nothing else about the excuse is relaxed.
+**Why the printed positions are not the whole class.** The cache feeds
+`spvindecode_errorcode`, and that proc does more with the charsets than print
+them: it counts how many positions failed, and the count picks which branch
+renders the result (one error prints a resolved character, several print `!`
+with the full charsets) and which model year the surrounding `spvindecode`
+settles on. A single stale position can therefore re-render positions that are
+not stale and years that are not wrong, and no containment test over the
+*printed* positions can ever recognise that — the evidence has been laundered by
+the time it reaches the diff.
+
+`counterfactual_rows` settles those the only way that is sound: by running the
+experiment. Freshen the oracle's cache — the proc's own
+`fExtractValidCharsPerWmiYear`, the function the cache is a stale materialisation
+of — re-decode, and excuse the VIN only if the freshened oracle now reproduces
+ultravin byte for byte. No modelling of the branch logic, no position arithmetic,
+and fail-closed by construction: anything the freshened oracle still disagrees
+about is, by definition, not explained by the cache.
 """
 
 from __future__ import annotations
@@ -48,7 +58,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from scripts.parity import normalize
+from scripts.parity.normalize import ERROR_ELEMENTS, from_oracle
 
 ROOT = Path(__file__).resolve().parents[2]
 CELLS = ROOT / "scripts" / "stale_cache_cells.json"
@@ -271,7 +281,7 @@ def error_fields_only(diff: dict[str, Any]) -> bool:
         rows += list(part)
     if not rows or diff.get("order_ok", True) is False:
         return False
-    return all(_element_id(r) in normalize.ERROR_ELEMENTS for r in rows)
+    return all(_element_id(r) in ERROR_ELEMENTS for r in rows)
 
 
 # One element-144 group, `(VIN position:allowed chars)`. The proc builds it as
@@ -362,13 +372,13 @@ def diff_positions(diff: dict[str, Any]) -> set[int]:
     return out
 
 
-def confined_to_stale_cell(
+def is_expected_divergence(
     vin: str,
     diff: dict[str, Any],
     decoded: dict[str, Any] | None = None,
     cells: dict[tuple[str, int], frozenset[int]] | None = None,
 ) -> bool:
-    """True when this difference sits entirely inside one stale cell's blast radius.
+    """True when this divergence *is* the documented stale-cache class.
 
     All three conditions are required, cheapest first (the second needs a
     decode): only error/correction fields differ, at all — that is everything the
@@ -381,6 +391,15 @@ def confined_to_stale_cell(
 
     Fails closed on every axis, the last one included: a record whose difference
     names no position is not this class.
+
+    This is the *printed-position* test, and it is deliberately narrow: it can
+    only recognise a divergence the stale charset printed directly. A stale cell
+    that changes the error *count* — flipping `spvindecode_errorcode` between its
+    single- and multi-error branches, or moving the model year the decode
+    settles on — re-renders positions that are not themselves stale, and no
+    containment test can pass that. `counterfactual_rows` is the answer to
+    those; this one still serves the sweep and campaign runners, which have a
+    diff to judge and no oracle to re-run.
     """
     if not error_fields_only(diff):
         return False
@@ -388,95 +407,130 @@ def confined_to_stale_cell(
     return bool(at) and at <= stale_positions(vin, decoded, cells)
 
 
-# `vpic.spvindecode`'s model-year element. Not an error element — the cache
-# cannot print it — but the cache can still decide it: see `is_expected_divergence`.
-MODEL_YEAR_ELEMENT = 29
-
-
-def _as_year(value: Any) -> int | None:
-    """`value` as a model year, or `None` if it is not one."""
-    if isinstance(value, bool):
-        return None
-    if isinstance(value, int):
-        return value
-    if isinstance(value, str) and value.strip().isdigit():
-        return int(value.strip())
-    return None
-
-
-def oracle_model_year(diff: dict[str, Any]) -> int | None:
-    """The model year the oracle chose, when this difference is a year flip.
-
-    `None` when the two agree on the year (or when the oracle named none), which
-    is the only case the second-order test below has nothing to say about.
-    """
-    diff = diff_view(diff)
-    for row in diff.get("field_diffs") or ():
-        element_id, oracle, mine = _sides(row)
-        if element_id == MODEL_YEAR_ELEMENT and oracle != mine:
-            year = _as_year(oracle)
-            if year is not None:
-                return year
-    for row in diff.get("missing") or ():
-        element_id, value = _one_sided(row)
-        if element_id == MODEL_YEAR_ELEMENT:
-            year = _as_year(value)
-            if year is not None:
-                return year
-    return None
-
-
-def is_expected_divergence(
-    vin: str,
-    diff: dict[str, Any],
-    decoded: dict[str, Any] | None = None,
-    cells: dict[tuple[str, int], frozenset[int]] | None = None,
-    oracle_rows: list[dict[str, Any]] | None = None,
-) -> bool:
-    """True when this divergence *is* the documented stale-cache class.
-
-    Two ways in. Directly: the difference is confined to the stale positions of
-    the cell this decode reads (`confined_to_stale_cell`). Second order: the two
-    disagree about the *model year* itself, because the cache feeds
-    `spvindecode_errorcode` and the error byte is what picks between candidate
-    years — a stale cell can therefore move element 29, which it can never
-    *print*. `confined_to_stale_cell` alone reads the cell keyed by ultravin's
-    year, which on a flip is the wrong cell entirely, so it can only ever say no.
-
-    The second-order test needs the oracle's own rows, and so runs only when
-    `oracle_rows` is supplied: pin ultravin to the year the oracle chose, re-diff
-    against those same oracle rows, and require the remainder to be confined to
-    the cell keyed by the **oracle's** year. If the whole disagreement dissolves
-    into that one cell's stale positions once the year is agreed, the year flip
-    was downstream of the cell; if anything else survives — a year ultravin will
-    not take, a difference outside the error elements, a position the cell is not
-    stale at — it stays a bug.
-
-    Fails closed on every axis: no oracle rows, no year flip, a re-decode that
-    still differs anywhere else, or a difference naming no position at all, and
-    the answer is no.
-    """
-    if confined_to_stale_cell(vin, diff, decoded, cells):
-        return True
-    if oracle_rows is None:
-        return False
-    year = oracle_model_year(diff)
-    if year is None:
-        return False
-    repinned = normalize.fingerprint(normalize.diff_rows(oracle_rows, normalize.ultravin_rows(_decode(vin, year))))
-    return confined_to_stale_cell(vin, repinned, {"model_year": year}, cells)
-
-
-def _decode(vin: str, year: int | None = None) -> dict[str, Any]:
+def _decode(vin: str) -> dict[str, Any]:
     # Lazy: reading and checking the list needs no built extension, and
     # scripts/refresh.py imports this module under a bare `python3`.
     import ultravin  # noqa: PLC0415
 
-    # `full=True` only when the rows are wanted: `cell_for` needs the model year
-    # and nothing else, and the provenance rows are the expensive half.
-    if year is None:
-        return ultravin.decode(vin)
-    return ultravin.decode(vin, full=True, year=year)
+    return ultravin.decode(vin)
+
+
+# ------------------------------------------------------------------ the counterfactual
+
+_DECODE = "select * from vpic.spvindecode(%s)"
+_CACHED = 'select year, position, "char" from vpic.wmiyearvalidchars where wmi = %s'
+_RECOMPUTE = "select p, c from vpic.fextractvalidcharsperwmiyear(%s, %s::smallint)"
+_DROP_CELL = "delete from vpic.wmiyearvalidchars where wmi = %s and year = %s"
+_FILL_CELL = (
+    'insert into vpic.wmiyearvalidchars (id, wmi, year, position, "char") '
+    "select %s - row_number() over (), %s, %s, p, c from unnest(%s::int[], %s::varchar[]) as t(p, c)"
+)
+
+# Decodes per rolled-back transaction. The stock procs create and drop nine temp
+# tables per decode and hold every one of those locks until the transaction ends,
+# so an unbounded batch exhausts the shared lock table; the rollback releases
+# them. Small enough to stay polite beside other users of the same instance.
+COUNTERFACTUAL_BATCH = 200
+
+
+def _cached_cells(conn: Any, wmi: str) -> dict[int, set[tuple[int, str]]]:
+    """What the shipped cache holds for one WMI: year -> {(position, char)}."""
+    out: dict[int, set[tuple[int, str]]] = {}
+    with conn.cursor() as cur:
+        cur.execute(_CACHED, (wmi,))
+        for row in cur.fetchall():
+            out.setdefault(int(row["year"]), set()).add((int(row["position"]), row["char"]))
+    return out
+
+
+def stale_cells_of(
+    conn: Any,
+    wmis: list[str],
+    cells: dict[tuple[str, int], frozenset[int]] | None = None,
+) -> tuple[dict[tuple[str, int], list[tuple[int, str]]], list[str]]:
+    """What freshening these WMIs would change, and how that drifts from the list.
+
+    Returns the recomputed contents of every cell whose cache contradicts
+    `fExtractValidCharsPerWmiYear` — the ground truth the cache is a stale
+    materialisation of, and the same function the proc itself falls back to —
+    together with the ways that set disagrees with `scripts/stale_cache_cells.json`.
+
+    The drift check is the audit that makes the counterfactual trustworthy. Both
+    directions are failures and both are reported: a cell that differs but is not
+    listed means the committed list under-reports the defect and an excuse would
+    be resting on an unrecorded one; a listed cell that does not differ means the
+    list describes some other dump than the one loaded.
+
+    Writes nothing, and much prefers an autocommit connection: every
+    `fExtractValidCharsPerWmiYear` call creates and drops a temp table, and
+    thousands of those inside one transaction hold thousands of locks and cost
+    about four times as much per call. On a transactional connection it ends each
+    WMI with a rollback for that reason — free, because there is nothing to undo.
+    """
+    listed = {(w, y) for w, y in (load_cells() if cells is None else cells) if w in set(wmis)}
+    stale: dict[tuple[str, int], list[tuple[int, str]]] = {}
+    for wmi in wmis:
+        with conn.cursor() as cur:
+            for year, have in _cached_cells(conn, wmi).items():
+                cur.execute(_RECOMPUTE, (wmi, year))
+                # Deduplicated: the function returns one row per pattern that
+                # allows a character, and the proc reads it through SELECT
+                # DISTINCT. A cell of 1,449 raw rows is ~100 distinct ones.
+                fresh = sorted({(int(r["p"]), r["c"]) for r in cur.fetchall()})
+                if set(fresh) != have:
+                    stale[(wmi, year)] = fresh
+        if not conn.autocommit:
+            conn.rollback()
+    drift = []
+    for what, cell_set in (("not listed as stale", set(stale) - listed), ("listed but not stale", listed - set(stale))):
+        if cell_set:
+            drift.append(f"{len(cell_set):,} cell(s) {what}: {sorted(cell_set)[:10]}")
+    return stale, drift
+
+
+def counterfactual_rows(
+    conn: Any,
+    vins: list[str],
+    stale: dict[tuple[str, int], list[tuple[int, str]]],
+    batch: int = COUNTERFACTUAL_BATCH,
+) -> Any:
+    """Yield `(vin, canonical rows)` for each VIN decoded against a freshened cache.
+
+    The experiment the class's registration rests on, run per VIN: replace the
+    stale cells with what the dump's own pattern rows say they should hold, ask
+    the oracle again, and let the caller compare that answer with ultravin's. No
+    model of the proc's branch logic is involved, which is what makes it able to
+    recognise the divergences a printed-position test cannot — an error count
+    that flipped a branch, a model year that moved — and what makes it fail
+    closed: whatever the freshened oracle still disagrees about is, by
+    construction, not something the cache explains.
+
+    Every batch runs in a transaction that is **always rolled back**, so a shared
+    oracle is never left mutated and no other session can even observe the change.
+    `conn` must therefore not be in autocommit. Ids are written negative: the
+    table's primary key needs one, and drawing from its sequence would advance
+    that sequence past the rollback — the one piece of state a rollback does not
+    restore.
+    """
+    if conn.autocommit:
+        msg = "counterfactual_rows needs a transactional connection — it rolls its writes back"
+        raise ValueError(msg)
+    for start in range(0, len(vins), batch):
+        chunk = vins[start : start + batch]
+        wmis = {vin_wmi(v) for v in chunk}
+        mine = [(cell, rows) for cell, rows in stale.items() if cell[0] in wmis]
+        try:
+            with conn.cursor() as cur:
+                first_id = 0
+                for (wmi, year), rows in mine:
+                    cur.execute(_DROP_CELL, (wmi, year))
+                    cur.execute(_FILL_CELL, (first_id, wmi, year, [p for p, _ in rows], [c for _, c in rows]))
+                    first_id -= len(rows)
+                for vin in chunk:
+                    cur.execute(_DECODE, (vin,))
+                    yield vin, [from_oracle(r) for r in cur.fetchall()]
+        finally:
+            conn.rollback()
 
 
 # --------------------------------------------------------------------------- cli
