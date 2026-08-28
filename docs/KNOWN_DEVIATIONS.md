@@ -280,6 +280,8 @@ including the two whose whole decode changes:
 ```
 MLHAE041XKA111111  delete 81 cache rows for (MLH,2019) -> oracle MY=1989 codes='0,14'  parity_now=True
 JH2RD1613RA111111  delete 80 cache rows for (JH2,2024) -> oracle MY=1994 codes='0,14'  parity_now=True
+10T2CE2A?LPY1111S  delete 111 cache rows for (10T,2020) -> oracle MY=1990 codes='5,14,400'  parity_now=True
+1HFTKS3B?RD1111I1  delete 80 cache rows for (1HF,2024) -> oracle MY=1994 codes='5,14,400'  parity_now=True
 ```
 
 Rolled back afterwards; the cache is left at its shipped 8,809,229 rows
@@ -305,7 +307,7 @@ at, and the registry records it as each entry's `scope`:
    observation names no VIN position, so the cell list cannot excuse it; those
    VINs are registered individually (see §4).
 
-3. **The whole decode** (`clean-decode`, 184 VINs registered individually; the
+3. **The whole decode** (`clean-decode`, 185 VINs registered individually; the
    two worked through here are `MLHAE041XKA111111` and
    `JH2RD1613RA111111`). Same cells, but these VINs have an *inconclusive* model
    year — `fVinModelYear2` cannot choose between the two halves of position 10's
@@ -338,6 +340,8 @@ at, and the registry records it as each entry's `scope`:
    - **permissive**, 159 VINs over 16 cells — `(JH2, 2019…2026)`, `(MLH, 2025)`,
      `(MLH, 2026)`, `(10T, 2024)`, `(2HJ, 2025)`, `(3H1, 2025)`, `(5J7, 2025)`,
      `(JH1, 2025)`, `(JYA, 2027)`. The MLH/JH2 walkthrough above is this shape.
+     The 2026-08-28 backlog drain added two more of this shape, not in that
+     census: `(10T, 2020)` and `(1HF, 2024)`, argued below.
    - **restrictive**, 18 VINs over `(JKA, 2025)` and `(JKB, 2025)`, both stale at
      position 11 with cache `ABJT` against recompute `ABDJT`. Each VIN carries
      `D` there, so the oracle penalizes its own 2025 pass and falls back to 1995
@@ -354,6 +358,50 @@ at, and the registry records it as each entry's `scope`:
    decisive test is shape-independent and was run on every one: emptying the
    cell in a rolled-back transaction made the oracle reproduce ultravin
    byte-for-byte on **182/182**, cache restored to its shipped 8,809,229 rows.
+
+   The 2026-08-28 backlog drain found two more permissive members of the same
+   mechanism. Both have an inconclusive position-10 year, so both halves of the
+   30-year cycle get a pass and the cache decides the race. Emptying each cell
+   in a rolled-back transaction made the oracle reproduce ultravin
+   byte-for-byte; the cache was left at its shipped 8,809,229 rows.
+
+   `10T2CE2A?LPY1111S` lands on `(10T, 2020)`, already on the cell list, stale
+   at positions 4, 5, 6, 7, 8, 11. Position 7's leftover digits make the VIN's
+   `2` look valid and position 11's leftover `CDP` make its `P` look valid, so
+   the oracle's 2020 pass flags only position 4 (code 4, weight −200) and beats
+   the 1990 pass; the pattern source flags 4, 7, and 11 (code 5, weight −300)
+   and the 1990-schema vehicle wins. Same dump, one query apart:
+
+   ```
+    source  | position | chars
+   ---------+----------+----------------------------
+    cache   |        7 | 0123456789ABCDFGHJK
+    extract |        7 | ABCDFGHJK
+    cache   |       11 | ABCDGKPSVWX
+    extract |       11 | ABGKSVWX
+   ```
+
+   Deleting the cell's 111 rows → oracle MY=1990 codes=`5,14,400` parity_now=True.
+
+   `1HFTKS3B?RD1111I1` lands on `(1HF, 2024)`, stale at position 11 only. The
+   leftover `1ACDFM` includes `D`, which is the character sitting there, so the
+   oracle's 2024 pass flags only position 6 (code 4) and beats 1994; the pattern
+   source flags 6 and 11 (code 5) and the 1994-schema vehicle wins (Honda de
+   Mexico plant rows the 2024 schema does not carry). This VIN cannot go in
+   `scripts/known_problems.json`: position 16 is `I`, and the registry forbids
+   I/O/Q. It does not need to. Pinning ultravin to the oracle's 2024 dissolves
+   the vehicle-level residue (`stale_cache.repin_verdict` = `collapsed`), which
+   is the one clean-decode shape the answer key machine-excuses without a
+   per-VIN entry.
+
+   ```
+    source  | position | chars
+   ---------+----------+----------------
+    cache   |       11 | 1345ACDEFJKMRY
+    extract |       11 | 345EJKRY
+   ```
+
+   Deleting the cell's 80 rows → oracle MY=1994 codes=`5,14,400` parity_now=True.
 
 **Per-VIN registration for this class covers only the `clean-decode` members.** A
 divergence is adjudicated against the cell list by `scripts/parity/stale_cache.py`
