@@ -326,13 +326,27 @@ jobs:
         run: |
           pin="$RUNNER_TEMP/keydist/answerkey.json"
           month=$(jq -r .month "$pin")
-          asset=$(jq -r .asset "$pin")
           count=$(jq -r .count "$pin")
           # The pin is assemble-produced data; sanity-check it against this
           # checkout's manifest (also data) before acting on it with a token.
           current=$(jq -r .month vpic/manifest.json)
           [ "$month" = "$current" ] || { echo "::error::pin month $month != manifest month $current"; exit 1; }
-          [ -f "$RUNNER_TEMP/keydist/$asset" ] || { echo "::error::pin names asset $asset but the artifact does not contain it"; exit 1; }
+          # $month reaches the release tag, the asset path, and step outputs, so
+          # pin it to the known format instead of trusting the branch's field.
+          case "$month" in
+            [0-9][0-9][0-9][0-9]_[0-9][0-9]) ;;
+            *) echo "::error::pin month $month has an unexpected format"; exit 1 ;;
+          esac
+          case "$count" in
+            ''|*[!0-9]*) echo "::error::pin count $count is not an integer"; exit 1 ;;
+          esac
+          # Derive the asset name from the validated month rather than trusting
+          # the branch-produced .asset field as an upload path: a poisoned pin
+          # (the fix agent may edit scripts/**) could otherwise set asset to a
+          # traversal like ../../<repo>/<repo>/.git/config and exfiltrate this
+          # credential-persisting checkout via `gh release upload`.
+          asset="answerkey-$month.jsonl.zst"
+          [ -f "$RUNNER_TEMP/keydist/$asset" ] || { echo "::error::assemble did not produce $asset"; exit 1; }
           {
             echo "month=$month"
             echo "asset=$asset"
