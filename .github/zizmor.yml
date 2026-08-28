@@ -24,7 +24,7 @@ rules:
     # finding at one of the checkouts below after an unrelated edit, the pin
     # drifted — re-pin it rather than widening these to bare filenames.
     ignore:
-      - answer-key.yaml:256   # job `publish` — pushes the pin onto the data branch (L334) or a pin branch (L400)
+      - answer-key.yaml:315   # job `publish` — pushes the pin onto the data branch (L384) or a pin branch (L445)
       - data-refresh.yaml:98  # job `refresh` — pushes data/$MONTH (L140)
       - data-refresh.yaml:444 # job `fix-publish` — re-pushes data/$MONTH after an agent fix (L495)
       - nightly.yaml:149      # job `deps-publish` — pushes deps/nightly (L175)

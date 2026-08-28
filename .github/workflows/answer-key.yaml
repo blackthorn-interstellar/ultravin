@@ -240,22 +240,26 @@ jobs:
       - name: Compare
         run: uv run -- python -m scripts.parity.answerkey compare --a target/equiv/stock.jsonl --b target/equiv/fast.jsonl
 
-  publish:
+  # Runs the repo's own tooling (`uv run … answerkey pin`) over the shard
+  # artifacts. On a data branch that is BRANCH code — the fix agent may
+  # legitimately edit scripts/** — so this job is token-free: read-only
+  # permissions, no persisted credentials, nothing worth stealing. The publish
+  # job below holds the write token and executes NO repo code — the same
+  # untrusted-code-vs-write-token split as data-review.yaml and the refresh
+  # fix / fix-publish lanes. Its outputs (key + pin) are data, not code, and
+  # are self-verifying downstream: ci.yaml's fetch/verify checks the pin's
+  # month against the manifest, the asset against the pinned sha256, and the
+  # key against the manifest's artifact hash — a poisoned pin only reddens CI.
+  assemble:
     needs: [build, equivalence]
     runs-on: ubuntu-latest
-    timeout-minutes: 60 # combine+zstd is minutes; merge-data-pr then retries the merge for ~22
+    timeout-minutes: 30
     permissions:
-      contents: write
-      pull-requests: write
-      actions: write # dispatch ci.yaml/data-review.yaml, approve gated runs
+      contents: read
     steps:
-      # No persist-credentials: false here — the pin commit/PR below pushes a
-      # branch with this checkout's token. Full history because merge-data-pr
-      # classifies the PR diff against a merge base (its documented caller
-      # contract is a fetch-depth: 0 checkout).
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          fetch-depth: 0
+          persist-credentials: false
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version-file: pyproject.toml
@@ -269,7 +273,6 @@ jobs:
           path: target/answerkey/
 
       - name: Combine, checksum, and pin
-        id: pin
         run: |
           month=$(python3 -c "import json;print(json.load(open('vpic/manifest.json'))['month'])")
           out="answerkey-$month.jsonl"
@@ -281,9 +284,58 @@ jobs:
           [ "$count" -gt 0 ] || { echo "::error::combined key has 0 answers"; exit 1; }
           uv run -- python -m scripts.parity.answerkey pin \
             --key "$out.zst" --sha256 "$sha" --count "$count"
+          mkdir -p "$RUNNER_TEMP/keydist"
+          mv "$out.zst" "$RUNNER_TEMP/keydist/"
+          cp tests/answerkey.json "$RUNNER_TEMP/keydist/answerkey.json"
+
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: answerkey-dist
+          path: ${{ runner.temp }}/keydist/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: assemble
+    runs-on: ubuntu-latest
+    timeout-minutes: 40 # merge-data-pr retries the merge for ~22 min
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write # dispatch ci.yaml/data-review.yaml, approve gated runs
+    steps:
+      # No persist-credentials: false here — the pin commit/PR below pushes a
+      # branch with this checkout's token. Full history because merge-data-pr
+      # classifies the PR diff against a merge base (its documented caller
+      # contract is a fetch-depth: 0 checkout). This job runs NOTHING from the
+      # checkout — no uv, no make, no scripts — it is only a git substrate plus
+      # gh/git/jq authored in this (trusted) workflow file; on data branches
+      # .github/** is master's by construction (the fix-publish guard refuses
+      # agent edits to it).
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: answerkey-dist
+          path: ${{ runner.temp }}/keydist/
+
+      - name: Read the pin
+        id: pin
+        run: |
+          pin="$RUNNER_TEMP/keydist/answerkey.json"
+          month=$(jq -r .month "$pin")
+          asset=$(jq -r .asset "$pin")
+          count=$(jq -r .count "$pin")
+          # The pin is assemble-produced data; sanity-check it against this
+          # checkout's manifest (also data) before acting on it with a token.
+          current=$(jq -r .month vpic/manifest.json)
+          [ "$month" = "$current" ] || { echo "::error::pin month $month != manifest month $current"; exit 1; }
+          [ -f "$RUNNER_TEMP/keydist/$asset" ] || { echo "::error::pin names asset $asset but the artifact does not contain it"; exit 1; }
           {
             echo "month=$month"
-            echo "asset=$out.zst"
+            echo "asset=$asset"
             echo "count=$count"
           } >> "$GITHUB_OUTPUT"
 
@@ -303,7 +355,7 @@ jobs:
           gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" \
             --target "$GITHUB_SHA" \
             --title "vPIC $MONTH" --notes "Frozen oracle answer key."
-          gh release upload "$tag" "$ASSET" --clobber
+          gh release upload "$tag" "$RUNNER_TEMP/keydist/$ASSET" --clobber
 
       # Dispatched on a data branch: the pin belongs IN the data PR — commit it
       # onto the branch, re-kick the checks on the new head, and complete the
@@ -319,15 +371,13 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # Re-fetch the LIVE branch tip: the build takes hours and the fix
-          # agent may have pushed meanwhile. The pin is a working-tree change
-          # from the step above, so park it across the switch. If the branch's
-          # data moved under us, verify fails on the artifact hash — loudly —
+          # agent may have pushed meanwhile. The new pin comes from the
+          # assemble artifact, not this working tree. If the branch's data
+          # moved under us, verify fails on the artifact hash — loudly —
           # rather than merging a key built from something else.
-          cp tests/answerkey.json "$RUNNER_TEMP/answerkey.json"
-          rm -f tests/answerkey.json
           git fetch origin "$BRANCH"
           git checkout -B "$BRANCH" FETCH_HEAD
-          cp "$RUNNER_TEMP/answerkey.json" tests/answerkey.json
+          cp "$RUNNER_TEMP/keydist/answerkey.json" tests/answerkey.json
           git add tests/answerkey.json
           git diff --cached --quiet -- tests/answerkey.json || {
             git commit -m "test: pin the $MONTH answer key"
@@ -378,16 +428,11 @@ jobs:
           # not the fix; run 33049223812 threw away a full key build this way.
           # FETCH_HEAD, not origin/master: checkout may configure a narrow
           # refspec, so the tracking ref is not reliably the live tip.
-          #
-          # The pin is a working-tree change from the step above (untracked on
-          # a month's first run), so park it across the switch: leaving it in
-          # place makes the switch refuse outright if master's own
-          # tests/answerkey.json moved in the meantime.
-          cp tests/answerkey.json "$RUNNER_TEMP/answerkey.json"
-          rm -f tests/answerkey.json
+          # The new pin comes from the assemble artifact, not this working
+          # tree, so the switch has nothing to trip over.
           git fetch origin master
           git checkout -B "$branch" FETCH_HEAD
-          cp "$RUNNER_TEMP/answerkey.json" tests/answerkey.json
+          cp "$RUNNER_TEMP/keydist/answerkey.json" tests/answerkey.json
           # Stage before diffing: the pin is untracked on its first run, and
           # `git diff` says nothing about a file git has never seen. The
           # comparison is against live master now, so a pin that landed there
