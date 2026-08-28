@@ -17,8 +17,10 @@
 #                                      dispatches release.yaml after merge
 # No GitHub App and no PAT: GITHUB_TOKEN *events* never trigger workflows, but
 # explicit workflow_dispatch calls do — so the pipeline kicks ci.yaml and
-# data-review.yaml itself and merges synchronously (.github/actions/merge-data-pr).
-# See docs/DATA_REFRESH.md for the full runbook.
+# data-review.yaml itself, then dispatches answer-key.yaml on the branch. That
+# build commits the key pin into the PR (ci.yaml's answerkey job is a hard
+# gate: a month cannot merge without its key) and completes the merge per
+# policy (.github/actions/merge-data-pr). See docs/DATA_REFRESH.md.
 name: Data Refresh
 on:
   schedule:
@@ -150,6 +152,9 @@ jobs:
             gh pr edit "data/$MONTH" --add-label schema-change
           fi
           # GITHUB_TOKEN events don't trigger workflows; explicit dispatches do.
+          # This first CI run is EXPECTED to fail its answerkey job — the pin
+          # for the new month doesn't exist yet — while giving early signal on
+          # everything else; the key build below re-kicks CI once the pin is in.
           gh workflow run ci.yaml --ref "data/$MONTH"
           gh workflow run data-review.yaml -f pr="$(gh pr view "data/$MONTH" --json number --jq .number)"
           # Bot-authored PRs also spawn approval-gated pull_request runs whose
@@ -160,14 +165,16 @@ jobs:
             gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
               || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
           done
-      - name: Merge per policy, tag, release
+      # The month and its key land atomically: ci.yaml's answerkey job is a
+      # hard gate, so this PR cannot merge until answer-key.yaml has frozen the
+      # key from this branch's data and committed the pin into the PR. Its
+      # publish job re-kicks the checks and completes the merge/tag/release per
+      # policy (merge-data-pr) — the ~hours-long key build cannot block here.
+      - name: Build the answer key on the branch (its publish leg merges per policy)
         if: steps.run.outputs.changed == 'true'
-        uses: ./.github/actions/merge-data-pr
-        with:
-          month: ${{ env.MONTH }}
-          automerge: ${{ vars.DATA_REFRESH_AUTOMERGE }}
-          automerge-schema: ${{ vars.DATA_REFRESH_AUTOMERGE_SCHEMA }}
-          autorelease: ${{ vars.DATA_REFRESH_AUTORELEASE }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run answer-key.yaml --ref "data/$MONTH" -f month="$MONTH"
       # On failure, bank the evidence the fix agent needs — above all the vpic/
       # text diff, which IS the upstream change. Without this the agent burns
       # ~15 min re-running the pipeline just to regenerate what we had here.
@@ -411,7 +418,8 @@ jobs:
   # Publish lane for the fix agent. A clean VM running no untrusted code, so it
   # is the only place the write token lives (mirrors deps-publish in
   # nightly.yaml). It recreates data/<month> from the agent's banked patch,
-  # opens/updates the PR, kicks the checks, and merges per policy.
+  # opens/updates the PR, kicks the checks, and hands off to the answer-key
+  # build, whose publish leg pins the key into the PR and merges per policy.
   fix-publish:
     needs: [detect, fix]
     # !cancelled() rather than the implicit success(): the fix job goes red when
@@ -420,9 +428,9 @@ jobs:
     # committed nothing never sets it, so that path stays loud-red and unpublished.
     if: ${{ !cancelled() && needs.fix.outputs.has_changes == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 40 # merge-data-pr retries the merge for ~22 min
-    # Same master-pinned environment; merge-data-pr may dispatch the answer-key
-    # and release workflows, which the environment gates to master.
+    timeout-minutes: 30
+    # Same master-pinned environment as the fix job, so this lane can never be
+    # invoked from a ref that is not rooted in master's automation.
     environment: data-refresh
     permissions:
       contents: write
@@ -520,10 +528,7 @@ jobs:
             gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
               || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
           done
-      - name: Merge per policy, tag, release
-        uses: ./.github/actions/merge-data-pr
-        with:
-          month: ${{ env.MONTH }}
-          automerge: ${{ vars.DATA_REFRESH_AUTOMERGE }}
-          automerge-schema: ${{ vars.DATA_REFRESH_AUTOMERGE_SCHEMA }}
-          autorelease: ${{ vars.DATA_REFRESH_AUTORELEASE }}
+      # Same atomic handoff as the mechanical lane: the key build's publish leg
+      # commits the pin into the PR and completes the merge per policy.
+      - name: Build the answer key on the branch (its publish leg merges per policy)
+        run: gh workflow run answer-key.yaml --ref "data/$MONTH" -f month="$MONTH"

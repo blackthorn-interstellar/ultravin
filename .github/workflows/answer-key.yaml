@@ -14,10 +14,13 @@
 # classes those rules distinguish), never from ultravin's own behaviour — an
 # answer key selected by our decoder could only confirm what we already test.
 #
-# Two ways in, so the key is always built from the data it will be used to
-# check: .github/actions/merge-data-pr dispatches this the moment the pipeline
-# merges a data month onto master, and the push trigger below catches the month
-# landing any other way.
+# A data month ships WITH its key: ci.yaml's answerkey job is a hard gate (no
+# skip path), so the refresh pipeline dispatches this workflow on the data
+# BRANCH before the PR can merge. Built from the branch, the key is frozen from
+# exactly the data it will gate; the publish job commits tests/answerkey.json
+# back onto the branch, re-kicks the checks, and completes the merge per policy
+# (.github/actions/merge-data-pr). The push trigger below is the safety net for
+# a month that reaches master any other way.
 # The build uses the temp-table rewrite (ULTRAVIN_ORACLE_FAST_PROCS), and pays for
 # the privilege: the `equivalence` job below rebuilds a sample both ways against
 # this month's data and fails unless every hash matches. That turns "equivalent,
@@ -29,11 +32,12 @@
 name: Answer Key
 
 on:
-  # The pipeline's own merges emit no push event (GITHUB_TOKEN never triggers
-  # workflows), which is why merge-data-pr dispatches this explicitly. A human
-  # merging a data PR by hand emits one and dispatches nothing — without this
-  # trigger that month gets no key, and ci.yaml's answerkey job skips green
-  # forever on the month mismatch. The two manifests are kept byte-identical;
+  # Safety net: a data month hand-merged onto master WITHOUT its key (the
+  # atomic path can be bypassed by an admin) leaves ci.yaml's answerkey gate
+  # red on master. This trigger builds the missing key and opens a pin PR. The
+  # preflight job below makes the common case free — the atomic merge moves the
+  # manifest and the pin together, and a pin already matching the month means
+  # there is nothing to build. The two manifests are kept byte-identical;
   # either one moving means the data month moved.
   push:
     branches: [master]
@@ -41,7 +45,9 @@ on:
       - crates/ultravin/data/manifest.json
       - vpic/manifest.json
   # No month input on a push: the steps below default to the pinned manifest,
-  # which on master is the month that just landed.
+  # which on master is the month that just landed. Dispatched on a data branch
+  # (the refresh pipeline's path), everything runs from that branch's data and
+  # the pin is committed back onto the branch instead of via a pin PR.
   workflow_dispatch:
     inputs:
       month:
@@ -55,11 +61,50 @@ on:
 permissions:
   contents: read
 
+# One build per ref at a time: a re-dispatch on the same data branch (say, the
+# fix lane re-pushing after a failed mechanical attempt) queues behind the
+# running build rather than racing it to commit a pin. Never cancel — a
+# cancelled build throws away hours of oracle time.
+concurrency:
+  group: answer-key-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
   SHARDS: 16
 
 jobs:
+  # Short-circuit for the push trigger: an atomic data merge moves the manifest
+  # and its pin together, and rebuilding a key the month already has would burn
+  # ~17 runner-hours for nothing. A push builds only when the pin is missing or
+  # names another month. Explicit dispatches always build — that is how a
+  # deliberate rebuild asks for one.
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      build: ${{ steps.decide.outputs.build }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+      - id: decide
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          build=true
+          if [ "$EVENT" = "push" ] && [ -f tests/answerkey.json ]; then
+            current=$(python3 -c "import json;print(json.load(open('vpic/manifest.json'))['month'])")
+            pinned=$(python3 -c "import json;print(json.load(open('tests/answerkey.json'))['month'])")
+            if [ "$pinned" = "$current" ]; then
+              build=false
+              echo "::notice::$current already has a pinned key — nothing to build"
+            fi
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
   build:
+    needs: preflight
+    if: needs.preflight.outputs.build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 350 # 1.8M/16 shards at stock oracle speed is ~55 min; headroom for a slow runner
     strategy:
@@ -144,6 +189,8 @@ jobs:
   # That limit is the reason the rewrite exists, and why the full 1.8M build
   # cannot use stock procs at all.
   equivalence:
+    needs: preflight
+    if: needs.preflight.outputs.build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -196,15 +243,19 @@ jobs:
   publish:
     needs: [build, equivalence]
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60 # combine+zstd is minutes; merge-data-pr then retries the merge for ~22
     permissions:
       contents: write
       pull-requests: write
       actions: write # dispatch ci.yaml/data-review.yaml, approve gated runs
     steps:
-      # No persist-credentials: false here — the pin PR below pushes a branch
-      # with this checkout's token.
+      # No persist-credentials: false here — the pin commit/PR below pushes a
+      # branch with this checkout's token. Full history because merge-data-pr
+      # classifies the PR diff against a merge base (its documented caller
+      # contract is a fetch-depth: 0 checkout).
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
           python-version-file: pyproject.toml
@@ -243,13 +294,73 @@ jobs:
           ASSET: ${{ steps.pin.outputs.asset }}
         run: |
           tag="data-$MONTH"
+          # --target this run's SHA: on a data branch the month is not on
+          # master yet, and an untargeted create would tag master's tip — a
+          # commit that does not even contain the month. The squash-merge later
+          # orphans the branch commit, but the tag keeps it alive, preserving
+          # the exact tree the key was frozen from. merge-data-pr sees the tag
+          # exists and leaves it.
           gh release view "$tag" >/dev/null 2>&1 || gh release create "$tag" \
+            --target "$GITHUB_SHA" \
             --title "vPIC $MONTH" --notes "Frozen oracle answer key."
           gh release upload "$tag" "$ASSET" --clobber
 
-      # master is protected and GITHUB_TOKEN cannot push to it, so the pin goes
-      # through a PR — the same route the data refresh already takes.
+      # Dispatched on a data branch: the pin belongs IN the data PR — commit it
+      # onto the branch, re-kick the checks on the new head, and complete the
+      # merge per policy. This is what makes the month+key landing atomic; the
+      # answerkey gate in ci.yaml stays red until this commit arrives.
+      - name: Commit the pin onto the data branch
+        if: github.ref_name != 'master'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MONTH: ${{ steps.pin.outputs.month }}
+          BRANCH: ${{ github.ref_name }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Re-fetch the LIVE branch tip: the build takes hours and the fix
+          # agent may have pushed meanwhile. The pin is a working-tree change
+          # from the step above, so park it across the switch. If the branch's
+          # data moved under us, verify fails on the artifact hash — loudly —
+          # rather than merging a key built from something else.
+          cp tests/answerkey.json "$RUNNER_TEMP/answerkey.json"
+          rm -f tests/answerkey.json
+          git fetch origin "$BRANCH"
+          git checkout -B "$BRANCH" FETCH_HEAD
+          cp "$RUNNER_TEMP/answerkey.json" tests/answerkey.json
+          git add tests/answerkey.json
+          git diff --cached --quiet -- tests/answerkey.json || {
+            git commit -m "test: pin the $MONTH answer key"
+            git push origin "$BRANCH"
+          }
+          # GITHUB_TOKEN events don't trigger workflows; explicit dispatches do.
+          gh workflow run ci.yaml --ref "$BRANCH"
+          pr=$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')
+          [ -n "$pr" ] || { echo "::warning::no open PR for $BRANCH — pin pushed, nothing to review or merge"; exit 0; }
+          gh workflow run data-review.yaml -f pr="$pr"
+          # Bot-authored PRs also spawn approval-gated pull_request runs whose
+          # queued check suites hold the required contexts in "expected" state,
+          # blocking the merge. Approve them so they run instead of dangling.
+          head=$(gh pr view "$BRANCH" --json headRefOid --jq .headRefOid)
+          for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml") | .id'); do
+            gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
+              || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
+          done
+
+      - name: Merge per policy, tag, release
+        if: startsWith(github.ref_name, 'data/')
+        uses: ./.github/actions/merge-data-pr
+        with:
+          month: ${{ steps.pin.outputs.month }}
+          automerge: ${{ vars.DATA_REFRESH_AUTOMERGE }}
+          automerge-schema: ${{ vars.DATA_REFRESH_AUTOMERGE_SCHEMA }}
+          autorelease: ${{ vars.DATA_REFRESH_AUTORELEASE }}
+
+      # On master (the safety-net path): master is protected and GITHUB_TOKEN
+      # cannot push to it, so the pin goes through a PR — the same route the
+      # data refresh already takes.
       - name: Open a PR for the pin
+        if: github.ref_name == 'master'
         env:
           GH_TOKEN: ${{ github.token }}
           MONTH: ${{ steps.pin.outputs.month }}

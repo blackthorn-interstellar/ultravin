@@ -7,10 +7,21 @@ integrates each release with no human in the loop until PR review:
 
 ```
 daily cron ──▶ detect ──▶ refresh (mechanical + gates) ──▶ PR: data/YYYY_MM
-                              │ failure
-                              ▼
-                          Grok agent fixes on the runner ──▶ same PR
+                              │ failure                         │
+                              ▼                                 ▼
+                          Grok agent fixes on the runner   answer key frozen from the
+                          ──▶ same PR                      branch ──▶ pin committed into
+                                                           the PR ──▶ merge per policy
 ```
+
+A month and its answer key land **atomically**: `ci.yaml`'s answerkey job is a
+hard gate (no skip path), so the PR stays red until `answer-key.yaml` — 
+dispatched on the data branch — has frozen the key from the branch's own data
+and committed `tests/answerkey.json` into the PR. Its publish job then re-kicks
+the checks and completes the merge/tag/release per policy
+(`.github/actions/merge-data-pr`). A month whose key build surfaces
+undocumented divergences cannot merge until they are adjudicated — that is the
+gate working.
 
 ## The mechanical path
 
@@ -156,18 +167,21 @@ a PR comment.
 | what | why |
 |---|---|
 | secret `XAI_API_KEY` | enables the agent fix job and the model leg of the review gate (without it, failures land in the job summary for a human) |
-| var `DATA_REFRESH_AUTOMERGE=true` | merge **data-only** PRs: the workflow waits for the required checks (CI + `review-verdict`) and squash-merges synchronously, then tags `data-YYYY_MM` on the merge commit |
+| var `DATA_REFRESH_AUTOMERGE=true` | merge **data-only** PRs: after the key pin lands, `answer-key.yaml`'s publish job waits for the required checks (CI + `review-verdict`) and squash-merges synchronously |
 | var `DATA_REFRESH_AUTOMERGE_SCHEMA=true` | extend merging to **schema-change** PRs too, including agent-fixed ones — the full-autonomy switch; leave off to keep a human on the merge button when decoder code changed |
 | var `DATA_REFRESH_AUTORELEASE=true` | after merging, also push the next patch `v` tag and dispatch `release.yaml` on it to ship PyPI |
 
 No GitHub App and no PAT anywhere: `GITHUB_TOKEN` *events* never trigger
 workflows, but explicit `workflow_dispatch` calls are exempt — so the pipeline
-kicks `ci.yaml` and `data-review.yaml` itself after creating a PR, and the
-merge/tag/release chain runs synchronously in-job
-(`.github/actions/merge-data-pr`). One side effect: the merge commit lands on
-master without a redundant master-push CI run — the identical tree was just
-fully checked on the branch. If you merge a data PR by hand, tag the month
-yourself (`git tag data-YYYY_MM && git push origin data-YYYY_MM`).
+kicks `ci.yaml` and `data-review.yaml` itself after creating a PR, dispatches
+`answer-key.yaml` on the branch, and that build's publish job runs the
+merge/tag/release chain (`.github/actions/merge-data-pr`) once the pin is in
+the PR. One side effect: the merge commit lands on master without a redundant
+master-push CI run — the identical tree was just fully checked on the branch.
+The `data-YYYY_MM` tag is created by the key build (targeting the branch head
+the key was frozen from), so a hand-merge needs no tagging; but a month
+hand-merged *without* its key leaves master's answerkey gate red until the
+push-triggered safety-net build opens a pin PR and it merges.
 
 Defaults with zero setup: PRs are opened and checks run; merging, releasing,
 and agent fixes are off.

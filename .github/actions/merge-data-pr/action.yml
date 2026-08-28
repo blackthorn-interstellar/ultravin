@@ -48,6 +48,9 @@ runs:
         # scripts/stale_cache_cells.json is in that data set: refresh.py
         # regenerates it from the dump's own WMIYearValidChars scan, exactly as
         # it regenerates vpic/, and it is never hand-edited.
+        # tests/answerkey.json is too: the atomic flow commits the key pin into
+        # the data PR, and the pin is self-verifying in CI (month vs manifest,
+        # sha256 of the downloaded asset, key artifact hash vs the manifest).
         #
         # The list must be rename-VISIBLE, which `gh pr diff --name-only` is
         # not: GitHub's diff runs rename detection (`rename from`/`rename to`)
@@ -69,7 +72,7 @@ runs:
           cls="schema-change"
         elif printf '%s\n' "$files" | grep -qE '^vpic/(schema|procs)/'; then
           cls="schema-change"   # structural: mirrors refresh.py classify()
-        elif printf '%s\n' "$files" | grep -qvE '^(vpic/|tests/parity_corpus\.json$|scripts/stale_cache_cells\.json$)'; then
+        elif printf '%s\n' "$files" | grep -qvE '^(vpic/|tests/parity_corpus\.json$|tests/answerkey\.json$|scripts/stale_cache_cells\.json$)'; then
           cls="schema-change"   # decoder code / scripts / packaging / .github
         else
           cls="data-only"
@@ -117,6 +120,9 @@ runs:
         fi
         sha=$(gh pr view "$pr" --json mergeCommit --jq .mergeCommit.oid)
         echo "merged PR #$pr at $sha" >> "$GITHUB_STEP_SUMMARY"
+        # In the atomic flow the tag normally already exists: answer-key.yaml
+        # created it (targeting the branch head) to hold the key asset before
+        # the merge, preserving the exact tree the key was frozen from.
         git fetch origin master --tags -q
         if git rev-parse -q --verify "refs/tags/data-$MONTH" >/dev/null; then
           echo "tag data-$MONTH already exists"
@@ -124,14 +130,6 @@ runs:
           git tag "data-$MONTH" "$sha"
           git push origin "data-$MONTH"
         fi
-        # The data is on master now, so this is the moment to freeze the oracle's
-        # answers for it. Dispatched rather than triggered: a tag pushed with
-        # GITHUB_TOKEN emits no event, the same reason release.yaml is dispatched
-        # below. Independent of autorelease — the key is a test asset, not a ship.
-        # Fatal if it fails: a dispatch that quietly does not happen leaves the
-        # month with no key, and ci.yaml's answerkey job then skips green.
-        gh workflow run answer-key.yaml --ref master -f month="$MONTH"
-        echo "answer key build dispatched for $MONTH" >> "$GITHUB_STEP_SUMMARY"
         if [ "$AUTORELEASE" = "true" ]; then
           latest=$(git tag -l 'v*' --sort=-v:refname | head -1)
           latest=${latest:-v0.0.0}

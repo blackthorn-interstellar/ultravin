@@ -82,12 +82,15 @@ jobs:
         path: crates/ultravin/data/vpic.rkyv
         if-no-files-found: error
   # Every push, checked against the oracle's own frozen answers for this data
-  # month — ~1.8M of them, and no Postgres involved. The key is published by
-  # answer-key.yaml when a data month lands; until one exists for the pinned
-  # month this skips rather than failing, so a fresh data PR is not blocked by a
-  # key that has not been built yet. That grace is time-boxed: once the data
-  # month has been on master for more than ten days with no key, the skip has
-  # stopped being a wait and become a dark gate, and the job fails instead.
+  # month — ~1.8M of them, and no Postgres involved. A hard gate with no skip
+  # path: `answerkey fetch` refuses a missing pin and a pin for another month,
+  # so a data month can only land together with its key. The refresh pipeline
+  # makes that atomic — answer-key.yaml builds the key ON the data branch and
+  # commits tests/answerkey.json into the same PR (see that workflow's header).
+  # Until the pin lands, this job is red on the data PR; that is the gate
+  # working, not a flake. Tampering fails closed too: deleting or rewriting the
+  # pin fails fetch on the month or the checksum, and the key asset itself
+  # cannot be forged without write access to the data-<month> release.
   answerkey:
     needs: data
     runs-on: ubuntu-latest
@@ -108,62 +111,7 @@ jobs:
         path: crates/ultravin/data
     - run: echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
     - run: uv sync --frozen --all-extras
-    # Whether this job's parity check runs must not be the PR's decision, so on a
-    # pull_request the pin is read from the merge BASE as well as from the PR: a
-    # PR that deletes or rewrites tests/answerkey.json can no longer vote itself
-    # out of the gate (and if it did tamper with it, the verify step below fails
-    # on the tampered file rather than skipping). The PR's own pin still counts,
-    # because answer-key.yaml's `answerkey/$MONTH` PR is how a month's first key
-    # legitimately arrives. The manifest is always the PR's: a data-refresh PR
-    # bumps the month and has no key yet, and that skip is by design.
-    - name: Is there a key for this data month?
-      id: pin
-      env:
-        BASE_REF: ${{ github.base_ref }}
-        GH_TOKEN: ${{ github.token }}
-        MANIFEST: crates/ultravin/data/manifest.json
-        GRACE_DAYS: 10
-      run: |
-        set -euo pipefail
-        current=$(python3 -c "import json;print(json.load(open('vpic/manifest.json'))['month'])")
-        head_pin=""
-        base_pin=""
-        if [ -f tests/answerkey.json ]; then
-          head_pin=$(python3 -c "import json;print(json.load(open('tests/answerkey.json'))['month'])")
-        fi
-        if [ -n "$BASE_REF" ]; then
-          # Depth-1 PR checkout has no base history; fetch just the base tip.
-          git fetch --no-tags --depth=1 origin "+refs/heads/$BASE_REF"
-          if git cat-file -e FETCH_HEAD:tests/answerkey.json 2>/dev/null; then
-            base_pin=$(git show FETCH_HEAD:tests/answerkey.json | python3 -c "import json,sys;print(json.load(sys.stdin)['month'])")
-          fi
-        else
-          base_pin="$head_pin"  # push to master: the checkout is the base
-        fi
-        if [ "$base_pin" = "$current" ] || [ "$head_pin" = "$current" ]; then
-          echo "have=true" >> "$GITHUB_OUTPUT"; exit 0
-        fi
-        # Waiting for a key is normal for a day or two; waiting for a week means
-        # nobody is coming. The month is dated from the API, not `git log`: this
-        # checkout is depth-1 and has no history for the manifest. An API failure
-        # keeps the skip — an outage must not brick unrelated PRs — so this is a
-        # tripwire, not a dependency.
-        landed=$(gh api "repos/$GITHUB_REPOSITORY/commits?path=$MANIFEST&sha=$GITHUB_SHA&per_page=1" \
-          --jq '.[0].commit.committer.date' 2>/dev/null || true)
-        landed_ts=$(date -u -d "$landed" +%s 2>/dev/null || true)
-        if [ -n "$landed_ts" ]; then
-          age=$(( ( $(date -u +%s) - landed_ts ) / 86400 ))
-          if [ "$age" -gt "$GRACE_DAYS" ]; then
-            echo "::error::data month $current landed $age days ago but the answer key still pins ${head_pin:-none} — run the Answer Key workflow (Actions → Answer Key → Run workflow) for $current and merge the answerkey/$current pin PR it opens"
-            exit 1
-          fi
-        else
-          echo "::warning::could not date $MANIFEST via the API — staleness check skipped"
-        fi
-        echo "::notice::no answer key for $current (base pin: ${base_pin:-none}, head pin: ${head_pin:-none}) — not built yet"
-        echo "have=false" >> "$GITHUB_OUTPUT"
     - name: Verify against the frozen answers
-      if: steps.pin.outputs.have == 'true'
       env:
         GH_TOKEN: ${{ github.token }}
       run: |

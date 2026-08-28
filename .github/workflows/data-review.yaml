@@ -130,11 +130,16 @@ jobs:
           git fetch origin "$HEAD_SHA"
           files=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
           printf 'changed files:\n%s\n' "$files"
-          if printf '%s\n' "$files" | grep -qvE '^(vpic/|tests/parity_corpus\.json$)'; then
+          # tests/answerkey.json is in the allowlist because the atomic data
+          # flow commits the key pin into the data PR; the pin is self-verifying
+          # in CI (month vs manifest, sha256 of the downloaded asset, and the
+          # key's artifact hash vs the manifest), so a tampered pin can only
+          # make CI redder, never greener.
+          if printf '%s\n' "$files" | grep -qvE '^(vpic/|tests/parity_corpus\.json$|tests/answerkey\.json$)'; then
             echo "verdict=model-review" >> "$GITHUB_OUTPUT"
           else
             echo "verdict=pass" >> "$GITHUB_OUTPUT"
-            echo "mechanical regeneration only (vpic/ + corpus) — allowlist pass" >> "$GITHUB_STEP_SUMMARY"
+            echo "mechanical regeneration only (vpic/ + corpus + key pin) — allowlist pass" >> "$GITHUB_STEP_SUMMARY"
           fi
       # A model review takes minutes; until it publishes, `review-verdict`
       # simply does not exist on the head SHA, and a watcher (branch

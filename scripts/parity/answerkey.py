@@ -555,7 +555,11 @@ def fetch(
     pinned = json.loads(PIN.read_text())
     manifest = json.loads(MANIFEST.read_text())
     if pinned["month"] != manifest["month"]:
-        typer.echo(f"pin is for {pinned['month']}, data is {manifest['month']} — rebuild the key", err=True)
+        typer.echo(
+            f"pin is for {pinned['month']}, data is {manifest['month']} — a data month ships with its key: "
+            "run the Answer Key workflow on this branch (Actions → Answer Key → Run workflow) to build and pin it",
+            err=True,
+        )
         raise typer.Exit(2)
 
     out = Path(dest)
