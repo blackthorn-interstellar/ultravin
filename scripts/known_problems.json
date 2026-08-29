@@ -662,6 +662,16 @@
       "doc": "KNOWN_DEVIATIONS.md#regex-crash-7t0"
     },
     {
+      "vin": "10T2CE2A?LPY1111S",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (10T, 2020) cell still holds characters no pattern row for that WMI-year allows any more — it is stale at positions 4, 5, 6, 7, 8, 11 (scripts/stale_cache_cells.json) — so spvindecode_errorcode's correction charset contradicts the pattern rows the same dump ships. The stale characters make position 7's '2' and position 11's 'P' look valid, so the oracle's 2020 pass takes a single-position correction code (4), outranks its own 1990 pass in the best-of scoring, and the whole decode resolves to a different vehicle. This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_08",
+      "evidence": "cache cell (wmiyearvalidchars, 10T, 2020) pos 7 = '0123456789ABCDFGHJK' vs recomputed 'ABCDFGHJK'; pos 11 = 'ABCDGKPSVWX' vs recomputed 'ABGKSVWX' — the extra characters (digits at 7, CDP at 11) are in no key of any schema covering that year; deleting the cell's 111 rows inside a rolled-back transaction makes the dump's own vpic.fextractvalidcharsperwmiyear fallback run and the oracle then answers model year 1990, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
       "vin": "10TAK8H20RSAA0000",
       "kind": "deviation",
       "class": "stale-wmiyearvalidchars-cache",
