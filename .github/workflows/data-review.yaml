@@ -67,7 +67,7 @@ jobs:
       number: ${{ steps.pr.outputs.number }}
       verdict: ${{ steps.scope.outputs.verdict }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # base repo @ master — never the PR's code
           # Classify only diffs; it fetches the PR head SHA (same-repo PRs only —
@@ -208,7 +208,7 @@ jobs:
       agent_deps: ${{ steps.agent_deps.outputs.structured_output }}
       agent_deps_retry: ${{ steps.agent_deps_retry.outputs.structured_output }}
     steps:
-      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # base repo @ master — never the PR's code
           # The reviewer only diffs. persist-credentials:false keeps even this
