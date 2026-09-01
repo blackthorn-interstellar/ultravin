@@ -1,21 +1,11 @@
-# Python deps are deliberately absent here. They're bumped by the nightly lane
-# (.github/workflows/nightly.yaml runs `uv lock --upgrade --exclude-newer`, then
-# scripts/bump_deps.py enforces the same 7-day release-age cooldown on the Cargo
-# side), which lands one reviewed PR instead of a stream of them. Adding a
-# "uv"/"pip" ecosystem below would duplicate that and fight over uv.lock.
+# Python and Rust deps are deliberately absent here. They're bumped by the
+# nightly lane (.github/workflows/nightly.yaml runs `uv lock --upgrade
+# --exclude-newer`, then scripts/bump_deps.py enforces the same 7-day
+# release-age cooldown on the Cargo side), which lands one reviewed PR instead
+# of a stream of them. Adding a "uv"/"pip"/"cargo" ecosystem below would
+# duplicate that and fight over uv.lock / Cargo.lock.
 version: 2
 updates:
-  - package-ecosystem: "cargo"
-    directory: "/"
-    schedule:
-      interval: "monthly"
-    cooldown:
-      default-days: 30
-    groups:
-      all-cargo:
-        patterns:
-          - "*"
-
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
