@@ -603,17 +603,24 @@ answer, and it is what the oracle itself produces once the stale cell is gone.
 
 <a id="stale-cache-code-3-vs-5"></a>
 
-## 5. Stale cache extra error takes the multi-position rung — WMI `1GD`/`1GT`
+## 5. Stale cache extra error takes the multi-position rung — WMI `1GD`/`1GT`/`2AP`/`ZDM`
 
 The same defective artifact as §2 — the shipped `vpic.WMIYearValidChars` cell —
-can add an extra flagged position, which moves `spvindecode_errorcode` from the
-single-error check-digit rung (error code 3) onto the multi-error rung (error
+can add or hide a flagged position, which moves `spvindecode_errorcode` between
+the single-error check-digit rung (error code 3) and the multi-error rung (error
 code 5). Code 3 rewrites the one bad character; code 5 stamps `!` on every
 flagged position. The Suggested VIN therefore differs at a position the cell is
 *not* stale at, so the machine-enumerated class in §2 fails closed on
 containment — `stale_cache.diff_positions` is a strict subset of the cell's
 stale positions, and an extra named position is a verdict of *not* that class —
 and the VIN has to be registered here.
+
+Two shapes, same rung, opposite direction:
+
+| shape | cache vs extract at the stale position | `cntErrors` | codes |
+|---|---|---|---|
+| **permissive** | cache leftover-lists the character sitting there | oracle 1, ultravin 2+ | oracle 3, ultravin 5 |
+| **restrictive** | cache is missing a character the pattern rows allow | oracle 2+, ultravin 1 | oracle 5, ultravin 3 |
 
 **The offending datum.** Cells `(1GD, 2023)`, `(1GT, 2023)`, and `(1GD, 2024)`
 are already on the §2 list, each stale at position 8 only
@@ -689,23 +696,103 @@ byte-for-byte with ultravin. 64 rows for `(1GD, 2023)`, 68 for `(1GT, 2023)`,
 68 for `(1GD, 2024)`. Rolled back afterwards; the cache is left at its shipped
 8,809,229 rows.
 
+**The 2026-08-30 members — same rung, two more cells.** The 2026-08-28 drain
+left this cluster; the backlog that night was exactly these two VINs. Both
+land on cells already on the §2 list. Both columns come out of the same loaded
+dump:
+
+```sql
+select wmi, year, position, string_agg("char", '' order by "char")
+  from vpic.wmiyearvalidchars
+  where (wmi, year) in (('2AP',2026),('ZDM',2018))
+    and position in (6, 7, 8, 11)
+  group by wmi, year, position;
+select '2AP' as wmi, 2026 as year, p, string_agg(distinct c, '' order by c)
+  from vpic.fextractvalidcharsperwmiyear('2AP', 2026::smallint)
+  where p in (7, 8, 11) group by p;
+select 'ZDM' as wmi, 2018 as year, p, string_agg(distinct c, '' order by c)
+  from vpic.fextractvalidcharsperwmiyear('ZDM', 2018::smallint)
+  where p in (6, 8) group by p;
+```
+
+```
+ source  | wmi | year | position | chars
+---------+-----+------+----------+-------------------
+ cache   | 2AP | 2026 |        7 | ABCDEFGHK          -- identical to extract
+ extract | 2AP | 2026 |        7 | ABCDEFGHK
+ cache   | 2AP | 2026 |        8 | ABCDEFGHJKLMNPST + leftover R
+ extract | 2AP | 2026 |        8 | ABCDEFGHJKLMNPST
+ cache   | 2AP | 2026 |       11 | CEKRSV
+ extract | 2AP | 2026 |       11 | ELR
+ cache   | ZDM | 2018 |        6 | BCDEFG
+ extract | ZDM | 2018 |        6 | ABCDEFGHJ
+ cache   | ZDM | 2018 |        8 | MNPRSTVW           -- identical to extract
+ extract | ZDM | 2018 |        8 | MNPRSTVW
+```
+
+`2APCDT9R0TC111111` is the permissive shape on `(2AP, 2026)`, already listed
+stale at positions 8 and 11. Schema 29298 (*Advance Tank Production Trailer
+Schema for 2AE/2AP (MY2026)*) is the only schema covering that cell. No 2026
+`2AP` key contributes `R` at key index 5 (VIN position 8): the keys that write
+there are `****B`, `****D`, `****G`, `****J`, `****L`, `****M`, `****N`,
+`****P`, `****S`, `****T`, and the bracket groups `[AB]`, `[ACFM]`, `[CDE]`,
+`[EHKT]`, `[FGH]`, `[JK]`, `[PS]` — `fValidCharsInKey` over every one of them
+returns zero rows for `R`. Position 11's extract is `ELR` from `*****|*E` /
+`*****|*L` / `*****|*R`; the cache leftover-lists `C`, `K`, `S`, `V` there.
+The VIN carries `R` at 8 and `C` at 11, so the cache accepts both and the
+extract rejects both. Position 7 (`9`, charset `ABCDEFGHK` on both sides) is
+invalid either way. Oracle `cntErrors = 1` (code 3); ultravin `cntErrors = 3`
+(code 5). Substituting each candidate of charset `ABCDEFGHK` into position 7
+of `2APCDT9R0TC111111` and asking `vpic.fVINCheckDigit` keeps only `A`
+(matches the input's `0` at position 9). The oracle therefore emits Possible
+Values `(7:A)` and rewrites position 7 to `A`; ultravin never enters that
+rung and stamps `!` at 7, 8, and 11. Element 142 differs at `{7, 8, 11}`,
+which is not a subset of the cell's `{8, 11}`.
+
+`ZDMBAJAK6JB111111` is the restrictive shape on `(ZDM, 2018)`, already listed
+stale at positions 5, 6, and 7. Schema 20037 (*Ducati Motorcycle Schema for
+ZDM/ML0 (2018)*) is the only schema covering that cell. Keys `***A`, `***H`,
+`***J`, and `***[A-N]` contribute `A`, `H`, and `J` at key index 3 (VIN
+position 6); the extract is `ABCDEFGHJ` and the cache dropped `A`, `H`, and
+`J`, leaving `BCDEFG`. The VIN carries `J` there, so the oracle flags
+position 6 and ultravin does not. Position 8 (`K`, charset `MNPRSTVW` on both
+sides) is invalid either way. Oracle `cntErrors = 2` (code 5); ultravin
+`cntErrors = 1` (code 3). Substituting each candidate of charset `MNPRSTVW`
+into position 8 of `ZDMBAJAK6JB111111` and asking `vpic.fVINCheckDigit` keeps
+only `S` (matches the input's `6` at position 9). Ultravin therefore emits
+Possible Values `(8:S)` and rewrites position 8 to `S`; the oracle never
+enters that rung and stamps `!` at 6 and 8. Element 142 differs at `{6, 8}`,
+which is not a subset of the cell's `{5, 6, 7}`.
+
+Deleting each cell inside a transaction takes `tmpRowCount` to 0, so the proc
+runs its own `fExtractValidCharsPerWmiYear` fallback — and the oracle then
+returns codes `1,5,14` with the three-`!` Suggested VIN on the `2AP` VIN (78
+rows) and codes `3,14` with Possible Values `(8:S)` on the `ZDM` VIN (50
+rows), byte-for-byte with ultravin. Rolled back afterwards; the cache is left
+at its shipped 8,809,229 rows.
+
 **Why this is not §2's enumerated class.** `scripts/parity/stale_cache.py`
 excuses a divergence only when **every** VIN position the difference points at
-is one that cell is actually stale at. These cells are stale at position 8
-only. Element 142 differs at positions 8 *and* 11, and element 144 prints a
-group for both, so `diff_positions == {8, 11}` which is not a subset of `{8}`.
-A cell stale at 8 explains the extra error at 8 and nothing about the
-Suggested VIN character printed for 11 — even though 11 moved only because 8
-did. That containment is load-bearing: otherwise any bug that happened to
-share a VIN with a stale cell would be laundered as soon as one overlapping
-position appeared. The defect is still the stale cell; the observation is just
-one the cell list is forbidden to forgive. Matching the oracle here would mean
+is one that cell is actually stale at. The `1GD`/`1GT` cells are stale at
+position 8 only. Element 142 differs at positions 8 *and* 11, and element 144
+prints a group for both, so `diff_positions == {8, 11}` which is not a subset
+of `{8}`. A cell stale at 8 explains the extra error at 8 and nothing about
+the Suggested VIN character printed for 11 — even though 11 moved only
+because 8 did. The same containment refuses the 2026-08-30 members:
+`(2AP, 2026)` is stale at `{8, 11}` and the diff names `{7, 8, 11}`;
+`(ZDM, 2018)` is stale at `{5, 6, 7}` and the diff names `{6, 8}`. That
+containment is load-bearing: otherwise any bug that happened to share a VIN
+with a stale cell would be laundered as soon as one overlapping position
+appeared. The defect is still the stale cell; the observation is just one the
+cell list is forbidden to forgive. Matching the oracle here would mean
 teaching ultravin to read that cell, which §2 already rejected.
 
 **What ultravin does.** `errors.rs::valid_charset` recomputes from the pattern
-rows, does not see `F`/`H` at position 8, and takes the `cntErrors > 1` branch
-(code 5). That is the source-consistent answer, and it is what the oracle
-itself produces once the stale cell is gone.
+rows. On the permissive members it does not see the cache's leftover
+character, so `cntErrors > 1` and it takes code 5. On the restrictive member
+it does see `J` at position 6, so `cntErrors == 1` and it takes the
+check-digit rung (code 3). Both are the source-consistent answer, and both
+are what the oracle itself produces once the stale cell is gone.
 
 ---
 
