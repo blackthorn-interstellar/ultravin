@@ -2570,6 +2570,16 @@
       "first_observed": "2026_08",
       "evidence": "cache cell (wmiyearvalidchars, ZDM, 2018) pos 6 = BCDEFG vs fextractvalidcharsperwmiyear ABCDEFGHJ; schema 20037 keys ***A, ***H, ***J, and ***[A-N] contribute A/H/J at key index 3 and the cache dropped them. Deleting the cell's 50 rows inside a rolled-back transaction makes the dump's own fallback run and the oracle then returns codes 3,14 with Suggested VIN matching ultravin byte-for-byte.",
       "doc": "KNOWN_DEVIATIONS.md#stale-cache-code-3-vs-5"
+    },
+    {
+      "vin": "ZDMNAAJN7JB111111",
+      "kind": "deviation",
+      "class": "stale-cache-code-3-vs-5",
+      "scope": "error-fields",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (ZDM, 2018) cell is missing A, H, and J at position 6 while vpic.fextractvalidcharsperwmiyear over the same dump's pattern rows allows ABCDEFGHJ. The VIN has A at position 6, so the oracle sees two errors (positions 4 and 6) and takes the multi-position rung (error code 5), while ultravin, recomputing from those pattern rows, sees one error (position 4) and takes the check-digit auto-correct rung (error code 3). Position 4 is not stale — the Suggested VIN difference there is the cascade of the extra error, so the machine-enumerated stale-cache class, which requires every named VIN position to be one the cell is stale at, cannot excuse it.",
+      "first_observed": "2026_09",
+      "evidence": "cache cell (wmiyearvalidchars, ZDM, 2018) pos 6 = BCDEFG vs fextractvalidcharsperwmiyear ABCDEFGHJ; schema 20037 keys ***A, ***H, ***J, and ***[A-N] contribute A/H/J at key index 3 and the cache dropped them. Position 4 charset ABDGHKMV is identical in both columns; vpic.fvincheckdigit keeps only V among those candidates (matches pos 9 = 7). Deleting the cell's 50 rows inside a rolled-back transaction makes the dump's own fallback run and the oracle then returns codes 3,14 with Suggested VIN matching ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-cache-code-3-vs-5"
     }
   ]
 }
