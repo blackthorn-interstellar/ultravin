@@ -1,21 +1,48 @@
 # ultravin benchmarks
 
-See the [September 2026 throughput report](THROUGHPUT_2026_09.md) for the latest
-optimization work, paired measurements and full-result equivalence checks.
-The measurements below retain their original dates and methodology.
+## Throughput (random corpus)
 
-Latest verified results are at the top; the **W3 baseline** (the starting point,
-before the zero-copy / artifact-slimming / hot-path optimizations) is carried in
-the `baseline` column for comparison. All numbers are deliberately honest and
-reproducible.
+Measured September 7, 2026: the Rust engine decodes **38,587 VIN/s on one core** and **109,190 VIN/s in
+four-core batches** over the random 5,000-VIN corpus. Both are medians of three
+20-second windows after warming the entire corpus; the original and optimized
+executables ran in alternating order on the same Apple M1 Max.
 
-Host: Apple Silicon (aarch64-apple-darwin), `cargo 1.90`, release profile
-(`opt-level=3`, `lto="thin"`, `codegen-units=1`). Artifact:
-`crates/ultravin/data/vpic.rkyv` (gitignored build product).
+| engine | VIN/s | vs ultravin (1 core) |
+|---|---|---|
+| **ultravin** — batched, 4 cores | **109,190** | ~2.8× faster |
+| **ultravin** — 1 core | **38,587** | 1× |
+| corgi v3 (binary index, published) | ~83 | ~465× slower |
+| corgi v2 (SQLite, published) | ~33 | ~1,169× slower |
+| NHTSA MSSQL (`spVinDecode`, SQL Server) | 22.5 | ~1,715× slower |
+| NHTSA Postgres (`spvindecode`) | 19.5 | ~1,979× slower |
+| NHTSA vPIC web API (public rate limit) | ~10 | ~3,859× slower |
 
-## Latest results (verified)
+The paired baseline measured 24,627 VIN/s single-core and 77,849 VIN/s batched:
+**1.57× and 1.40× improvements**, respectively. All **1,862,306 full-result
+fingerprints** matched. The [September report](THROUGHPUT_2026_09.md) includes
+reproduction commands, all samples, and the startup and memory tradeoffs.
 
-Re-measured 2026-08-24 on the same Apple Silicon host, against the current
+Measurement notes:
+
+- The host was contended. Optimized samples ranged from 35,745–39,697 VIN/s
+  single-core and 96,181–112,141 VIN/s batched. These measure the Rust engine;
+  Python dictionary construction and parquet I/O have separate costs.
+- Batches use `RAYON_NUM_THREADS=4`; the machine has 10 physical cores. Batched
+  throughput is about 2.8× the single-core rate.
+- The September runs used the release profile (`opt-level=3`, `lto="fat"`,
+  `codegen-units=1`) and line tables for profiling, with the same artifact,
+  allocator, lockfile and harness in both builds.
+- corgi figures are derived from previously published latency (~12 ms v3,
+  ~30 ms v2), not re-measured here. SQL-oracle figures are carried forward from
+  earlier runs over the shared corpus; neither SQL engine was re-run in September.
+- MSSQL ran SQL Server 2022 under amd64 emulation on Apple Silicon with the
+  `2026_06` dump. That understates its performance on native hardware.
+- The vPIC API row is the previously cited [~10 requests/s rate limit](https://cardog.app/blog/corgi-vin-decoder), not a
+  decode-latency measurement. Ratios use the rounded comparison rates shown.
+
+## Earlier latency and artifact measurements (2026-08-24)
+
+Re-measured 2026-08-24 on the same Apple Silicon host, against the
 `2026_08` artifact — no benchmark-motivated code change in this round, so the
 gains are the accumulated effect of the API redesign and the newer toolchain,
 not a targeted optimization. Criterion's own stored baseline scores the warm
@@ -27,13 +54,16 @@ every pass, compiling a regex per bracket key) is byte-identical output —
 verified by checksumming the full JSON of 7,900 decodes before and after — and
 is worth ~1.4× on decode; the attributes shape is worth ~2× on the Python
 `decode_batch` path (2.4× on 10 cores), which is marshalling-bound rather than
-decode-bound. Measured on a contended host (load average 5–9), so these are
-conservative — see the honesty notes under Throughput for how each figure was
-cross-checked.
+decode-bound. These August measurements used a contended host (load average
+5–9); their methodology differs from the September throughput runs above.
 
-### Acceptance targets
+These measurements predate the September optimization. Warm single-VIN latency
+and the Criterion corpus were not re-measured in September; the latest measured
+cold-start is **1.597 ms**. The tables below preserve the August results.
 
-| metric | target | baseline | latest | met? |
+### Acceptance targets (August snapshot)
+
+| metric | target | baseline | August 24 | met? |
 |---|---|---|---|---|
 | warm single-decode | < 50 us | 4204 us | **38.4 us** | **yes** |
 | cold-start (fresh process, load + 1 decode) | < 5 ms | 29.3 ms | **0.753 ms** (median, n=11) | **yes** |
@@ -77,30 +107,10 @@ ultravin warm decode is ~312x faster than corgi v3 (published), ~781x faster
 than corgi v2, and ~1,601x faster than the Postgres round-trip oracle, on the
 same VIN, with a smaller compressed download.
 
-## Throughput (random corpus)
+## Earlier throughput optimization rounds
 
-A second, harder benchmark: **how many VINs each engine decodes per second**,
-single sequential caller, over an identical random corpus of 5,000 valid VINs
-(seeded shuffle of the full WMI→schema→pattern set; the oracle is authoritative
-for what's decodable), measured over a 60 s wall-clock window. This is a varied
-workload, not one cache-friendly VIN, so the per-decode cost is higher than the
-warm single-decode number above.
-
-The batched row is capped at **4 cores** (`RAYON_NUM_THREADS=4`), not the host's
-10 — a 4-vCPU box is the shape most people actually deploy on, so the number
-transfers instead of flattering the benchmark host.
-
-| engine | VIN/s | vs ultravin (1 core) |
-|---|---|---|
-| **ultravin** — batched, 4 cores | **94,030** | ~3.2× faster |
-| **ultravin** — 1 core | **29,568** | 1× |
-| corgi v3 (binary index, published) | ~83 | ~356× slower |
-| corgi v2 (SQLite, published) | ~33 | ~896× slower |
-| NHTSA MSSQL (`spVinDecode`, SQL Server) | 22.5 | ~1,314× slower |
-| NHTSA Postgres (`spvindecode`) | 19.5 | ~1,516× slower |
-| NHTSA vPIC web API (public rate limit) | ~10 | ~2,957× slower |
-
-These figures are after four rounds of hot-path work, all byte-identical output:
+Before the September optimization, four rounds improved throughput with
+byte-identical output:
 
 - the per-thread `(wmi, model_year)` memoization of the suggested-VIN correction
   charset (`valid_charset`), which removed ~60% of the hot path: single-core
@@ -121,50 +131,10 @@ These figures are after four rounds of hot-path work, all byte-identical output:
   (compiling a fresh regex per bracket key), which raised single-core **19,331 →
   25,175 VIN/s**, and batch **111,496 → 121,359 VIN/s** measured across all 10
   cores as the earlier rounds were. Verified identical by checksumming the full
-  JSON output of 7,900 decodes with and without the memo. The headline table
-  above reports the 4-core batch figure instead; the 10-core numbers are kept
-  here so the round-to-round progression stays comparable.
+  JSON output of 7,900 decodes with and without the memo. These 10-core numbers
+  are historical and use a different core count from the current headline table.
 
-Notes on honesty:
-- **ultravin** is the in-process Rust engine (system-clock path). The single-core
-  number (29,568 VIN/s) is over a varied corpus, not one repeated VIN; batched
-  (94,030 VIN/s) scales ~3.2× across 4 cores — sublinear because varied patterns
-  and shared memory bandwidth bound the per-thread matcher/charset caches.
-- These were measured on a **contended** host (load average 5–9, other workloads
-  running), so single 60 s windows varied: over 5× 60 s runs single-core spanned
-  27.1k–30.0k and batched spanned 81.4k–94.0k, the low batch sample landing in
-  the run where load peaked at 9.2. Single-core **29,568** is the median of those
-  5 runs; batched **94,030** is the best of them, which a 20 s spot check
-  corroborates at 93,114 (within 1%).
-- The single-core figure has **no** independent same-corpus probe this round —
-  the prior round's fixed-work min-of-9 script was not re-run. What it does
-  cross-check against is the criterion fixed-work bench on the frozen 223-VIN
-  corpus (31.4k VIN/s): the varied 5,000-VIN corpus reads ~6% under it, the same
-  relationship as the prior round (25.2k vs 27.4k, ~8% under). Treat 29,568 as a
-  median with a ±5% window, not a tight figure, and re-measure on a quiet machine
-  before quoting it anywhere load-sensitive.
-- **corgi v2/v3** are *derived* from the project's published per-VIN latency
-  (~30 ms / ~12 ms → ~33 / ~83 VIN/s), not re-measured here.
-- **NHTSA Postgres** runs the unmodified `vpic.spvindecode` over localhost TCP
-  (psycopg). The varied corpus averages ~51 ms/VIN vs the ~61.5 ms single-VIN
-  baseline — both in the same ballpark.
-- **NHTSA MSSQL** runs the unmodified `dbo.spVinDecode` shipped in
-  `vPICList_lite_2026_06.bak`, restored into SQL Server 2022. On Apple Silicon
-  that image only runs under **amd64 emulation (Rosetta)**, so its throughput
-  understates native SQL Server hardware — yet ultravin is still ~1,314× faster.
-- **NHTSA vPIC web API** is not a decode measurement: it's the public API's
-  ~10 requests/s rate limit ([corgi blog](https://cardog.app/blog/corgi-vin-decoder)),
-  the practical ceiling for anyone decoding against the hosted service. It's a
-  hard cap regardless of hardware, included for context.
-
-All measured on the same Apple Silicon host (10 physical cores; the batch row uses 4 of them). The ultravin rows were
-re-measured 2026-08-24 (5× 60 s runs; median for single-core, best for batched);
-the SQL-oracle rows are round-trip-bound and carried over from the prior run —
-they are dominated by query execution, not client CPU, so they are effectively
-host-independent at this scale. Re-running them needs the Docker oracles loaded
-with the pinned dump, which this round did not do.
-
-## Python output shapes (`full=True`)
+## Earlier Python output-shape measurements (`full=True`)
 
 Past a certain point the Rust decode stops being the cost and **marshalling into
 Python does**. The `full=True` shape returns ~41 elements per VIN as 15-key dicts
@@ -177,8 +147,8 @@ These figures are why the cheap shape is the default: the columns below were
 measured when `elements` still was, so read `full=True` as "what you used to get
 for free" and `default` as the shape a caller now gets without asking.
 
-5,000-VIN corpus, 4 cores, min-of-15, release wheel — same basis as the
-throughput table above:
+Earlier measurements over the 5,000-VIN corpus, four cores, min-of-15, release
+wheel. These were not re-run in September:
 
 | path | `full=True` | default |
 |---|---|---|
@@ -206,7 +176,10 @@ An earlier attempt at the same target — interning the `value`/`attribute_id`/
 already interns much of that text, and the cost is the dict stores themselves,
 not the string allocation. Recorded here so nobody re-tries it.
 
-### Reproduce the throughput benchmark
+### Reproduce the earlier 60-second comparison
+
+For the current three-run, 20-second medians, use the
+[September reproduction commands](THROUGHPUT_2026_09.md#reproduce).
 
 ```sh
 # 1. Postgres oracle (parity dump already loaded) + corpus
@@ -237,7 +210,7 @@ That one-month skew is deliberate and irrelevant for throughput — the row coun
 are near-identical, and the two engines are never compared row-for-row here (see
 [ORACLE_TUNING.md](ORACLE_TUNING.md)).
 
-## Methodology
+## Earlier measurement methodology (August snapshot)
 
 ### Warm single-decode & batch (criterion)
 `crates/ultravin/benches/decode.rs` (criterion, `harness = false`).
