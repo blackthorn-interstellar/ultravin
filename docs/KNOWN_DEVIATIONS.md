@@ -764,12 +764,24 @@ Possible Values `(8:S)` and rewrites position 8 to `S`; the oracle never
 enters that rung and stamps `!` at 6 and 8. Element 142 differs at `{6, 8}`,
 which is not a subset of the cell's `{5, 6, 7}`.
 
+**The 2026-09-07 member — same cell, same rung, the extra error at position 4.**
+`ZDMNAAJN7JB111111` is the same restrictive shape on `(ZDM, 2018)`. The VIN
+carries `A` at position 6, so the oracle flags position 6 and ultravin does
+not. Position 4 (`N`, charset `ABDGHKMV` on both sides — not a stale
+position) is invalid either way. Oracle `cntErrors = 2` (code 5); ultravin
+`cntErrors = 1` (code 3). Substituting each candidate of charset `ABDGHKMV`
+into position 4 of `ZDMNAAJN7JB111111` and asking `vpic.fVINCheckDigit` keeps
+only `V` (matches the input's `7` at position 9). Ultravin therefore emits
+Possible Values `(4:V)` and rewrites position 4 to `V`; the oracle never
+enters that rung and stamps `!` at 4 and 6. Element 142 differs at `{4, 6}`,
+which is not a subset of the cell's `{5, 6, 7}`.
+
 Deleting each cell inside a transaction takes `tmpRowCount` to 0, so the proc
 runs its own `fExtractValidCharsPerWmiYear` fallback — and the oracle then
 returns codes `1,5,14` with the three-`!` Suggested VIN on the `2AP` VIN (78
-rows) and codes `3,14` with Possible Values `(8:S)` on the `ZDM` VIN (50
-rows), byte-for-byte with ultravin. Rolled back afterwards; the cache is left
-at its shipped 8,809,229 rows.
+rows) and codes `3,14` with Possible Values `(8:S)` / `(4:V)` on the two `ZDM`
+VINs (50 rows), byte-for-byte with ultravin. Rolled back afterwards; the cache
+is left at its shipped 8,809,229 rows.
 
 **Why this is not §2's enumerated class.** `scripts/parity/stale_cache.py`
 excuses a divergence only when **every** VIN position the difference points at
@@ -780,17 +792,19 @@ of `{8}`. A cell stale at 8 explains the extra error at 8 and nothing about
 the Suggested VIN character printed for 11 — even though 11 moved only
 because 8 did. The same containment refuses the 2026-08-30 members:
 `(2AP, 2026)` is stale at `{8, 11}` and the diff names `{7, 8, 11}`;
-`(ZDM, 2018)` is stale at `{5, 6, 7}` and the diff names `{6, 8}`. That
-containment is load-bearing: otherwise any bug that happened to share a VIN
-with a stale cell would be laundered as soon as one overlapping position
-appeared. The defect is still the stale cell; the observation is just one the
-cell list is forbidden to forgive. Matching the oracle here would mean
-teaching ultravin to read that cell, which §2 already rejected.
+`(ZDM, 2018)` is stale at `{5, 6, 7}` and the diff names `{6, 8}`. It also
+refuses the 2026-09-07 member: the same `(ZDM, 2018)` cell, with the diff
+naming `{4, 6}`. That containment is load-bearing: otherwise any bug that
+happened to share a VIN with a stale cell would be laundered as soon as one
+overlapping position appeared. The defect is still the stale cell; the
+observation is just one the cell list is forbidden to forgive. Matching the
+oracle here would mean teaching ultravin to read that cell, which §2 already
+rejected.
 
 **What ultravin does.** `errors.rs::valid_charset` recomputes from the pattern
 rows. On the permissive members it does not see the cache's leftover
-character, so `cntErrors > 1` and it takes code 5. On the restrictive member
-it does see `J` at position 6, so `cntErrors == 1` and it takes the
+character, so `cntErrors > 1` and it takes code 5. On the restrictive members
+it does see `J` or `A` at position 6, so `cntErrors == 1` and it takes the
 check-digit rung (code 3). Both are the source-consistent answer, and both
 are what the oracle itself produces once the stale cell is gone.
 
