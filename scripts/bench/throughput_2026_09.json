@@ -1,0 +1,188 @@
+{
+  "date": "2026-09-07",
+  "baseline_commit": "0fe7564b22a204765cc814122525bda6e8e18052",
+  "artifact_blake3": "907eedd5f2794a10e586e01ca6c2a5af4e8d7e0f966bcfdf030a9889d77ac538",
+  "corpus": "scripts/bench/corpus.txt",
+  "corpus_size": 5000,
+  "rayon_threads": 4,
+  "release_debug": "line-tables-only",
+  "measurements": [
+    {
+      "build": "baseline",
+      "mode": "single",
+      "trial": 1,
+      "timed_vins": 325000,
+      "seconds": 20.0,
+      "vins_per_second": 16231,
+      "process_cpu_seconds": 16.020003,
+      "process_cpu_us_per_vin": 48.545463636363635
+    },
+    {
+      "build": "candidate",
+      "mode": "single",
+      "trial": 1,
+      "timed_vins": 720000,
+      "seconds": 20.1,
+      "vins_per_second": 35745,
+      "process_cpu_seconds": 20.180872999999995,
+      "process_cpu_us_per_vin": 27.835686896551717
+    },
+    {
+      "build": "candidate",
+      "mode": "single",
+      "trial": 2,
+      "timed_vins": 775000,
+      "seconds": 20.1,
+      "vins_per_second": 38587,
+      "process_cpu_seconds": 20.403178999999998,
+      "process_cpu_us_per_vin": 26.15792179487179
+    },
+    {
+      "build": "baseline",
+      "mode": "single",
+      "trial": 2,
+      "timed_vins": 505000,
+      "seconds": 20.1,
+      "vins_per_second": 25090,
+      "process_cpu_seconds": 20.523433000000004,
+      "process_cpu_us_per_vin": 40.242025490196085
+    },
+    {
+      "build": "baseline",
+      "mode": "single",
+      "trial": 3,
+      "timed_vins": 495000,
+      "seconds": 20.1,
+      "vins_per_second": 24627,
+      "process_cpu_seconds": 20.18067400000001,
+      "process_cpu_us_per_vin": 40.36134800000002
+    },
+    {
+      "build": "candidate",
+      "mode": "single",
+      "trial": 3,
+      "timed_vins": 795000,
+      "seconds": 20.0,
+      "vins_per_second": 39697,
+      "process_cpu_seconds": 20.522791,
+      "process_cpu_us_per_vin": 25.65348875
+    },
+    {
+      "build": "baseline",
+      "mode": "batch",
+      "trial": 1,
+      "timed_vins": 1560000,
+      "seconds": 20.0,
+      "vins_per_second": 77849,
+      "process_cpu_seconds": 63.207429999999974,
+      "process_cpu_us_per_vin": 40.38813418530349
+    },
+    {
+      "build": "candidate",
+      "mode": "batch",
+      "trial": 1,
+      "timed_vins": 2185000,
+      "seconds": 20.0,
+      "vins_per_second": 109190,
+      "process_cpu_seconds": 60.30931900000001,
+      "process_cpu_us_per_vin": 27.538501826484023
+    },
+    {
+      "build": "candidate",
+      "mode": "batch",
+      "trial": 2,
+      "timed_vins": 2245000,
+      "seconds": 20.0,
+      "vins_per_second": 112141,
+      "process_cpu_seconds": 61.539370000000005,
+      "process_cpu_us_per_vin": 27.350831111111113
+    },
+    {
+      "build": "baseline",
+      "mode": "batch",
+      "trial": 2,
+      "timed_vins": 1235000,
+      "seconds": 20.0,
+      "vins_per_second": 61699,
+      "process_cpu_seconds": 50.170632,
+      "process_cpu_us_per_vin": 40.46018709677419
+    },
+    {
+      "build": "baseline",
+      "mode": "batch",
+      "trial": 3,
+      "timed_vins": 1655000,
+      "seconds": 20.0,
+      "vins_per_second": 82725,
+      "process_cpu_seconds": 63.691739999999996,
+      "process_cpu_us_per_vin": 38.36851807228915
+    },
+    {
+      "build": "candidate",
+      "mode": "batch",
+      "trial": 3,
+      "timed_vins": 1925000,
+      "seconds": 20.0,
+      "vins_per_second": 96181,
+      "process_cpu_seconds": 54.310580999999985,
+      "process_cpu_us_per_vin": 28.14019740932642
+    }
+  ],
+  "resources": {
+    "cold_ms": {
+      "baseline": [
+        35.782,
+        0.691,
+        0.615,
+        0.738,
+        0.624,
+        0.715,
+        0.675,
+        0.548,
+        0.698,
+        0.639,
+        0.577
+      ],
+      "candidate": [
+        37.834,
+        1.618,
+        1.587,
+        1.597,
+        1.649,
+        1.633,
+        1.457,
+        1.372,
+        1.409,
+        1.738,
+        1.51
+      ]
+    },
+    "memory": [
+      {
+        "build": "baseline",
+        "mode": "single",
+        "max_rss_bytes": 100024320
+      },
+      {
+        "build": "candidate",
+        "mode": "single",
+        "max_rss_bytes": 136232960
+      },
+      {
+        "build": "baseline",
+        "mode": "batch",
+        "max_rss_bytes": 241336320
+      },
+      {
+        "build": "candidate",
+        "mode": "batch",
+        "max_rss_bytes": 264863744
+      }
+    ]
+  },
+  "equivalence": {
+    "cases": 1862306,
+    "input_sha256": "93d318f511450137545ee64bfe0311dc737233748ee9bf32250e8043e12b6ea8",
+    "both_fingerprint_files_sha256": "e985b2617222a111cb2444b02af3fa62e0f7bfb18345170dbd6829e9e047ba52"
+  }
+}

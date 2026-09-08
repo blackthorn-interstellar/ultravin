@@ -12,7 +12,7 @@ use std::rc::Rc;
 use crate::checkdigit::{check_digit_v1, check_digit_with_flag, is_default_char, is_my_char};
 use crate::db::Db;
 use crate::decode::CoreResult;
-use crate::hash::{FxBuildHasher, IntSet};
+use crate::hash::FxBuildHasher;
 use crate::tables::{ArchivedWmi, NULL_I32};
 
 /// The "possible values" payload for element 144, in the reference's order.
@@ -215,7 +215,7 @@ thread_local! {
     /// key, compiles a regex to do it (see [`valid_chars_in_regex`]). The
     /// expansion is a pure function of the key text and the keys come from the
     /// immutable archive, so a hit is byte-identical to recomputing; this is the
-    /// same trade as `MATCHER_CACHE` in `matcher.rs` and [`CHARSET_CACHE`] below.
+    /// same trade as [`CHARSET_CACHE`] below.
     /// Not shared with [`valid_charset`], which sweeps *every* key of a WMI-year
     /// (already memoized as a whole) and would flood the memo with keys E6 never
     /// asks about. Keys are archive-derived, never caller-derived, so the fast
@@ -247,7 +247,7 @@ thread_local! {
     /// charset is a pure function of those two inputs and the immutable archive,
     /// yet the SQL recomputes it on every decode (and once per best-of pass) —
     /// the same work the server-side `WMIYearValidChars` table materialises.
-    /// Mirrors the `REGEX_CACHE` in `matcher.rs`; `Rc` keeps a hit clone-free. The
+    /// `Rc` keeps a hit clone-free. The
     /// outer key is a `String` but lookups borrow it as `&str`, so a cache hit
     /// allocates nothing (the old `(String, i32)` key allocated on every call).
     static CHARSET_CACHE: RefCell<HashMap<String, HashMap<i32, Charset>>> =
@@ -452,15 +452,10 @@ fn errorcode(
         error_bytes = replacements.clone();
     }
 
-    // E6: unused positions from the matched-pattern keys.
-    let mut ty: IntSet<(i32, char)> = IntSet::default();
-    for &key in matched_keys {
-        for &(kpos, c) in key_chars(key).iter() {
-            if c != '|' {
-                ty.insert((kpos, c));
-            }
-        }
-    }
+    // E6 only asks whether the VIN's own character is present at six positions.
+    // Keep those membership answers, rather than allocating a set containing
+    // every possible character from every matched key.
+    let used = used_key_positions(&vb, matched_keys);
     let ubound = 11.min(vlen);
     let mut unused = String::new();
     let mut i = 3i32;
@@ -469,8 +464,7 @@ fn errorcode(
         if !matches!(i, 4 | 5 | 6 | 7 | 8 | 11) {
             continue;
         }
-        let chr = vb[(i - 1) as usize];
-        if !ty.contains(&(i - 3, chr)) {
+        if !used[(i - 4) as usize] {
             // Comma-joined as it is built. The SQL accumulates " N" and then
             // trims + replaces ' ' with ',', which yields exactly this — every
             // part is a bare decimal, so there is no interior space to convert.
@@ -490,6 +484,54 @@ fn errorcode(
         corrected_vin,
         error_bytes,
         unused_positions,
+    }
+}
+
+fn used_key_positions(vin: &[char], matched_keys: &[&str]) -> [bool; 8] {
+    let mut used = [false; 8];
+    for &key in matched_keys {
+        for &(pos, c) in key_chars(key).iter() {
+            if (1..=8).contains(&pos) && c != '|' && vin.get((pos + 2) as usize) == Some(&c) {
+                used[(pos - 1) as usize] = true;
+            }
+        }
+    }
+    used
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::hash::IntSet;
+
+    #[test]
+    fn position_flags_equal_the_full_character_set() {
+        let key_sets: &[&[&str]] = &[
+            &[],
+            &[""],
+            &["CM82[67]", "CM82[67]", "*****|*A"],
+            &["[A-Z][1-9]*", "#", "_______________"],
+            &["|", "abc", "é"],
+        ];
+        for keys in key_sets {
+            let expected: IntSet<(i32, char)> = keys
+                .iter()
+                .flat_map(|key| valid_chars_in_key(key))
+                .filter(|(_, c)| *c != '|')
+                .collect();
+            for vin in ["1HGCM82633A004352", "ABCZ1Z9|*1X", "123abc", "123é", ""] {
+                let vin: Vec<char> = vin.chars().collect();
+                let actual = used_key_positions(&vin, keys);
+                for (i, &used) in actual.iter().enumerate() {
+                    assert_eq!(
+                        used,
+                        vin.get(i + 3)
+                            .is_some_and(|c| expected.contains(&(i as i32 + 1, *c))),
+                        "keys {keys:?}, VIN {vin:?}, position {i}"
+                    );
+                }
+            }
+        }
     }
 }
 
@@ -542,7 +584,7 @@ pub fn compute_errors(
         let matched_keys: Vec<&str> = items
             .iter()
             .filter(|it| contains_ci(it.source.as_ref(), b"pattern") && !it.keys.is_empty())
-            .map(|it| it.keys.as_str())
+            .map(|it| it.keys.as_ref())
             .collect();
         let ec = errorcode(db, vin, var_wmi, model_year, &matched_keys);
         for c in ec.codes {
@@ -562,7 +604,7 @@ pub fn compute_errors(
     }
     let is_off_road = items
         .iter()
-        .any(|it| it.element_id == 5 && OFF_ROAD.contains(&it.attribute_id.as_str()));
+        .any(|it| it.element_id == 5 && OFF_ROAD.contains(&it.attribute_id.as_ref()));
     if is_off_road {
         raw.insert(10);
     }
@@ -573,7 +615,7 @@ pub fn compute_errors(
     let vehicle_type: Option<&str> = items
         .iter()
         .find(|it| it.element_id == 39)
-        .map(|it| it.attribute_id.as_str());
+        .map(|it| it.attribute_id.as_ref());
     let is_vin_exception = db.vinexception_checkdigit(vin);
     let (start_pos, is_car_mpv_lt) = start_context(vin, db.wmi_any(var_wmi));
 
@@ -699,7 +741,7 @@ pub fn compute_errors(
     let incomplete = vehicle_type == Some("10")
         || items
             .iter()
-            .any(|it| it.element_id == 5 && INCOMPLETE.contains(&it.attribute_id.as_str()));
+            .any(|it| it.element_id == 5 && INCOMPLETE.contains(&it.attribute_id.as_ref()));
     if incomplete {
         info = Some(trunc500(
             format!(

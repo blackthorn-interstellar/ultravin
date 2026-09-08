@@ -1,5 +1,9 @@
 # ultravin benchmarks
 
+See the [September 2026 throughput report](THROUGHPUT_2026_09.md) for the latest
+optimization work, paired measurements and full-result equivalence checks.
+The measurements below retain their original dates and methodology.
+
 Latest verified results are at the top; the **W3 baseline** (the starting point,
 before the zero-copy / artifact-slimming / hot-path optimizations) is carried in
 the `baseline` column for comparison. All numbers are deliberately honest and

@@ -13,18 +13,126 @@
 //! Anything the parser doesn't fully recognise falls back to the real `regex`
 //! engine, so behaviour is identical to compiling the pattern fresh every call.
 
-use std::cell::RefCell;
-
 use regex::Regex;
 
 use crate::hash::IntMap;
+use crate::{db::Db, tables::ArchivedPattern};
 
-thread_local! {
-    /// Per-thread cache of compiled bracket matchers, keyed by the interned
-    /// `keys_regex` string id. The archive is immutable, so a given id always maps
-    /// to the same pattern; caching turns the hot path from "compile per pattern
-    /// per decode" into one compile per distinct pattern per worker thread.
-    static MATCHER_CACHE: RefCell<IntMap<u32, Matcher>> = RefCell::new(IntMap::default());
+/// Match each distinct key once, then expand it to its eligible pattern rows.
+/// Owned by its database, so string ids cannot alias another loaded artifact.
+pub(crate) struct PatternIndex {
+    groups: Vec<KeyGroup>,
+    literals: IntMap<u16, Vec<usize>>,
+    positions: Vec<usize>,
+    fallback: Vec<usize>,
+    pub(crate) formula_rows: Vec<u32>,
+}
+
+struct KeyGroup {
+    key: u32,
+    matcher: Option<Matcher>,
+    rows: Vec<u32>,
+}
+
+impl PatternIndex {
+    pub(crate) fn build(db: &Db, start: u32, patterns: &[ArchivedPattern]) -> Self {
+        let mut groups: Vec<KeyGroup> = Vec::new();
+        let mut by_key: IntMap<u64, usize> = IntMap::default();
+        let eligible = db.pattern_element_ok();
+        let mut formula_rows = Vec::new();
+        for (i, p) in patterns.iter().enumerate() {
+            if db.s(p.keys.to_native()).contains('#') {
+                formula_rows.push(start + i as u32);
+            }
+            if !eligible
+                .get(p.elementid.to_native() as usize)
+                .copied()
+                .unwrap_or(false)
+            {
+                continue;
+            }
+            let key = if p.has_bracket {
+                p.keys_regex.to_native()
+            } else {
+                p.keys.to_native()
+            };
+            let identity = u64::from(key) * 2 + u64::from(p.has_bracket);
+            let group = *by_key.entry(identity).or_insert_with(|| {
+                let index = groups.len();
+                groups.push(KeyGroup {
+                    key,
+                    matcher: p.has_bracket.then(|| Matcher::compile(db.s(key))),
+                    rows: Vec::new(),
+                });
+                index
+            });
+            groups[group].rows.push(start + i as u32);
+        }
+        let mut literals: IntMap<u16, Vec<usize>> = IntMap::default();
+        let mut positions = Vec::new();
+        let mut fallback = Vec::new();
+        for (i, group) in groups.iter().enumerate() {
+            let literal = match &group.matcher {
+                Some(Matcher::Sets(sets)) => sets.iter().enumerate().find_map(|(pos, set)| {
+                    if set.iter().map(|word| word.count_ones()).sum::<u32>() != 1 {
+                        return None;
+                    }
+                    let word = set.iter().position(|word| *word != 0).unwrap();
+                    Some((pos, (word * 64 + set[word].trailing_zeros() as usize) as u8))
+                }),
+                Some(Matcher::Fallback(_)) => None,
+                None => db
+                    .s(group.key)
+                    .bytes()
+                    .enumerate()
+                    .find(|(_, b)| !matches!(b, b'*' | b'_')),
+            };
+            // Normalized VIN keys have at most 14 bytes. Longer or unusual
+            // patterns keep the ordinary matcher as the authority.
+            if let Some((pos, byte)) = literal.filter(|(pos, _)| *pos < 14) {
+                literals
+                    .entry((pos as u16) * 256 + u16::from(byte))
+                    .or_default()
+                    .push(i);
+                positions.push(pos);
+            } else {
+                fallback.push(i);
+            }
+        }
+        positions.sort_unstable();
+        positions.dedup();
+        Self {
+            groups,
+            literals,
+            positions,
+            fallback,
+            formula_rows,
+        }
+    }
+
+    pub(crate) fn hits(&self, db: &Db, keys: &str) -> Vec<u32> {
+        let mut hits = Vec::new();
+        let candidates = self
+            .positions
+            .iter()
+            .filter_map(|&pos| {
+                let byte = *keys.as_bytes().get(pos)?;
+                self.literals.get(&((pos as u16) * 256 + u16::from(byte)))
+            })
+            .flatten()
+            .chain(&self.fallback);
+        for &i in candidates {
+            let group = &self.groups[i];
+            let matched = match &group.matcher {
+                Some(matcher) => matcher.is_match(keys),
+                None => like_match(keys.as_bytes(), db.s(group.key).as_bytes()),
+            };
+            if matched {
+                hits.extend_from_slice(&group.rows);
+            }
+        }
+        hits
+    }
 }
 
 /// Port of `vpic.sqlwild_to_regex`: turn a wildcard key into an anchored regex.
@@ -219,23 +327,164 @@ fn parse_class(body: &[u8], start: usize) -> Option<(Token, usize)> {
     Some((Token::Class(ranges), j + 1))
 }
 
-/// SQL `var_keys ~ keys_regex` for the bracket branch. `regex_id` is the
-/// interned `keys_regex` string id, `regex` its text; the compiled matcher is
-/// memoized per thread. Behaviour is identical to compiling `regex` fresh every
-/// call (same `is_match`, same `false` on a compile error).
-pub fn regex_match_cached(regex_id: u32, regex: &str, var_keys: &str) -> bool {
-    MATCHER_CACHE.with(|c| {
-        let mut cache = c.borrow_mut();
-        let entry = cache
-            .entry(regex_id)
-            .or_insert_with(|| Matcher::compile(regex));
-        entry.is_match(var_keys)
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn indexed_db(definitions: &[(&str, Option<&str>, i32)]) -> Db {
+        use crate::tables::{serialize_artifact, Element, Pattern, VinSchema, VpicData};
+
+        let mut strings = vec![String::new()];
+        let mut intern = |s: &str| -> u32 {
+            if let Some(i) = strings.iter().position(|v| v == s) {
+                return i as u32;
+            }
+            strings.push(s.into());
+            (strings.len() - 1) as u32
+        };
+        let patterns = definitions
+            .iter()
+            .enumerate()
+            .map(|(i, &(key, regex, element))| Pattern {
+                id: i as i32,
+                vinschemaid: 1,
+                keys: intern(key),
+                keys_regex: intern(regex.unwrap_or("")),
+                elementid: element,
+                attributeid: 0,
+                createdon_key: 0,
+                specificity: 0,
+                has_bracket: regex.is_some(),
+            })
+            .collect();
+        let mut arena_bytes = Vec::new();
+        let mut arena_offsets = vec![0];
+        for s in strings {
+            arena_bytes.extend_from_slice(s.as_bytes());
+            arena_offsets.push(arena_bytes.len() as u32);
+        }
+        let data = VpicData {
+            arena_bytes,
+            arena_offsets,
+            pattern: patterns,
+            vinschema: vec![VinSchema {
+                id: 1,
+                tobeqced: false,
+            }],
+            element: [1, 2, 3, 26, 114]
+                .into_iter()
+                .map(|id| Element {
+                    id,
+                    name: 0,
+                    code: 0,
+                    isprivate: id == 2,
+                    groupname: 0,
+                    datatype: 0,
+                    decode: 0,
+                    decode_present: id != 3,
+                    weight: 0,
+                })
+                .collect(),
+            wmi: vec![],
+            wmi_vinschema: vec![],
+            make_model: vec![],
+            wmi_make: vec![],
+            enginemodel: vec![],
+            enginemodelpattern: vec![],
+            defaultvalue: vec![],
+            vinexception: vec![],
+            conversion: vec![],
+            lookups: vec![],
+            cover: vec![],
+            vspecschema: vec![],
+            vspecschemapattern: vec![],
+            vspecpattern: vec![],
+            vspecschemamodel: vec![],
+            vspecschemayear: vec![],
+        };
+        Db::from_bytes(&serialize_artifact(&data, 1)).unwrap()
+    }
+
+    #[test]
+    fn indexed_matches_equal_a_row_scan_including_duplicates_and_fallbacks() {
+        let db = indexed_db(&[
+            ("", None, 1),
+            ("A*", None, 1),
+            ("A*", None, 114),
+            ("A*", None, 2),
+            ("A*", None, 3),
+            ("A*", None, 26),
+            ("A*", None, 999),
+            ("A_", None, 1),
+            ("A[BC]", Some("^A[BC].*"), 1),
+            ("[AB]*", Some("^[AB]..*"), 1),
+            ("*[AB]X", Some("^.[AB]X.*"), 1),
+            ("***", None, 1),
+            ("ABC", None, 1),
+            ("A|B", Some("^(A|B).*$"), 1),
+            ("[", Some("["), 1),
+            ("______________Z", None, 1),
+            // Identical string ids in opposite matching modes must stay separate.
+            ("^A.*", None, 1),
+            ("A", Some("^A.*"), 1),
+            ("A#", None, 2),
+            ("##", None, 999),
+        ]);
+        let index = db.pattern_index(1).unwrap();
+        assert_eq!(index.formula_rows, vec![18, 19]);
+        let alphabet = b"ABCX_*!\n";
+        let mut inputs = vec![String::new(), "______________Z".into(), "^A.*".into()];
+        for &a in alphabet {
+            inputs.push(String::from_utf8(vec![a]).unwrap());
+            for &b in alphabet {
+                inputs.push(String::from_utf8(vec![a, b]).unwrap());
+                for &c in alphabet {
+                    inputs.push(String::from_utf8(vec![a, b, c]).unwrap());
+                }
+            }
+        }
+        for input in inputs {
+            let expected: Vec<u32> = db
+                .patterns_for(1)
+                .iter()
+                .enumerate()
+                .filter_map(|(i, p)| {
+                    let eligible = db
+                        .pattern_element_ok()
+                        .get(p.elementid.to_native() as usize)
+                        .copied()
+                        .unwrap_or(false);
+                    let matched = if p.has_bracket {
+                        Regex::new(db.s(p.keys_regex.to_native()))
+                            .ok()
+                            .is_some_and(|re| re.is_match(&input))
+                    } else {
+                        like_match(input.as_bytes(), db.s(p.keys.to_native()).as_bytes())
+                    };
+                    (eligible && matched).then_some(i as u32)
+                })
+                .collect();
+            let mut actual = index.hits(&db, &input);
+            actual.sort_unstable();
+            assert_eq!(actual, expected, "input {input:?}");
+        }
+    }
+
+    #[test]
+    fn indexes_belong_to_the_database_and_are_shared_between_threads() {
+        let a = indexed_db(&[("[AB]", Some("^[AB].*"), 1)]);
+        let b = indexed_db(&[("[XY]", Some("^[XY].*"), 1)]);
+        std::thread::scope(|scope| {
+            for _ in 0..4 {
+                scope.spawn(|| {
+                    assert_eq!(a.pattern_index(1).unwrap().hits(&a, "A"), vec![0]);
+                    assert!(b.pattern_index(1).unwrap().hits(&b, "A").is_empty());
+                    assert_eq!(b.pattern_index(1).unwrap().hits(&b, "X"), vec![0]);
+                });
+            }
+        });
+        assert!(a.pattern_index(999).is_none());
+    }
 
     #[test]
     fn plain_like_prefix_and_wildcards() {
@@ -249,8 +498,8 @@ mod tests {
     fn bracket_regex_matches() {
         let re = sqlwild_to_regex("CM82[67]");
         assert_eq!(re, "^CM82[67].*");
-        assert!(regex_match_cached(1, &re, "CM826|3A004352"));
-        assert!(!regex_match_cached(2, &re, "CM825|3A004352"));
+        assert!(Matcher::compile(&re).is_match("CM826|3A004352"));
+        assert!(!Matcher::compile(&re).is_match("CM825|3A004352"));
     }
 
     /// Every real bracket key of a spread of real WMIs must decide exactly what

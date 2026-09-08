@@ -12,6 +12,8 @@
 
 use std::sync::OnceLock;
 
+use crate::hash::IntMap;
+use crate::matcher::PatternIndex;
 use crate::tables::{check_header, validate_body};
 use crate::tables::{
     ArchivedConversion, ArchivedDefaultValue, ArchivedElement, ArchivedEngineModel,
@@ -63,9 +65,8 @@ pub struct Db {
     _backing: Backing,
     archive: *const ArchivedVpicData,
     /// Dense `element_id -> slice index` table (`-1` = absent), built once on first
-    /// use. `element_by_id` is called once per pattern in the matching loop —
-    /// hundreds to thousands of times per decode — so an O(1) index beats the
-    /// `binary_search` over the (small but repeatedly scanned) element table.
+    /// use. Resolution and projection repeatedly consult element metadata, so
+    /// an O(1) index avoids searching the element table for every output row.
     element_index: OnceLock<Box<[i32]>>,
     /// Dense `tag -> [start, end)` band into the `lookups` table (built once). The
     /// table is sorted by `(tag, id)`, so a lookup can binary-search `id` inside
@@ -74,12 +75,15 @@ pub struct Db {
     /// winning-pass `resolve_xxx` runs dozens of lookups per VIN.
     lookup_index: OnceLock<Box<[(u32, u32)]>>,
     /// Dense `element_id -> can this element contribute a pattern match` table
-    /// (built once). The pattern loop tests every pattern of every schema of the
-    /// WMI — the hottest loop in a decode — and the test only ever reads three
-    /// immutable element flags. Precomputing them turns two random reads (the
-    /// `element_index` slot, then the element row) into one byte load out of a
-    /// table small enough to stay in L1. See `decode::decode_core`.
+    /// (built once). Index construction uses these immutable element flags to
+    /// exclude ineligible rows before they can reach the matching hot path.
     pattern_element_ok: OnceLock<Box<[bool]>>,
+    /// One lazily compiled key index per schema, shared by all decoding threads.
+    pattern_indexes: OnceLock<Box<[OnceLock<PatternIndex>]>>,
+    /// The spec join first selects by make and model; keep those candidates in
+    /// archive order so decoding need not scan every model of a manufacturer's
+    /// every schema. Vehicle type, year and QC checks still run on each pass.
+    spec_model_index: OnceLock<IntMap<(i32, i32), Vec<u32>>>,
 }
 
 // SAFETY: the archive is immutable, validated bytes; sharing `&Db` across threads
@@ -105,6 +109,8 @@ impl Db {
             element_index: OnceLock::new(),
             lookup_index: OnceLock::new(),
             pattern_element_ok: OnceLock::new(),
+            pattern_indexes: OnceLock::new(),
+            spec_model_index: OnceLock::new(),
         })
     }
 
@@ -126,6 +132,8 @@ impl Db {
             element_index: OnceLock::new(),
             lookup_index: OnceLock::new(),
             pattern_element_ok: OnceLock::new(),
+            pattern_indexes: OnceLock::new(),
+            spec_model_index: OnceLock::new(),
         }
     }
 
@@ -271,6 +279,23 @@ impl Db {
         v.binary_search_by(|r| r.id.to_native().cmp(&id))
             .ok()
             .map(|i| &v[i])
+    }
+
+    pub(crate) fn pattern_index(&self, id: i32) -> Option<&PatternIndex> {
+        let schemas = self.a().vinschema.as_slice();
+        let i = schemas
+            .binary_search_by_key(&id, |s| s.id.to_native())
+            .ok()?;
+        let indexes = self
+            .pattern_indexes
+            .get_or_init(|| (0..schemas.len()).map(|_| OnceLock::new()).collect());
+        Some(indexes[i].get_or_init(|| {
+            let patterns = self.patterns();
+            let start = patterns.partition_point(|p| p.vinschemaid.to_native() < id);
+            let end =
+                start + patterns[start..].partition_point(|p| p.vinschemaid.to_native() <= id);
+            PatternIndex::build(self, start as u32, &patterns[start..end])
+        }))
     }
 
     pub fn element_by_id(&self, id: i32) -> Option<&ArchivedElement> {
@@ -469,6 +494,37 @@ impl Db {
         })
     }
 
+    pub(crate) fn vspecschemas_for_make_model(
+        &self,
+        makeid: i32,
+        modelid: i32,
+    ) -> impl Iterator<Item = &ArchivedVSpecSchema> {
+        let index = self.spec_model_index.get_or_init(|| {
+            let mut index: IntMap<(i32, i32), Vec<u32>> = IntMap::default();
+            for (i, schema) in self.vspecschemas().iter().enumerate() {
+                let mut previous_model = None;
+                for model in self.vspecschema_models_for(schema.id.to_native()) {
+                    let id = model.modelid.to_native();
+                    // The old join used `any`: duplicate model rows must not
+                    // duplicate the schema. Model rows are sorted by model id.
+                    if previous_model != Some(id) {
+                        index
+                            .entry((schema.makeid.to_native(), id))
+                            .or_default()
+                            .push(i as u32);
+                        previous_model = Some(id);
+                    }
+                }
+            }
+            index
+        });
+        index
+            .get(&(makeid, modelid))
+            .into_iter()
+            .flatten()
+            .map(|&i| &self.vspecschemas()[i as usize])
+    }
+
     /// `VSpecSchemaPattern` rows for a schema id.
     pub fn vspecschemapatterns_for(&self, schemaid: i32) -> &[ArchivedVSpecSchemaPattern] {
         slice_eq(self.a().vspecschemapattern.as_slice(), schemaid, |r| {
@@ -536,4 +592,38 @@ fn slice_eq<T, F: Fn(&T) -> i32>(v: &[T], target: i32, key: F) -> &[T] {
     // comparison count of the second binary search on the large tables.
     let hi = lo + v[lo..].partition_point(|r| key(r) <= target);
     &v[lo..hi]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn spec_model_index_preserves_the_original_join_and_order() {
+        let Some(db) = Db::try_embedded() else { return };
+        let mut pairs = std::collections::BTreeSet::new();
+        for schema in db.vspecschemas() {
+            for model in db.vspecschema_models_for(schema.id.to_native()) {
+                pairs.insert((schema.makeid.to_native(), model.modelid.to_native()));
+            }
+        }
+        pairs.insert((-1, -1));
+        for (make, model) in pairs {
+            let expected: Vec<i32> = db
+                .vspecschemas_for_make(make)
+                .iter()
+                .filter(|s| {
+                    db.vspecschema_models_for(s.id.to_native())
+                        .iter()
+                        .any(|m| m.modelid.to_native() == model)
+                })
+                .map(|s| s.id.to_native())
+                .collect();
+            let actual: Vec<i32> = db
+                .vspecschemas_for_make_model(make, model)
+                .map(|s| s.id.to_native())
+                .collect();
+            assert_eq!(actual, expected, "make {make}, model {model}");
+        }
+    }
 }

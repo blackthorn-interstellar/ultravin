@@ -545,10 +545,10 @@ fn batch_json<T: serde::Serialize + Send>(
 /// One decode pass (a single `spvindecode_core` invocation): its items (with the
 /// 142/143/144/156/191/196 corrections appended, values still pre-resolution) and
 /// the metadata the scorer and result need.
-struct Pass {
+struct Pass<'a> {
     id: i32,
     model_year: Option<i32>,
-    items: Vec<decode::DecodingItem>,
+    items: Vec<decode::DecodingItem<'a>>,
     codes: Vec<i32>,
     corrected_vin: String,
     check_digit_valid: bool,
@@ -697,8 +697,8 @@ pub fn decode_full<'a>(
 
 /// Run one `spvindecode_core` pass and append its corrections.
 #[allow(clippy::too_many_arguments)]
-fn run_pass(
-    db: &Db,
+fn run_pass<'a>(
+    db: &'a Db,
     vin: &str,
     var_wmi: &str,
     var_keys: &str,
@@ -710,7 +710,7 @@ fn run_pass(
     conclusive: bool,
     error12: bool,
     scan: &mut decode::PatternScan,
-) -> Pass {
+) -> Pass<'a> {
     let core = decode::decode_core(
         db,
         var_wmi,
@@ -828,7 +828,7 @@ fn cmp_year_nulls_last(a: Option<i32>, b: Option<i32>) -> std::cmp::Ordering {
 
 /// Project the surviving items into output elements (non-empty Decode, public),
 /// ordered by the GroupName CASE rank then element id.
-fn project(db: &Db, items: Vec<decode::DecodingItem>) -> Vec<DecodedElement<'_>> {
+fn project<'a>(db: &'a Db, items: Vec<decode::DecodingItem<'a>>) -> Vec<DecodedElement<'a>> {
     let mut elements: Vec<DecodedElement> = Vec::with_capacity(items.len());
     for it in items {
         let Some(e) = db.element_by_id(it.element_id) else {
@@ -842,14 +842,14 @@ fn project(db: &Db, items: Vec<decode::DecodingItem>) -> Vec<DecodedElement<'_>>
             variable: db.s(e.name.to_native()),
             value: scrub(it.value),
             element_id: it.element_id,
-            attribute_id: it.attribute_id,
+            attribute_id: it.attribute_id.into_owned(),
             code: db.s(e.code.to_native()),
             data_type: db.s(e.datatype.to_native()),
             decode: decode_str,
             source: it.source,
             pattern_id: opt_i32(it.pattern_id),
             vin_schema_id: opt_i32(it.vin_schema_id),
-            keys: it.keys,
+            keys: it.keys.into_owned(),
             created_on: opt_i64(it.created_on),
             wmi_id: opt_i32(it.wmi_id),
             to_be_qced: it.to_be_qced,
@@ -906,11 +906,11 @@ fn append_correction(items: &mut Vec<decode::DecodingItem>, element_id: i32, val
     items.push(decode::DecodingItem {
         created_on: tables::NULL_I64,
         pattern_id: tables::NULL_I32,
-        keys: String::new(),
+        keys: std::borrow::Cow::Borrowed(""),
         vin_schema_id: tables::NULL_I32,
         wmi_id: tables::NULL_I32,
         element_id,
-        attribute_id: value.to_string(),
+        attribute_id: std::borrow::Cow::Owned(value.to_string()),
         value: std::borrow::Cow::Owned(value.to_string()),
         source: std::borrow::Cow::Borrowed("Corrections"),
         priority: 999,
