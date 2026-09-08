@@ -4,7 +4,62 @@ The goal was twice the decoding throughput with identical answers. These changes
 improve the existing decoder without an alternate output mode, an artifact
 format change, or a cache of previously decoded VINs.
 
-## Results
+## September 8 rerun
+
+**1.55× single-core and 1.43× four-core batch throughput. The 2× target remains
+unmet.** Medians of three 60-second windows per build and mode:
+
+| Mode | Before VIN/s | After VIN/s | Speedup | Before / after process CPU µs per VIN |
+|---|---:|---:|---:|---:|
+| Single core | 29,293 | 45,376 | 1.55× | 34.26 / 22.15 |
+| Batch, four cores | 91,206 | 130,381 | 1.43× | 35.96 / 24.49 |
+
+The previous README reported 29,568 single-core and 94,030 four-core VIN/s.
+This rerun's baseline is within about 1% and 3% of those figures, respectively.
+September 7's absolute measurements were lower for both builds. The paired
+improvement is similar, but those lower rates understated the throughput seen
+in this rerun. An older 121,359 VIN/s figure used ten cores, not four.
+
+Single-core samples ranged from 28,021–30,480 before and 44,857–46,849 after;
+batch samples ranged from 90,039–94,582 before and 125,445–131,708 after. Every
+sample is retained in
+[`throughput_2026_09_08.json`](../scripts/bench/throughput_2026_09_08.json), along
+with commit ids, toolchain, input and executable hashes, and process CPU times.
+The README and chart now use these medians.
+
+Both executables used the same harness, 5,000-VIN corpus, embedded artifact,
+Cargo.lock, mimalloc allocator and standard release profile (`opt-level=3`,
+fat LTO, one codegen unit, no debug information). The baseline is `3eafb62`,
+immediately before the optimization; the candidate is `f2913e8`. Both include
+the newly rebased upstream changes. The host was the same Apple M1 Max on AC
+power, with other applications running and no reported thermal or performance
+warning. This does not isolate which environmental or build difference caused
+the lower September 7 rates.
+
+The harness warmed the whole corpus before each window and alternated build
+order. Process CPU time includes startup, warmup and teardown. No decoder code
+changed for this rerun; correctness fingerprints, startup and memory figures
+below remain the earlier measurements and were not rerun.
+
+To reproduce from `f2913e8`, with the artifact already present:
+
+```bash
+git worktree add --detach /tmp/ultravin-before-20260908 3eafb62
+cp crates/ultravin/examples/throughput.rs /tmp/ultravin-before-20260908/crates/ultravin/examples/
+cp Cargo.lock /tmp/ultravin-before-20260908/Cargo.lock
+export ULTRAVIN_DATA="$PWD/crates/ultravin/data/vpic.rkyv"
+unset CARGO_PROFILE_RELEASE_DEBUG
+CARGO_TARGET_DIR="$PWD/target/bench-before-20260908" cargo build \
+  --manifest-path /tmp/ultravin-before-20260908/Cargo.toml \
+  -p ultravin --example throughput --release --locked
+cargo build -p ultravin --example throughput --release --locked
+uv run --frozen -- python scripts/bench/compare.py \
+  target/bench-before-20260908/release/examples/throughput \
+  target/release/examples/throughput --seconds 60 --rounds 3 --threads 4 \
+  --output target/throughput-20260908.json
+```
+
+## Initial results (September 7)
 
 **1.57× single-core and 1.40× four-core batch throughput. The 2× target was not
 reached.** Medians of three 20-second windows per executable and mode, measured

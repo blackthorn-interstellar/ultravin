@@ -2,35 +2,42 @@
 
 ## Throughput (random corpus)
 
-Measured September 7, 2026: the Rust engine decodes **38,587 VIN/s on one core** and **109,190 VIN/s in
+Measured September 8, 2026: the Rust engine decodes **45,376 VIN/s on one core** and **130,381 VIN/s in
 four-core batches** over the random 5,000-VIN corpus. Both are medians of three
-20-second windows after warming the entire corpus; the original and optimized
+60-second windows after warming the entire corpus; the original and optimized
 executables ran in alternating order on the same Apple M1 Max.
 
 | engine | VIN/s | vs ultravin (1 core) |
 |---|---|---|
-| **ultravin** — batched, 4 cores | **109,190** | ~2.8× faster |
-| **ultravin** — 1 core | **38,587** | 1× |
-| corgi v3 (binary index, published) | ~83 | ~465× slower |
-| corgi v2 (SQLite, published) | ~33 | ~1,169× slower |
-| NHTSA MSSQL (`spVinDecode`, SQL Server) | 22.5 | ~1,715× slower |
-| NHTSA Postgres (`spvindecode`) | 19.5 | ~1,979× slower |
-| NHTSA vPIC web API (public rate limit) | ~10 | ~3,859× slower |
+| **ultravin** — batched, 4 cores | **130,381** | ~2.9× faster |
+| **ultravin** — 1 core | **45,376** | 1× |
+| corgi v3 (binary index, published) | ~83 | ~547× slower |
+| corgi v2 (SQLite, published) | ~33 | ~1,375× slower |
+| NHTSA MSSQL (`spVinDecode`, SQL Server) | 22.5 | ~2,017× slower |
+| NHTSA Postgres (`spvindecode`) | 19.5 | ~2,327× slower |
+| NHTSA vPIC web API (public rate limit) | ~10 | ~4,538× slower |
 
-The paired baseline measured 24,627 VIN/s single-core and 77,849 VIN/s batched:
-**1.57× and 1.40× improvements**, respectively. All **1,862,306 full-result
-fingerprints** matched. The [September report](THROUGHPUT_2026_09.md) includes
-reproduction commands, all samples, and the startup and memory tradeoffs.
+The paired baseline measured 29,293 VIN/s single-core and 91,206 VIN/s batched:
+**1.55× and 1.43× improvements**, respectively. The earlier correctness run
+matched all **1,862,306 full-result fingerprints**; this rerun measures throughput
+only. The [September report](THROUGHPUT_2026_09.md) includes reproduction commands,
+all samples, and the startup and memory tradeoffs.
+
+The baseline now agrees with the previous README’s 29,568 / 94,030 VIN/s to
+within about 1% single-core and 3% batched. The September 7 measurements were lower
+for both builds; their absolute rates should not be compared directly with the
+older README to estimate the optimization’s gain. An older 121,359 VIN/s result
+used ten cores, not four.
 
 Measurement notes:
 
-- The host was contended. Optimized samples ranged from 35,745–39,697 VIN/s
-  single-core and 96,181–112,141 VIN/s batched. These measure the Rust engine;
+- The host was shared. Optimized samples ranged from 44,857–46,849 VIN/s
+  single-core and 125,445–131,708 VIN/s batched. These measure the Rust engine;
   Python dictionary construction and parquet I/O have separate costs.
 - Batches use `RAYON_NUM_THREADS=4`; the machine has 10 physical cores. Batched
-  throughput is about 2.8× the single-core rate.
-- The September runs used the release profile (`opt-level=3`, `lto="fat"`,
-  `codegen-units=1`) and line tables for profiling, with the same artifact,
+  throughput is about 2.9× the single-core rate.
+- The September 8 rerun used the release profile (`opt-level=3`, `lto="fat"`,
+  `codegen-units=1`) without debug information, with the same artifact,
   allocator, lockfile and harness in both builds.
 - corgi figures are derived from previously published latency (~12 ms v3,
   ~30 ms v2), not re-measured here. SQL-oracle figures are carried forward from

@@ -1,0 +1,190 @@
+{
+  "date": "2026-09-08",
+  "baseline_commit": "3eafb627c1ec7543cde2982f57e6b8c1f8654ace",
+  "candidate_commit": "f2913e849c9f4e1c133ae56f4804635b0b24d9a9",
+  "host": "Apple M1 Max, 10 physical cores, AC power",
+  "platform": "macOS-26.6.1-arm64-arm-64bit-Mach-O",
+  "rustc": "rustc 1.90.0 (1159e78c4 2025-09-14)\nbinary: rustc\ncommit-hash: 1159e78c4747b02ef996e55082b704c09b970588\ncommit-date: 2025-09-14\nhost: aarch64-apple-darwin\nrelease: 1.90.0\nLLVM version: 20.1.8",
+  "profile": {
+    "opt_level": 3,
+    "lto": "fat",
+    "codegen_units": 1,
+    "debug": false
+  },
+  "allocator": "mimalloc",
+  "corpus": "scripts/bench/corpus.txt",
+  "corpus_size": 5000,
+  "corpus_sha256": "b45ad4472c202ee176f86e8bc3c39609c76b6258df963ea04e08439aa3a1eb09",
+  "artifact_sha256": "2d555d4db3fde3867f41e415ec6e848285a286b2fe5fb45f0bdcb88245bd7787",
+  "cargo_lock_sha256": "87d72b2d0ff341c4bfca44104fb8c2f4f4e2dd555553794414d92549194d46fa",
+  "harness_sha256": "0029106fc65478979f7fd8a0cf610339e3513cacdedc14859ddaa37276caa4c1",
+  "baseline_binary_sha256": "968cdcd95e7285eff26ce03ac39ec0843f404e5ed86cecf7ca82afcd8eb6769d",
+  "candidate_binary_sha256": "066fd1c83a9a0a8073d977f32ad2e9577544c5ca6c9c685f8ccec5d4f67bd2a0",
+  "rayon_threads": 4,
+  "seconds_per_window": 60,
+  "rounds": 3,
+  "prior_readme": {
+    "commit": "f21d033032f45a78b7a24415091865d1c6063e70",
+    "single": 29568,
+    "batch_four_cores": 94030
+  },
+  "methodology": "Identical harness, artifact, lockfile, allocator and release settings. Warm entire corpus before each timed window; alternate executable order; retain every sample. Process CPU includes startup, warmup and teardown.",
+  "load_before": "09:30:49  up 28 days  8:07,  49 users,  load average: 4.75, 5.13, 5.26",
+  "power_before": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+  "measurements": [
+    {
+      "build": "baseline",
+      "mode": "single",
+      "trial": 1,
+      "timed_vins": 1830000,
+      "seconds": 60.0,
+      "vins_per_second": 30480,
+      "process_cpu_seconds": 60.650077,
+      "process_cpu_us_per_vin": 33.05181307901908
+    },
+    {
+      "build": "candidate",
+      "mode": "single",
+      "trial": 1,
+      "timed_vins": 2815000,
+      "seconds": 60.1,
+      "vins_per_second": 46849,
+      "process_cpu_seconds": 60.688551,
+      "process_cpu_us_per_vin": 21.520762765957446
+    },
+    {
+      "build": "candidate",
+      "mode": "single",
+      "trial": 2,
+      "timed_vins": 2725000,
+      "seconds": 60.1,
+      "vins_per_second": 45376,
+      "process_cpu_seconds": 60.48160300000001,
+      "process_cpu_us_per_vin": 22.154433333333337
+    },
+    {
+      "build": "baseline",
+      "mode": "single",
+      "trial": 2,
+      "timed_vins": 1760000,
+      "seconds": 60.1,
+      "vins_per_second": 29293,
+      "process_cpu_seconds": 60.46164100000003,
+      "process_cpu_us_per_vin": 34.255887252124666
+    },
+    {
+      "build": "baseline",
+      "mode": "single",
+      "trial": 3,
+      "timed_vins": 1685000,
+      "seconds": 60.1,
+      "vins_per_second": 28021,
+      "process_cpu_seconds": 60.54496400000001,
+      "process_cpu_us_per_vin": 35.825422485207106
+    },
+    {
+      "build": "candidate",
+      "mode": "single",
+      "trial": 3,
+      "timed_vins": 2695000,
+      "seconds": 60.1,
+      "vins_per_second": 44857,
+      "process_cpu_seconds": 60.668884000000006,
+      "process_cpu_us_per_vin": 22.46995703703704
+    },
+    {
+      "build": "baseline",
+      "mode": "batch",
+      "trial": 1,
+      "timed_vins": 5675000,
+      "seconds": 60.0,
+      "vins_per_second": 94582,
+      "process_cpu_seconds": 196.703894,
+      "process_cpu_us_per_vin": 34.63096725352113
+    },
+    {
+      "build": "candidate",
+      "mode": "batch",
+      "trial": 1,
+      "timed_vins": 7825000,
+      "seconds": 60.0,
+      "vins_per_second": 130381,
+      "process_cpu_seconds": 191.72514700000008,
+      "process_cpu_us_per_vin": 24.48597024265646
+    },
+    {
+      "build": "candidate",
+      "mode": "batch",
+      "trial": 2,
+      "timed_vins": 7905000,
+      "seconds": 60.0,
+      "vins_per_second": 131708,
+      "process_cpu_seconds": 191.7161099999999,
+      "process_cpu_us_per_vin": 24.237182048040445
+    },
+    {
+      "build": "baseline",
+      "mode": "batch",
+      "trial": 2,
+      "timed_vins": 5405000,
+      "seconds": 60.0,
+      "vins_per_second": 90039,
+      "process_cpu_seconds": 194.56699999999987,
+      "process_cpu_us_per_vin": 35.964325323475016
+    },
+    {
+      "build": "baseline",
+      "mode": "batch",
+      "trial": 3,
+      "timed_vins": 5475000,
+      "seconds": 60.0,
+      "vins_per_second": 91206,
+      "process_cpu_seconds": 197.25532399999992,
+      "process_cpu_us_per_vin": 35.995497080291955
+    },
+    {
+      "build": "candidate",
+      "mode": "batch",
+      "trial": 3,
+      "timed_vins": 7530000,
+      "seconds": 60.0,
+      "vins_per_second": 125445,
+      "process_cpu_seconds": 188.87386400000003,
+      "process_cpu_us_per_vin": 25.066206237558067
+    }
+  ],
+  "summary": {
+    "single": {
+      "baseline": {
+        "median_vins_per_second": 29293,
+        "min_vins_per_second": 28021,
+        "max_vins_per_second": 30480,
+        "median_process_cpu_us_per_vin": 34.255887252124666
+      },
+      "candidate": {
+        "median_vins_per_second": 45376,
+        "min_vins_per_second": 44857,
+        "max_vins_per_second": 46849,
+        "median_process_cpu_us_per_vin": 22.154433333333337
+      },
+      "speedup": 1.5490390195609873
+    },
+    "batch": {
+      "baseline": {
+        "median_vins_per_second": 91206,
+        "min_vins_per_second": 90039,
+        "max_vins_per_second": 94582,
+        "median_process_cpu_us_per_vin": 35.964325323475016
+      },
+      "candidate": {
+        "median_vins_per_second": 130381,
+        "min_vins_per_second": 125445,
+        "max_vins_per_second": 131708,
+        "median_process_cpu_us_per_vin": 24.48597024265646
+      },
+      "speedup": 1.4295221805582965
+    }
+  },
+  "load_after": "09:43:56  up 28 days  8:20,  49 users,  load average: 5.24, 5.42, 5.07",
+  "power_after": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded"
+}
