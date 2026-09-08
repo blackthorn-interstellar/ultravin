@@ -407,16 +407,16 @@ def is_expected_divergence(
     return bool(at) and at <= stale_positions(vin, decoded, cells)
 
 
-def _decode(vin: str, year: int | None = None) -> dict[str, Any]:
+def _decode(vin: str, year: int | None = None, *, full: bool = False) -> dict[str, Any]:
     # Lazy: reading and checking the list needs no built extension, and
     # scripts/refresh.py imports this module under a bare `python3`.
     import ultravin  # noqa: PLC0415
 
     # `full=True` only when the rows are wanted: `cell_for` needs the model year
     # and nothing else, and the provenance rows are the expensive half.
-    if year is None:
-        return ultravin.decode(vin)
-    return ultravin.decode(vin, full=True, year=year)
+    if year is not None:
+        return ultravin.decode(vin, full=True, year=year)
+    return ultravin.decode(vin, full=True) if full else ultravin.decode(vin)
 
 
 # ------------------------------------------------------------------------ the repin
@@ -637,6 +637,158 @@ def counterfactual_rows(
                     yield vin, [from_oracle(r) for r in cur.fetchall()]
         finally:
             conn.rollback()
+
+
+# What the experiment made of one divergence. Only the first two are excuses.
+#
+# `SHIPPED_AGREES` and `NOT_CACHE_CAUSED` are different facts and are kept apart:
+# the first says this oracle never disagreed with ultravin at all, the second
+# that it disagreed and a freshened cache did not account for it. `OUT_OF_SCOPE`
+# is a *positive* counterfactual the policy still refuses to machine-excuse — the
+# vehicle itself moved — so it needs a human and a `scripts/known_problems.json`
+# entry, which is not the same as saying the cache is innocent.
+CACHE_CAUSED = "cache-caused"
+CACHE_CAUSED_ON_REPIN = "cache-caused-on-repin"
+OUT_OF_SCOPE = "cache-caused-out-of-scope"
+SHIPPED_AGREES = "shipped-oracle-agrees"
+# Shared with `answerkey.classify`, which reports the same finding under the same
+# name; defined here so the two vocabularies cannot drift apart.
+NOT_CACHE_CAUSED = "not reproduced by a freshened cache"
+EXCUSABLE = frozenset({CACHE_CAUSED, CACHE_CAUSED_ON_REPIN})
+
+
+def has_diff_evidence(record: dict[str, Any]) -> bool:
+    """True when this record describes a *difference* between two answers.
+
+    A crash record carries an `error` and no diff at all: the oracle produced
+    nothing to compare, so there is no divergence for a freshened cache to
+    reproduce and nothing for the scope gate to read. Those belong to
+    `regex_crash.py` or to a human, and putting one through the counterfactual
+    would at best waste an oracle round trip and at worst take the whole batch
+    down with it. Fails closed: a record carrying no diff description is not
+    evidence.
+    """
+    diff = diff_view(record)
+    return any(diff.get(key) for key in ("field_diffs", "missing", "extra"))
+
+
+def shipped_rows(conn: Any, vin: str) -> list[dict[str, Any]]:
+    """The untouched oracle's canonical answer for one VIN.
+
+    Read-only, and it ends with a rollback on a transactional connection for the
+    same reason `stale_cells_of` does: nothing to undo, and nothing left open —
+    on the way out of an exception too, or a dead decode would leave the caller's
+    next statement inside a failed transaction.
+    """
+    try:
+        with conn.cursor() as cur:
+            cur.execute(_DECODE, (vin,))
+            return [from_oracle(r) for r in cur.fetchall()]
+    finally:
+        if not conn.autocommit:
+            conn.rollback()
+
+
+def _narrow(observed: dict[str, Any]) -> bool:
+    """Whether an observed diff stays inside the elements the cache feeds.
+
+    `fingerprint` sorts each row as a list and falls through to comparing values,
+    so a null against a str raises — real rows carry nulls. One of those must not
+    take a whole batch down, and it must not be read as narrow either: fail
+    closed, which files the record rather than forgiving it.
+    """
+    try:
+        return error_fields_only(fingerprint(observed))
+    except TypeError:
+        return False
+
+
+def counterfactual_verdicts(
+    scan: Any,
+    conn: Any,
+    vins: list[str],
+    cells: dict[tuple[str, int], frozenset[int]] | None = None,
+) -> tuple[dict[str, str], list[str]]:
+    """One verdict per VIN from the freshened-cache experiment, plus any list drift.
+
+    The classification `answerkey.classify` performs, packaged for a caller that
+    holds VINs and an oracle rather than a corpus of frozen hashes — the nightly
+    covfuzz intake. Every question is settled by running *this* oracle; nothing
+    is taken from the record that reported the divergence, because that record
+    was produced elsewhere (the intake's probe runs against a separate
+    fast-procs oracle) and an excuse may only rest on what the byte-faithful
+    oracle in front of us actually does.
+
+    Three questions, in order, and a VIN must pass all three to be excused:
+
+    1. *Does this oracle disagree with ultravin at all?* Asked first, of the
+       **shipped** cache. If it already agrees there is nothing for the cache to
+       explain, and the record is evidence about whatever produced it — a
+       fast-procs discrepancy, a fixed decoder — not about this defect
+       (`SHIPPED_AGREES`). This is also what stops a no-op freshening from
+       excusing anything: on a cell that is not stale the freshened answer *is*
+       the shipped answer, so a counterfactual "match" would mean the two agreed
+       all along, and forgiving that would launder an unrelated disagreement
+       into a documented class.
+    2. *Does a freshened cache reproduce ultravin byte for byte?*
+       `counterfactual_rows`, compared with `normalize.diff_rows` — the module's
+       one definition of equality, the same one `repin_verdict` calls a total
+       collapse. Nothing that fails this is excusable, whatever else is true of
+       it (`NOT_CACHE_CAUSED`).
+    3. *Is the difference in scope for a machine excuse?* Policy, not physics,
+       and read off the shipped oracle's own diff. Confined to the
+       error/correction elements the cache feeds, it is `CACHE_CAUSED` — that is
+       the blast radius the class is defined over. Wider than that the vehicle
+       is in dispute, and exactly one shape is still excusable: a model-year flip
+       that dissolves once ultravin is pinned to the oracle's year
+       (`repin_verdict` == `COLLAPSED`), which is `CACHE_CAUSED_ON_REPIN`. The
+       rest is `OUT_OF_SCOPE` — cache-caused, but a clean-decode deviation a
+       human has to argue one VIN at a time.
+
+    Note the order of 2 and 3: the counterfactual runs for every VIN, and the
+    scope gate only decides *which* excuse a reproduced divergence may have.
+    Reading the scope first and skipping the experiment would leave the year-flip
+    shape with nothing but `repin_verdict` behind it, which is strictly weaker
+    than what the answer key demands of the same VIN.
+
+    `scan` reads and writes nothing (autocommit much preferred — see
+    `stale_cells_of`); `conn` must be transactional, because the freshening is
+    always rolled back.
+
+    Drift between the committed cell list and the loaded dump is **returned**
+    rather than raised, and with it no verdicts at all: a list that disagrees
+    with the dump is not evidence about anything, so every VIN stays unexcused
+    and the caller decides how loud to be. `answerkey.classify` exits 2 on the
+    same finding; the nightly intake files the records and warns, because a
+    hard exit there would throw away a night of the agent's work over a fact
+    that is only ever a reason to excuse *less*.
+    """
+    vins = sorted(set(vins))
+    stale, drift = stale_cells_of(scan, sorted({vin_wmi(v) for v in vins}), cells)
+    if drift:
+        return {}, drift
+    # Decoded once, up front: the same rows answer both comparisons, and doing it
+    # here keeps the freshening transaction as short as the decodes are slow.
+    mine = {vin: ultravin_rows(_decode(vin, full=True)) for vin in vins}
+    # Consumed whole before anything else touches `scan`: the generator holds the
+    # freshening open on `conn`, and every question below is about the *shipped*
+    # cache, which only an untouched connection can answer.
+    reproduced = {vin for vin, rows in counterfactual_rows(conn, vins, stale) if diff_rows(rows, mine[vin])["ok"]}
+    verdicts: dict[str, str] = {}
+    for vin in vins:
+        shipped = shipped_rows(scan, vin)
+        observed = diff_rows(shipped, mine[vin])
+        if observed["ok"]:
+            verdicts[vin] = SHIPPED_AGREES
+        elif vin not in reproduced:
+            verdicts[vin] = NOT_CACHE_CAUSED
+        elif _narrow(observed):
+            verdicts[vin] = CACHE_CAUSED
+        elif repin_verdict(vin, shipped, cells) == COLLAPSED:
+            verdicts[vin] = CACHE_CAUSED_ON_REPIN
+        else:
+            verdicts[vin] = OUT_OF_SCOPE
+    return verdicts, drift
 
 
 # --------------------------------------------------------------------------- cli

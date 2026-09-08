@@ -421,6 +421,36 @@ at all is **not** this class. The corpus and sweep gates count the ones that
 qualify as the known class; the nightly covfuzz intake drops them instead of
 filing backlog work. Everything else fails exactly as before.
 
+**Containment is the intake's first pass, not its only one.** Containment reads
+the *printed* evidence, and a stale cell does more with a charset than print it:
+it can flip the error **count** — moving `spvindecode_errorcode` between its
+single- and multi-error rungs (§5, and the 2-vs-3 shape in §4) — or move the
+model year the decode settles on (§2.3). Both re-render positions that are not
+themselves stale, so no containment test can ever pass them, and every night's
+covfuzz probe re-found them and filed them as fresh backlog work. Since 2026-09
+the intake puts what containment refuses to the same experiment
+`answerkey.classify` runs — `stale_cache.counterfactual_verdicts`: freshen the
+stale cells in a rolled-back transaction, re-decode, and drop the record only if
+the freshened oracle reproduces ultravin byte for byte, with the same policy
+scope on top (error elements only, or a year flip that collapses on the oracle's
+year via `stale_cache.repin_verdict`). A cache-caused divergence that reaches the
+vehicle and does not collapse is still filed — that is a clean-decode deviation
+for a human to register.
+
+The evidence is taken **only from the oracle running the experiment**, never
+from the record that reported the divergence: the probe that produced it runs
+against a separate fast-procs oracle, so the byte-faithful one is asked to
+decode the VIN itself and must disagree with ultravin before any excuse is
+possible, and the scope gate reads *its* diff. That precondition is also what
+keeps a cell that is not stale from excusing anything — freshening it is a no-op,
+so a "reproduction" there would mean the two never disagreed, and forgiving that
+would launder an unrelated difference into this class. Two deliberate
+differences from the answer key: the intake **files and warns** where `classify`
+exits 2 on cell-list drift (drift disables the excuse for the whole run, and
+bricking the lane would throw away the agent's night over a fact that only ever
+excuses less), and it examines at most 500 VINs across 100 WMIs a night, filing
+the rest unexamined.
+
 **What keeps a decoder bug out of the list — and what does not.** The list is
 computed from the dump alone, never from an observed ultravin-vs-oracle
 difference, so no output the decoder prints can put a cell on it. That is *not*
@@ -614,6 +644,15 @@ flagged position. The Suggested VIN therefore differs at a position the cell is
 containment — `stale_cache.diff_positions` is a strict subset of the cell's
 stale positions, and an extra named position is a verdict of *not* that class —
 and the VIN has to be registered here.
+
+That is a statement about *containment*, and it still holds: nothing below is
+excused by the cell list, and the gates are unchanged. What did change is who
+pays for the rediscovery. The nightly covfuzz intake re-found this shape every
+night and filed it as fresh backlog work, because containment is all it had;
+since 2026-09 it re-asks a freshened oracle instead (§2, *Containment is the
+intake's first pass*) and drops what the experiment reproduces. The registration
+here is what documents the class; the intake merely stops paying an agent night
+to rediscover it.
 
 Two shapes, same rung, opposite direction:
 

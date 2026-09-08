@@ -1261,17 +1261,43 @@ jobs:
             # fvalidcharsinregex one AND whose decode selects the dump's
             # uncompilable `[1-A-JT]` pattern key is the regex-crash-7t0 class.
             # Both are documented, so both are dropped rather than filed as
-            # fresh work. Everything else, judged or not, is filed.
+            # fresh work.
+            #
+            # Containment against the cell list is the cheap first pass and it
+            # cannot see the whole class: a stale cell that flips the error
+            # COUNT (code 3-vs-5, 2-vs-3) or the model year re-renders positions
+            # that are not themselves stale, so the printed evidence never lands
+            # inside the cell's positions. Whatever containment refuses is put to
+            # the same experiment the answer key uses — freshen the stale cells
+            # in a rolled-back transaction, re-decode, demand ultravin byte for
+            # byte — against the BYTE-FAITHFUL oracle on 55432, not the probe's
+            # fast-procs copy on 55433. Nothing from the probe's record is
+            # trusted for that verdict: 55432 has to disagree with ultravin
+            # itself before any excuse is possible, and the scope of the
+            # disagreement is read off ITS diff. Everything else, judged or not,
+            # is filed — and so is every VIN already registered in
+            # scripts/known_problems.json, which needs no rediscovery.
             uv run --frozen -- python - <<'PYEOF'
           import json
           from collections import Counter
           import ultravin
+          from scripts.parity import oracle, stale_cache
           from scripts.parity.campaign import is_infra_error
           from scripts.parity.regex_crash import is_expected_crash
-          from scripts.parity.stale_cache import cell_for, is_expected_divergence
+          from scripts.refresh import KNOWN_DEVIATION_VINS
+
+          # What one night may put through the counterfactual. It costs a
+          # per-WMI-per-year freshening scan plus two live decodes per VIN, on a
+          # job budget shared with the agent, and the WMI half is the expensive
+          # one against stock procs. Records past either cap are filed
+          # unexamined, which is the safe direction.
+          VIN_CAP, WMI_CAP = 500, 100
+
           seen = {json.loads(line)["vin"] for line in open("tests/parity_backlog.jsonl")}
-          new, infra, unjudged, crash7t0 = [], 0, 0, 0
+          infra = unjudged = crash7t0 = registered = 0
           stale = Counter()
+          decided = []  # (line, record) in file order; the oracle may still excuse some
+          asked = []  # VINs the counterfactual is allowed to judge
           for line in open("campaign/fails-covfuzz.jsonl"):
               rec = json.loads(line)
               if is_infra_error(rec):
@@ -1279,10 +1305,17 @@ jobs:
                   continue
               if rec["vin"] in seen:
                   continue
+              if rec["vin"] in KNOWN_DEVIATION_VINS:
+                  # Already argued for this VIN in scripts/known_problems.json
+                  # and docs/KNOWN_DEVIATIONS.md. Refiling it every night asks an
+                  # agent to re-derive a deviation a human already registered.
+                  registered += 1
+                  continue
               try:
                   # One decode, both answers: cell_for would otherwise repeat it.
                   decoded = ultravin.decode(rec["vin"])
-                  cell = cell_for(rec["vin"], decoded) if is_expected_divergence(rec["vin"], rec, decoded) else None
+                  contained = stale_cache.is_expected_divergence(rec["vin"], rec, decoded)
+                  cell = stale_cache.cell_for(rec["vin"], decoded) if contained else None
                   # Crash records carry no diff, so the two classes never overlap.
                   known_crash = cell is None and is_expected_crash(rec["vin"], rec)
               except Exception as exc:  # noqa: BLE001 - see below
@@ -1291,13 +1324,63 @@ jobs:
                   # the classifier - unknown shape, a decode that raises - the
                   # answer is to file it and let a human look, never to drop it.
                   print(f"::warning::unclassifiable {rec.get('vin')!r}, filing it: {exc!r}")
-                  cell, known_crash, unjudged = None, False, unjudged + 1
+                  seen.add(rec["vin"])
+                  unjudged += 1
+                  decided.append((line, rec))
+                  continue
               if cell is not None:
                   stale[cell] += 1
               elif known_crash:
                   crash7t0 += 1
               else:
                   seen.add(rec["vin"])
+                  decided.append((line, rec))
+                  # A crash record carries no diff for a freshened cache to
+                  # reproduce, so it never enters the experiment at all - a
+                  # novel one would only spend an oracle round trip on the way
+                  # to being filed, or take the whole batch down with it.
+                  if stale_cache.has_diff_evidence(rec):
+                      asked.append(rec["vin"])
+
+          verdicts, drift, examine = {}, [], []
+          if asked:
+              wmis = set()
+              for vin in sorted(asked):
+                  wmi = stale_cache.vin_wmi(vin)
+                  if len(examine) >= VIN_CAP or (wmi not in wmis and len(wmis) >= WMI_CAP):
+                      continue
+                  wmis.add(wmi)
+                  examine.append(vin)
+              if len(examine) < len(asked):
+                  print(f"::warning::{len(asked) - len(examine)} record(s) past the {VIN_CAP}-VIN / {WMI_CAP}-WMI counterfactual caps, filed unexamined")
+              try:
+                  scan = oracle.connect()  # autocommit: it writes nothing and scans thousands of cells
+                  try:
+                      # batch >= 2 makes the connection transactional, which is
+                      # what lets the freshening be rolled back.
+                      conn = oracle.connect(batch=2)
+                      try:
+                          verdicts, drift = stale_cache.counterfactual_verdicts(scan, conn, examine)
+                      finally:
+                          conn.close()
+                  finally:
+                      scan.close()
+              except Exception as exc:  # noqa: BLE001 - same rule as above: file, never drop
+                  print(f"::warning::the counterfactual classifier failed, filing {len(asked)} record(s): {exc!r}")
+              if drift:
+                  # The list describes some other dump than the one loaded, so no
+                  # excuse resting on it is sound tonight: nothing is dropped and
+                  # everything is said out loud. Deliberately not fatal - the
+                  # answer key exits 2 here, but bricking this lane would throw
+                  # away the agent's night over a fact that only ever excuses less.
+                  print("::warning::scripts/stale_cache_cells.json disagrees with the loaded dump, counterfactual excusing disabled for this run: " + "; ".join(drift))
+
+          new, tally = [], Counter()
+          for line, rec in decided:
+              why = verdicts.get(rec["vin"])
+              if why is not None:
+                  tally[why] += 1
+              if why not in stale_cache.EXCUSABLE:
                   new.append(line)
           if new:
               with open("tests/parity_backlog.jsonl", "a") as f:
@@ -1305,10 +1388,21 @@ jobs:
           cells = ", ".join(f"({w},{y})x{n}" for (w, y), n in stale.most_common(10))
           print(
               f"{len(new)} new backlog entries from tonight's probe "
-              f"({infra} infra errors dropped; {sum(stale.values())} known stale-cache "
-              f"divergences dropped across {len(stale)} cell(s){': ' + cells if cells else ''}"
+              f"({infra} infra errors dropped; {registered} registered known-deviation VINs dropped"
+              f"; {sum(stale.values())} known stale-cache divergences dropped across "
+              f"{len(stale)} cell(s){': ' + cells if cells else ''}"
               f"; {crash7t0} known regex-crash-7t0 oracle crashes dropped"
               f"; {unjudged} filed unclassified)"
+          )
+          # Always printed, so a night that examined VINs and excused none reads
+          # differently from one where the experiment never ran at all.
+          print(
+              f"counterfactual: {len(asked)} candidate(s), {len(examine)} examined -> "
+              f"{tally[stale_cache.CACHE_CAUSED]} stale_counterfactual, "
+              f"{tally[stale_cache.CACHE_CAUSED_ON_REPIN]} year-flip repin"
+              f"; filed: {tally[stale_cache.OUT_OF_SCOPE]} cache-caused but out of scope, "
+              f"{tally[stale_cache.NOT_CACHE_CAUSED]} not cache-caused, "
+              f"{tally[stale_cache.SHIPPED_AGREES]} the byte-faithful oracle already agrees with"
           )
           PYEOF
           fi

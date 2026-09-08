@@ -161,6 +161,49 @@ it). Dead-oracle connection errors abort the probe and are filtered out of
 the queue, never enqueued. Coverage state resumes via actions/cache; a
 decoder change reopens coverage, so the probe never permanently retires.
 
+**What the intake drops.** Exact-VIN dedupe cannot see that two VINs are one
+defect, so the fuzzer re-finds the documented classes every night. Four
+filters stand between a failure record and the queue, and everything they do
+not recognise — including everything they could not judge — is filed:
+
+1. the **registry**: a VIN already argued in `scripts/known_problems.json`
+   (kind `deviation`) is dropped, read live. Refiling one asks an agent to
+   re-derive a deviation a human already registered;
+2. the **regex-crash-7t0** predicate (`scripts/parity/regex_crash.py`), for
+   crash records carrying that defect's markers and a decode that selects the
+   dump's uncompilable pattern;
+3. **containment** against `scripts/stale_cache_cells.json`
+   (`stale_cache.is_expected_divergence`) — cheap, no oracle, and unchanged;
+4. the **counterfactual** (`stale_cache.counterfactual_verdicts`), for what
+   containment refuses. A stale cell that flips the error count or the model
+   year re-renders positions that are not stale, which containment can never
+   pass, so those two shapes cost an agent night each until this landed. The
+   experiment is the answer key's: freshen the stale cells in a rolled-back
+   transaction on the **byte-faithful** oracle (55432, not the fast-procs probe
+   copy), re-decode, and drop the record only if the freshened oracle
+   reproduces ultravin byte for byte — with the answer key's policy scope on
+   top (`docs/KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache`).
+
+**Nothing in the probe's record is trusted for that last verdict**, because the
+probe ran against a different oracle. 55432 is asked to decode the VIN itself
+first, and unless *it* disagrees with ultravin the record is filed however the
+freshening turns out — a fast-procs discrepancy or a decoder that has since
+been fixed is not this defect, and on a cell that is not stale the freshening
+changes nothing, so a "reproduction" would only mean the two agreed all along.
+The scope of the disagreement is read off 55432's diff for the same reason.
+Crash records never enter the experiment at all: no diff, nothing to reproduce.
+
+The counterfactual fails closed in every other direction too: cell-list drift
+against the loaded dump disables it for the whole run and files everything with
+a `::warning::` (the answer-key build exits 2 on the same finding; this lane
+warns instead, because losing the agent's night to it would be a worse trade),
+any exception files the records it was asked about, and it examines at most 500
+VINs across at most 100 WMIs a night — the freshening scan is per WMI per year
+against stock procs, which is the half that costs real time — with the rest
+filed unexamined. Every drop and every filed verdict is counted in the step
+summary, so a night that examined VINs and excused none reads differently from
+one where the experiment never ran.
+
 Each night the agent gets a loaded oracle and a built extension, and resolves
 **one root-cause cluster**: reproduce first (stale entries are deleted — that
 alone is a valid delivery), then either fix the decoder or document a genuine

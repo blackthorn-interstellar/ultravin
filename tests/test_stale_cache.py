@@ -538,7 +538,7 @@ RECOMPUTED = {
 }
 
 
-def _oracle_row(value: str) -> dict[str, Any]:
+def _oracle_row(value: str, element_id: int = 144) -> dict[str, Any]:
     """One raw spvindecode row, the shape `normalize.from_oracle` expects."""
     return {
         "groupname": "",
@@ -547,7 +547,7 @@ def _oracle_row(value: str) -> dict[str, Any]:
         "itempatternid": None,
         "itemvinschemaid": None,
         "itemkeys": "",
-        "itemelementid": 144,
+        "itemelementid": element_id,
         "itemattributeid": "",
         "itemcreatedon": None,
         "itemwmiid": None,
@@ -586,7 +586,15 @@ class _FakeCursor:
             # The "decode": whatever the cell this VIN reads holds right now.
             cell = (stale_cache.vin_wmi(args[0]), 2019)
             self.db.decoded.append(args[0])
-            self.rows = [_oracle_row("".join(sorted(c for _, c in self.db.cache.get(cell, ()))))]
+            chars = "".join(sorted(c for _, c in self.db.cache.get(cell, ())))
+            self.rows = [_oracle_row(chars)]
+            if self.db.year_rows:
+                # A miniature year flip: the cache's extra `A` makes the 2019
+                # pass look clean, so this decode settles on 2019; freshened, it
+                # takes a correction code, loses to the other half of position
+                # 10's cycle, and answers 1989 — a difference on element 29,
+                # which the cache can never print.
+                self.rows.append(_oracle_row("2019" if "A" in chars else "1989", element_id=29))
         else:  # pragma: no cover - a query the fixture does not know is a test bug
             raise AssertionError(sql)
 
@@ -595,8 +603,9 @@ class _FakeCursor:
 
 
 class _FakeOracle:
-    def __init__(self, autocommit: bool = False) -> None:
+    def __init__(self, autocommit: bool = False, year_rows: bool = False) -> None:
         self.autocommit = autocommit
+        self.year_rows = year_rows
         self.cache = {k: set(v) for k, v in SHIPPED.items()}
         self.ids: list[int] = []
         self.filled: list[tuple[str, int]] = []
@@ -690,3 +699,130 @@ def test_an_autocommit_connection_is_refused() -> None:
     """Autocommit would make the freshening permanent on whatever oracle this is."""
     with pytest.raises(ValueError, match="rolls its writes back"):
         list(stale_cache.counterfactual_rows(_FakeOracle(autocommit=True), ["MLHAE041XKA111111"], {}))
+
+
+# --------------------------------------------------------------- the verdict by experiment
+#
+# `counterfactual_verdicts` is the whole classification one call: scan, freshen,
+# re-decode, compare, and only then consult the policy scope. The fixture above
+# supplies the oracle half; ultravin's half is a decode of a single element-144
+# row, which is all the fixture's "decode" renders.
+
+VIN = "MLHAE041XKA111111"
+# A VIN whose WMI has no stale cell at all: freshening it changes nothing.
+UNAFFECTED = "JH2RD1613RA111111"
+
+
+def _full(*elements: dict[str, Any], year: int = 2019) -> dict[str, Any]:
+    """An ultravin `full=True` decode of these canonical-ish element rows."""
+    return {"model_year": year, "elements": list(elements)}
+
+
+def _charset(value: str) -> dict[str, Any]:
+    return {"element_id": 144, "value": value}
+
+
+def _year(value: str) -> dict[str, Any]:
+    return {"element_id": 29, "value": value}
+
+
+def _ultravin_says(monkeypatch, *elements: dict[str, Any]) -> None:
+    """Fix ultravin's answer. The shipped cell renders `AJ`, the freshened one `J`."""
+    monkeypatch.setattr(stale_cache, "_decode", lambda *_a, **_k: _full(*elements))
+
+
+def test_a_freshened_cache_that_reproduces_ultravin_excuses_an_error_fields_diff(monkeypatch) -> None:
+    _ultravin_says(monkeypatch, _charset("J"))
+    scan, conn = _FakeOracle(autocommit=True), _FakeOracle()
+    verdicts, drift = stale_cache.counterfactual_verdicts(scan, conn, [VIN], CELLS)
+    assert (verdicts, drift) == ({VIN: stale_cache.CACHE_CAUSED}, [])
+
+
+def test_a_shipped_answer_the_freshening_does_not_change_is_not_the_class(monkeypatch) -> None:
+    """The experiment is the whole test: an answer the freshened oracle still
+    disagrees with is not explained by the cache, however narrow the diff is."""
+    _ultravin_says(monkeypatch, _charset("X"))
+    verdicts, _ = stale_cache.counterfactual_verdicts(_FakeOracle(autocommit=True), _FakeOracle(), [VIN], CELLS)
+    assert verdicts == {VIN: stale_cache.NOT_CACHE_CAUSED}
+
+
+def test_an_oracle_that_already_agrees_can_never_be_excused(monkeypatch) -> None:
+    """The counterfactual only means something where this oracle disagrees. On a
+    cell that is not stale the freshening is a no-op, so a "reproduction" is just
+    the two having agreed all along — as here, where the record came from the
+    probe's separate fast-procs oracle. Excusing that would launder a fast-procs
+    discrepancy (or a decoder fix) into the documented cache class."""
+    _ultravin_says(monkeypatch, _charset(""))
+    scan, conn = _FakeOracle(autocommit=True), _FakeOracle()
+    verdicts, _ = stale_cache.counterfactual_verdicts(scan, conn, [UNAFFECTED], CELLS)
+    assert verdicts == {UNAFFECTED: stale_cache.SHIPPED_AGREES}
+    assert stale_cache.SHIPPED_AGREES not in stale_cache.EXCUSABLE
+
+
+def test_the_scope_gate_reads_the_diff_this_oracle_shows(monkeypatch) -> None:
+    """Scope comes from the shipped oracle's own diff, never from the record that
+    reported the divergence — that one was produced against another oracle
+    entirely. Here 55432 disagrees about the model year as well as the charset,
+    which is outside what the cache can print, so the narrow excuse is out of
+    reach and only a repin that collapses the residue can save the VIN."""
+    _ultravin_says(monkeypatch, _charset("J"), _year("1989"))
+    monkeypatch.setattr(stale_cache, "repin_verdict", lambda *_a, **_k: stale_cache.COLLAPSED)
+    scan, conn = _FakeOracle(autocommit=True, year_rows=True), _FakeOracle(year_rows=True)
+    verdicts, _ = stale_cache.counterfactual_verdicts(scan, conn, [VIN], CELLS)
+    assert verdicts == {VIN: stale_cache.CACHE_CAUSED_ON_REPIN}
+
+
+def test_a_wider_diff_that_survives_the_repin_needs_a_human(monkeypatch) -> None:
+    """Cache-caused and still not machine-excusable: the vehicle moved, which is
+    a clean-decode deviation somebody has to register one VIN at a time."""
+    _ultravin_says(monkeypatch, _charset("J"), _year("1989"))
+    monkeypatch.setattr(stale_cache, "repin_verdict", lambda *_a, **_k: stale_cache.NOT_THIS_CLASS)
+    scan, conn = _FakeOracle(autocommit=True, year_rows=True), _FakeOracle(year_rows=True)
+    verdicts, _ = stale_cache.counterfactual_verdicts(scan, conn, [VIN], CELLS)
+    assert verdicts == {VIN: stale_cache.OUT_OF_SCOPE}
+    assert stale_cache.OUT_OF_SCOPE not in stale_cache.EXCUSABLE
+
+
+def test_drift_yields_no_verdicts_at_all(monkeypatch) -> None:
+    """A cell list that disagrees with the loaded dump is not evidence about
+    anything, so nothing is judged and neither oracle is asked to decode."""
+    _ultravin_says(monkeypatch, _charset("J"))
+    scan, conn = _FakeOracle(autocommit=True), _FakeOracle()
+    verdicts, drift = stale_cache.counterfactual_verdicts(scan, conn, [VIN], {})
+    assert verdicts == {}
+    assert drift == ["1 cell(s) not listed as stale: [('MLH', 2019)]"]
+    assert (scan.decoded, conn.decoded) == ([], [])
+
+
+def test_the_experiment_always_puts_the_cache_back(monkeypatch) -> None:
+    _ultravin_says(monkeypatch, _charset("J"))
+    conn = _FakeOracle()
+    stale_cache.counterfactual_verdicts(_FakeOracle(autocommit=True), conn, [VIN], CELLS)
+    assert conn.rollbacks == 1
+    assert conn.cache == {k: set(v) for k, v in SHIPPED.items()}
+
+
+def test_a_shipped_decode_that_raises_still_ends_its_transaction() -> None:
+    """Otherwise the caller's next statement runs inside a failed transaction and
+    every verdict after the first dead VIN is an error about the error."""
+
+    class _Boom(_FakeOracle):
+        @contextlib.contextmanager
+        def cursor(self) -> Any:
+            msg = "server closed the connection unexpectedly"
+            raise RuntimeError(msg)
+            yield  # pragma: no cover - unreachable, but this must be a generator
+
+    db = _Boom()
+    with pytest.raises(RuntimeError, match="server closed the connection"):
+        stale_cache.shipped_rows(db, VIN)
+    assert db.rollbacks == 1
+
+
+def test_a_crash_record_carries_no_difference_to_judge() -> None:
+    """The oracle produced no answer at all, so there is nothing for a freshened
+    cache to reproduce — such a record must never enter the experiment."""
+    assert not stale_cache.has_diff_evidence({"vin": VIN, "error": "InvalidRegularExpression"})
+    assert not stale_cache.has_diff_evidence({"field_diffs": [], "missing": [], "extra": []})
+    assert stale_cache.has_diff_evidence(_diff(144))
+    assert stale_cache.has_diff_evidence({"fingerprint": {"field_diffs": [[143, "value", "a", "b"]]}})

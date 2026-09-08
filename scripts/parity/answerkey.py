@@ -149,7 +149,9 @@ MACHINE_EXCUSED = "error-fields, cache-caused"
 REPIN_EXCUSED = "year flip, collapses on the oracle's year"
 REGISTERED = "clean-decode, registered per VIN"
 NEEDS_REGISTRATION = "clean-decode, cache-caused, NOT registered"
-NOT_CACHE_CAUSED = "not reproduced by a freshened cache"
+# Owned by `stale_cache`, which reports the same finding to the nightly intake:
+# one string, so the two classifiers cannot describe it differently.
+NOT_CACHE_CAUSED = stale_cache.NOT_CACHE_CAUSED
 REGISTERED_UNPINNED = "registered, not pinned (not compared)"
 # The first three are frozen under `~`. `REGISTERED_UNPINNED` is neither pinned
 # nor compared: the entry keeps the oracle's hash and `verify` skips the VIN, as
@@ -223,7 +225,7 @@ def classify(divergences: dict[str, Divergence]) -> dict[str, str]:
                 verdicts[vin] = REGISTERED_UNPINNED if vin in KNOWN_DEVIATIONS else NOT_CACHE_CAUSED
             elif divergences[vin].error_fields_only:
                 verdicts[vin] = MACHINE_EXCUSED
-            elif stale_cache.repin_verdict(vin, _shipped_rows(scan, vin)) == stale_cache.COLLAPSED:
+            elif stale_cache.repin_verdict(vin, stale_cache.shipped_rows(scan, vin)) == stale_cache.COLLAPSED:
                 verdicts[vin] = REPIN_EXCUSED
             else:
                 verdicts[vin] = REGISTERED if vin in KNOWN_DEVIATIONS else NEEDS_REGISTRATION
@@ -232,14 +234,10 @@ def classify(divergences: dict[str, Divergence]) -> dict[str, str]:
         scan.close()
 
 
-def _shipped_rows(conn: Any, vin: str) -> list[dict[str, Any]]:
-    """The untouched oracle's canonical answer, re-asked for the repin probe.
-
-    Only the handful of divergences that reach outside the error elements need
-    this, so it is cheaper to ask again than to carry every diverging VIN's rows
-    through the first pass.
-    """
-    return [normalize.from_oracle(r) for r in oracle.decode(conn, vin)]
+# The untouched oracle's answer for the repin probe is `stale_cache.shipped_rows`:
+# only the handful of divergences that reach outside the error elements need it,
+# so it is cheaper to ask again than to carry every diverging VIN's rows through
+# the first pass, and the nightly intake asks the same question the same way.
 
 
 def sample_selected(vin: str, mod: int) -> bool:

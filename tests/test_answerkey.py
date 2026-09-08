@@ -313,6 +313,10 @@ def _classifier(
 ) -> None:
     monkeypatch.setattr(answerkey.oracle, "connect", lambda **_: _NullConn())
     monkeypatch.setattr(answerkey.oracle, "decode", lambda _conn, vin: _as_oracle(_canonical(vin)))
+    # The repin probe re-asks the untouched oracle through `stale_cache`, which
+    # both classifiers share; `_NullConn` is a connection only in the sense
+    # `classify` needs — it has nothing to run a query with.
+    monkeypatch.setattr(answerkey.stale_cache, "shipped_rows", lambda _conn, vin: _canonical(vin))
     monkeypatch.setattr(answerkey.stale_cache, "stale_cells_of", lambda *_a, **_k: ({("MLH", 2019): []}, drift or []))
     monkeypatch.setattr(answerkey.stale_cache, "repin_verdict", lambda *_a, **_k: repin)
     monkeypatch.setattr(
