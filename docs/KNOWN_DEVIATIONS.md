@@ -815,6 +815,23 @@ Possible Values `(4:V)` and rewrites position 4 to `V`; the oracle never
 enters that rung and stamps `!` at 4 and 6. Element 142 differs at `{4, 6}`,
 which is not a subset of the cell's `{5, 6, 7}`.
 
+**The 2026-09-08 member — same cell as `1GTW7NFH5PA077131`, leftover `F`
+instead of `H`.** `1GT289EF0P9P77111` is the same permissive shape on
+`(1GT, 2023)`. The VIN carries `F` at position 8, so the cache accepts it and
+the extract rejects it. Position 11 (`9`, charset `1FUZ` on both sides — not
+a stale position) is invalid either way. Oracle `cntErrors = 1` (code 3);
+ultravin `cntErrors = 2` (code 5). Substituting each candidate of charset
+`1FUZ` into position 11 of `1GT289EF0P9P77111` and asking
+`vpic.fVINCheckDigit` keeps only `Z` (matches the input's `0` at position 9).
+The oracle therefore emits Possible Values `(11:Z)` and rewrites position 11
+to `Z`; ultravin never enters that rung and stamps `!` at 8 and 11. Element
+142 differs at `{8, 11}`, which is not a subset of the cell's `{8}`. Deleting
+the cell's 68 rows inside a transaction takes `tmpRowCount` to 0, so the proc
+runs its own `fExtractValidCharsPerWmiYear` fallback — and the oracle then
+returns codes `5,14` with Suggested VIN `1GT289E!0P!P77111` and Possible
+Values `(8:178ADKLPTY)(11:1FUZ)`, byte-for-byte with ultravin. Rolled back
+afterwards; the cache is left at its shipped 8,809,229 rows.
+
 Deleting each cell inside a transaction takes `tmpRowCount` to 0, so the proc
 runs its own `fExtractValidCharsPerWmiYear` fallback — and the oracle then
 returns codes `1,5,14` with the three-`!` Suggested VIN on the `2AP` VIN (78
@@ -833,12 +850,13 @@ because 8 did. The same containment refuses the 2026-08-30 members:
 `(2AP, 2026)` is stale at `{8, 11}` and the diff names `{7, 8, 11}`;
 `(ZDM, 2018)` is stale at `{5, 6, 7}` and the diff names `{6, 8}`. It also
 refuses the 2026-09-07 member: the same `(ZDM, 2018)` cell, with the diff
-naming `{4, 6}`. That containment is load-bearing: otherwise any bug that
-happened to share a VIN with a stale cell would be laundered as soon as one
-overlapping position appeared. The defect is still the stale cell; the
-observation is just one the cell list is forbidden to forgive. Matching the
-oracle here would mean teaching ultravin to read that cell, which §2 already
-rejected.
+naming `{4, 6}`. It also refuses the 2026-09-08 member: the same `(1GT, 2023)`
+cell, leftover `F` at position 8, with the diff naming `{8, 11}`. That
+containment is load-bearing: otherwise any bug that happened to share a VIN
+with a stale cell would be laundered as soon as one overlapping position
+appeared. The defect is still the stale cell; the observation is just one
+the cell list is forbidden to forgive. Matching the oracle here would mean
+teaching ultravin to read that cell, which §2 already rejected.
 
 **What ultravin does.** `errors.rs::valid_charset` recomputes from the pattern
 rows. On the permissive members it does not see the cache's leftover
