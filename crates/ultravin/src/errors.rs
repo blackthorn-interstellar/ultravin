@@ -31,7 +31,8 @@ use crate::tables::{ArchivedWmi, NULL_I32};
 /// charset is consulted — so `_` is the only non-alphanumeric that arrives.
 #[derive(Debug, Default, Clone)]
 pub(crate) struct ValidChars {
-    chars: std::collections::BTreeSet<char>,
+    ascii: u128,
+    other: std::collections::BTreeSet<char>,
     /// The rendered form, built on first use and kept: a charset is built once
     /// per (WMI, year, position) and memoized, but every VIN with a bad character
     /// at that position renders the same set again — sorting and formatting it
@@ -43,24 +44,36 @@ pub(crate) struct ValidChars {
 impl ValidChars {
     fn insert(&mut self, c: char) {
         self.rendered.take();
-        self.chars.insert(c);
+        if c.is_ascii() {
+            self.ascii |= 1 << (c as u32);
+        } else {
+            self.other.insert(c);
+        }
     }
 
     /// The `Display` text, computed once per set.
     fn rendered(&self) -> &str {
         self.rendered.get_or_init(|| {
-            let mut chars: Vec<char> = self.chars.iter().copied().collect();
+            let mut chars: Vec<char> = (0..128u8)
+                .filter(|c| self.ascii & (1 << c) != 0)
+                .map(char::from)
+                .chain(self.other.iter().copied())
+                .collect();
             chars.sort_by_key(|c| (c.is_ascii_alphanumeric(), *c));
             chars.into_iter().collect()
         })
     }
 
     fn contains(&self, c: char) -> bool {
-        self.chars.contains(&c)
+        if c.is_ascii() {
+            self.ascii & (1 << (c as u32)) != 0
+        } else {
+            self.other.contains(&c)
+        }
     }
 
     fn is_empty(&self) -> bool {
-        self.chars.is_empty()
+        self.ascii == 0 && self.other.is_empty()
     }
 }
 
@@ -505,6 +518,24 @@ fn used_key_positions(vin: &[char], matched_keys: &[&str]) -> [bool; 8] {
 mod tests {
     use super::*;
     use crate::hash::IntSet;
+
+    #[test]
+    fn compact_valid_chars_preserve_membership_and_render_order() {
+        let mut actual = ValidChars::default();
+        let mut expected = BTreeSet::new();
+        assert!(actual.is_empty());
+        for c in "_9Aé|日本\0Z0123\n".chars().chain("é_9".chars()) {
+            actual.insert(c);
+            expected.insert(c);
+            assert!(!actual.is_empty());
+            for probe in (0..=127u8).map(char::from).chain("é日本界".chars()) {
+                assert_eq!(actual.contains(probe), expected.contains(&probe));
+            }
+            let mut ordered: Vec<_> = expected.iter().copied().collect();
+            ordered.sort_by_key(|c| (c.is_ascii_alphanumeric(), *c));
+            assert_eq!(actual.rendered(), ordered.iter().collect::<String>());
+        }
+    }
 
     #[test]
     fn position_flags_equal_the_full_character_set() {
