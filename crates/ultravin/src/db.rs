@@ -80,6 +80,9 @@ pub struct Db {
     pattern_element_ok: OnceLock<Box<[bool]>>,
     /// One lazily compiled key index per schema, shared by all decoding threads.
     pattern_indexes: OnceLock<Box<[OnceLock<PatternIndex>]>>,
+    /// Packed WMI bytes -> archive row range. Year selection, core passes and
+    /// error correction all consult the same WMI; avoid repeating string searches.
+    wmi_index: OnceLock<IntMap<u64, (usize, usize)>>,
     /// The spec join first selects by make and model; keep those candidates in
     /// archive order so decoding need not scan every model of a manufacturer's
     /// every schema. Vehicle type, year and QC checks still run on each pass.
@@ -110,6 +113,7 @@ impl Db {
             lookup_index: OnceLock::new(),
             pattern_element_ok: OnceLock::new(),
             pattern_indexes: OnceLock::new(),
+            wmi_index: OnceLock::new(),
             spec_model_index: OnceLock::new(),
         })
     }
@@ -133,6 +137,7 @@ impl Db {
             lookup_index: OnceLock::new(),
             pattern_element_ok: OnceLock::new(),
             pattern_indexes: OnceLock::new(),
+            wmi_index: OnceLock::new(),
             spec_model_index: OnceLock::new(),
         }
     }
@@ -239,25 +244,38 @@ impl Db {
         unsafe { std::str::from_utf8_unchecked(&a.arena_bytes[start..end]) }
     }
 
-    /// Find a public WMI by its string (binary search, public availability gated).
+    /// Find the first WMI row published as of the supplied clock.
     pub fn wmi_by_str(&self, wmi: &str, now_micros: i64) -> Option<&ArchivedWmi> {
-        let v = self.a().wmi.as_slice();
-        let mut lo = v.partition_point(|w| self.s(w.wmi.to_native()) < wmi);
-        while lo < v.len() && self.s(v[lo].wmi.to_native()) == wmi {
-            let w = &v[lo];
-            if w.is_public(now_micros) {
-                return Some(w);
-            }
-            lo += 1;
-        }
-        None
+        self.wmi_rows(wmi).iter().find(|w| w.is_public(now_micros))
     }
 
     /// Any WMI row by string (ignoring availability) — for vehicle/truck type.
     pub fn wmi_any(&self, wmi: &str) -> Option<&ArchivedWmi> {
+        self.wmi_rows(wmi).first()
+    }
+
+    /// All rows for one WMI, in archive order. Availability remains a per-call
+    /// decision: a cached range must not freeze a future publication date.
+    fn wmi_rows(&self, wmi: &str) -> &[ArchivedWmi] {
         let v = self.a().wmi.as_slice();
+        if let Some(key) = packed_wmi(wmi) {
+            let index = self.wmi_index.get_or_init(|| {
+                let mut index: IntMap<u64, (usize, usize)> =
+                    IntMap::with_capacity_and_hasher(v.len(), Default::default());
+                for (i, row) in v.iter().enumerate() {
+                    if let Some(key) = packed_wmi(self.s(row.wmi.to_native())) {
+                        index.entry(key).or_insert((i, i + 1)).1 = i + 1;
+                    }
+                }
+                index
+            });
+            return index.get(&key).map_or(&[], |&(start, end)| &v[start..end]);
+        }
+        // Normal WMIs have three or six characters. Retain the ordinary lookup
+        // for longer strings supplied through the explicit-database API.
         let lo = v.partition_point(|w| self.s(w.wmi.to_native()) < wmi);
-        v.get(lo).filter(|w| self.s(w.wmi.to_native()) == wmi)
+        let len = v[lo..].partition_point(|w| self.s(w.wmi.to_native()) <= wmi);
+        &v[lo..lo + len]
     }
 
     /// Contiguous `wmi_vinschema` rows for a wmi id.
@@ -460,14 +478,11 @@ impl Db {
     /// All make ids linked (via `Wmi_Make`) to any `Wmi` row whose string equals
     /// `wmi` (no public-availability filter, matching the spec candidate join).
     pub fn makeids_for_wmi_str(&self, wmi: &str) -> Vec<i32> {
-        let v = self.a().wmi.as_slice();
-        let mut i = v.partition_point(|w| self.s(w.wmi.to_native()) < wmi);
         let mut out: Vec<i32> = Vec::new();
-        while i < v.len() && self.s(v[i].wmi.to_native()) == wmi {
-            for m in self.wmi_makes_for(v[i].id.to_native()) {
+        for row in self.wmi_rows(wmi) {
+            for m in self.wmi_makes_for(row.id.to_native()) {
                 out.push(m.makeid.to_native());
             }
-            i += 1;
         }
         out.sort_unstable();
         out.dedup();
@@ -477,14 +492,10 @@ impl Db {
     /// All `Wmi.id`s whose string equals `wmi` (no availability filter), for the
     /// `fExtractValidCharsPerWmiYear` join (correction charset).
     pub fn wmi_ids_for_str(&self, wmi: &str) -> Vec<i32> {
-        let v = self.a().wmi.as_slice();
-        let mut i = v.partition_point(|w| self.s(w.wmi.to_native()) < wmi);
-        let mut out = Vec::new();
-        while i < v.len() && self.s(v[i].wmi.to_native()) == wmi {
-            out.push(v[i].id.to_native());
-            i += 1;
-        }
-        out
+        self.wmi_rows(wmi)
+            .iter()
+            .map(|w| w.id.to_native())
+            .collect()
     }
 
     /// `VehicleSpecSchema` rows for a make id.
@@ -585,6 +596,18 @@ impl Db {
     }
 }
 
+/// Keep length in the last byte so embedded NULs and short strings cannot alias.
+fn packed_wmi(wmi: &str) -> Option<u64> {
+    let bytes = wmi.as_bytes();
+    if bytes.len() > 7 {
+        return None;
+    }
+    let mut key = [0u8; 8];
+    key[..bytes.len()].copy_from_slice(bytes);
+    key[7] = bytes.len() as u8;
+    Some(u64::from_le_bytes(key))
+}
+
 /// Contiguous sub-slice of `v` (sorted by `key`) whose key equals `target`.
 fn slice_eq<T, F: Fn(&T) -> i32>(v: &[T], target: i32, key: F) -> &[T] {
     let lo = v.partition_point(|r| key(r) < target);
@@ -597,6 +620,48 @@ fn slice_eq<T, F: Fn(&T) -> i32>(v: &[T], target: i32, key: F) -> &[T] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn packed_wmis_preserve_length_and_embedded_nuls() {
+        let strings = ["", "\0", "A", "A\0", "\0A", "ABC", "AB9DEF", "ABCDEFG", "é"];
+        let keys: std::collections::HashSet<_> =
+            strings.iter().map(|s| packed_wmi(s).unwrap()).collect();
+        assert_eq!(keys.len(), strings.len());
+        assert_eq!(packed_wmi("ABCDEFGH"), None);
+        assert_eq!(packed_wmi("éééé"), None);
+    }
+
+    #[test]
+    fn wmi_index_preserves_row_order_and_publication_boundaries() {
+        let Some(db) = Db::try_embedded() else { return };
+        let all = db.wmis();
+        for row in all {
+            let wmi = db.s(row.wmi.to_native());
+            let start = all.partition_point(|w| db.s(w.wmi.to_native()) < wmi);
+            let len = all[start..].partition_point(|w| db.s(w.wmi.to_native()) <= wmi);
+            let expected = &all[start..start + len];
+            let ids: Vec<_> = expected.iter().map(|w| w.id.to_native()).collect();
+            assert_eq!(db.wmi_ids_for_str(wmi), ids, "{wmi}");
+            assert!(std::ptr::eq(db.wmi_any(wmi).unwrap(), &expected[0]));
+            let date = row.publicavailabilitydate.to_native();
+            for now in [i64::MIN, 0, date.saturating_sub(1), date, i64::MAX] {
+                let want = expected.iter().find(|w| w.is_public(now));
+                assert_eq!(
+                    db.wmi_by_str(wmi, now).map(|w| w as *const _),
+                    want.map(|w| w as *const _),
+                    "{wmi}, clock {now}"
+                );
+            }
+        }
+        for wmi in ["", "?", "ABC\0", "not a WMI", "a longer string", "éééé"] {
+            let expected: Vec<_> = all
+                .iter()
+                .filter(|w| db.s(w.wmi.to_native()) == wmi)
+                .map(|w| w.id.to_native())
+                .collect();
+            assert_eq!(db.wmi_ids_for_str(wmi), expected, "{wmi:?}");
+        }
+    }
 
     #[test]
     fn spec_model_index_preserves_the_original_join_and_order() {
