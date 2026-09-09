@@ -68,9 +68,9 @@ pub struct Db {
     /// use. Resolution and projection repeatedly consult element metadata, so
     /// an O(1) index avoids searching the element table for every output row.
     element_index: OnceLock<Box<[i32]>>,
-    /// Packed (lookup tag, numeric id) -> arena string id, initialized once.
-    /// Winning-pass resolution repeatedly reads these immutable names.
-    lookup_index: OnceLock<IntMap<u64, u32>>,
+    /// Initialize lookup tables separately: a first error-code lookup should not
+    /// allocate an index for every make/model/engine name in the archive.
+    lookup_index: OnceLock<Box<[OnceLock<LookupIndex>]>>,
     /// Dense `element_id -> can this element contribute a pattern match` table
     /// (built once). Index construction uses these immutable element flags to
     /// exclude ineligible rows before they can reach the matching hot path.
@@ -586,22 +586,86 @@ impl Db {
 
     /// Resolve a lookup (`tag`, numeric id) to its name.
     pub fn lookup(&self, tag: u16, id: i32) -> Option<&str> {
-        let key = (u64::from(tag) << 32) | u64::from(id as u32);
-        self.lookup_index
-            .get_or_init(|| {
-                let rows = self.a().lookups.as_slice();
-                let mut index = IntMap::with_capacity_and_hasher(rows.len(), Default::default());
-                for row in rows {
-                    let key = (u64::from(row.tag.to_native()) << 32)
-                        | u64::from(row.id.to_native() as u32);
-                    // The previous lower-bound search returns the first duplicate.
-                    index.entry(key).or_insert(row.name.to_native());
-                }
-                index
-            })
-            .get(&key)
-            .map(|&name| self.s(name))
+        let rows = self.a().lookups.as_slice();
+        let indexes = self.lookup_index.get_or_init(|| {
+            (0..crate::tables::LOOKUP_TABLES.len())
+                .map(|_| OnceLock::new())
+                .collect()
+        });
+        let name = if let Some(slot) = indexes.get(usize::from(tag)) {
+            slot.get_or_init(|| LookupIndex::build(rows, tag))
+                .name(rows, id)
+        } else {
+            // Custom tags retain the original lower-bound lookup.
+            lookup_name(rows, tag, id)
+        };
+        name.map(|name| self.s(name))
     }
+}
+
+/// Dense id ranges need one array load. Sparse external ids keep a binary
+/// search over their table; index memory is capped and proportional to rows.
+enum LookupIndex {
+    Dense { first: i32, names: Box<[u64]> },
+    Sparse { start: usize, end: usize },
+}
+
+impl LookupIndex {
+    fn build(rows: &[crate::tables::ArchivedLookupRow], tag: u16) -> Self {
+        let start = rows.partition_point(|r| r.tag.to_native() < tag);
+        let end = start + rows[start..].partition_point(|r| r.tag.to_native() == tag);
+        let table = &rows[start..end];
+        if let (Some(first), Some(last)) = (table.first(), table.last()) {
+            let first = first.id.to_native();
+            let span = usize::try_from(i64::from(last.id.to_native()) - i64::from(first) + 1).ok();
+            if let Some(span) =
+                span.filter(|&n| n <= table.len().saturating_mul(2) && n <= 1_048_576)
+            {
+                // Zero means missing; widening before +1 preserves every u32 name
+                // id, including the arena's valid empty-string id zero.
+                let mut names = vec![0u64; span];
+                for row in table {
+                    let offset = (i64::from(row.id.to_native()) - i64::from(first)) as usize;
+                    if names[offset] == 0 {
+                        names[offset] = u64::from(row.name.to_native()) + 1;
+                    }
+                }
+                return Self::Dense {
+                    first,
+                    names: names.into_boxed_slice(),
+                };
+            }
+        }
+        Self::Sparse { start, end }
+    }
+
+    fn name(&self, rows: &[crate::tables::ArchivedLookupRow], id: i32) -> Option<u32> {
+        match self {
+            Self::Dense { first, names } => {
+                let offset = usize::try_from(i64::from(id) - i64::from(*first)).ok()?;
+                names
+                    .get(offset)
+                    .copied()
+                    .filter(|&n| n != 0)
+                    .map(|n| (n - 1) as u32)
+            }
+            Self::Sparse { start, end } => {
+                let rows = &rows[*start..*end];
+                let i = rows.partition_point(|r| r.id.to_native() < id);
+                rows.get(i)
+                    .filter(|r| r.id.to_native() == id)
+                    .map(|r| r.name.to_native())
+            }
+        }
+    }
+}
+
+fn lookup_name(rows: &[crate::tables::ArchivedLookupRow], tag: u16, id: i32) -> Option<u32> {
+    let key = (tag, id);
+    let i = rows.partition_point(|r| (r.tag.to_native(), r.id.to_native()) < key);
+    rows.get(i)
+        .filter(|r| (r.tag.to_native(), r.id.to_native()) == key)
+        .map(|r| r.name.to_native())
 }
 
 /// Keep length in the last byte so embedded NULs and short strings cannot alias.
@@ -628,6 +692,47 @@ fn slice_eq<T, F: Fn(&T) -> i32>(v: &[T], target: i32, key: F) -> &[T] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lookup_ranges_keep_negative_sparse_duplicate_and_empty_names() {
+        use crate::tables::LookupRow;
+        let data: Vec<_> = [
+            (0, -3, 0),
+            (0, -1, 1),
+            (0, -1, 2),
+            (0, 0, u32::MAX),
+            (1, i32::MIN, 3),
+            (1, 0, 4),
+            (1, i32::MAX, 5),
+            (u16::MAX, 7, 6),
+        ]
+        .into_iter()
+        .map(|(tag, id, name)| LookupRow { tag, id, name })
+        .collect();
+        let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&data).unwrap();
+        let rows = rkyv::access::<rkyv::Archived<Vec<LookupRow>>, rkyv::rancor::Error>(&bytes)
+            .unwrap()
+            .as_slice();
+        for tag in [0, 1, 2, u16::MAX] {
+            let index = LookupIndex::build(rows, tag);
+            for id in [i32::MIN, -4, -3, -2, -1, 0, 1, 7, i32::MAX] {
+                let expected = data
+                    .iter()
+                    .find(|r| r.tag == tag && r.id == id)
+                    .map(|r| r.name);
+                assert_eq!(index.name(rows, id), expected, "tag {tag}, id {id}");
+                assert_eq!(lookup_name(rows, tag, id), expected);
+            }
+        }
+        assert!(matches!(
+            LookupIndex::build(rows, 0),
+            LookupIndex::Dense { .. }
+        ));
+        assert!(matches!(
+            LookupIndex::build(rows, 1),
+            LookupIndex::Sparse { .. }
+        ));
+    }
 
     #[test]
     fn lookup_index_matches_lower_bound_searches() {
