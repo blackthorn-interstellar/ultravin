@@ -357,12 +357,12 @@ struct ErrorCodeOut {
 
 /// Port of `vpic.spvindecode_errorcode` (E0-E6). `matched_keys` are the
 /// non-empty `Keys` of the pass's pattern rows (Source ILIKE '%pattern%').
-fn errorcode(
+fn errorcode<'a>(
     db: &Db,
     vin: &str,
     var_wmi: &str,
     model_year: Option<i32>,
-    matched_keys: &[&str],
+    matched_keys: impl Iterator<Item = &'a str>,
 ) -> ErrorCodeOut {
     let vb: Vec<char> = vin.chars().collect();
     let vlen = vb.len() as i32;
@@ -502,13 +502,34 @@ fn errorcode(
     }
 }
 
-fn used_key_positions(vin: &[char], matched_keys: &[&str]) -> [bool; 8] {
+/// E6 examines VIN positions 4..8 and 11. Stop visiting pattern rows once
+/// all of those positions present in this VIN have a matching character.
+fn used_key_positions<'a>(vin: &[char], matched_keys: impl Iterator<Item = &'a str>) -> [bool; 8] {
     let mut used = [false; 8];
-    for &key in matched_keys {
+    let mut remaining = 0u8;
+    for i in [0, 1, 2, 3, 4, 7] {
+        if vin.get(i + 3).is_some() {
+            remaining |= 1 << i;
+        }
+    }
+    if remaining == 0 {
+        return used;
+    }
+    for key in matched_keys {
+        // A key cannot cover more positions than its byte length. In
+        // particular, common five-position keys cannot fill VIN position 11.
+        if key.len() <= remaining.trailing_zeros() as usize {
+            continue;
+        }
         for &(pos, c) in key_chars(key).iter() {
-            if (1..=8).contains(&pos) && c != '|' && vin.get((pos + 2) as usize) == Some(&c) {
-                used[(pos - 1) as usize] = true;
+            if matches!(pos, 1..=5 | 8) && c != '|' && vin.get((pos + 2) as usize) == Some(&c) {
+                let index = (pos - 1) as usize;
+                used[index] = true;
+                remaining &= !(1 << index);
             }
+        }
+        if remaining == 0 {
+            break;
         }
     }
     used
@@ -554,8 +575,9 @@ mod tests {
                 .collect();
             for vin in ["1HGCM82633A004352", "ABCZ1Z9|*1X", "123abc", "123é", ""] {
                 let vin: Vec<char> = vin.chars().collect();
-                let actual = used_key_positions(&vin, keys);
-                for (i, &used) in actual.iter().enumerate() {
+                let actual = used_key_positions(&vin, keys.iter().copied());
+                for i in [0, 1, 2, 3, 4, 7] {
+                    let used = actual[i];
                     assert_eq!(
                         used,
                         vin.get(i + 3)
@@ -641,12 +663,11 @@ pub fn compute_errors(
     } else if !items.iter().any(|it| it.pattern_id != NULL_I32) {
         raw.insert(8);
     } else {
-        let matched_keys: Vec<&str> = items
+        let matched_keys = items
             .iter()
             .filter(|it| contains_ci(it.source.as_ref(), b"pattern") && !it.keys.is_empty())
-            .map(|it| it.keys.as_ref())
-            .collect();
-        let ec = errorcode(db, vin, var_wmi, model_year, &matched_keys);
+            .map(|it| it.keys.as_ref());
+        let ec = errorcode(db, vin, var_wmi, model_year, matched_keys);
         for c in ec.codes {
             raw.insert(c);
         }

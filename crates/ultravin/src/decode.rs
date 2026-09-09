@@ -306,11 +306,7 @@ fn append_formula_patterns<'a>(
     var_keys: &str,
     model_year: Option<i32>,
 ) {
-    let formula_keys: String = var_keys
-        .chars()
-        .map(|c| if c.is_ascii_digit() { '#' } else { c })
-        .collect();
-    let fk = formula_keys.as_bytes();
+    let formula_keys = std::cell::OnceCell::new();
     let mut seen_vs: IntSet<i32> = IntSet::default();
     for wvs in db.wmi_vinschema_for(wmiid) {
         if let Some(my) = model_year {
@@ -319,9 +315,6 @@ fn append_formula_patterns<'a>(
             }
         }
         let vsid = wvs.vinschemaid.to_native();
-        if !seen_vs.insert(vsid) {
-            continue;
-        }
         let index = db.pattern_index(vsid);
         let rows = index
             .map(|index| index.formula_rows.as_slice())
@@ -333,6 +326,9 @@ fn append_formula_patterns<'a>(
         } else {
             &[]
         };
+        if rows.is_empty() && unindexed.is_empty() || !seen_vs.insert(vsid) {
+            continue;
+        }
         for p in rows
             .iter()
             .map(|&i| &db.patterns()[i as usize])
@@ -348,6 +344,19 @@ fn append_formula_patterns<'a>(
             if db.element_by_id(p.elementid.to_native()).is_none() {
                 continue;
             }
+            // Most schemas have no formula rows. Build the substituted VIN
+            // only when a surviving formula actually needs to match it.
+            let fk = formula_keys
+                .get_or_init(|| {
+                    let mut text = String::with_capacity(var_keys.len());
+                    text.extend(
+                        var_keys
+                            .chars()
+                            .map(|c| if c.is_ascii_digit() { '#' } else { c }),
+                    );
+                    text
+                })
+                .as_bytes();
             if !like_match(fk, keys.as_bytes()) {
                 continue;
             }
