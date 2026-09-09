@@ -195,11 +195,10 @@ fn decode<'py>(
     year: Option<i32>,
     full: bool,
 ) -> PyResult<Bound<'py, PyDict>> {
-    let r = ultravin::decode(vin, year);
     if full {
-        result_to_dict(py, &r)
+        result_to_dict(py, &ultravin::decode(vin, year))
     } else {
-        flat_to_dict(py, &r.into())
+        flat_to_dict(py, &ultravin::decode_flat(vin, year))
     }
 }
 

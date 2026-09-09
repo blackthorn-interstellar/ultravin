@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 use crate::db::Db;
 use crate::hash::IntSet;
-use crate::{decode_full, epoch_to_year, now_secs, public_decode};
+use crate::{decode_items, epoch_to_year, now_secs, public_decode};
 
 /// Value type of a projected column, taken from the element's vPIC `data_type`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -162,12 +162,12 @@ pub struct IdsBatch {
 /// Parse one decoded value into its column's type. Empty → null; a value that
 /// does not parse as the declared numeric type is data the decoder should not
 /// have emitted, but a bulk job must not die on it — null and move on.
-fn parse_value(dtype: IdsDType, value: &str) -> Option<CellValue> {
+fn parse_value(dtype: IdsDType, value: String) -> Option<CellValue> {
     if value.is_empty() {
         return None;
     }
     Some(match dtype {
-        IdsDType::Str => CellValue::Str(value.to_string()),
+        IdsDType::Str => CellValue::Str(value),
         IdsDType::Int => CellValue::Int(value.parse::<i64>().ok()?),
         IdsDType::Float => CellValue::Float(value.parse::<f64>().ok()?),
     })
@@ -200,8 +200,15 @@ pub fn decode_batch_ids(
     let current_year = epoch_to_year(secs);
     let db = Db::embedded();
     // element_id -> column index; filled once, read from every rayon task.
-    let index: HashMap<i32, usize, crate::hash::FxBuildHasher> =
-        metas.iter().enumerate().map(|(i, m)| (m.id, i)).collect();
+    let index: HashMap<i32, usize, crate::hash::FxBuildHasher> = metas
+        .iter()
+        .enumerate()
+        .filter(|(_, m)| {
+            db.element_by_id(m.id)
+                .is_some_and(|e| public_decode(db, e).is_some())
+        })
+        .map(|(i, m)| (m.id, i))
+        .collect();
 
     let mut model_year = vec![None; inputs.len()];
     // One flat buffer of `stride` cells per row rather than a `Vec` per row: at
@@ -222,12 +229,23 @@ pub fn decode_batch_ids(
             .zip(&mut model_year)
             .zip(slots.par_chunks_mut(stride))
             .for_each(|(((i, vin), my), row)| {
-                let r = decode_full(db, vin, now_micros, current_year, crate::year_at(years, i));
+                let r = decode_items(db, vin, now_micros, current_year, crate::year_at(years, i));
                 *my = r.model_year;
-                for e in &r.elements {
-                    if let Some(&ci) = index.get(&e.element_id) {
+                // Sorting full output cannot change order within one element id.
+                // Walk raw items directly; first occurrence wins even when empty.
+                for it in r.items {
+                    if let Some(&ci) = index.get(&it.element_id) {
                         if row[ci].is_none() {
-                            row[ci] = Some(parse_value(metas[ci].dtype, &e.value));
+                            let value = if it.value == "XXX" {
+                                crate::resolve::felement_attribute_value(
+                                    db,
+                                    it.element_id,
+                                    it.attribute_id,
+                                )
+                            } else {
+                                it.value
+                            };
+                            row[ci] = Some(parse_value(metas[ci].dtype, crate::scrub(value)));
                         }
                     }
                 }
@@ -452,6 +470,36 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn hand_built_metas_preserve_visibility_and_duplicate_column_behavior() {
+        let Some(db) = db() else { return };
+        let mut metas = resolve_ids(db, &[MAKE]).unwrap();
+        metas.push(metas[0].clone());
+        let hidden = db
+            .elements()
+            .iter()
+            .find(|e| public_decode(db, e).is_none())
+            .unwrap();
+        metas.push(IdMeta {
+            id: hidden.id.to_native(),
+            dtype: IdsDType::Str,
+            name: "hidden".into(),
+        });
+        metas.push(IdMeta {
+            id: -1,
+            dtype: IdsDType::Str,
+            name: "unknown".into(),
+        });
+        let vins = vec![HONDA.to_string(), "".to_string()];
+        // A short years list means the remaining rows have no caller year.
+        let batch = decode_batch_ids(&vins, Some(&[Some(2003)]), &metas);
+        assert_eq!(strs(&batch.columns[0]), &[None, None]);
+        assert_eq!(strs(&batch.columns[1]), &[Some("HONDA".into()), None]);
+        assert_eq!(strs(&batch.columns[2]), &[None, None]);
+        assert_eq!(strs(&batch.columns[3]), &[None, None]);
+        assert_eq!(batch.model_year, [Some(2003), None]);
     }
 
     #[test]

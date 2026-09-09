@@ -14,11 +14,9 @@ use crate::tables::{element_lookup_tag, is_exempt, NULL_I32, NULL_I64};
 ///
 /// `source` is a static literal for every source but Conversion, and `value` is
 /// the `"XXX"` sentinel for every pattern/spec/default item (resolved lazily, and
-/// only on the winning pass). Both are `Cow<'static, str>` so those overwhelmingly
-/// common cases borrow instead of allocating — the per-item, per-pass `String`
-/// churn was the single largest allocation source on the decode hot path.
-/// Keys and attribute ids also borrow the archive until projection: losing
-/// passes and discarded duplicate rows never need owned copies of those strings.
+/// only on the winning pass). These common literals borrow instead of allocating.
+/// Resolved values, keys and attribute ids also borrow the archive until output
+/// needs an owned string; losing passes and discarded rows avoid those copies.
 #[derive(Debug, Clone)]
 pub struct DecodingItem<'a> {
     pub created_on: i64, // NULL_I64 = none
@@ -28,7 +26,7 @@ pub struct DecodingItem<'a> {
     pub wmi_id: i32,        // NULL_I32 = none
     pub element_id: i32,
     pub attribute_id: Cow<'a, str>,
-    pub value: Cow<'static, str>,
+    pub value: Cow<'a, str>,
     pub source: Cow<'static, str>,
     pub priority: i32,
     pub to_be_qced: bool,
@@ -178,7 +176,7 @@ pub fn decode_core<'a>(
         }
     }
 
-    let wmi_upper = var_wmi.to_ascii_uppercase();
+    let wmi_upper = uppercase_key(db.s(wmi.wmi.to_native()));
 
     // --- (b) VehType 39 (priority 100).
     let veh_type_id = wmi.vehicletypeid.to_native();
@@ -188,7 +186,7 @@ pub fn decode_core<'a>(
                 items.push(DecodingItem {
                     created_on: wmi.createdon_key.to_native(),
                     pattern_id: NULL_I32,
-                    keys: Cow::Owned(wmi_upper.clone()),
+                    keys: wmi_upper.clone(),
                     vin_schema_id: NULL_I32,
                     wmi_id: wmiid,
                     element_id: 39,
@@ -212,7 +210,7 @@ pub fn decode_core<'a>(
         items.push(DecodingItem {
             created_on: NULL_I64,
             pattern_id: NULL_I32,
-            keys: Cow::Owned(wmi_upper.clone()),
+            keys: wmi_upper.clone(),
             vin_schema_id: NULL_I32,
             wmi_id: wmiid,
             element_id: 27,
@@ -225,7 +223,7 @@ pub fn decode_core<'a>(
         items.push(DecodingItem {
             created_on: NULL_I64,
             pattern_id: NULL_I32,
-            keys: Cow::Owned(wmi_upper.clone()),
+            keys: wmi_upper,
             vin_schema_id: NULL_I32,
             wmi_id: wmiid,
             element_id: 157,
@@ -266,7 +264,7 @@ pub fn decode_core<'a>(
         db,
         &mut items,
         wmiid,
-        var_wmi,
+        db.s(wmi.wmi.to_native()),
         wmi.createdon_key.to_native(),
     );
 
@@ -485,7 +483,7 @@ fn append_make<'a>(
     db: &'a Db,
     items: &mut Vec<DecodingItem<'a>>,
     wmiid: i32,
-    var_wmi: &str,
+    var_wmi: &'a str,
     wmi_created: i64,
 ) {
     let model_item = items.iter().find(|it| it.element_id == 28).map(|it| {
@@ -535,7 +533,7 @@ fn append_make<'a>(
             items.push(DecodingItem {
                 created_on: wmi_created,
                 pattern_id: NULL_I32,
-                keys: Cow::Owned(var_wmi.to_string()),
+                keys: Cow::Borrowed(var_wmi),
                 vin_schema_id: NULL_I32,
                 wmi_id: wmiid,
                 element_id: 26,

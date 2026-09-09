@@ -27,7 +27,11 @@ impl FxHasher {
 impl Hasher for FxHasher {
     #[inline]
     fn write(&mut self, bytes: &[u8]) {
-        for &b in bytes {
+        let mut words = bytes.chunks_exact(8);
+        for word in &mut words {
+            self.add(u64::from_ne_bytes(word.try_into().unwrap()));
+        }
+        for &b in words.remainder() {
             self.add(b as u64);
         }
     }
@@ -144,6 +148,28 @@ impl ElementIndex {
 #[cfg(test)]
 mod element_collection_tests {
     use super::*;
+
+    #[test]
+    fn string_keys_can_be_looked_up_through_borrowed_text() {
+        let keys = [
+            "",
+            "a",
+            "1234567",
+            "12345678",
+            "123456789",
+            "0123456789abcdefg",
+            "é日本語",
+        ];
+        let map: HashMap<String, usize, FxBuildHasher> = keys
+            .iter()
+            .enumerate()
+            .map(|(i, key)| (key.to_string(), i))
+            .collect();
+        for (i, key) in keys.iter().enumerate() {
+            assert_eq!(map.get(*key), Some(&i));
+        }
+        assert_eq!(map.get("1234567890"), None);
+    }
 
     #[test]
     fn memberships_cover_inline_boundaries_and_external_ids() {

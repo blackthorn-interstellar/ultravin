@@ -106,9 +106,9 @@ pub enum FlatValue {
 ///
 /// Same header fields as [`DecodeResult`]; `elements` is replaced by
 /// `attributes`, which drops the 13 per-element provenance columns and keeps the
-/// pair almost every caller actually reads. Building this costs one map entry per
-/// element instead of a 15-key dict, which is the whole point — the marshalling
-/// into Python, not the decode, is what it saves.
+/// pair almost every caller actually reads. Its decode path resolves only the
+/// output values, avoiding owned provenance strings; Python marshalling then
+/// builds one attribute entry instead of a 15-key dict per element.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct FlatResult<'a> {
     pub vin: String,
@@ -144,27 +144,11 @@ impl<'a> From<DecodeResult<'a>> for FlatResult<'a> {
     /// unreachable with the current archive (no model maps to more than one make)
     /// and would be a data change worth catching in the refresh gates.
     fn from(r: DecodeResult<'a>) -> Self {
-        let mut attributes: Vec<(&'a str, FlatValue)> = Vec::with_capacity(r.elements.len());
-        let mut seen: std::collections::HashMap<&'a str, usize, hash::FxBuildHasher> =
-            std::collections::HashMap::default();
-        for e in r.elements {
-            match seen.get(e.variable) {
-                Some(&i) => {
-                    if let (_, FlatValue::Many(list)) = &mut attributes[i] {
-                        list.push(e.value);
-                    }
-                }
-                None => {
-                    seen.insert(e.variable, attributes.len());
-                    let value = if tables::is_exempt(e.element_id) {
-                        FlatValue::Many(vec![e.value])
-                    } else {
-                        FlatValue::One(e.value)
-                    };
-                    attributes.push((e.variable, value));
-                }
-            }
-        }
+        let attributes = flatten_values(
+            r.elements
+                .into_iter()
+                .map(|e| (e.variable, e.element_id, e.value)),
+        );
         FlatResult {
             vin: r.vin,
             wmi: r.wmi,
@@ -176,6 +160,34 @@ impl<'a> From<DecodeResult<'a>> for FlatResult<'a> {
             attributes,
         }
     }
+}
+
+/// Keep the first value for each variable name, collecting repeatable notes.
+fn flatten_values<'a>(
+    values: impl Iterator<Item = (&'a str, i32, String)>,
+) -> Vec<(&'a str, FlatValue)> {
+    let mut attributes: Vec<(&'a str, FlatValue)> = Vec::with_capacity(values.size_hint().0);
+    let mut seen: std::collections::HashMap<&'a str, usize, hash::FxBuildHasher> =
+        std::collections::HashMap::default();
+    for (variable, element_id, value) in values {
+        match seen.get(variable) {
+            Some(&i) => {
+                if let (_, FlatValue::Many(list)) = &mut attributes[i] {
+                    list.push(value);
+                }
+            }
+            None => {
+                seen.insert(variable, attributes.len());
+                let value = if tables::is_exempt(element_id) {
+                    FlatValue::Many(vec![value])
+                } else {
+                    FlatValue::One(value)
+                };
+                attributes.push((variable, value));
+            }
+        }
+    }
+    attributes
 }
 
 /// The element's `Decode` text when it is one `project` emits, `None` when the
@@ -290,7 +302,15 @@ pub fn decode(input: &str, year: Option<i32>) -> DecodeResult<'static> {
 /// [`decode`] with the [`FlatResult`] shape: elements collapsed to
 /// `variable -> value`, the 13 per-element provenance columns dropped.
 pub fn decode_flat(input: &str, year: Option<i32>) -> FlatResult<'static> {
-    FlatResult::from(decode(input, year))
+    let secs = now_secs();
+    decode_items(
+        Db::embedded(),
+        input,
+        secs * 1_000_000,
+        epoch_to_year(secs),
+        year,
+    )
+    .flat()
 }
 
 /// Decode a VIN against an explicit database and clock (injectable for tests),
@@ -344,7 +364,7 @@ impl Db {
         inputs: &[String],
         years: Option<&[Option<i32>]>,
     ) -> Vec<DecodeResult<'_>> {
-        batch(self, inputs, years, |r| r)
+        batch(self, inputs, years, RawResult::full)
     }
 
     /// [`decode_batch_flat`](fn@decode_batch_flat) against this database.
@@ -353,7 +373,7 @@ impl Db {
         inputs: &[String],
         years: Option<&[Option<i32>]>,
     ) -> Vec<FlatResult<'_>> {
-        batch(self, inputs, years, FlatResult::from)
+        batch(self, inputs, years, RawResult::flat)
     }
 }
 
@@ -428,7 +448,7 @@ fn batch<'a, T: Send>(
     db: &'a Db,
     inputs: &[String],
     years: Option<&[Option<i32>]>,
-    shape: impl Fn(DecodeResult<'a>) -> T + Sync,
+    shape: impl Fn(RawResult<'a>) -> T + Sync,
 ) -> Vec<T> {
     use rayon::prelude::*;
 
@@ -441,7 +461,7 @@ fn batch<'a, T: Send>(
         order
             .par_iter()
             .map(|&i| {
-                shape(decode_full(
+                shape(decode_items(
                     db,
                     &inputs[i as usize],
                     now_micros,
@@ -468,8 +488,7 @@ pub fn decode_json(input: &str, year: Option<i32>) -> String {
 
 /// [`decode_json`] with the [`FlatResult`] shape.
 pub fn decode_json_flat(input: &str, year: Option<i32>) -> String {
-    serde_json::to_string(&FlatResult::from(decode(input, year)))
-        .expect("FlatResult is infallibly serializable")
+    serde_json::to_string(&decode_flat(input, year)).expect("FlatResult is infallibly serializable")
 }
 
 /// Decode many VINs to a single compact JSON array string, in parallel.
@@ -481,12 +500,12 @@ pub fn decode_json_flat(input: &str, year: Option<i32>) -> String {
 /// otherwise caps `decode_batch`. `json.loads` of the output equals
 /// `decode_batch` element-for-element.
 pub fn decode_batch_json(inputs: &[String], years: Option<&[Option<i32>]>) -> String {
-    batch_json(inputs, years, |r| r)
+    batch_json(inputs, years, RawResult::full)
 }
 
 /// [`decode_batch_json`] with the [`FlatResult`] shape.
 pub fn decode_batch_json_flat(inputs: &[String], years: Option<&[Option<i32>]>) -> String {
-    batch_json(inputs, years, FlatResult::from)
+    batch_json(inputs, years, RawResult::flat)
 }
 
 /// Shared body of the batch-JSON paths: decode + serialize in parallel through
@@ -494,7 +513,7 @@ pub fn decode_batch_json_flat(inputs: &[String], years: Option<&[Option<i32>]>) 
 fn batch_json<T: serde::Serialize + Send>(
     inputs: &[String],
     years: Option<&[Option<i32>]>,
-    shape: impl Fn(DecodeResult<'static>) -> T + Sync,
+    shape: impl Fn(RawResult<'static>) -> T + Sync,
 ) -> String {
     use rayon::prelude::*;
 
@@ -511,7 +530,7 @@ fn batch_json<T: serde::Serialize + Send>(
         order
             .par_iter()
             .map(|&i| {
-                serde_json::to_string(&shape(decode_full(
+                serde_json::to_string(&shape(decode_items(
                     db,
                     &inputs[i as usize],
                     now_micros,
@@ -590,6 +609,81 @@ pub fn decode_full<'a>(
     current_year: i32,
     caller_year: Option<i32>,
 ) -> DecodeResult<'a> {
+    decode_items(db, input, now_micros, current_year, caller_year).full()
+}
+
+/// Winning pass, before output-specific value resolution and projection.
+/// Flat and column callers never need owned provenance strings.
+struct RawResult<'a> {
+    db: &'a Db,
+    vin: String,
+    wmi: String,
+    descriptor: String,
+    model_year: Option<i32>,
+    error_codes: Vec<i32>,
+    check_digit_valid: bool,
+    corrected_vin: String,
+    items: Vec<decode::DecodingItem<'a>>,
+}
+
+impl<'a> RawResult<'a> {
+    fn full(mut self) -> DecodeResult<'a> {
+        resolve::resolve_xxx(self.db, &mut self.items);
+        DecodeResult {
+            vin: self.vin,
+            wmi: self.wmi,
+            descriptor: self.descriptor,
+            model_year: self.model_year,
+            error_codes: self.error_codes,
+            check_digit_valid: self.check_digit_valid,
+            corrected_vin: self.corrected_vin,
+            elements: project(self.db, self.items),
+        }
+    }
+
+    fn flat(mut self) -> FlatResult<'a> {
+        resolve::resolve_xxx(self.db, &mut self.items);
+        let mut values: Vec<_> = self
+            .items
+            .into_iter()
+            .filter_map(|it| {
+                let e = self.db.element_by_id(it.element_id)?;
+                public_decode(self.db, e)?;
+                Some((
+                    tables::group_rank(self.db.s(e.groupname.to_native())),
+                    it.element_id,
+                    self.db.s(e.name.to_native()),
+                    scrub(it.value),
+                ))
+            })
+            .collect();
+        // Stable within an element: repeated notes keep their original order.
+        values.sort_by_key(|&(rank, id, _, _)| (rank, id));
+        let attributes = flatten_values(
+            values
+                .into_iter()
+                .map(|(_, id, name, value)| (name, id, value)),
+        );
+        FlatResult {
+            vin: self.vin,
+            wmi: self.wmi,
+            descriptor: self.descriptor,
+            model_year: self.model_year,
+            error_codes: self.error_codes,
+            check_digit_valid: self.check_digit_valid,
+            corrected_vin: self.corrected_vin,
+            attributes,
+        }
+    }
+}
+
+fn decode_items<'a>(
+    db: &'a Db,
+    input: &str,
+    now_micros: i64,
+    current_year: i32,
+    caller_year: Option<i32>,
+) -> RawResult<'a> {
     let vin = sanitize(input);
     let var_wmi = vin_wmi(&vin);
     let descriptor = vin_descriptor(&vin);
@@ -677,13 +771,11 @@ pub fn decode_full<'a>(
         .expect("at least one pass ran");
 
     let mut items = best.items;
-    // QC override + TobeQCed delete (inert with current data) then XXX resolution.
+    // QC filtering belongs after scoring, before every output shape.
     items.retain(|it| !it.to_be_qced);
-    resolve::resolve_xxx(db, &mut items);
 
-    let elements = project(db, items);
-
-    DecodeResult {
+    RawResult {
+        db,
         vin,
         wmi: var_wmi,
         descriptor,
@@ -691,7 +783,7 @@ pub fn decode_full<'a>(
         error_codes: best.codes,
         check_digit_valid: best.check_digit_valid,
         corrected_vin: best.corrected_vin,
-        elements,
+        items,
     }
 }
 
@@ -1036,6 +1128,39 @@ mod tests {
         assert_eq!(decode_flat(vin, None), FlatResult::from(decode(vin, None)));
         // The caller year reaches the decode through the flat door too.
         assert_eq!(decode_flat(vin, Some(2013)).model_year, Some(2013));
+    }
+
+    #[test]
+    fn direct_flat_projection_preserves_full_output_order_and_values() {
+        let Some(db) = Db::try_embedded() else { return };
+        for vin in [
+            "",
+            "nope",
+            "1HGCM82633A004352",
+            "1FTFW1ET5DFC10312",
+            "ZZZCM82633A004352",
+            "1HGCM8263Ł3A00435",
+            "1HGCM826?3A004352",
+        ] {
+            for year in [
+                None,
+                Some(1979),
+                Some(1980),
+                Some(2013),
+                Some(2028),
+                Some(2029),
+            ] {
+                let raw = decode_items(db, vin, 1_788_739_200_000_000, 2026, year);
+                let full = decode_full(db, vin, 1_788_739_200_000_000, 2026, year);
+                let expected = FlatResult::from(full);
+                let actual = raw.flat();
+                assert_eq!(actual, expected, "{vin:?}, {year:?}");
+                assert_eq!(
+                    serde_json::to_string(&actual).unwrap(),
+                    serde_json::to_string(&expected).unwrap()
+                );
+            }
+        }
     }
 
     #[test]
