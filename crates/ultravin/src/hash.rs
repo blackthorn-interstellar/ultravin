@@ -27,11 +27,11 @@ impl FxHasher {
 impl Hasher for FxHasher {
     #[inline]
     fn write(&mut self, bytes: &[u8]) {
-        let mut words = bytes.chunks_exact(8);
-        for word in &mut words {
-            self.add(u64::from_ne_bytes(word.try_into().unwrap()));
+        let (words, rest) = bytes.as_chunks::<8>();
+        for word in words {
+            self.add(u64::from_ne_bytes(*word));
         }
-        for &b in words.remainder() {
+        for &b in rest {
             self.add(b as u64);
         }
     }
