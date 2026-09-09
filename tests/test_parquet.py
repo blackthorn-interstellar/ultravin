@@ -490,6 +490,20 @@ def test_a_bad_projection_is_a_value_error(tmp_path: Path) -> None:
 # ── Arrow sources ─────────────────────────────────────────────────────────────
 
 
+@pytest.mark.parametrize("batch_size", [257, 777])
+def test_rows_and_nulls_stay_aligned_across_internal_chunks(batch_size: int) -> None:
+    corpus = [CORPUS[i % len(CORPUS)] for i in range(777)]
+    source = pa.table({"vin": text([v for v, _ in corpus]), "year": ints([y for _, y in corpus])})
+    source_reader = pa.RecordBatchReader.from_batches(source.schema, source.to_batches(max_chunksize=batch_size))
+    reader = pa.RecordBatchReader.from_stream(uv.decode_stream(source_reader, columns=PROJECTED))
+    batches = list(reader)
+    assert [batch.num_rows for batch in batches] == [
+        min(batch_size, len(corpus) - start) for start in range(0, len(corpus), batch_size)
+    ]
+    expected = {"vin": [v for v, _ in corpus], "year": [y for _, y in corpus]} | reference(corpus, PROJECTED)
+    assert pa.Table.from_batches(batches).to_pydict() == expected
+
+
 def test_a_pyarrow_table_decodes_without_touching_the_disk() -> None:
     table = pa.table({"vin": text([HONDA, FORD, None]), "year": ints([None, None, 2013])})
     out = columns(table, columns=[MAKE])

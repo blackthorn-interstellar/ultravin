@@ -7,10 +7,8 @@
 //! the durable key: a monthly NHTSA dump that renames a variable cannot silently
 //! break a pipeline pinned to them.
 
-use std::collections::HashMap;
-
 use crate::db::Db;
-use crate::hash::IntSet;
+use crate::hash::{ElementIndex, ElementSet, IntSet};
 use crate::{decode_items, epoch_to_year, now_secs, public_decode};
 
 /// Value type of a projected column, taken from the element's vPIC `data_type`.
@@ -159,26 +157,53 @@ pub struct IdsBatch {
     pub columns: Vec<ColumnValues>,
 }
 
-/// Parse one decoded value into its column's type. Empty → null; a value that
-/// does not parse as the declared numeric type is data the decoder should not
-/// have emitted, but a bulk job must not die on it — null and move on.
-fn parse_value(dtype: IdsDType, value: String) -> Option<CellValue> {
-    if value.is_empty() {
-        return None;
-    }
-    Some(match dtype {
-        IdsDType::Str => CellValue::Str(value),
-        IdsDType::Int => CellValue::Int(value.parse::<i64>().ok()?),
-        IdsDType::Float => CellValue::Float(value.parse::<f64>().ok()?),
-    })
+/// A typed column written in row order. Missing values are filled as null gaps,
+/// avoiding a scan of every requested column for every decoded row.
+pub(crate) trait ColumnWriter: Send {
+    fn push_value(&mut self, row: usize, value: std::borrow::Cow<'_, str>);
+    fn finish_rows(&mut self, rows: usize);
 }
 
-/// Internal sum type so one extraction loop can fill any column kind.
-#[derive(Debug, Clone)]
-enum CellValue {
-    Str(String),
-    Int(i64),
-    Float(f64),
+impl ColumnWriter for ColumnValues {
+    fn push_value(&mut self, row: usize, value: std::borrow::Cow<'_, str>) {
+        match self {
+            ColumnValues::Str(v) => {
+                v.resize(row, None);
+                v.push(Some(value.into_owned()));
+            }
+            ColumnValues::Int(v) => {
+                v.resize(row, None);
+                v.push(value.parse::<i64>().ok());
+            }
+            ColumnValues::Float(v) => {
+                v.resize(row, None);
+                v.push(value.parse::<f64>().ok());
+            }
+        }
+    }
+
+    fn finish_rows(&mut self, rows: usize) {
+        match self {
+            ColumnValues::Str(v) => v.resize(rows, None),
+            ColumnValues::Int(v) => v.resize(rows, None),
+            ColumnValues::Float(v) => v.resize(rows, None),
+        }
+    }
+}
+
+pub(crate) struct ColumnChunk<C> {
+    pub(crate) model_year: Vec<Option<i32>>,
+    pub(crate) columns: Vec<C>,
+}
+
+/// Move one chunk into its final column, releasing the chunk's allocation.
+fn append_column(dst: &mut ColumnValues, src: &mut ColumnValues) {
+    match (dst, src) {
+        (ColumnValues::Str(dst), ColumnValues::Str(src)) => dst.extend(std::mem::take(src)),
+        (ColumnValues::Int(dst), ColumnValues::Int(src)) => dst.extend(std::mem::take(src)),
+        (ColumnValues::Float(dst), ColumnValues::Float(src)) => dst.extend(std::mem::take(src)),
+        _ => unreachable!("chunk and destination use the same column metadata"),
+    }
 }
 
 /// Decode every input in parallel over the shared archive, projecting each
@@ -193,104 +218,124 @@ pub fn decode_batch_ids(
     years: Option<&[Option<i32>]>,
     metas: &[IdMeta],
 ) -> IdsBatch {
+    let mut chunks = decode_chunks(inputs, years, metas, |dtype, rows| match dtype {
+        IdsDType::Str => ColumnValues::Str(Vec::with_capacity(rows)),
+        IdsDType::Int => ColumnValues::Int(Vec::with_capacity(rows)),
+        IdsDType::Float => ColumnValues::Float(Vec::with_capacity(rows)),
+    });
+
+    let model_year = chunks
+        .iter_mut()
+        .flat_map(|chunk| std::mem::take(&mut chunk.model_year))
+        .collect();
+    // Allocate and assemble one final column at a time, freeing its old chunk
+    // buffers as they are consumed. Peak storage stays near the final columns'
+    // size rather than holding two full rectangular representations at once.
+    let columns = metas
+        .iter()
+        .enumerate()
+        .map(|(ci, m)| {
+            let mut column = match m.dtype {
+                IdsDType::Str => ColumnValues::Str(Vec::with_capacity(inputs.len())),
+                IdsDType::Int => ColumnValues::Int(Vec::with_capacity(inputs.len())),
+                IdsDType::Float => ColumnValues::Float(Vec::with_capacity(inputs.len())),
+            };
+            for chunk in &mut chunks {
+                append_column(&mut column, &mut chunk.columns[ci]);
+            }
+            column
+        })
+        .collect();
+    IdsBatch {
+        model_year,
+        columns,
+    }
+}
+
+/// Decode each row once into bounded typed chunks, resolving only public
+/// requested values after the winning model-year pass has been selected.
+pub(crate) fn decode_chunks<I: AsRef<str> + Sync, C: ColumnWriter>(
+    inputs: &[I],
+    years: Option<&[Option<i32>]>,
+    metas: &[IdMeta],
+    make_column: impl Fn(IdsDType, usize) -> C + Sync,
+) -> Vec<ColumnChunk<C>> {
     use rayon::prelude::*;
 
     let secs = now_secs();
     let now_micros = secs * 1_000_000;
     let current_year = epoch_to_year(secs);
     let db = Db::embedded();
-    // element_id -> column index; filled once, read from every rayon task.
-    let index: HashMap<i32, usize, crate::hash::FxBuildHasher> = metas
-        .iter()
-        .enumerate()
-        .filter(|(_, m)| {
-            db.element_by_id(m.id)
-                .is_some_and(|e| public_decode(db, e).is_some())
-        })
-        .map(|(i, m)| (m.id, i))
-        .collect();
+    // IdMeta is public: retain visibility filtering and last-column-wins
+    // behavior even when the caller bypasses resolve_columns.
+    let mut index = ElementIndex::default();
+    for (ci, m) in metas.iter().enumerate() {
+        if db
+            .element_by_id(m.id)
+            .is_some_and(|e| public_decode(db, e).is_some())
+        {
+            index.insert(m.id, ci);
+        }
+    }
 
-    let mut model_year = vec![None; inputs.len()];
-    // One flat buffer of `stride` cells per row rather than a `Vec` per row: at
-    // 65k rows a chunk, the per-row allocation was the dominant cost here. The
-    // `max(1)` keeps a row one cell wide when nothing is projected, because
-    // `par_chunks_mut(0)` panics and a zero-width buffer would zip to no rows
-    // at all — leaving `model_year` undecoded.
-    let stride = metas.len().max(1);
-    // Outer `Option` = "this element was already seen for this row", so the true
-    // first occurrence wins for the repeat-exempt elements even when it is empty
-    // (which is null, not "unfilled"). Inner `Option` = the value itself.
-    let mut slots: Vec<Option<Option<CellValue>>> = vec![None; inputs.len() * stride];
-
+    // Bound the worker's typed buffers. A whole-batch row-major enum matrix
+    // duplicates the final columns and costs 210 MiB at 65,536 x 140 cells.
+    const CHUNK_ROWS: usize = 256;
     crate::batch_pool().install(|| {
         inputs
-            .par_iter()
+            .par_chunks(CHUNK_ROWS)
             .enumerate()
-            .zip(&mut model_year)
-            .zip(slots.par_chunks_mut(stride))
-            .for_each(|(((i, vin), my), row)| {
-                let r = decode_items(db, vin, now_micros, current_year, crate::year_at(years, i));
-                *my = r.model_year;
-                // Sorting full output cannot change order within one element id.
-                // Walk raw items directly; first occurrence wins even when empty.
-                for it in r.items {
-                    if let Some(&ci) = index.get(&it.element_id) {
-                        if row[ci].is_none() {
-                            let value = if it.value == "XXX" {
-                                crate::resolve::felement_attribute_value(
-                                    db,
-                                    it.element_id,
-                                    it.attribute_id,
-                                )
-                            } else {
-                                it.value
-                            };
-                            row[ci] = Some(parse_value(metas[ci].dtype, crate::scrub(value)));
+            .map(|(chunk_index, vins)| {
+                let mut columns: Vec<_> = metas
+                    .iter()
+                    .map(|m| make_column(m.dtype, vins.len()))
+                    .collect();
+                let mut model_year = Vec::with_capacity(vins.len());
+                for (row, vin) in vins.iter().enumerate() {
+                    let input_index = chunk_index * CHUNK_ROWS + row;
+                    let r = decode_items(
+                        db,
+                        vin.as_ref(),
+                        now_micros,
+                        current_year,
+                        crate::year_at(years, input_index),
+                    );
+                    model_year.push(r.model_year);
+                    let mut seen = ElementSet::default();
+                    for it in r.items {
+                        let Some(&ci) = index.get(&it.element_id) else {
+                            continue;
+                        };
+                        // Mark seen before checking emptiness: the first note wins
+                        // even when its value is null and later notes contain text.
+                        if !seen.insert(it.element_id) {
+                            continue;
                         }
+                        let value = if it.value == "XXX" {
+                            crate::resolve::felement_attribute_value(
+                                db,
+                                it.element_id,
+                                it.attribute_id,
+                            )
+                        } else {
+                            it.value
+                        };
+                        if value.is_empty() {
+                            continue;
+                        }
+                        columns[ci].push_value(row, crate::scrub_value(value));
                     }
                 }
-            });
-    });
-
-    // Unwrap the per-row slots into typed columns (column-major output).
-    let columns = metas
-        .iter()
-        .enumerate()
-        .map(|(ci, m)| match m.dtype {
-            IdsDType::Str => ColumnValues::Str(
-                slots
-                    .chunks_mut(stride)
-                    .map(|row| match row[ci].take().flatten() {
-                        Some(CellValue::Str(s)) => Some(s),
-                        _ => None,
-                    })
-                    .collect(),
-            ),
-            IdsDType::Int => ColumnValues::Int(
-                slots
-                    .chunks_mut(stride)
-                    .map(|row| match row[ci].take().flatten() {
-                        Some(CellValue::Int(v)) => Some(v),
-                        _ => None,
-                    })
-                    .collect(),
-            ),
-            IdsDType::Float => ColumnValues::Float(
-                slots
-                    .chunks_mut(stride)
-                    .map(|row| match row[ci].take().flatten() {
-                        Some(CellValue::Float(v)) => Some(v),
-                        _ => None,
-                    })
-                    .collect(),
-            ),
-        })
-        .collect();
-
-    IdsBatch {
-        model_year,
-        columns,
-    }
+                for column in &mut columns {
+                    column.finish_rows(vins.len());
+                }
+                ColumnChunk {
+                    model_year,
+                    columns,
+                }
+            })
+            .collect()
+    })
 }
 
 #[cfg(test)]
@@ -500,6 +545,49 @@ mod tests {
         assert_eq!(strs(&batch.columns[2]), &[None, None]);
         assert_eq!(strs(&batch.columns[3]), &[None, None]);
         assert_eq!(batch.model_year, [Some(2003), None]);
+    }
+
+    #[test]
+    fn typed_chunks_preserve_rows_across_worker_boundaries() {
+        let Some(db) = db() else { return };
+        let vins: Vec<_> = [HONDA, "", "1FTFW1ET5DFC10312", "ZZZCM82633A004352"]
+            .into_iter()
+            .cycle()
+            .take(777)
+            .map(str::to_string)
+            .collect();
+        let years: Vec<_> = [None, Some(2013), Some(2003)]
+            .into_iter()
+            .cycle()
+            .take(700)
+            .collect();
+        let metas = resolve_ids(db, &[MAKE, CYLINDERS, DISPLACEMENT_L, 143]).unwrap();
+        let batch = decode_batch_ids(&vins, Some(&years), &metas);
+        for (row, vin) in vins.iter().enumerate() {
+            let full = crate::decode(vin, crate::year_at(Some(&years), row));
+            assert_eq!(batch.model_year[row], full.model_year, "row {row}");
+            for (ci, meta) in metas.iter().enumerate() {
+                let expected = full
+                    .elements
+                    .iter()
+                    .find(|e| e.element_id == meta.id)
+                    .map(|e| e.value.as_str())
+                    .filter(|v| !v.is_empty());
+                match &batch.columns[ci] {
+                    ColumnValues::Str(values) => assert_eq!(values[row].as_deref(), expected),
+                    ColumnValues::Int(values) => {
+                        assert_eq!(values[row], expected.and_then(|s| s.parse().ok()))
+                    }
+                    ColumnValues::Float(values) => {
+                        assert_eq!(values[row], expected.and_then(|s| s.parse().ok()))
+                    }
+                }
+            }
+        }
+        let empty = decode_batch_ids(&[], None, &metas);
+        assert!(empty.model_year.is_empty());
+        assert_eq!(empty.columns.len(), metas.len());
+        assert!(empty.columns.iter().all(ColumnValues::is_empty));
     }
 
     #[test]

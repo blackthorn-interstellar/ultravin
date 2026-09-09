@@ -232,10 +232,16 @@ fn opt_i64(v: i64) -> Option<i64> {
 /// existing owned `String` straight through; a borrowed literal still pays one
 /// (rare, short) copy via `into_owned`.
 fn scrub(v: std::borrow::Cow<'_, str>) -> String {
+    scrub_value(v).into_owned()
+}
+
+/// Column builders can copy clean borrowed text directly into their final
+/// buffers; only values containing control characters need an intermediate.
+fn scrub_value(v: std::borrow::Cow<'_, str>) -> std::borrow::Cow<'_, str> {
     if v.bytes().any(|b| matches!(b, b'\t' | b'\r' | b'\n')) {
-        v.replace(['\t', '\r', '\n'], " ")
+        std::borrow::Cow::Owned(v.replace(['\t', '\r', '\n'], " "))
     } else {
-        v.into_owned()
+        v
     }
 }
 
@@ -967,8 +973,28 @@ fn cmp_year_nulls_last(a: Option<i32>, b: Option<i32>) -> std::cmp::Ordering {
 /// Project the surviving items into output elements (non-empty Decode, public),
 /// ordered by the GroupName CASE rank then element id.
 fn project<'a>(db: &'a Db, items: Vec<decode::DecodingItem<'a>>) -> Vec<DecodedElement<'a>> {
-    let mut elements: Vec<DecodedElement> = Vec::with_capacity(items.len());
-    for it in items {
+    // Sort small keys before constructing the large output records. The original
+    // item index breaks ties, preserving repeated notes in insertion order.
+    let mut order: Vec<_> = items
+        .iter()
+        .enumerate()
+        .filter_map(|(index, it)| {
+            let e = db.element_by_id(it.element_id)?;
+            public_decode(db, e)?;
+            Some((
+                tables::group_rank(db.s(e.groupname.to_native())),
+                it.element_id,
+                index,
+            ))
+        })
+        .collect();
+    order.sort_unstable();
+    let mut items: Vec<_> = items.into_iter().map(Some).collect();
+    let mut elements: Vec<DecodedElement> = Vec::with_capacity(order.len());
+    for (_, _, index) in order {
+        let it = items[index]
+            .take()
+            .expect("each projected item appears once");
         let Some(e) = db.element_by_id(it.element_id) else {
             continue;
         };
@@ -993,12 +1019,6 @@ fn project<'a>(db: &'a Db, items: Vec<decode::DecodingItem<'a>>) -> Vec<DecodedE
             to_be_qced: it.to_be_qced,
         });
     }
-    // GroupName CASE rank, then element id (the proc leaves intra-group order to
-    // the scan; element id is the deterministic, stable secondary key). A cached
-    // key keeps `group_rank` to one call per element and sorts in place — no tuple
-    // Vec and no second pass to strip the rank. `sort_by_cached_key` is stable, so
-    // the few duplicate exempt elements keep insertion order, exactly as before.
-    elements.sort_by_cached_key(|e| (tables::group_rank(e.group_name), e.element_id));
     elements
 }
 

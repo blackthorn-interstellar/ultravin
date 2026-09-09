@@ -12,14 +12,14 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use arrow_array::{
-    cast::AsArray, Array, ArrayRef, Float64Array, Int32Array, Int64Array, RecordBatch, StringArray,
-};
+use arrow_array::builder::{ArrayBuilder, Float64Builder, Int64Builder, StringBuilder};
+use arrow_array::{cast::AsArray, new_empty_array, Array, ArrayRef, Int32Array, RecordBatch};
 use arrow_cast::cast;
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
+use arrow_select::concat::concat;
 
 use crate::db::Db;
-use crate::ids::{decode_batch_ids, resolve_columns, ColumnSpec, ColumnValues, IdMeta, IdsDType};
+use crate::ids::{decode_chunks, resolve_columns, ColumnSpec, ColumnWriter, IdMeta, IdsDType};
 
 /// `Io` covers a batch that will not cast or assemble; `Config` is a caller
 /// mistake (missing/ambiguous columns, bad column requests) worth a
@@ -229,14 +229,8 @@ impl ArrowDecoder {
         let vin_arr = cast(batch.column(self.vin_idx), &DataType::Utf8)
             .map_err(|e| ArrowError::Io(format!("casting VIN column: {e}")))?;
         let vin = vin_arr.as_string::<i32>();
-        let vins: Vec<String> = (0..vin.len())
-            .map(|i| {
-                if vin.is_null(i) {
-                    String::new()
-                } else {
-                    vin.value(i).to_string()
-                }
-            })
+        let vins: Vec<&str> = (0..vin.len())
+            .map(|i| if vin.is_null(i) { "" } else { vin.value(i) })
             .collect();
 
         // The caller-year column is cast once and reused: the kernel reads it and
@@ -255,22 +249,100 @@ impl ArrowDecoder {
                 .collect()
         });
 
-        let out = decode_batch_ids(&vins, years.as_deref(), &self.metas);
+        let (model_year, decoded) = decode_arrays(&vins, years.as_deref(), &self.metas)?;
 
         let mut cols: Vec<ArrayRef> = Vec::with_capacity(self.metas.len() + 3);
         cols.push(vin_arr);
         cols.extend(year_arr);
-        cols.push(Arc::new(Int32Array::from(out.model_year)));
-        for col in out.columns {
-            cols.push(match col {
-                ColumnValues::Str(v) => Arc::new(StringArray::from(v)) as ArrayRef,
-                ColumnValues::Int(v) => Arc::new(Int64Array::from(v)),
-                ColumnValues::Float(v) => Arc::new(Float64Array::from(v)),
-            });
-        }
+        cols.push(Arc::new(Int32Array::from(model_year)));
+        cols.extend(decoded);
         RecordBatch::try_new(self.out_schema.clone(), cols)
             .map_err(|e| ArrowError::Io(format!("assembling output batch: {e}")))
     }
+}
+
+/// Arrow storage is the final owner of the text. Borrowed lookup values go
+/// directly into its byte buffer rather than through one String per cell.
+enum ArrowColumn {
+    Str(StringBuilder),
+    Int(Int64Builder),
+    Float(Float64Builder),
+}
+
+impl ArrowColumn {
+    fn new(dtype: IdsDType, rows: usize) -> Self {
+        match dtype {
+            IdsDType::Str => Self::Str(StringBuilder::with_capacity(rows, 0)),
+            IdsDType::Int => Self::Int(Int64Builder::with_capacity(rows)),
+            IdsDType::Float => Self::Float(Float64Builder::with_capacity(rows)),
+        }
+    }
+
+    fn finish(&mut self) -> ArrayRef {
+        match self {
+            Self::Str(v) => Arc::new(v.finish()),
+            Self::Int(v) => Arc::new(v.finish()),
+            Self::Float(v) => Arc::new(v.finish()),
+        }
+    }
+}
+
+impl ColumnWriter for ArrowColumn {
+    fn push_value(&mut self, row: usize, value: std::borrow::Cow<'_, str>) {
+        match self {
+            Self::Str(v) => {
+                v.append_nulls(row - v.len());
+                v.append_value(value.as_ref());
+            }
+            Self::Int(v) => {
+                v.append_nulls(row - v.len());
+                v.append_option(value.parse::<i64>().ok());
+            }
+            Self::Float(v) => {
+                v.append_nulls(row - v.len());
+                v.append_option(value.parse::<f64>().ok());
+            }
+        }
+    }
+
+    fn finish_rows(&mut self, rows: usize) {
+        match self {
+            Self::Str(v) => v.append_nulls(rows - v.len()),
+            Self::Int(v) => v.append_nulls(rows - v.len()),
+            Self::Float(v) => v.append_nulls(rows - v.len()),
+        }
+    }
+}
+
+fn decode_arrays(
+    vins: &[&str],
+    years: Option<&[Option<i32>]>,
+    metas: &[IdMeta],
+) -> Result<(Vec<Option<i32>>, Vec<ArrayRef>), ArrowError> {
+    let mut chunks = decode_chunks(vins, years, metas, ArrowColumn::new);
+    let model_year = chunks
+        .iter_mut()
+        .flat_map(|c| std::mem::take(&mut c.model_year))
+        .collect();
+    let columns = metas
+        .iter()
+        .enumerate()
+        .map(|(ci, meta)| {
+            let parts: Vec<_> = chunks.iter_mut().map(|c| c.columns[ci].finish()).collect();
+            match parts.len() {
+                0 => Ok(new_empty_array(&match meta.dtype {
+                    IdsDType::Str => DataType::Utf8,
+                    IdsDType::Int => DataType::Int64,
+                    IdsDType::Float => DataType::Float64,
+                })),
+                1 => Ok(parts.into_iter().next().unwrap()),
+                _ => concat(&parts.iter().map(|a| a.as_ref()).collect::<Vec<_>>()).map_err(|e| {
+                    ArrowError::Io(format!("assembling decoded column {}: {e}", meta.name))
+                }),
+            }
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok((model_year, columns))
 }
 
 /// Whole numbers, including the dictionary encoding an integer column can
@@ -492,6 +564,7 @@ fn build_out_schema(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use arrow_array::{Float64Array, StringArray};
 
     const MAKE: i32 = 26; // lookup  -> Utf8
     const CYLINDERS: i32 = 9; // int     -> Int64

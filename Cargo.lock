@@ -1532,6 +1532,7 @@ dependencies = [
  "arrow-array",
  "arrow-cast",
  "arrow-schema",
+ "arrow-select",
  "blake3",
  "criterion",
  "memmap2",
