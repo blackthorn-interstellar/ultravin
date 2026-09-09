@@ -1,0 +1,195 @@
+{
+  "date": "2026-09-09",
+  "baseline_commit": "50261f13d230cd0b4af6485edebd0c8f4b0e1413",
+  "candidate_commit": "ddc6ee382814e3da9bfa97ddf33766a35c2f00d2",
+  "candidate_worktree_note": "candidate binary also carries the uncommitted clippy fix in crates/ultravin/src/hash.rs (chunks_exact -> as_chunks); it is a lint-only rewrite of the FxHasher word loop with identical semantics",
+  "host": "Apple M1 Max, 10 physical cores, AC power",
+  "platform": "macOS-26.6.1-arm64-arm-64bit-Mach-O",
+  "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: aarch64-apple-darwin\nrelease: 1.98.1\nLLVM version: 22.1.8",
+  "profile": {
+    "opt_level": 3,
+    "lto": "fat",
+    "codegen_units": 1,
+    "debug": false
+  },
+  "allocator": "mimalloc",
+  "corpus": "scripts/bench/corpus.txt",
+  "corpus_size": 5000,
+  "corpus_sha256": "b45ad4472c202ee176f86e8bc3c39609c76b6258df963ea04e08439aa3a1eb09",
+  "artifact_sha256": "2d555d4db3fde3867f41e415ec6e848285a286b2fe5fb45f0bdcb88245bd7787",
+  "cargo_lock_sha256": "1339f46ace2921b69e29686f13b48471582658d4a1429d42d8b2a0092e98b16b",
+  "harness_sha256": "0029106fc65478979f7fd8a0cf610339e3513cacdedc14859ddaa37276caa4c1",
+  "baseline_binary_sha256": "9b5f2fde80ffb5b28581492f03fe07f2a5baad853dedafc3c463cde1b6e9f8f5",
+  "candidate_binary_sha256": "b15dadc92a38ad7fa4be3510d7e629333b2dfb4c890ff7d96f6071b57a7667e4",
+  "rayon_threads": 4,
+  "seconds_per_window": 60,
+  "rounds": 3,
+  "prior_readme": {
+    "commit": "50261f13d230cd0b4af6485edebd0c8f4b0e1413",
+    "single": 45376,
+    "batch_four_cores": 130381
+  },
+  "fingerprint_parity": {
+    "cases": 1862306,
+    "source": "target/answerkey/answerkey-2026_08.jsonl",
+    "identical": true
+  },
+  "methodology": "Identical harness, artifact, lockfile, allocator and release settings. Warm entire corpus before each timed window; alternate executable order; retain every sample. Process CPU includes startup, warmup and teardown.",
+  "load_after": "10:13:02  up 29 days  8:49,  49 users,  load average: 4.83, 5.72, 5.24",
+  "power_after": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+  "load_before": "not captured for this run",
+  "measurements": [
+    {
+      "build": "baseline",
+      "mode": "single",
+      "trial": 1,
+      "timed_vins": 2775000,
+      "seconds": 60.1,
+      "vins_per_second": 46192,
+      "process_cpu_seconds": 60.731092999999994,
+      "process_cpu_us_per_vin": 21.845716906474816
+    },
+    {
+      "build": "candidate",
+      "mode": "single",
+      "trial": 1,
+      "timed_vins": 4595000,
+      "seconds": 60.0,
+      "vins_per_second": 76581,
+      "process_cpu_seconds": 60.522898000000005,
+      "process_cpu_us_per_vin": 13.157151739130436
+    },
+    {
+      "build": "candidate",
+      "mode": "single",
+      "trial": 2,
+      "timed_vins": 4630000,
+      "seconds": 60.1,
+      "vins_per_second": 77093,
+      "process_cpu_seconds": 60.536721999999976,
+      "process_cpu_us_per_vin": 13.060781445523189
+    },
+    {
+      "build": "baseline",
+      "mode": "single",
+      "trial": 2,
+      "timed_vins": 2760000,
+      "seconds": 60.0,
+      "vins_per_second": 45990,
+      "process_cpu_seconds": 60.58268299999999,
+      "process_cpu_us_per_vin": 21.91055443037974
+    },
+    {
+      "build": "baseline",
+      "mode": "single",
+      "trial": 3,
+      "timed_vins": 2710000,
+      "seconds": 60.1,
+      "vins_per_second": 45120,
+      "process_cpu_seconds": 60.604889000000036,
+      "process_cpu_us_per_vin": 22.32224272559854
+    },
+    {
+      "build": "candidate",
+      "mode": "single",
+      "trial": 3,
+      "timed_vins": 4555000,
+      "seconds": 60.0,
+      "vins_per_second": 75860,
+      "process_cpu_seconds": 60.53533,
+      "process_cpu_us_per_vin": 13.275291666666666
+    },
+    {
+      "build": "baseline",
+      "mode": "batch",
+      "trial": 1,
+      "timed_vins": 7740000,
+      "seconds": 60.0,
+      "vins_per_second": 128998,
+      "process_cpu_seconds": 191.11274899999995,
+      "process_cpu_us_per_vin": 24.675629309231756
+    },
+    {
+      "build": "candidate",
+      "mode": "batch",
+      "trial": 1,
+      "timed_vins": 10870000,
+      "seconds": 60.0,
+      "vins_per_second": 181135,
+      "process_cpu_seconds": 175.5503510000001,
+      "process_cpu_us_per_vin": 16.142561011494262
+    },
+    {
+      "build": "candidate",
+      "mode": "batch",
+      "trial": 2,
+      "timed_vins": 10860000,
+      "seconds": 60.0,
+      "vins_per_second": 180951,
+      "process_cpu_seconds": 174.871049,
+      "process_cpu_us_per_vin": 16.09489636447308
+    },
+    {
+      "build": "baseline",
+      "mode": "batch",
+      "trial": 2,
+      "timed_vins": 7715000,
+      "seconds": 60.0,
+      "vins_per_second": 128573,
+      "process_cpu_seconds": 191.2744939999999,
+      "process_cpu_us_per_vin": 24.776488860103612
+    },
+    {
+      "build": "baseline",
+      "mode": "batch",
+      "trial": 3,
+      "timed_vins": 7835000,
+      "seconds": 60.0,
+      "vins_per_second": 130517,
+      "process_cpu_seconds": 192.03921499999996,
+      "process_cpu_us_per_vin": 24.49479783163265
+    },
+    {
+      "build": "candidate",
+      "mode": "batch",
+      "trial": 3,
+      "timed_vins": 10975000,
+      "seconds": 60.0,
+      "vins_per_second": 182849,
+      "process_cpu_seconds": 175.57717700000012,
+      "process_cpu_us_per_vin": 15.990635428051013
+    }
+  ],
+  "summary": {
+    "single": {
+      "baseline": {
+        "median_vins_per_second": 45990,
+        "min_vins_per_second": 45120,
+        "max_vins_per_second": 46192,
+        "median_process_cpu_us_per_vin": 21.91055443037974
+      },
+      "candidate": {
+        "median_vins_per_second": 76581,
+        "min_vins_per_second": 75860,
+        "max_vins_per_second": 77093,
+        "median_process_cpu_us_per_vin": 13.157151739130436
+      },
+      "speedup": 1.665
+    },
+    "batch": {
+      "baseline": {
+        "median_vins_per_second": 128998,
+        "min_vins_per_second": 128573,
+        "max_vins_per_second": 130517,
+        "median_process_cpu_us_per_vin": 24.675629309231756
+      },
+      "candidate": {
+        "median_vins_per_second": 181135,
+        "min_vins_per_second": 180951,
+        "max_vins_per_second": 182849,
+        "median_process_cpu_us_per_vin": 16.09489636447308
+      },
+      "speedup": 1.404
+    }
+  }
+}

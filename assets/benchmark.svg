@@ -10,11 +10,11 @@
 <line class="grid" x1="631.2" y1="14" x2="631.2" y2="226"/>
 <line class="grid" x1="690.0" y1="14" x2="690.0" y2="226"/>
 <text class="label strong" x="210" y="35.0" text-anchor="end">ultravin — batched (4 cores)</text>
-<rect class="bar-hi" x="220" y="22.0" width="383.0" height="18" rx="2"/>
-<text class="value strong" x="609.0" y="35.0">130,381</text>
+<rect class="bar-hi" x="220" y="22.0" width="425.7" height="18" rx="2"/>
+<text class="value strong" x="651.7" y="35.0">181,135</text>
 <text class="label strong" x="210" y="65.0" text-anchor="end">ultravin — 1 core</text>
-<rect class="bar-hi" x="220" y="52.0" width="133.3" height="18" rx="2"/>
-<text class="value strong" x="359.3" y="65.0">45,376</text>
+<rect class="bar-hi" x="220" y="52.0" width="180.0" height="18" rx="2"/>
+<text class="value strong" x="406.0" y="65.0">76,581</text>
 <text class="label" x="210" y="95.0" text-anchor="end">corgi v3</text>
 <rect class="bar" x="220" y="82.0" width="2.0" height="18" rx="2"/>
 <text class="value" x="226.2" y="95.0">83</text>
@@ -26,19 +26,19 @@
 <text class="value" x="226.1" y="155.0">22.5</text>
 <text class="label" x="210" y="185.0" text-anchor="end">NHTSA Postgres</text>
 <rect class="bar" x="220" y="172.0" width="2.0" height="18" rx="2"/>
-<text class="value" x="226.1" y="185.0">19.5</text>
+<text class="value" x="226.0" y="185.0">19.5</text>
 <text class="label" x="210" y="215.0" text-anchor="end">NHTSA vPIC API (rate limit)</text>
 <rect class="bar" x="220" y="202.0" width="2.0" height="18" rx="2"/>
 <text class="value" x="226.0" y="215.0">10</text>
 <line class="grid" x1="220" y1="226" x2="690" y2="226"/>
 <text class="axis" x="220.0" y="242" text-anchor="middle">0</text>
-<text class="axis" x="278.8" y="242" text-anchor="middle">20k</text>
-<text class="axis" x="337.5" y="242" text-anchor="middle">40k</text>
-<text class="axis" x="396.2" y="242" text-anchor="middle">60k</text>
-<text class="axis" x="455.0" y="242" text-anchor="middle">80k</text>
-<text class="axis" x="513.8" y="242" text-anchor="middle">100k</text>
-<text class="axis" x="572.5" y="242" text-anchor="middle">120k</text>
-<text class="axis" x="631.2" y="242" text-anchor="middle">140k</text>
-<text class="axis" x="690.0" y="242" text-anchor="middle">160k</text>
+<text class="axis" x="278.8" y="242" text-anchor="middle">25k</text>
+<text class="axis" x="337.5" y="242" text-anchor="middle">50k</text>
+<text class="axis" x="396.2" y="242" text-anchor="middle">75k</text>
+<text class="axis" x="455.0" y="242" text-anchor="middle">100k</text>
+<text class="axis" x="513.8" y="242" text-anchor="middle">125k</text>
+<text class="axis" x="572.5" y="242" text-anchor="middle">150k</text>
+<text class="axis" x="631.2" y="242" text-anchor="middle">175k</text>
+<text class="axis" x="690.0" y="242" text-anchor="middle">200k</text>
 <text class="axis" x="455.0" y="258" text-anchor="middle">VINs decoded per second — higher is better</text>
 </svg>

@@ -5,7 +5,7 @@
 </p>
 
 Pure-Rust NHTSA vPIC VIN decoder: byte-for-byte parity with the official
-`spVinDecode` stored procedure, ~45,400 VIN/s on one core, fully offline at runtime.
+`spVinDecode` stored procedure, ~76,600 VIN/s on one core, fully offline at runtime.
 Same engine as the [`ultravin`](https://pypi.org/project/ultravin/) Python
 package; the repo, benchmarks and parity evidence live at
 [github.com/blackthorn-interstellar/ultravin](https://github.com/blackthorn-interstellar/ultravin).
