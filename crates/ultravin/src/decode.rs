@@ -304,7 +304,6 @@ fn append_formula_patterns<'a>(
         .collect();
     let fk = formula_keys.as_bytes();
     let mut seen_vs: IntSet<i32> = IntSet::default();
-    let mut new_items: Vec<DecodingItem> = Vec::new();
     for wvs in db.wmi_vinschema_for(wmiid) {
         if let Some(my) = model_year {
             if my < wvs.yearfrom.to_native() || my > wvs.yearto_or(2999) {
@@ -344,7 +343,7 @@ fn append_formula_patterns<'a>(
             if !like_match(fk, keys.as_bytes()) {
                 continue;
             }
-            new_items.push(DecodingItem {
+            items.push(DecodingItem {
                 created_on: p.createdon_key.to_native(),
                 pattern_id: p.id.to_native(),
                 keys: Cow::Borrowed(keys),
@@ -359,7 +358,6 @@ fn append_formula_patterns<'a>(
             });
         }
     }
-    items.extend(new_items);
 }
 
 /// `SUBSTRING(var_keys, STRPOS(keys,'#'), last_hash - first_hash + 1)` — the
@@ -812,7 +810,6 @@ fn append_default_values<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
         return;
     };
     let present: IntSet<i32> = items.iter().map(|it| it.element_id).collect();
-    let mut to_add: Vec<DecodingItem> = Vec::new();
     for dv in db.defaultvalues_for(veh) {
         let element_id = dv.elementid.to_native();
         if !dv.defaultvalue_present || present.contains(&element_id) {
@@ -828,7 +825,7 @@ fn append_default_values<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
         } else {
             Cow::Borrowed("XXX")
         };
-        to_add.push(DecodingItem {
+        items.push(DecodingItem {
             created_on: dv.createdon_key.to_native(),
             pattern_id: NULL_I32,
             keys: Cow::Borrowed(""),
@@ -842,7 +839,6 @@ fn append_default_values<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
             to_be_qced: false,
         });
     }
-    items.extend(to_add);
 }
 
 #[cfg(test)]

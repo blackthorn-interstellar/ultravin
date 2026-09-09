@@ -751,14 +751,13 @@ fn run_pass<'a>(
 /// Pick the best pass by the `x` scoring table: ErrorValue desc, ElementsWeight
 /// desc, Patterns desc, ModelYear desc (NULLs last), then lowest pass id.
 fn best_pass(passes: &[Pass], db: &Db, caller_year: Option<i32>) -> i32 {
-    // Score each pass once (max_by would otherwise recompute score — and its
-    // per-call IntSet — 2·(n−1) times).
-    let scored: Vec<(i32, Score)> = passes
+    if let [pass] = passes {
+        return pass.id;
+    }
+    // Score each candidate once, without allocating a collection of scores.
+    passes
         .iter()
         .map(|p| (p.id, score(p, db, caller_year)))
-        .collect();
-    scored
-        .iter()
         .max_by(|(ida, sa), (idb, sb)| {
             // a is "greater" (preferred) when its tuple ranks higher.
             sa.0.cmp(&sb.0)
@@ -767,7 +766,7 @@ fn best_pass(passes: &[Pass], db: &Db, caller_year: Option<i32>) -> i32 {
                 .then(cmp_year_nulls_last(sa.3, sb.3))
                 .then(idb.cmp(ida)) // lower id wins ties
         })
-        .map(|(id, _)| *id)
+        .map(|(id, _)| id)
         .unwrap_or(0)
 }
 

@@ -536,7 +536,12 @@ mod tests {
 }
 
 pub(crate) fn trunc500(s: &str) -> String {
-    s.chars().take(500).collect()
+    let end = if s.len() <= 500 {
+        s.len()
+    } else {
+        s.char_indices().nth(500).map_or(s.len(), |(i, _)| i)
+    };
+    s[..end].to_string()
 }
 
 /// ASCII case-insensitive substring test without allocating — the proc's
@@ -775,6 +780,17 @@ pub fn compute_errors(
 #[cfg(test)]
 mod malformed_class_tests {
     use super::*;
+
+    #[test]
+    fn truncation_preserves_character_boundaries() {
+        for pattern in ["a", "é", "😀", "aé😀中"] {
+            for len in [0, 1, 124, 125, 126, 249, 250, 251, 499, 500, 501, 999, 1000] {
+                let value: String = pattern.chars().cycle().take(len).collect();
+                let expected: String = value.chars().take(500).collect();
+                assert_eq!(trunc500(&value), expected, "{pattern:?}, {len}");
+            }
+        }
+    }
 
     /// docs/KNOWN_DEVIATIONS.md #1. `pattern` rows 1827685/1827686 (vinschema
     /// 24522, WMI 7T0, MY 2023-2025) carry the key `*****|*[1-A-JT]`. Postgres
