@@ -326,10 +326,11 @@ fn valid_charset(db: &Db, wmi: &str, model_year: Option<i32>) -> Charset {
 /// `substring(vin,1,pos-1) || rep || substring(vin, pos+1, 17-pos)`.
 fn build_replace(vb: &[char], pos: i32, rep: &str) -> String {
     let p = pos as usize;
-    let left: String = vb.iter().take(p.saturating_sub(1)).collect();
-    let take = (17 - pos).max(0) as usize;
-    let right: String = vb.iter().skip(p).take(take).collect();
-    format!("{left}{rep}{right}")
+    let mut out = String::with_capacity(17 + rep.len());
+    out.extend(vb.iter().take(p.saturating_sub(1)));
+    out.push_str(rep);
+    out.extend(vb.iter().skip(p).take((17 - pos).max(0) as usize));
+    out
 }
 
 /// Output of the `spvindecode_errorcode` helper.
@@ -368,7 +369,7 @@ fn errorcode(
     let mut replacements = String::new();
     let mut cnt_errors = 0;
     let mut last_error_pos = 0i32;
-    let mut last_replacements = String::new();
+    let mut last_replacements = "";
     let mut i = 3i32;
     while i < n && i < vlen {
         i += 1;
@@ -387,7 +388,7 @@ fn errorcode(
                         std::fmt::Write::write_fmt(&mut replacements, format_args!("({i}:{x})"));
                     cnt_errors += 1;
                     last_error_pos = i;
-                    last_replacements = x.to_string();
+                    last_replacements = x;
                     corrected.push('!');
                 }
             }
@@ -395,27 +396,31 @@ fn errorcode(
         }
     }
 
-    // E3: bracket the WMI back on, then tail-fill from the raw VIN.
-    let w: Vec<char> = var_wmi.chars().collect();
-    let mut corrected = if w.len() == 3 {
-        format!("{var_wmi}{corrected}")
-    } else {
-        let left3: String = w.iter().take(3).collect();
-        let right3: String = w.iter().skip(w.len().saturating_sub(3)).collect();
-        format!("{left3}{corrected}{right3}")
+    // Only ambiguous or multiple errors use this suggested VIN. Clean inputs
+    // and single-candidate corrections need no WMI/tail reconstruction.
+    let compose_corrected = || {
+        let mut out = String::with_capacity(17);
+        let wmi_len = var_wmi.chars().count();
+        if wmi_len == 3 {
+            out.push_str(var_wmi);
+            out.push_str(&corrected);
+        } else {
+            out.extend(var_wmi.chars().take(3));
+            out.push_str(&corrected);
+            out.extend(var_wmi.chars().skip(wmi_len.saturating_sub(3)));
+        }
+        let len = out.chars().count();
+        if (vlen as usize) > len {
+            out.extend(vb.iter().skip(len).take(3));
+        }
+        out
     };
-    let clen = corrected.chars().count();
-    if (vlen as usize) > clen {
-        let tail: String = vb.iter().skip(clen).take(3).collect();
-        corrected.push_str(&tail);
-    }
 
     if cnt_errors == 1 {
         if last_replacements.chars().count() == 1 {
             // E4(a): single candidate -> auto-correct (code 2).
-            corrected = build_replace(&vb, last_error_pos, &last_replacements);
+            corrected_vin = build_replace(&vb, last_error_pos, last_replacements);
             codes.push(2);
-            corrected_vin = corrected.clone();
             error_bytes = replacements.clone();
         } else {
             // E4(b): check digit disambiguates among the candidates.
@@ -424,14 +429,11 @@ fn errorcode(
             let mut corrected1 = String::new();
             for var_c in last_replacements.chars() {
                 let tmp = build_replace(&vb, last_error_pos, &var_c.to_string());
-                let tb: Vec<char> = tmp.chars().collect();
-                if tb.len() >= 9 {
-                    if let Some(cd) = check_digit_v1(&tmp) {
-                        if tb[8] == cd {
-                            good += 1;
-                            new_repl.push(var_c);
-                            corrected1 = tmp.clone();
-                        }
+                if let Some(cd) = check_digit_v1(&tmp) {
+                    if tmp.chars().nth(8) == Some(cd) {
+                        good += 1;
+                        new_repl.push(var_c);
+                        corrected1 = tmp;
                     }
                 }
             }
@@ -441,14 +443,14 @@ fn errorcode(
                 error_bytes = format!("({last_error_pos}:{new_repl})");
             } else {
                 codes.push(4);
-                corrected_vin = corrected.clone();
+                corrected_vin = compose_corrected();
                 error_bytes = format!("({last_error_pos}:{last_replacements})");
             }
         }
     }
     if cnt_errors > 1 {
         codes.push(5);
-        corrected_vin = corrected.clone();
+        corrected_vin = compose_corrected();
         error_bytes = replacements.clone();
     }
 
@@ -558,6 +560,28 @@ fn contains_ci(haystack: &str, needle: &[u8]) -> bool {
         .any(|w| w.iter().zip(needle).all(|(a, b)| a.eq_ignore_ascii_case(b)))
 }
 
+/// Codes 0..14 and 400 are the entire error domain produced below.
+/// One word preserves uniqueness and numeric order without a tree allocation.
+#[derive(Default)]
+struct ErrorCodes(u16);
+
+impl ErrorCodes {
+    fn insert(&mut self, code: i32) {
+        debug_assert!((0..=14).contains(&code) || code == 400);
+        self.0 |= 1 << if code == 400 { 15 } else { code };
+    }
+
+    fn contains(&self, code: &i32) -> bool {
+        self.0 & (1 << if *code == 400 { 15 } else { *code }) != 0
+    }
+
+    fn iter(&self) -> impl Iterator<Item = i32> + '_ {
+        (0..16)
+            .filter(|bit| self.0 & (1 << bit) != 0)
+            .map(|bit| if bit == 15 { 400 } else { bit })
+    }
+}
+
 /// Compute the full error state for a decode pass (the `spvindecode_core` error
 /// assembly C1-C11). `var_wmi`/`model_year`/`error12`/`conclusive` are the
 /// pass's inputs.
@@ -571,7 +595,7 @@ pub fn compute_errors(
     conclusive: bool,
 ) -> ErrorState {
     let items = &core.items;
-    let mut raw: BTreeSet<i32> = BTreeSet::new();
+    let mut raw = ErrorCodes::default();
     let mut corrected_vin = String::new();
     let mut error_bytes = String::new();
     let mut unused_positions: Option<String> = None;
@@ -583,7 +607,7 @@ pub fn compute_errors(
     // regular Pattern matches.
     if !core.wmi_found {
         raw.insert(7);
-    } else if items.iter().filter(|it| it.pattern_id != NULL_I32).count() == 0 {
+    } else if !items.iter().any(|it| it.pattern_id != NULL_I32) {
         raw.insert(8);
     } else {
         let matched_keys: Vec<&str> = items
@@ -625,17 +649,17 @@ pub fn compute_errors(
     let (start_pos, is_car_mpv_lt) = start_context(vin, db.wmi_any(var_wmi));
 
     // C5: invalid-char scan; stamps `!` into the corrected VIN AFTER the helper.
-    let vb: Vec<char> = vin.chars().collect();
+    let vb = vin.as_bytes();
     let vlen = vb.len();
     let mut invalid_chars = String::new();
-    let mut cv: Vec<char> = corrected_vin.chars().collect();
+    let mut stamped: Option<Vec<char>> = None;
     let mut j = 0usize;
     while j < vlen {
         j += 1;
         if j == 9 && (is_off_road || is_vin_exception) {
             continue;
         }
-        let c = vb[j - 1] as u8;
+        let c = vb[j - 1];
         // Mirrors the four-way OR in spvindecode_core verbatim (positions vs
         // char-class). Kept un-factored so it reads against the SQL.
         #[allow(clippy::nonminimal_bool)]
@@ -644,12 +668,16 @@ pub fn compute_errors(
             || (j == 9 && !class_cd(c))
             || (j == 10 && !class_my(c));
         if bad {
-            if cv.is_empty() {
-                cv = vb.clone();
-            }
+            let cv = stamped.get_or_insert_with(|| {
+                if corrected_vin.is_empty() {
+                    vin.chars().collect()
+                } else {
+                    corrected_vin.chars().collect()
+                }
+            });
             let _ = std::fmt::Write::write_fmt(
                 &mut invalid_chars,
-                format_args!(", {}:{}", j, vb[j - 1]),
+                format_args!(", {}:{}", j, c as char),
             );
             // CorrectedVIN = left(cv, j-1) || '!' || substring(cv, j+1, 100).
             // For a monotonically increasing `j` that prefix+'!'+suffix rebuild is
@@ -666,7 +694,9 @@ pub fn compute_errors(
             }
         }
     }
-    corrected_vin = cv.iter().collect();
+    if let Some(cv) = stamped {
+        corrected_vin = cv.into_iter().collect();
+    }
 
     // C6: invalid chars (400), caller-year mismatch (12).
     if !invalid_chars.is_empty() {
@@ -687,7 +717,7 @@ pub fn compute_errors(
         // does the same — spvindecode compares `cd <> calcCD`, '?' <> '?' is false, so
         // it emits no code 1. Rejecting the '?' sentinel would diverge from the oracle
         // (the spec) and force an answer-key rebuild. Frozen in the parity corpus.
-        check_digit_valid = vb[8] == calc;
+        check_digit_valid = vb[8] as char == calc;
         if !check_digit_valid && !is_vin_exception {
             raw.insert(1);
         }
@@ -698,7 +728,7 @@ pub fn compute_errors(
     // means no codes outside {9,10,12}, or exactly {14} among them.
     let mut non_special = 0usize;
     let mut has_14 = false;
-    for &c in raw.iter() {
+    for c in raw.iter() {
         if matches!(c, 9 | 10 | 12) {
             continue;
         }
@@ -767,7 +797,7 @@ pub fn compute_errors(
     }
 
     ErrorState {
-        codes: raw.into_iter().collect(),
+        codes: raw.iter().collect(),
         corrected_vin,
         error_bytes,
         additional_info: info.unwrap_or_default(),
@@ -780,6 +810,53 @@ pub fn compute_errors(
 #[cfg(test)]
 mod malformed_class_tests {
     use super::*;
+
+    #[test]
+    fn compact_codes_keep_numeric_order_and_remove_duplicates() {
+        let mut actual = ErrorCodes::default();
+        let mut expected = BTreeSet::new();
+        for code in [400, 14, 0, 4, 5, 2, 400, 1, 12, 3, 11, 10, 9, 8, 7, 6] {
+            actual.insert(code);
+            expected.insert(code);
+            assert_eq!(
+                actual.iter().collect::<Vec<_>>(),
+                expected.iter().copied().collect::<Vec<_>>()
+            );
+            for probe in (0..=14).chain([400]) {
+                assert_eq!(actual.contains(&probe), expected.contains(&probe));
+            }
+        }
+    }
+
+    #[test]
+    fn replacement_keeps_character_slices_and_the_seventeen_position_limit() {
+        for vin in [
+            "",
+            "ABC",
+            "1HGCM82633A004352",
+            "é日本語abcdefghijklmnop",
+            "a very long input string",
+        ] {
+            let chars: Vec<_> = vin.chars().collect();
+            for pos in 1..=20 {
+                for replacement in ["", "X", "é日本", "ABC"] {
+                    let left: String = chars
+                        .iter()
+                        .take((pos as usize).saturating_sub(1))
+                        .collect();
+                    let right: String = chars
+                        .iter()
+                        .skip(pos as usize)
+                        .take((17i32 - pos).max(0) as usize)
+                        .collect();
+                    assert_eq!(
+                        build_replace(&chars, pos, replacement),
+                        format!("{left}{replacement}{right}")
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn truncation_preserves_character_boundaries() {
