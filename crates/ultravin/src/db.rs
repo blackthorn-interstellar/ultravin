@@ -56,6 +56,8 @@ impl Backing {
     }
 }
 
+type WmiRangeIndex = IntMap<u64, (usize, usize)>;
+
 /// The decode database: validated archived bytes plus a pointer to the root.
 ///
 /// The pointer references the heap/static buffer owned by `_backing`; that buffer
@@ -82,7 +84,7 @@ pub struct Db {
     model_from_conversion: OnceLock<bool>,
     /// Packed WMI bytes -> archive row range. Year selection, core passes and
     /// error correction all consult the same WMI; avoid repeating string searches.
-    wmi_index: OnceLock<IntMap<u64, (usize, usize)>>,
+    wmi_index: OnceLock<Box<[OnceLock<WmiRangeIndex>]>>,
     /// The spec join first selects by make and model; keep those candidates in
     /// archive order so decoding need not scan every model of a manufacturer's
     /// every schema. Vehicle type, year and QC checks still run on each pass.
@@ -260,11 +262,24 @@ impl Db {
     /// decision: a cached range must not freeze a future publication date.
     fn wmi_rows(&self, wmi: &str) -> &[ArchivedWmi] {
         let v = self.a().wmi.as_slice();
-        if let Some(key) = packed_wmi(wmi) {
-            let index = self.wmi_index.get_or_init(|| {
+        if let (Some(key), Some(bucket)) = (packed_wmi(wmi), wmi_prefix_bucket(wmi)) {
+            let buckets = self
+                .wmi_index
+                .get_or_init(|| (0..36 * 36).map(|_| OnceLock::new()).collect());
+            let index = buckets[bucket].get_or_init(|| {
+                // Only index this two-character prefix. A first decode needs a
+                // handful of nearby WMIs, not every manufacturer in the archive.
+                let prefix = &wmi.as_bytes()[..2];
+                let row_prefix = |row: &ArchivedWmi| {
+                    let bytes = self.s(row.wmi.to_native()).as_bytes();
+                    &bytes[..bytes.len().min(2)]
+                };
+                let start = v.partition_point(|row| row_prefix(row) < prefix);
+                let len = v[start..].partition_point(|row| row_prefix(row) == prefix);
                 let mut index: IntMap<u64, (usize, usize)> =
-                    IntMap::with_capacity_and_hasher(v.len(), Default::default());
-                for (i, row) in v.iter().enumerate() {
+                    IntMap::with_capacity_and_hasher(len, Default::default());
+                for (offset, row) in v[start..start + len].iter().enumerate() {
+                    let i = start + offset;
                     if let Some(key) = packed_wmi(self.s(row.wmi.to_native())) {
                         index.entry(key).or_insert((i, i + 1)).1 = i + 1;
                     }
@@ -273,8 +288,8 @@ impl Db {
             });
             return index.get(&key).map_or(&[], |&(start, end)| &v[start..end]);
         }
-        // Normal WMIs have three or six characters. Retain the ordinary lookup
-        // for longer strings supplied through the explicit-database API.
+        // Retain the ordinary lookup for short, nonstandard or long strings
+        // supplied through the explicit-database API.
         let lo = v.partition_point(|w| self.s(w.wmi.to_native()) < wmi);
         let len = v[lo..].partition_point(|w| self.s(w.wmi.to_native()) <= wmi);
         &v[lo..lo + len]
@@ -668,6 +683,18 @@ fn lookup_name(rows: &[crate::tables::ArchivedLookupRow], tag: u16, id: i32) -> 
         .map(|r| r.name.to_native())
 }
 
+/// Bounded buckets for the archive's ordinary uppercase alphanumeric prefixes.
+/// Other text uses the original string search, without allocating a cache entry.
+fn wmi_prefix_bucket(wmi: &str) -> Option<usize> {
+    let digit = |byte: u8| match byte {
+        b'0'..=b'9' => Some(usize::from(byte - b'0')),
+        b'A'..=b'Z' => Some(usize::from(byte - b'A') + 10),
+        _ => None,
+    };
+    let bytes = wmi.as_bytes();
+    Some(digit(*bytes.first()?)? * 36 + digit(*bytes.get(1)?)?)
+}
+
 /// Keep length in the last byte so embedded NULs and short strings cannot alias.
 fn packed_wmi(wmi: &str) -> Option<u64> {
     let bytes = wmi.as_bytes();
@@ -845,6 +872,24 @@ mod tests {
         let db = load(&data);
         assert!(db.may_have_pattern_rows("ABC", Some(2999), 100));
         assert!(!db.may_have_pattern_rows("ABC", Some(3000), 100));
+    }
+
+    #[test]
+    fn wmi_prefix_buckets_are_unique_and_bounded() {
+        let chars = b"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+        let mut seen = std::collections::HashSet::new();
+        for &a in chars {
+            for &b in chars {
+                let prefix = String::from_utf8(vec![a, b]).unwrap();
+                let bucket = wmi_prefix_bucket(&prefix).unwrap();
+                assert!(bucket < 36 * 36);
+                assert!(seen.insert(bucket));
+                assert_eq!(wmi_prefix_bucket(&(prefix + "9ABC")), Some(bucket));
+            }
+        }
+        for text in ["", "A", "aB", "Aé", "éA", "A\0"] {
+            assert_eq!(wmi_prefix_bucket(text), None);
+        }
     }
 
     #[test]
