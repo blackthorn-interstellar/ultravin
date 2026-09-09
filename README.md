@@ -271,6 +271,7 @@ reproduction: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 - [Vision](docs/VISION.md) — what this is, and what it deliberately is not
 - [Benchmarks](docs/BENCHMARKS.md) — the numbers, the methodology, how to reproduce them
+- [Performance improvements](PERFORMANCE_IMPROVEMENTS.md) — the optimization history, measured gains, tradeoffs, and rejected experiments
 - [Acceptance](docs/ACCEPTANCE.md) — the parity policy: what counts as passing, how a divergence is adjudicated
 - [Known deviations](docs/KNOWN_DEVIATIONS.md) — the vPIC defects ultravin does not reproduce, with evidence
 - [Corpora](docs/CORPUS.md) — `generate`, `cover_vins`, `sweep`: hitting every decode behaviour with the fewest VINs
