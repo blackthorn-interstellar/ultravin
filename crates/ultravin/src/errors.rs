@@ -253,7 +253,9 @@ fn key_chars(key: &str) -> KeyChars {
     expansion
 }
 
-type Charset = Rc<HashMap<i32, ValidChars>>;
+// The correction helper consults only VIN positions 4..14. Index those
+// directly; the public recomputation function still returns every position.
+type Charset = Rc<[ValidChars; 11]>;
 
 thread_local! {
     /// Per-thread memo of [`valid_charset`], keyed by wmi then `model_year`. The
@@ -305,35 +307,39 @@ pub fn recompute_valid_chars(db: &Db, wmi: &str, year: i32) -> BTreeMap<i32, BTr
 /// `WMIYearValidChars` cache and only calls the function on an empty cell, and
 /// the shipped cache is stale for ~2% of (wmi, year) cells — see
 /// `docs/KNOWN_DEVIATIONS.md` and the `--stale-cache-report` scan.
-fn valid_charset(db: &Db, wmi: &str, model_year: Option<i32>) -> Charset {
-    let Some(year) = model_year else {
-        return Rc::new(HashMap::new());
-    };
+fn valid_charset(db: &Db, wmi: &str, model_year: Option<i32>) -> Option<Charset> {
+    let year = model_year?;
     if let Some(hit) =
         CHARSET_CACHE.with(|c| c.borrow().get(wmi).and_then(|m| m.get(&year)).cloned())
     {
-        return hit;
+        return Some(hit);
     }
-    let mut map: HashMap<i32, ValidChars> = HashMap::new();
+    let mut map: [ValidChars; 11] = std::array::from_fn(|_| ValidChars::default());
+    let mut any = false;
     for key in &charset_keys(db, wmi, year) {
         for (kpos, c) in valid_chars_in_key(key) {
-            map.entry(kpos + 3).or_default().insert(c);
+            any = true;
+            if let Some(chars) = map.get_mut((kpos - 1) as usize) {
+                chars.insert(c);
+            }
         }
+    }
+    // Preserve cache eligibility for keys that constrain only later positions.
+    if !any {
+        return None;
     }
     let charset = Rc::new(map);
     // Only memoize WMIs that actually have schemas (a non-empty charset). Unknown
     // or garbage WMIs from adversarial input yield an empty map that is cheap to
     // recompute; caching them would let the (input-derived) WMI keyspace grow the
     // cache without bound. Caching is transparent, so this never changes output.
-    if !charset.is_empty() {
-        CHARSET_CACHE.with(|c| {
-            c.borrow_mut()
-                .entry(wmi.to_string())
-                .or_default()
-                .insert(year, charset.clone())
-        });
-    }
-    charset
+    CHARSET_CACHE.with(|c| {
+        c.borrow_mut()
+            .entry(wmi.to_string())
+            .or_default()
+            .insert(year, charset.clone())
+    });
+    Some(charset)
 }
 
 /// `substring(vin,1,pos-1) || rep || substring(vin, pos+1, 17-pos)`.
@@ -391,7 +397,10 @@ fn errorcode<'a>(
             corrected.push(var_c);
             continue;
         }
-        match charset.get(&i) {
+        match charset
+            .as_deref()
+            .and_then(|chars| chars.get((i - 4) as usize))
+        {
             Some(set) if !set.is_empty() => {
                 if set.contains(var_c) {
                     corrected.push(var_c);

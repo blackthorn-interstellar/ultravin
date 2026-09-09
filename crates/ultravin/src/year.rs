@@ -84,10 +84,7 @@ pub fn resolve_years(vin: &str, var_wmi: &str, db: &Db, current_year: i32) -> Ye
                     None
                 };
                 if let Some(a) = alt {
-                    if a != rmy
-                        && schema_count(var_wmi, db, rmy) == 0
-                        && schema_count(var_wmi, db, a) > 0
-                    {
+                    if a != rmy && !has_schema(var_wmi, db, rmy) && has_schema(var_wmi, db, a) {
                         rmy = a;
                     }
                 }
@@ -101,13 +98,12 @@ pub fn resolve_years(vin: &str, var_wmi: &str, db: &Db, current_year: i32) -> Ye
     }
 }
 
-/// Count of WMI schemas covering `year` for this VIN's WMI.
-fn schema_count(var_wmi: &str, db: &Db, year: i32) -> i32 {
+/// Whether a WMI schema covers `year` for this VIN's WMI.
+fn has_schema(var_wmi: &str, db: &Db, year: i32) -> bool {
     let Some(w) = db.wmi_any(var_wmi) else {
-        return 0;
+        return false;
     };
     db.wmi_vinschema_for(w.id.to_native())
         .iter()
-        .filter(|r| year >= r.yearfrom.to_native() && year <= r.yearto_or(2999))
-        .count() as i32
+        .any(|r| year >= r.yearfrom.to_native() && year <= r.yearto_or(2999))
 }
