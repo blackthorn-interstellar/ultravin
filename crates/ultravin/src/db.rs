@@ -77,6 +77,9 @@ pub struct Db {
     pattern_element_ok: OnceLock<Box<[bool]>>,
     /// One lazily compiled key index per schema, shared by all decoding threads.
     pattern_indexes: OnceLock<Box<[OnceLock<PatternIndex>]>>,
+    /// A conversion producing Model can enable vehicle-spec pattern rows even
+    /// when no regular/formula schema covers the candidate year.
+    model_from_conversion: OnceLock<bool>,
     /// Packed WMI bytes -> archive row range. Year selection, core passes and
     /// error correction all consult the same WMI; avoid repeating string searches.
     wmi_index: OnceLock<IntMap<u64, (usize, usize)>>,
@@ -110,6 +113,7 @@ impl Db {
             lookup_index: OnceLock::new(),
             pattern_element_ok: OnceLock::new(),
             pattern_indexes: OnceLock::new(),
+            model_from_conversion: OnceLock::new(),
             wmi_index: OnceLock::new(),
             spec_model_index: OnceLock::new(),
         })
@@ -134,6 +138,7 @@ impl Db {
             lookup_index: OnceLock::new(),
             pattern_element_ok: OnceLock::new(),
             pattern_indexes: OnceLock::new(),
+            model_from_conversion: OnceLock::new(),
             wmi_index: OnceLock::new(),
             spec_model_index: OnceLock::new(),
         }
@@ -279,6 +284,24 @@ impl Db {
     pub fn wmi_vinschema_for(&self, wmiid: i32) -> &[ArchivedWmiVinSchema] {
         slice_eq(self.a().wmi_vinschema.as_slice(), wmiid, |r| {
             r.wmiid.to_native()
+        })
+    }
+
+    /// Conservative preflight for a pass that needs a PatternId-bearing row to
+    /// compete. Any year-eligible link is enough, including orphan/QC schemas:
+    /// formula matching intentionally permits those. With no links, only a
+    /// conversion to Model could enable the vehicle-spec source later in core.
+    pub(crate) fn may_have_pattern_rows(&self, wmi: &str, year: Option<i32>, now: i64) -> bool {
+        let Some(wmi) = self.wmi_by_str(wmi, now) else {
+            return false;
+        };
+        self.wmi_vinschema_for(wmi.id.to_native()).iter().any(|r| {
+            year.is_none_or(|year| year >= r.yearfrom.to_native() && year <= r.yearto_or(2999))
+        }) || *self.model_from_conversion.get_or_init(|| {
+            self.a()
+                .conversion
+                .iter()
+                .any(|c| c.toelementid.to_native() == 28)
         })
     }
 
@@ -626,6 +649,97 @@ mod tests {
                 assert_eq!(db.lookup(tag, id), expected, "tag {tag}, id {id}");
             }
         }
+    }
+
+    #[test]
+    fn pass_preflight_keeps_orphan_schemas_and_conversion_models() {
+        use crate::tables::{serialize_artifact, Conversion, VpicData, Wmi, WmiVinSchema};
+        let mut data = VpicData {
+            arena_bytes: b"ABC#x#".to_vec(),
+            arena_offsets: vec![0, 0, 3, 6],
+            wmi: vec![
+                Wmi {
+                    id: 1,
+                    wmi: 1,
+                    manufacturerid: 1,
+                    makeid: 1,
+                    vehicletypeid: 2,
+                    trucktypeid: 0,
+                    publicavailabilitydate: 100,
+                    createdon_key: 0,
+                },
+                Wmi {
+                    id: 2,
+                    wmi: 1,
+                    manufacturerid: 1,
+                    makeid: 1,
+                    vehicletypeid: 2,
+                    trucktypeid: 0,
+                    publicavailabilitydate: 0,
+                    createdon_key: 0,
+                },
+            ],
+            wmi_vinschema: vec![
+                WmiVinSchema {
+                    id: 1,
+                    wmiid: 1,
+                    vinschemaid: 900,
+                    yearfrom: 2000,
+                    yearto: 2000,
+                },
+                WmiVinSchema {
+                    id: 2,
+                    wmiid: 2,
+                    vinschemaid: 901,
+                    yearfrom: 2010,
+                    yearto: 2010,
+                },
+            ],
+            // Formula rows may join an orphan schema: do not require this table.
+            vinschema: vec![],
+            pattern: vec![],
+            element: vec![],
+            make_model: vec![],
+            wmi_make: vec![],
+            enginemodel: vec![],
+            enginemodelpattern: vec![],
+            defaultvalue: vec![],
+            vinexception: vec![],
+            conversion: vec![],
+            lookups: vec![],
+            cover: vec![],
+            vspecschema: vec![],
+            vspecschemapattern: vec![],
+            vspecpattern: vec![],
+            vspecschemamodel: vec![],
+            vspecschemayear: vec![],
+        };
+        let load = |data: &VpicData| Db::from_bytes(&serialize_artifact(data, 1)).unwrap();
+        let db = load(&data);
+        assert!(!db.may_have_pattern_rows("ABC", Some(2010), -1));
+        assert!(!db.may_have_pattern_rows("ABC", Some(2000), 50));
+        assert!(db.may_have_pattern_rows("ABC", Some(2010), 50));
+        assert!(db.may_have_pattern_rows("ABC", Some(2000), 100));
+        assert!(!db.may_have_pattern_rows("ABC", Some(2010), 100));
+        assert!(db.may_have_pattern_rows("ABC", None, 100));
+        assert!(!db.may_have_pattern_rows("ABC", Some(1900), 100));
+        assert!(!db.may_have_pattern_rows("unknown", None, 100));
+        data.conversion.push(Conversion {
+            id: 1,
+            fromelementid: 39,
+            toelementid: 28,
+            formula: 2,
+        });
+        assert!(
+            load(&data).may_have_pattern_rows("ABC", Some(1900), 100),
+            "a conversion-produced Model can enable vehicle-spec pattern rows"
+        );
+        data.conversion[0].toelementid = 26;
+        assert!(!load(&data).may_have_pattern_rows("ABC", Some(1900), 100));
+        data.wmi_vinschema[0].yearto = crate::tables::NULL_I32;
+        let db = load(&data);
+        assert!(db.may_have_pattern_rows("ABC", Some(2999), 100));
+        assert!(!db.may_have_pattern_rows("ABC", Some(3000), 100));
     }
 
     #[test]

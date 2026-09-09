@@ -684,6 +684,17 @@ fn decode_items<'a>(
     current_year: i32,
     caller_year: Option<i32>,
 ) -> RawResult<'a> {
+    decode_items_with_pruning(db, input, now_micros, current_year, caller_year, true)
+}
+
+fn decode_items_with_pruning<'a>(
+    db: &'a Db,
+    input: &str,
+    now_micros: i64,
+    current_year: i32,
+    caller_year: Option<i32>,
+    prune: bool,
+) -> RawResult<'a> {
     let vin = sanitize(input);
     let var_wmi = vin_wmi(&vin);
     let descriptor = vin_descriptor(&vin);
@@ -720,7 +731,9 @@ fn decode_items<'a>(
                     true,
                     true,
                     &mut scan,
-                );
+                    i32::MIN,
+                )
+                .expect("the first pass is never pruned");
                 do3and4 = p.codes.contains(&8) && plan.rmy.is_some();
                 passes.push(p);
             }
@@ -730,7 +743,12 @@ fn decode_items<'a>(
     if do3and4 {
         // Pass 3: rmy.
         let e12 = caller_year.is_some() && plan.rmy.is_some() && caller_year != plan.rmy;
-        passes.push(run_pass(
+        let floor = if prune {
+            best_error_value(&passes)
+        } else {
+            i32::MIN
+        };
+        passes.extend(run_pass(
             db,
             &vin,
             &var_wmi,
@@ -743,11 +761,17 @@ fn decode_items<'a>(
             plan.conclusive,
             e12,
             &mut scan,
+            floor,
         ));
         // Pass 4: omy (only when inconclusive).
         if let Some(omy) = plan.omy {
             let e12 = caller_year.is_some() && caller_year != Some(omy);
-            passes.push(run_pass(
+            let floor = if prune {
+                best_error_value(&passes)
+            } else {
+                i32::MIN
+            };
+            passes.extend(run_pass(
                 db,
                 &vin,
                 &var_wmi,
@@ -760,6 +784,7 @@ fn decode_items<'a>(
                 plan.conclusive,
                 e12,
                 &mut scan,
+                floor,
             ));
         }
     }
@@ -787,6 +812,16 @@ fn decode_items<'a>(
     }
 }
 
+/// ErrorValue is the first score component, before element weights and the
+/// caller-year bonus. Only a strictly worse upper bound permits pruning.
+fn best_error_value(passes: &[Pass]) -> i32 {
+    passes
+        .iter()
+        .map(|p| p.codes.iter().map(|c| tables::errorcode_weight(*c)).sum())
+        .max()
+        .unwrap_or(i32::MIN)
+}
+
 /// Run one `spvindecode_core` pass and append its corrections.
 #[allow(clippy::too_many_arguments)]
 fn run_pass<'a>(
@@ -802,7 +837,14 @@ fn run_pass<'a>(
     conclusive: bool,
     error12: bool,
     scan: &mut decode::PatternScan,
-) -> Pass<'a> {
+    error_floor: i32,
+) -> Option<Pass<'a>> {
+    // No WMI means error 7; no PatternId-bearing item means error 8. All
+    // additional code weights are non-positive, so this bounds either score.
+    let ceiling = tables::errorcode_weight(7).max(tables::errorcode_weight(8));
+    if error_floor > ceiling && !db.may_have_pattern_rows(var_wmi, model_year, now_micros) {
+        return None;
+    }
     let core = decode::decode_core(
         db,
         var_wmi,
@@ -812,6 +854,14 @@ fn run_pass<'a>(
         now_micros,
         scan,
     );
+    if error_floor > ceiling
+        && !core
+            .items
+            .iter()
+            .any(|it| it.pattern_id != tables::NULL_I32)
+    {
+        return None;
+    }
     let err = errors::compute_errors(db, vin, var_wmi, &core, model_year, error12, conclusive);
 
     let mut items = core.items;
@@ -823,21 +873,21 @@ fn run_pass<'a>(
         let _ = write!(codes_csv, "{c}");
     }
     let error_text = error_messages(db, &err);
-    append_correction(&mut items, 142, &err.corrected_vin);
-    append_correction(&mut items, 143, &codes_csv);
-    append_correction(&mut items, 144, &err.error_bytes);
-    append_correction(&mut items, 156, &err.additional_info);
-    append_correction(&mut items, 191, &error_text);
-    append_correction(&mut items, 196, descriptor);
+    append_correction(&mut items, 142, err.corrected_vin.clone());
+    append_correction(&mut items, 143, codes_csv);
+    append_correction(&mut items, 144, err.error_bytes);
+    append_correction(&mut items, 156, err.additional_info);
+    append_correction(&mut items, 191, error_text);
+    append_correction(&mut items, 196, descriptor.to_string());
 
-    Pass {
+    Some(Pass {
         id,
         model_year,
         items,
         codes: err.codes,
         corrected_vin: err.corrected_vin,
         check_digit_valid: err.check_digit_valid,
-    }
+    })
 }
 
 /// Pick the best pass by the `x` scoring table: ErrorValue desc, ElementsWeight
@@ -990,7 +1040,7 @@ fn error_messages(db: &Db, err: &errors::ErrorState) -> String {
     errors::trunc500(&out)
 }
 
-fn append_correction(items: &mut Vec<decode::DecodingItem>, element_id: i32, value: &str) {
+fn append_correction(items: &mut Vec<decode::DecodingItem>, element_id: i32, value: String) {
     items.push(decode::DecodingItem {
         created_on: tables::NULL_I64,
         pattern_id: tables::NULL_I32,
@@ -998,8 +1048,8 @@ fn append_correction(items: &mut Vec<decode::DecodingItem>, element_id: i32, val
         vin_schema_id: tables::NULL_I32,
         wmi_id: tables::NULL_I32,
         element_id,
-        attribute_id: std::borrow::Cow::Owned(value.to_string()),
-        value: std::borrow::Cow::Owned(value.to_string()),
+        attribute_id: std::borrow::Cow::Owned(value.clone()),
+        value: std::borrow::Cow::Owned(value),
         source: std::borrow::Cow::Borrowed("Corrections"),
         priority: 999,
         to_be_qced: false,
@@ -1128,6 +1178,55 @@ mod tests {
         assert_eq!(decode_flat(vin, None), FlatResult::from(decode(vin, None)));
         // The caller year reaches the decode through the flat door too.
         assert_eq!(decode_flat(vin, Some(2013)).model_year, Some(2013));
+    }
+
+    #[test]
+    fn pruning_preserves_best_pass_selection_across_the_builtin_cover() {
+        let Some(db) = Db::try_embedded() else { return };
+        for vin in db.cover() {
+            for year in [None, Some(1980), Some(2003), Some(2028)] {
+                let run = |prune| {
+                    decode_items_with_pruning(db, &vin, 1_788_739_200_000_000, 2026, year, prune)
+                        .full()
+                };
+                assert_eq!(run(true), run(false), "{vin}, {year:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_patternless_pass_can_be_pruned_only_below_a_strict_score_floor() {
+        let Some(db) = Db::try_embedded() else { return };
+        for code in (0..=14).chain([400]) {
+            assert!(
+                tables::errorcode_weight(code) <= 0,
+                "pruning relies on non-positive error weights"
+            );
+        }
+        let run = |floor| {
+            run_pass(
+                db,
+                "",
+                "",
+                "",
+                1_788_739_200_000_000,
+                "",
+                3,
+                None,
+                "***X*|Y",
+                true,
+                false,
+                &mut decode::PatternScan::default(),
+                floor,
+            )
+        };
+        assert!(run(i32::MIN).is_some());
+        let ceiling = tables::errorcode_weight(7).max(tables::errorcode_weight(8));
+        assert!(
+            run(ceiling).is_some(),
+            "ties still require the remaining score components"
+        );
+        assert!(run(ceiling + 1).is_none());
     }
 
     #[test]
