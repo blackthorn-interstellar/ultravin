@@ -82,6 +82,9 @@ pub struct Db {
     /// A conversion producing Model can enable vehicle-spec pattern rows even
     /// when no regular/formula schema covers the candidate year.
     model_from_conversion: OnceLock<bool>,
+    /// When public variable names are unique, sorted flat rows can be grouped
+    /// by adjacent element ids without constructing a per-VIN string hash map.
+    unique_public_variables: OnceLock<bool>,
     /// Packed WMI bytes -> archive row range. Year selection, core passes and
     /// error correction all consult the same WMI; avoid repeating string searches.
     wmi_index: OnceLock<Box<[OnceLock<WmiRangeIndex>]>>,
@@ -116,6 +119,7 @@ impl Db {
             pattern_element_ok: OnceLock::new(),
             pattern_indexes: OnceLock::new(),
             model_from_conversion: OnceLock::new(),
+            unique_public_variables: OnceLock::new(),
             wmi_index: OnceLock::new(),
             spec_model_index: OnceLock::new(),
         })
@@ -141,6 +145,7 @@ impl Db {
             pattern_element_ok: OnceLock::new(),
             pattern_indexes: OnceLock::new(),
             model_from_conversion: OnceLock::new(),
+            unique_public_variables: OnceLock::new(),
             wmi_index: OnceLock::new(),
             spec_model_index: OnceLock::new(),
         }
@@ -396,6 +401,16 @@ impl Db {
                 }
             }
             idx.into_boxed_slice()
+        })
+    }
+
+    pub(crate) fn unique_public_variables(&self) -> bool {
+        *self.unique_public_variables.get_or_init(|| {
+            let mut names = std::collections::HashSet::new();
+            self.elements()
+                .iter()
+                .filter(|e| crate::public_decode(self, e).is_some())
+                .all(|e| names.insert(self.s(e.name.to_native())))
         })
     }
 

@@ -190,6 +190,33 @@ fn flatten_values<'a>(
     attributes
 }
 
+/// With unique variable names and element-sorted rows, repeats are adjacent.
+/// External databases with duplicate names retain the general name-based path.
+fn flatten_unique_variables<'a>(
+    values: impl Iterator<Item = (&'a str, i32, String)>,
+) -> Vec<(&'a str, FlatValue)> {
+    let mut attributes: Vec<(&str, FlatValue)> = Vec::with_capacity(values.size_hint().0);
+    let mut previous = None;
+    for (name, id, value) in values {
+        if previous == Some(id) {
+            if let Some((_, FlatValue::Many(list))) = attributes.last_mut() {
+                list.push(value);
+            }
+        } else {
+            previous = Some(id);
+            attributes.push((
+                name,
+                if tables::is_exempt(id) {
+                    FlatValue::Many(vec![value])
+                } else {
+                    FlatValue::One(value)
+                },
+            ));
+        }
+    }
+    attributes
+}
+
 /// The element's `Decode` text when it is one `project` emits, `None` when the
 /// element never reaches output (no Decode text, or private). The single gate for
 /// "can this element appear in a result", shared by the projection, the
@@ -665,11 +692,14 @@ impl<'a> RawResult<'a> {
             .collect();
         // Stable within an element: repeated notes keep their original order.
         values.sort_by_key(|&(rank, id, _, _)| (rank, id));
-        let attributes = flatten_values(
-            values
-                .into_iter()
-                .map(|(_, id, name, value)| (name, id, value)),
-        );
+        let values = values
+            .into_iter()
+            .map(|(_, id, name, value)| (name, id, value));
+        let attributes = if self.db.unique_public_variables() {
+            flatten_unique_variables(values)
+        } else {
+            flatten_values(values)
+        };
         FlatResult {
             vin: self.vin,
             wmi: self.wmi,
@@ -1247,6 +1277,23 @@ mod tests {
             "ties still require the remaining score components"
         );
         assert!(run(ceiling + 1).is_none());
+    }
+
+    #[test]
+    fn adjacent_flat_groups_preserve_first_values_and_repeated_notes() {
+        let note = tables::EXEMPT_ELEMENTS[0];
+        let rows = vec![
+            ("Note", note, "".to_string()),
+            ("Note", note, "later note".to_string()),
+            ("Make", 26, "".to_string()),
+            ("Make", 26, "later make".to_string()),
+            ("Model", 28, "example".to_string()),
+        ];
+        assert_eq!(
+            flatten_unique_variables(rows.clone().into_iter()),
+            flatten_values(rows.into_iter())
+        );
+        assert!(flatten_unique_variables(std::iter::empty()).is_empty());
     }
 
     #[test]
