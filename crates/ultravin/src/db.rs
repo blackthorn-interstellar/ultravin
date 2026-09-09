@@ -68,12 +68,9 @@ pub struct Db {
     /// use. Resolution and projection repeatedly consult element metadata, so
     /// an O(1) index avoids searching the element table for every output row.
     element_index: OnceLock<Box<[i32]>>,
-    /// Dense `tag -> [start, end)` band into the `lookups` table (built once). The
-    /// table is sorted by `(tag, id)`, so a lookup can binary-search `id` inside
-    /// its tag's band — `log(rows_in_tag)` single-i32 compares instead of
-    /// `log(all_rows)` tuple compares over the whole concatenated table. The
-    /// winning-pass `resolve_xxx` runs dozens of lookups per VIN.
-    lookup_index: OnceLock<Box<[(u32, u32)]>>,
+    /// Packed (lookup tag, numeric id) -> arena string id, initialized once.
+    /// Winning-pass resolution repeatedly reads these immutable names.
+    lookup_index: OnceLock<IntMap<u64, u32>>,
     /// Dense `element_id -> can this element contribute a pattern match` table
     /// (built once). Index construction uses these immutable element flags to
     /// exclude ineligible rows before they can reach the matching hot path.
@@ -566,33 +563,21 @@ impl Db {
 
     /// Resolve a lookup (`tag`, numeric id) to its name.
     pub fn lookup(&self, tag: u16, id: i32) -> Option<&str> {
-        let (start, end) = *self.lookup_index().get(tag as usize)?;
-        let band = &self.a().lookups.as_slice()[start as usize..end as usize];
-        // Within a tag the rows are sorted by id, so search just the band.
-        let lo = band.partition_point(|r| r.id.to_native() < id);
-        band.get(lo)
-            .filter(|r| r.id.to_native() == id)
-            .map(|r| self.s(r.name.to_native()))
-    }
-
-    /// Lazily-built dense `tag -> [start, end)` band table (see field docs).
-    fn lookup_index(&self) -> &[(u32, u32)] {
-        self.lookup_index.get_or_init(|| {
-            let v = self.a().lookups.as_slice();
-            let max_tag = v.iter().map(|r| r.tag.to_native()).max().unwrap_or(0);
-            let mut idx = vec![(0u32, 0u32); max_tag as usize + 1];
-            // Rows are sorted by (tag, id); record each tag's contiguous band.
-            let mut i = 0usize;
-            while i < v.len() {
-                let tag = v[i].tag.to_native() as usize;
-                let start = i;
-                while i < v.len() && v[i].tag.to_native() as usize == tag {
-                    i += 1;
+        let key = (u64::from(tag) << 32) | u64::from(id as u32);
+        self.lookup_index
+            .get_or_init(|| {
+                let rows = self.a().lookups.as_slice();
+                let mut index = IntMap::with_capacity_and_hasher(rows.len(), Default::default());
+                for row in rows {
+                    let key = (u64::from(row.tag.to_native()) << 32)
+                        | u64::from(row.id.to_native() as u32);
+                    // The previous lower-bound search returns the first duplicate.
+                    index.entry(key).or_insert(row.name.to_native());
                 }
-                idx[tag] = (start as u32, i as u32);
-            }
-            idx.into_boxed_slice()
-        })
+                index
+            })
+            .get(&key)
+            .map(|&name| self.s(name))
     }
 }
 
@@ -620,6 +605,28 @@ fn slice_eq<T, F: Fn(&T) -> i32>(v: &[T], target: i32, key: F) -> &[T] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn lookup_index_matches_lower_bound_searches() {
+        let Some(db) = Db::try_embedded() else { return };
+        let rows = db.a().lookups.as_slice();
+        let key = |r: &crate::tables::ArchivedLookupRow| (r.tag.to_native(), r.id.to_native());
+        for row in rows {
+            let (tag, id) = key(row);
+            let first = rows.partition_point(|r| key(r) < (tag, id));
+            assert_eq!(db.lookup(tag, id), Some(db.s(rows[first].name.to_native())));
+        }
+        for tag in [0, 1, 26, 27, 39, u16::MAX] {
+            for id in [i32::MIN, -1, 0, 1, 100_000, i32::MAX] {
+                let first = rows.partition_point(|r| key(r) < (tag, id));
+                let expected = rows
+                    .get(first)
+                    .filter(|r| key(r) == (tag, id))
+                    .map(|r| db.s(r.name.to_native()));
+                assert_eq!(db.lookup(tag, id), expected, "tag {tag}, id {id}");
+            }
+        }
+    }
 
     #[test]
     fn packed_wmis_preserve_length_and_embedded_nuls() {

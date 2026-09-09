@@ -41,6 +41,16 @@ fn uppercase_key(key: &str) -> Cow<'_, str> {
     }
 }
 
+/// Archive names commonly already have their required uppercase spelling.
+/// Unicode names retain the full to_uppercase behavior, including expansions.
+fn uppercase_name(name: &str) -> Cow<'_, str> {
+    if name.is_ascii() && !name.bytes().any(|b| b.is_ascii_lowercase()) {
+        Cow::Borrowed(name)
+    } else {
+        Cow::Owned(name.to_uppercase())
+    }
+}
+
 /// Per-decode memo of the pattern-key scan, keyed by VIN schema id.
 ///
 /// Which patterns of a schema a VIN's keys match depends only on the keys, not on
@@ -191,7 +201,7 @@ pub fn decode_core<'a>(
                     wmi_id: wmiid,
                     element_id: 39,
                     attribute_id: Cow::Owned(veh_type_id.to_string()),
-                    value: Cow::Owned(name.to_uppercase()),
+                    value: uppercase_name(name),
                     source: Cow::Borrowed("VehType"),
                     priority: 100,
                     to_be_qced: false,
@@ -205,7 +215,7 @@ pub fn decode_core<'a>(
     if mfr_id != NULL_I32 {
         let mfr_name = element_lookup_tag(27)
             .and_then(|t| db.lookup(t, mfr_id))
-            .map(|n| n.to_uppercase())
+            .map(uppercase_name)
             .unwrap_or_default();
         items.push(DecodingItem {
             created_on: NULL_I64,
@@ -215,7 +225,7 @@ pub fn decode_core<'a>(
             wmi_id: wmiid,
             element_id: 27,
             attribute_id: Cow::Owned(mfr_id.to_string()),
-            value: Cow::Owned(mfr_name),
+            value: mfr_name,
             source: Cow::Borrowed("Manu. Name"),
             priority: 100,
             to_be_qced: false,
@@ -501,7 +511,7 @@ fn append_make<'a>(
                 let makeid = mm.makeid.to_native();
                 let name = element_lookup_tag(26)
                     .and_then(|t| db.lookup(t, makeid))
-                    .map(|n| n.to_uppercase())
+                    .map(uppercase_name)
                     .unwrap_or_default();
                 items.push(DecodingItem {
                     created_on: NULL_I64,
@@ -511,7 +521,7 @@ fn append_make<'a>(
                     wmi_id: NULL_I32,
                     element_id: 26,
                     attribute_id: Cow::Owned(makeid.to_string()),
-                    value: Cow::Owned(name),
+                    value: name,
                     source: Cow::Borrowed("pattern - model"),
                     priority: 1000,
                     to_be_qced: false,
@@ -528,7 +538,7 @@ fn append_make<'a>(
             let makeid = distinct[0];
             let name = element_lookup_tag(26)
                 .and_then(|t| db.lookup(t, makeid))
-                .map(|n| n.to_uppercase())
+                .map(uppercase_name)
                 .unwrap_or_default();
             items.push(DecodingItem {
                 created_on: wmi_created,
@@ -538,7 +548,7 @@ fn append_make<'a>(
                 wmi_id: wmiid,
                 element_id: 26,
                 attribute_id: Cow::Owned(makeid.to_string()),
-                value: Cow::Owned(name),
+                value: name,
                 source: Cow::Borrowed("Make"),
                 priority: -100,
                 to_be_qced: false,
@@ -856,5 +866,27 @@ mod tests {
         }
         assert!(matches!(uppercase_key("ABC*"), Cow::Borrowed(_)));
         assert!(matches!(uppercase_key("AbC*"), Cow::Owned(_)));
+    }
+}
+
+#[cfg(test)]
+mod uppercase_name_tests {
+    use super::*;
+
+    #[test]
+    fn names_preserve_unicode_uppercase_and_borrow_ascii_when_possible() {
+        for name in [
+            "",
+            "HONDA",
+            "Passenger Car",
+            "Straße",
+            "école",
+            "İstanbul",
+            "日本語",
+        ] {
+            assert_eq!(uppercase_name(name), name.to_uppercase());
+        }
+        assert!(matches!(uppercase_name("HONDA"), Cow::Borrowed(_)));
+        assert!(matches!(uppercase_name("Straße"), Cow::Owned(_)));
     }
 }
