@@ -2,7 +2,7 @@
 //! All logic lives in `ultravin`; this layer only marshals to Python.
 
 use std::any::Any;
-use std::cell::RefCell;
+use std::cell::{OnceCell, RefCell};
 use std::ffi::CStr;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
@@ -59,6 +59,9 @@ thread_local! {
     /// re-keys on pid (see `ultravin::lib`). If this module ever opts into
     /// multiple-interpreters, this cache MUST be reworked to key by interpreter.
     static META_CACHE: RefCell<Vec<Option<[Py<PyString>; 5]>>> = const { RefCell::new(Vec::new()) };
+    /// The same finite archive variable names recur in every flat dictionary.
+    /// This cache has the same interpreter constraints as META_CACHE above.
+    static FLAT_KEYS: OnceCell<std::collections::HashMap<&'static str, Py<PyString>>> = const { OnceCell::new() };
 }
 
 /// The cached five metadata `PyString`s for an element (created + memoized on
@@ -156,12 +159,36 @@ fn flat_to_dict<'py>(py: Python<'py>, r: &FlatResult<'_>) -> PyResult<Bound<'py,
     d.set_item(intern!(py, "check_digit_valid"), r.check_digit_valid)?;
     d.set_item(intern!(py, "corrected_vin"), &r.corrected_vin)?;
     let attrs = PyDict::new(py);
-    for (name, value) in &r.attributes {
-        match value {
-            FlatValue::One(v) => attrs.set_item(name, v)?,
-            FlatValue::Many(vs) => attrs.set_item(name, PyList::new(py, vs)?)?,
+    FLAT_KEYS.with(|cache| -> PyResult<()> {
+        let keys = cache.get_or_init(|| {
+            let db = ultravin::Db::embedded();
+            db.elements()
+                .iter()
+                .map(|e| {
+                    let name = db.s(e.name.to_native());
+                    (name, PyString::new(py, name).unbind())
+                })
+                .collect()
+        });
+        for (name, value) in &r.attributes {
+            let uncached;
+            let key = match keys.get(name) {
+                Some(key) => key.bind(py),
+                None => {
+                    uncached = PyString::new(py, name);
+                    &uncached
+                }
+            };
+            match value {
+                FlatValue::One(v) if v == "Not Applicable" => {
+                    attrs.set_item(key, intern!(py, "Not Applicable"))?
+                }
+                FlatValue::One(v) => attrs.set_item(key, v)?,
+                FlatValue::Many(vs) => attrs.set_item(key, PyList::new(py, vs)?)?,
+            }
         }
-    }
+        Ok(())
+    })?;
     d.set_item(intern!(py, "attributes"), attrs)?;
     Ok(d)
 }
