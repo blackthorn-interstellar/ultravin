@@ -39,7 +39,7 @@ static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 thread_local! {
     /// A private 15-key template per element. Copying its fixed metadata and
     /// key layout avoids rebuilding the same dictionary for every VIN; only
-    /// the nine item-dependent fields need individual stores.
+    /// the item-dependent fields need individual stores.
     ///
     /// Subinterpreter safety: the cached Python objects are keyed per-thread, not
     /// per-interpreter. This module does NOT declare `Py_mod_multiple_interpreters`,
@@ -76,7 +76,7 @@ fn make_element_template<'py>(
     d.set_item(intern!(py, "code"), e.code)?;
     d.set_item(intern!(py, "data_type"), e.data_type)?;
     d.set_item(intern!(py, "decode"), e.decode)?;
-    d.set_item(intern!(py, "source"), &none)?;
+    d.set_item(intern!(py, "source"), intern!(py, "Pattern"))?;
     d.set_item(intern!(py, "pattern_id"), &none)?;
     d.set_item(intern!(py, "vin_schema_id"), &none)?;
     d.set_item(intern!(py, "keys"), &none)?;
@@ -113,11 +113,37 @@ fn element_template<'py>(py: Python<'py>, e: &DecodedElement<'_>) -> PyResult<Bo
     template.copy()
 }
 
+/// These source labels are fixed by the decoder. Dynamic conversion text
+/// remains uncached, so caller-dependent strings cannot grow this cache.
+fn source_to_python<'py>(py: Python<'py>, source: &str) -> Bound<'py, PyString> {
+    match source {
+        "Pattern" => intern!(py, "Pattern").clone(),
+        "EngineModelPattern" => intern!(py, "EngineModelPattern").clone(),
+        "VehType" => intern!(py, "VehType").clone(),
+        "Manu. Name" => intern!(py, "Manu. Name").clone(),
+        "Manu. Id" => intern!(py, "Manu. Id").clone(),
+        "ModelYear" => intern!(py, "ModelYear").clone(),
+        "Formula Pattern" => intern!(py, "Formula Pattern").clone(),
+        "pattern - model" => intern!(py, "pattern - model").clone(),
+        "Make" => intern!(py, "Make").clone(),
+        "Vehicle Specs" => intern!(py, "Vehicle Specs").clone(),
+        "Default" => intern!(py, "Default").clone(),
+        "Corrections" => intern!(py, "Corrections").clone(),
+        _ => PyString::new(py, source),
+    }
+}
+
 fn elem_to_dict<'py>(py: Python<'py>, e: &DecodedElement<'_>) -> PyResult<Bound<'py, PyDict>> {
     let d = element_template(py, e)?;
     d.set_item(intern!(py, "value"), &e.value)?;
     d.set_item(intern!(py, "attribute_id"), &e.attribute_id)?;
-    d.set_item(intern!(py, "source"), e.source.as_ref())?;
+    // Pattern is the common source and is already in the private template.
+    if e.source != "Pattern" {
+        d.set_item(
+            intern!(py, "source"),
+            source_to_python(py, e.source.as_ref()),
+        )?;
+    }
     d.set_item(intern!(py, "pattern_id"), e.pattern_id)?;
     d.set_item(intern!(py, "vin_schema_id"), e.vin_schema_id)?;
     d.set_item(intern!(py, "keys"), &e.keys)?;
@@ -244,6 +270,19 @@ fn decode_batch<'py>(
 ) -> PyResult<Vec<Bound<'py, PyDict>>> {
     check_years(&vins, &years)?;
     let years = years.as_deref();
+    // A singleton has no work to distribute. Use the existing single decoder
+    // while retaining batch validation, the released GIL and the list shape.
+    if let [vin] = vins.as_slice() {
+        let year = years.and_then(|years| years.first()).copied().flatten();
+        let result = if full {
+            let result = py.detach(|| ultravin::decode(vin, year));
+            result_to_dict(py, &result)?
+        } else {
+            let result = py.detach(|| ultravin::decode_flat(vin, year));
+            flat_to_dict(py, &result)?
+        };
+        return Ok(vec![result]);
+    }
     if full {
         let results = py.detach(|| ultravin::decode_batch(&vins, years));
         return results.iter().map(|r| result_to_dict(py, r)).collect();
@@ -312,6 +351,15 @@ fn decode_batch_json(
     check_years(&vins, &years)?;
     Ok(py.detach(|| {
         let years = years.as_deref();
+        if let [vin] = vins.as_slice() {
+            let year = years.and_then(|years| years.first()).copied().flatten();
+            let json = if full {
+                ultravin::decode_json(vin, year)
+            } else {
+                ultravin::decode_json_flat(vin, year)
+            };
+            return format!("[{json}]");
+        }
         if full {
             ultravin::decode_batch_json(&vins, years)
         } else {

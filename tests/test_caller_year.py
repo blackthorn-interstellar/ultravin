@@ -54,3 +54,12 @@ def test_batch_years_length_mismatch_raises() -> None:
         uv.decode_batch([VIN], years=[2003, 1995])
     with pytest.raises(ValueError, match=r"one entry .* per VIN"):
         uv.decode_batch_json([VIN, VIN], years=[2003])
+
+
+@pytest.mark.parametrize("full", [False, True])
+@pytest.mark.parametrize("years", [None, [None], [1995], [1979]])
+def test_singleton_batch_preserves_year_and_shape(years: list[int | None] | None, full: bool) -> None:
+    year = years[0] if years is not None else None
+    expected = uv.decode(VIN, year=year, full=full)
+    assert uv.decode_batch([VIN], years=years, full=full) == [expected]
+    assert uv.decode_batch_json([VIN], years=years, full=full) == f"[{uv.decode_json(VIN, year=year, full=full)}]"
