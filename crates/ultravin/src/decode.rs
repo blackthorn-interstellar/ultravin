@@ -6,7 +6,7 @@ use std::borrow::Cow;
 use std::cmp::Ordering;
 
 use crate::db::Db;
-use crate::hash::{IntMap, IntSet};
+use crate::hash::{ElementIndex, ElementSet, IntMap, IntSet};
 use crate::matcher::like_match;
 use crate::tables::{element_lookup_tag, is_exempt, NULL_I32, NULL_I64};
 
@@ -442,7 +442,7 @@ fn cmp_keys_no_brackets(a: &str, b: &str) -> Ordering {
 /// RANK dedup: keep the best item per non-exempt element id.
 fn dedup_per_element(items: &mut Vec<DecodingItem>) {
     // best index per element id (lowest under the comparator).
-    let mut best: IntMap<i32, usize> = IntMap::default();
+    let mut best = ElementIndex::default();
     for (i, it) in items.iter().enumerate() {
         if is_exempt(it.element_id) {
             continue;
@@ -588,6 +588,9 @@ fn append_conversions<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
             });
         }
     }
+    if rows.is_empty() {
+        return;
+    }
     rows.sort_by(|a, b| {
         b.priority
             .cmp(&a.priority)
@@ -595,7 +598,7 @@ fn append_conversions<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
             .then(a.conv_id.cmp(&b.conv_id))
     });
 
-    let mut present: IntSet<i32> = items.iter().map(|it| it.element_id).collect();
+    let mut present: ElementSet = items.iter().map(|it| it.element_id).collect();
     for r in rows {
         if !present.insert(r.to_elem) {
             continue;
@@ -727,10 +730,13 @@ fn append_vehicle_specs<'a>(
         }
         cnt_total == matched.len()
     });
+    if candidates.is_empty() {
+        return;
+    }
 
     // STEP 3: non-key attributes for elements not already decoded (exempt set
     // never blocks). Emit one tbl1 row per surviving non-key pattern.
-    let decoded_nonexempt: IntSet<i32> = items
+    let decoded_nonexempt: ElementSet = items
         .iter()
         .map(|it| it.element_id)
         .filter(|e| !SPEC_EXEMPT.contains(e))
@@ -762,7 +768,7 @@ fn append_vehicle_specs<'a>(
 
     // STEP 4: dedup to one per element by latest ChangedOn. Ties (rare) break by
     // highest VSpecSchemaPattern id then highest schema id — deterministic.
-    let mut best: IntMap<i32, usize> = IntMap::default();
+    let mut best = ElementIndex::default();
     for (i, t) in tbl1.iter().enumerate() {
         match best.get(&t.element_id) {
             None => {
@@ -809,7 +815,7 @@ fn append_default_values<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
     else {
         return;
     };
-    let present: IntSet<i32> = items.iter().map(|it| it.element_id).collect();
+    let present: ElementSet = items.iter().map(|it| it.element_id).collect();
     for dv in db.defaultvalues_for(veh) {
         let element_id = dv.elementid.to_native();
         if !dv.defaultvalue_present || present.contains(&element_id) {

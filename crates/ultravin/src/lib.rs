@@ -780,15 +780,12 @@ fn score(pass: &Pass, db: &Db, caller_year: Option<i32>) -> Score {
         .map(|c| tables::errorcode_weight(*c))
         .sum();
 
-    let mut weighted: hash::IntSet<i32> = hash::IntSet::default();
-    for it in &pass.items {
-        if !it.value.is_empty() {
-            weighted.insert(it.element_id);
-        }
-    }
-    let elements_weight: i32 = weighted
+    let mut weighted = hash::ElementSet::default();
+    let elements_weight: i32 = pass
+        .items
         .iter()
-        .filter_map(|eid| db.element_by_id(*eid))
+        .filter(|it| !it.value.is_empty() && weighted.insert(it.element_id))
+        .filter_map(|it| db.element_by_id(it.element_id))
         .map(|e| e.weight.to_native())
         .filter(|w| *w != tables::NULL_I32)
         .sum();
