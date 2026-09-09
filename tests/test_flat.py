@@ -9,6 +9,8 @@ across vPIC data refreshes.
 
 from __future__ import annotations
 
+from copy import deepcopy
+
 import pytest
 import ultravin as uv
 
@@ -104,3 +106,15 @@ def test_elements_table_describes_decoded_variables() -> None:
 def test_unknown_module_attribute_raises() -> None:
     with pytest.raises(AttributeError, match="no attribute 'nope'"):
         uv.nope  # noqa: B018
+
+
+def test_mutating_full_element_dictionaries_does_not_change_later_decodes() -> None:
+    vin = "1HGCM82633A004352"
+    expected = deepcopy(uv.decode(vin, full=True))
+    changed = uv.decode(vin, full=True)
+    changed["elements"][0]["variable"] = "changed metadata"
+    changed["elements"][0]["value"] = "changed value"
+    changed["elements"][0]["new field"] = "must not leak"
+    changed["elements"][1].clear()
+    assert uv.decode(vin, full=True) == expected
+    assert uv.decode_batch([vin], full=True) == [expected]

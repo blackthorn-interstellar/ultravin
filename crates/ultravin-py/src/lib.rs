@@ -37,85 +37,86 @@ use ultravin::{
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 thread_local! {
-    /// `element_id -> [group_name, variable, code, data_type, decode]` interned as
-    /// `PyString`s. Those five columns are element *metadata* — a pure function of
-    /// `element_id` and constant for the life of the interpreter — yet a naïve
-    /// marshaller allocates five fresh `PyString`s for every element of every VIN.
-    /// Once the decode itself is parallel + cheap, this GIL-serial marshalling is
-    /// the batch bottleneck; caching turns ~5×(elements) `PyString` allocations
-    /// per VIN into one-time-per-element-id creation plus refcount bumps.
+    /// A private 15-key template per element. Copying its fixed metadata and
+    /// key layout avoids rebuilding the same dictionary for every VIN; only
+    /// the nine item-dependent fields need individual stores.
     ///
-    /// Subinterpreter safety: the cached `Py<PyString>` are keyed per-thread, not
+    /// Subinterpreter safety: the cached Python objects are keyed per-thread, not
     /// per-interpreter. This module does NOT declare `Py_mod_multiple_interpreters`,
     /// so CPython refuses to import it under a per-interpreter GIL — the mode where
     /// unsynchronized cross-interpreter refcounting would be UB. Legacy shared-GIL
     /// subinterpreters (`Py_NewInterpreter()`, mod_wsgi) DO import it, and there the
-    /// cache hands one interpreter's strings to another: an isolation-contract
+    /// cache hands one interpreter's objects to another: an isolation-contract
     /// violation, accepted knowingly — the GIL serializes the refcounting and the
-    /// strings are immutable, so it cannot corrupt memory, and pyo3's own `intern!`
+    /// templates are private and only copied, and pyo3's own `intern!`
     /// (used throughout `elem_to_dict`) shares strings process-wide the same way,
     /// so keying this cache by interpreter would not make the module clean.
-    /// `fork()` gets a fresh process + thread-local, and the batch pool already
-    /// re-keys on pid (see `ultravin::lib`). If this module ever opts into
-    /// multiple-interpreters, this cache MUST be reworked to key by interpreter.
-    static META_CACHE: RefCell<Vec<Option<[Py<PyString>; 5]>>> = const { RefCell::new(Vec::new()) };
+    /// After `fork()`, the child inherits the calling thread's cache in its own
+    /// address space; the batch pool re-keys on pid (see `ultravin::lib`). If this
+    /// module opts into multiple-interpreters, this cache MUST key by interpreter.
+    static ELEM_TEMPLATES: RefCell<Vec<Option<Py<PyDict>>>> = const { RefCell::new(Vec::new()) };
     /// The same finite archive variable names recur in every flat dictionary.
-    /// This cache has the same interpreter constraints as META_CACHE above.
+    /// This cache has the same interpreter constraints as ELEM_TEMPLATES above.
     static FLAT_KEYS: OnceCell<std::collections::HashMap<&'static str, Py<PyString>>> = const { OnceCell::new() };
 }
 
-/// The cached five metadata `PyString`s for an element (created + memoized on
-/// first sight of its id). They are immutable and content-identical to a fresh
-/// `PyString`, so reuse is transparent to callers.
-fn meta_strings(py: Python<'_>, e: &DecodedElement<'_>) -> [Py<PyString>; 5] {
-    let id = e.element_id;
-    // Real element ids are small positives; never grow an unbounded cache on a
-    // stray negative id (just build the strings without memoizing).
-    if id < 0 {
-        return [
-            PyString::new(py, e.group_name).unbind(),
-            PyString::new(py, e.variable).unbind(),
-            PyString::new(py, e.code).unbind(),
-            PyString::new(py, e.data_type).unbind(),
-            PyString::new(py, e.decode).unbind(),
-        ];
+/// Construct keys in the public insertion order. Placeholders are overwritten
+/// after copying; the cached dictionary itself is never exposed or modified.
+fn make_element_template<'py>(
+    py: Python<'py>,
+    e: &DecodedElement<'_>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let d = PyDict::new(py);
+    let none = py.None();
+    d.set_item(intern!(py, "group_name"), e.group_name)?;
+    d.set_item(intern!(py, "variable"), e.variable)?;
+    d.set_item(intern!(py, "value"), &none)?;
+    d.set_item(intern!(py, "element_id"), e.element_id)?;
+    d.set_item(intern!(py, "attribute_id"), &none)?;
+    d.set_item(intern!(py, "code"), e.code)?;
+    d.set_item(intern!(py, "data_type"), e.data_type)?;
+    d.set_item(intern!(py, "decode"), e.decode)?;
+    d.set_item(intern!(py, "source"), &none)?;
+    d.set_item(intern!(py, "pattern_id"), &none)?;
+    d.set_item(intern!(py, "vin_schema_id"), &none)?;
+    d.set_item(intern!(py, "keys"), &none)?;
+    d.set_item(intern!(py, "created_on"), &none)?;
+    d.set_item(intern!(py, "wmi_id"), &none)?;
+    d.set_item(intern!(py, "to_be_qced"), &none)?;
+    Ok(d)
+}
+
+fn element_template<'py>(py: Python<'py>, e: &DecodedElement<'_>) -> PyResult<Bound<'py, PyDict>> {
+    let Ok(id) = usize::try_from(e.element_id) else {
+        return make_element_template(py, e);
+    };
+    let cached = ELEM_TEMPLATES.with(|cache| {
+        cache
+            .borrow()
+            .get(id)
+            .and_then(|slot| slot.as_ref())
+            .map(|d| d.clone_ref(py))
+    });
+    if let Some(template) = cached {
+        return template.bind(py).copy();
     }
-    let id = id as usize;
-    META_CACHE.with(|c| {
-        let mut v = c.borrow_mut();
-        if id >= v.len() {
-            v.resize_with(id + 1, || None);
+    // Python allocation can run GC callbacks. Never hold a RefCell borrow
+    // while building/copying a dictionary, so a reentrant decode is safe.
+    let template = make_element_template(py, e)?;
+    ELEM_TEMPLATES.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        if id >= cache.len() {
+            cache.resize_with(id + 1, || None);
         }
-        if let Some(cached) = &v[id] {
-            return cached.each_ref().map(|p| p.clone_ref(py));
-        }
-        let arr = [
-            PyString::new(py, e.group_name).unbind(),
-            PyString::new(py, e.variable).unbind(),
-            PyString::new(py, e.code).unbind(),
-            PyString::new(py, e.data_type).unbind(),
-            PyString::new(py, e.decode).unbind(),
-        ];
-        let ret = arr.each_ref().map(|p| p.clone_ref(py));
-        v[id] = Some(arr);
-        ret
-    })
+        cache[id] = Some(template.clone().unbind());
+    });
+    template.copy()
 }
 
 fn elem_to_dict<'py>(py: Python<'py>, e: &DecodedElement<'_>) -> PyResult<Bound<'py, PyDict>> {
-    // `intern!` reuses one cached `PyString` per key per interpreter instead of
-    // allocating a fresh key string on every `set_item` — these 15 keys recur for
-    // every element of every decode, so this is the bulk of the marshalling cost.
-    let d = PyDict::new(py);
-    let [group_name, variable, code, data_type, decode] = meta_strings(py, e);
-    d.set_item(intern!(py, "group_name"), group_name)?;
-    d.set_item(intern!(py, "variable"), variable)?;
+    let d = element_template(py, e)?;
     d.set_item(intern!(py, "value"), &e.value)?;
-    d.set_item(intern!(py, "element_id"), e.element_id)?;
     d.set_item(intern!(py, "attribute_id"), &e.attribute_id)?;
-    d.set_item(intern!(py, "code"), code)?;
-    d.set_item(intern!(py, "data_type"), data_type)?;
-    d.set_item(intern!(py, "decode"), decode)?;
     d.set_item(intern!(py, "source"), e.source.as_ref())?;
     d.set_item(intern!(py, "pattern_id"), e.pattern_id)?;
     d.set_item(intern!(py, "vin_schema_id"), e.vin_schema_id)?;
@@ -141,7 +142,7 @@ fn result_to_dict<'py>(py: Python<'py>, r: &DecodeResult<'_>) -> PyResult<Bound<
         .iter()
         .map(|e| elem_to_dict(py, e))
         .collect::<PyResult<_>>()?;
-    d.set_item(intern!(py, "elements"), PyList::new(py, &dicts)?)?;
+    d.set_item(intern!(py, "elements"), PyList::new(py, dicts)?)?;
     Ok(d)
 }
 
