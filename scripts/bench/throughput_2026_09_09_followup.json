@@ -1,0 +1,665 @@
+{
+  "date": "2026-09-09",
+  "baseline_commit": "d536710ba101a4ee89610ab5ec7cf5aa40ec6738",
+  "candidate_commit": "54cbf7f547512f5cec9060e419f258ada7b3a8b1",
+  "target": "2x throughput relative to the starting revision, with identical complete outputs",
+  "target_met": false,
+  "provenance": {
+    "baseline_commit": "d536710ba101a4ee89610ab5ec7cf5aa40ec6738",
+    "platform": "macOS-26.6.1-arm64-arm-64bit-Mach-O",
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: aarch64-apple-darwin\nrelease: 1.98.1\nLLVM version: 22.1.8",
+    "input_and_source_sha256": {
+      "Cargo.lock": "1339f46ace2921b69e29686f13b48471582658d4a1429d42d8b2a0092e98b16b",
+      "Cargo.toml": "a85692348ace983f4e8dba935f913f4bb2edf7181194ce554d9290afb454cfb2",
+      "crates/ultravin/data/vpic.rkyv": "2d555d4db3fde3867f41e415ec6e848285a286b2fe5fb45f0bdcb88245bd7787",
+      "scripts/bench/corpus.txt": "b45ad4472c202ee176f86e8bc3c39609c76b6258df963ea04e08439aa3a1eb09",
+      "crates/ultravin/examples/throughput.rs": "0029106fc65478979f7fd8a0cf610339e3513cacdedc14859ddaa37276caa4c1",
+      "crates/ultravin/examples/fingerprint.rs": "8c32cd25528952f7013808c144f83cd471fac64cb0cdcfef4ac4772dd9ae74d8",
+      "crates/ultravin/src/db.rs": "8800a014cb3a6d4b2c6360ffdd96c755885979c879aeb57226c5d63aaeed643e",
+      "crates/ultravin/src/errors.rs": "ab781597fe1960201fc4f685553cb55d1e139ecfe12e21e92772a6de5388ccfe",
+      "crates/ultravin/src/lib.rs": "3e8fa8ded55fc14a677d0b2fe323d7d55408cd9640fcb35b8e65783643ebb22b",
+      "crates/ultravin/src/matcher.rs": "3e36ce839ae2d109a5f58fd8801c8deec14eb14fb015b2c39de4f560d5133f8e"
+    },
+    "build_environment": {
+      "CARGO_PROFILE_RELEASE_DEBUG": null,
+      "RUSTFLAGS": null,
+      "CARGO_ENCODED_RUSTFLAGS": null,
+      "RAYON_NUM_THREADS": null,
+      "ULTRAVIN_DATA": null
+    },
+    "binaries_sha256": {
+      "baseline-throughput": "b15dadc92a38ad7fa4be3510d7e629333b2dfb4c890ff7d96f6071b57a7667e4",
+      "candidate-throughput": "92d8963ec59e63a9c7ce94f8f5ccb139d0d19eecdb3ef2acd3133752420b8e1a",
+      "baseline-fingerprint": "a78f11d96cf58f8aa2a14af3290cc05a6b6718ac93b636f9829ea228f5fc9b36",
+      "candidate-fingerprint": "3e1b76719349e2e746e40bec8969ccbb2bfbb27bede6f648489ed80bed2287cf",
+      "baseline-cold": "46275048d4b505db7238762848c1a61e9927b58f7475667f4bddadbf6a999513",
+      "candidate-cold": "3830fd6a448cd9028569161870d33314d73655e5b54f33b5388a61fac24828d7"
+    },
+    "host": "Apple M1 Max"
+  },
+  "profile": {
+    "opt_level": 3,
+    "lto": "fat",
+    "codegen_units": 1,
+    "debug": false
+  },
+  "allocator": "mimalloc",
+  "corpus": "scripts/bench/corpus.txt",
+  "corpus_size": 5000,
+  "rayon_threads": 4,
+  "seconds_per_window": 60,
+  "rounds": 3,
+  "methodology": "Warm the whole corpus, alternate executable order, retain all samples. No builds or tests during throughput measurements. Shared host; CPU time includes startup, warmup and teardown.",
+  "measurements": [
+    {
+      "build": "baseline",
+      "mode": "single",
+      "trial": 1,
+      "timed_vins": 4295000,
+      "seconds": 60.0,
+      "vins_per_second": 71556,
+      "process_cpu_seconds": 60.504754999999996,
+      "process_cpu_us_per_vin": 14.070873255813952
+    },
+    {
+      "build": "candidate",
+      "mode": "single",
+      "trial": 1,
+      "timed_vins": 5090000,
+      "seconds": 60.0,
+      "vins_per_second": 84822,
+      "process_cpu_seconds": 60.51831000000001,
+      "process_cpu_us_per_vin": 11.877980372914624
+    },
+    {
+      "build": "candidate",
+      "mode": "single",
+      "trial": 2,
+      "timed_vins": 5280000,
+      "seconds": 60.0,
+      "vins_per_second": 87979,
+      "process_cpu_seconds": 60.465552,
+      "process_cpu_us_per_vin": 11.440974834437085
+    },
+    {
+      "build": "baseline",
+      "mode": "single",
+      "trial": 2,
+      "timed_vins": 4490000,
+      "seconds": 60.1,
+      "vins_per_second": 74751,
+      "process_cpu_seconds": 60.51839699999999,
+      "process_cpu_us_per_vin": 13.463492102335927
+    },
+    {
+      "build": "baseline",
+      "mode": "single",
+      "trial": 3,
+      "timed_vins": 4255000,
+      "seconds": 60.0,
+      "vins_per_second": 70903,
+      "process_cpu_seconds": 60.369397999999975,
+      "process_cpu_us_per_vin": 14.171220187793422
+    },
+    {
+      "build": "candidate",
+      "mode": "single",
+      "trial": 3,
+      "timed_vins": 5090000,
+      "seconds": 60.0,
+      "vins_per_second": 84806,
+      "process_cpu_seconds": 60.51507400000007,
+      "process_cpu_us_per_vin": 11.87734524043181
+    },
+    {
+      "build": "baseline",
+      "mode": "batch",
+      "trial": 1,
+      "timed_vins": 10500000,
+      "seconds": 60.0,
+      "vins_per_second": 174951,
+      "process_cpu_seconds": 172.50110700000002,
+      "process_cpu_us_per_vin": 16.42085740123751
+    },
+    {
+      "build": "candidate",
+      "mode": "batch",
+      "trial": 1,
+      "timed_vins": 11675000,
+      "seconds": 60.0,
+      "vins_per_second": 194519,
+      "process_cpu_seconds": 168.81475,
+      "process_cpu_us_per_vin": 14.453317636986302
+    },
+    {
+      "build": "candidate",
+      "mode": "batch",
+      "trial": 2,
+      "timed_vins": 11730000,
+      "seconds": 60.0,
+      "vins_per_second": 195458,
+      "process_cpu_seconds": 169.40270999999998,
+      "process_cpu_us_per_vin": 14.435680443118873
+    },
+    {
+      "build": "baseline",
+      "mode": "batch",
+      "trial": 2,
+      "timed_vins": 10690000,
+      "seconds": 60.0,
+      "vins_per_second": 178083,
+      "process_cpu_seconds": 175.85553699999983,
+      "process_cpu_us_per_vin": 16.442780458158
+    },
+    {
+      "build": "baseline",
+      "mode": "batch",
+      "trial": 3,
+      "timed_vins": 10745000,
+      "seconds": 60.0,
+      "vins_per_second": 179079,
+      "process_cpu_seconds": 174.57251699999998,
+      "process_cpu_us_per_vin": 16.23930390697674
+    },
+    {
+      "build": "candidate",
+      "mode": "batch",
+      "trial": 3,
+      "timed_vins": 11715000,
+      "seconds": 60.0,
+      "vins_per_second": 195203,
+      "process_cpu_seconds": 169.90425300000007,
+      "process_cpu_us_per_vin": 14.496949914675772
+    }
+  ],
+  "summary": {
+    "single": {
+      "baseline": {
+        "median": 71556,
+        "minimum": 70903,
+        "maximum": 74751,
+        "process_cpu_us_per_vin": 14.070873255813952
+      },
+      "candidate": {
+        "median": 84822,
+        "minimum": 84806,
+        "maximum": 87979,
+        "process_cpu_us_per_vin": 11.87734524043181
+      },
+      "speedup": 1.1853932584269662
+    },
+    "batch": {
+      "baseline": {
+        "median": 178083,
+        "minimum": 174951,
+        "maximum": 179079,
+        "process_cpu_us_per_vin": 16.42085740123751
+      },
+      "candidate": {
+        "median": 195203,
+        "minimum": 194519,
+        "maximum": 195458,
+        "process_cpu_us_per_vin": 14.453317636986302
+      },
+      "speedup": 1.0961349483106193
+    }
+  },
+  "broader_corpus": {
+    "source": "full compatibility cases",
+    "eligible_distinct_vins": 1762284,
+    "count": 100000,
+    "random_seed": 20260909,
+    "sha256": "a656df49a66e0a98ff1b366105e0b7f87b9524ac3865a5c8d79f94c66bb18f7d",
+    "semantics": "Distinct 17-byte ASCII VINs without CR/LF, sampled from sorted compatibility inputs; no caller year. Stress corpus, not a fleet distribution."
+  },
+  "broader_seconds_per_window": 20,
+  "broader_rounds": 2,
+  "broader_measurements": [
+    {
+      "build": "baseline",
+      "mode": "single",
+      "trial": 1,
+      "timed_vins": 1500000,
+      "seconds": 20.2,
+      "vins_per_second": 74139,
+      "process_cpu_seconds": 22.457217,
+      "process_cpu_us_per_vin": 14.035760625
+    },
+    {
+      "build": "candidate",
+      "mode": "single",
+      "trial": 1,
+      "timed_vins": 1800000,
+      "seconds": 20.8,
+      "vins_per_second": 86442,
+      "process_cpu_seconds": 22.768136,
+      "process_cpu_us_per_vin": 11.98322947368421
+    },
+    {
+      "build": "candidate",
+      "mode": "single",
+      "trial": 2,
+      "timed_vins": 1800000,
+      "seconds": 20.9,
+      "vins_per_second": 86031,
+      "process_cpu_seconds": 22.871906000000006,
+      "process_cpu_us_per_vin": 12.037845263157898
+    },
+    {
+      "build": "baseline",
+      "mode": "single",
+      "trial": 2,
+      "timed_vins": 1500000,
+      "seconds": 20.0,
+      "vins_per_second": 74917,
+      "process_cpu_seconds": 22.221382999999992,
+      "process_cpu_us_per_vin": 13.888364374999995
+    },
+    {
+      "build": "baseline",
+      "mode": "batch",
+      "trial": 1,
+      "timed_vins": 3800000,
+      "seconds": 20.1,
+      "vins_per_second": 188822,
+      "process_cpu_seconds": 54.78565300000001,
+      "process_cpu_us_per_vin": 14.047603333333335
+    },
+    {
+      "build": "candidate",
+      "mode": "batch",
+      "trial": 1,
+      "timed_vins": 4100000,
+      "seconds": 20.4,
+      "vins_per_second": 201329,
+      "process_cpu_seconds": 52.680934000000015,
+      "process_cpu_us_per_vin": 12.543079523809528
+    },
+    {
+      "build": "candidate",
+      "mode": "batch",
+      "trial": 2,
+      "timed_vins": 4200000,
+      "seconds": 20.4,
+      "vins_per_second": 206163,
+      "process_cpu_seconds": 52.98107199999998,
+      "process_cpu_us_per_vin": 12.321179534883717
+    },
+    {
+      "build": "baseline",
+      "mode": "batch",
+      "trial": 2,
+      "timed_vins": 3800000,
+      "seconds": 20.1,
+      "vins_per_second": 188812,
+      "process_cpu_seconds": 54.365990999999966,
+      "process_cpu_us_per_vin": 13.939997692307683
+    }
+  ],
+  "broader_summary": {
+    "single": {
+      "baseline": {
+        "median": 74528.0,
+        "minimum": 74139,
+        "maximum": 74917,
+        "process_cpu_us_per_vin": 13.962062499999998
+      },
+      "candidate": {
+        "median": 86236.5,
+        "minimum": 86031,
+        "maximum": 86442,
+        "process_cpu_us_per_vin": 12.010537368421055
+      },
+      "speedup": 1.1571020287677114
+    },
+    "batch": {
+      "baseline": {
+        "median": 188817.0,
+        "minimum": 188812,
+        "maximum": 188822,
+        "process_cpu_us_per_vin": 13.99380051282051
+      },
+      "candidate": {
+        "median": 203746.0,
+        "minimum": 201329,
+        "maximum": 206163,
+        "process_cpu_us_per_vin": 12.432129529346621
+      },
+      "speedup": 1.079065973932432
+    }
+  },
+  "fingerprint_parity": {
+    "cases": 1862306,
+    "byte_identical": true,
+    "first_difference_after_case": null,
+    "fingerprint_sha256": [
+      "e985b2617222a111cb2444b02af3fa62e0f7bfb18345170dbd6829e9e047ba52",
+      "e985b2617222a111cb2444b02af3fa62e0f7bfb18345170dbd6829e9e047ba52"
+    ],
+    "exit_codes": [
+      0,
+      0
+    ],
+    "elapsed_seconds": 113.0923515832983,
+    "input_sha256": "93d318f511450137545ee64bfe0311dc737233748ee9bf32250e8043e12b6ea8"
+  },
+  "cold_methodology": "Seven alternating fresh processes per VIN and build; main-to-first-result time. System allocator in both cold probes. Filesystem cache was not flushed.",
+  "cold_measurements": [
+    {
+      "vin": "1HGCM82633A004352",
+      "trial": 1,
+      "build": "baseline",
+      "stdout": "29.199\n",
+      "stderr": "cold_ms=29.199 elements=44\n"
+    },
+    {
+      "vin": "1HGCM82633A004352",
+      "trial": 1,
+      "build": "candidate",
+      "stdout": "5.834\n",
+      "stderr": "cold_ms=5.834 elements=44\n"
+    },
+    {
+      "vin": "1HGCM82633A004352",
+      "trial": 2,
+      "build": "candidate",
+      "stdout": "1.735\n",
+      "stderr": "cold_ms=1.735 elements=44\n"
+    },
+    {
+      "vin": "1HGCM82633A004352",
+      "trial": 2,
+      "build": "baseline",
+      "stdout": "1.499\n",
+      "stderr": "cold_ms=1.499 elements=44\n"
+    },
+    {
+      "vin": "1HGCM82633A004352",
+      "trial": 3,
+      "build": "baseline",
+      "stdout": "1.425\n",
+      "stderr": "cold_ms=1.425 elements=44\n"
+    },
+    {
+      "vin": "1HGCM82633A004352",
+      "trial": 3,
+      "build": "candidate",
+      "stdout": "1.777\n",
+      "stderr": "cold_ms=1.777 elements=44\n"
+    },
+    {
+      "vin": "1HGCM82633A004352",
+      "trial": 4,
+      "build": "candidate",
+      "stdout": "1.635\n",
+      "stderr": "cold_ms=1.635 elements=44\n"
+    },
+    {
+      "vin": "1HGCM82633A004352",
+      "trial": 4,
+      "build": "baseline",
+      "stdout": "1.440\n",
+      "stderr": "cold_ms=1.440 elements=44\n"
+    },
+    {
+      "vin": "1HGCM82633A004352",
+      "trial": 5,
+      "build": "baseline",
+      "stdout": "1.459\n",
+      "stderr": "cold_ms=1.459 elements=44\n"
+    },
+    {
+      "vin": "1HGCM82633A004352",
+      "trial": 5,
+      "build": "candidate",
+      "stdout": "1.758\n",
+      "stderr": "cold_ms=1.758 elements=44\n"
+    },
+    {
+      "vin": "1HGCM82633A004352",
+      "trial": 6,
+      "build": "candidate",
+      "stdout": "1.696\n",
+      "stderr": "cold_ms=1.696 elements=44\n"
+    },
+    {
+      "vin": "1HGCM82633A004352",
+      "trial": 6,
+      "build": "baseline",
+      "stdout": "1.467\n",
+      "stderr": "cold_ms=1.467 elements=44\n"
+    },
+    {
+      "vin": "1HGCM82633A004352",
+      "trial": 7,
+      "build": "baseline",
+      "stdout": "1.387\n",
+      "stderr": "cold_ms=1.387 elements=44\n"
+    },
+    {
+      "vin": "1HGCM82633A004352",
+      "trial": 7,
+      "build": "candidate",
+      "stdout": "1.755\n",
+      "stderr": "cold_ms=1.755 elements=44\n"
+    },
+    {
+      "vin": "1FTFW1ET5DFC10312",
+      "trial": 1,
+      "build": "baseline",
+      "stdout": "20.123\n",
+      "stderr": "cold_ms=20.123 elements=39\n"
+    },
+    {
+      "vin": "1FTFW1ET5DFC10312",
+      "trial": 1,
+      "build": "candidate",
+      "stdout": "5.324\n",
+      "stderr": "cold_ms=5.324 elements=39\n"
+    },
+    {
+      "vin": "1FTFW1ET5DFC10312",
+      "trial": 2,
+      "build": "candidate",
+      "stdout": "3.315\n",
+      "stderr": "cold_ms=3.315 elements=39\n"
+    },
+    {
+      "vin": "1FTFW1ET5DFC10312",
+      "trial": 2,
+      "build": "baseline",
+      "stdout": "3.082\n",
+      "stderr": "cold_ms=3.082 elements=39\n"
+    },
+    {
+      "vin": "1FTFW1ET5DFC10312",
+      "trial": 3,
+      "build": "baseline",
+      "stdout": "2.987\n",
+      "stderr": "cold_ms=2.987 elements=39\n"
+    },
+    {
+      "vin": "1FTFW1ET5DFC10312",
+      "trial": 3,
+      "build": "candidate",
+      "stdout": "3.578\n",
+      "stderr": "cold_ms=3.578 elements=39\n"
+    },
+    {
+      "vin": "1FTFW1ET5DFC10312",
+      "trial": 4,
+      "build": "candidate",
+      "stdout": "3.267\n",
+      "stderr": "cold_ms=3.267 elements=39\n"
+    },
+    {
+      "vin": "1FTFW1ET5DFC10312",
+      "trial": 4,
+      "build": "baseline",
+      "stdout": "3.353\n",
+      "stderr": "cold_ms=3.353 elements=39\n"
+    },
+    {
+      "vin": "1FTFW1ET5DFC10312",
+      "trial": 5,
+      "build": "baseline",
+      "stdout": "2.970\n",
+      "stderr": "cold_ms=2.970 elements=39\n"
+    },
+    {
+      "vin": "1FTFW1ET5DFC10312",
+      "trial": 5,
+      "build": "candidate",
+      "stdout": "3.442\n",
+      "stderr": "cold_ms=3.442 elements=39\n"
+    },
+    {
+      "vin": "1FTFW1ET5DFC10312",
+      "trial": 6,
+      "build": "candidate",
+      "stdout": "3.367\n",
+      "stderr": "cold_ms=3.367 elements=39\n"
+    },
+    {
+      "vin": "1FTFW1ET5DFC10312",
+      "trial": 6,
+      "build": "baseline",
+      "stdout": "3.116\n",
+      "stderr": "cold_ms=3.116 elements=39\n"
+    },
+    {
+      "vin": "1FTFW1ET5DFC10312",
+      "trial": 7,
+      "build": "baseline",
+      "stdout": "3.047\n",
+      "stderr": "cold_ms=3.047 elements=39\n"
+    },
+    {
+      "vin": "1FTFW1ET5DFC10312",
+      "trial": 7,
+      "build": "candidate",
+      "stdout": "3.346\n",
+      "stderr": "cold_ms=3.346 elements=39\n"
+    },
+    {
+      "vin": "ZZZCM82633A004352",
+      "trial": 1,
+      "build": "baseline",
+      "stdout": "1.290\n",
+      "stderr": "cold_ms=1.290 elements=6\n"
+    },
+    {
+      "vin": "ZZZCM82633A004352",
+      "trial": 1,
+      "build": "candidate",
+      "stdout": "0.203\n",
+      "stderr": "cold_ms=0.203 elements=6\n"
+    },
+    {
+      "vin": "ZZZCM82633A004352",
+      "trial": 2,
+      "build": "candidate",
+      "stdout": "0.065\n",
+      "stderr": "cold_ms=0.065 elements=6\n"
+    },
+    {
+      "vin": "ZZZCM82633A004352",
+      "trial": 2,
+      "build": "baseline",
+      "stdout": "0.062\n",
+      "stderr": "cold_ms=0.062 elements=6\n"
+    },
+    {
+      "vin": "ZZZCM82633A004352",
+      "trial": 3,
+      "build": "baseline",
+      "stdout": "0.058\n",
+      "stderr": "cold_ms=0.058 elements=6\n"
+    },
+    {
+      "vin": "ZZZCM82633A004352",
+      "trial": 3,
+      "build": "candidate",
+      "stdout": "0.066\n",
+      "stderr": "cold_ms=0.066 elements=6\n"
+    },
+    {
+      "vin": "ZZZCM82633A004352",
+      "trial": 4,
+      "build": "candidate",
+      "stdout": "0.063\n",
+      "stderr": "cold_ms=0.063 elements=6\n"
+    },
+    {
+      "vin": "ZZZCM82633A004352",
+      "trial": 4,
+      "build": "baseline",
+      "stdout": "0.062\n",
+      "stderr": "cold_ms=0.062 elements=6\n"
+    },
+    {
+      "vin": "ZZZCM82633A004352",
+      "trial": 5,
+      "build": "baseline",
+      "stdout": "0.057\n",
+      "stderr": "cold_ms=0.057 elements=6\n"
+    },
+    {
+      "vin": "ZZZCM82633A004352",
+      "trial": 5,
+      "build": "candidate",
+      "stdout": "0.066\n",
+      "stderr": "cold_ms=0.066 elements=6\n"
+    },
+    {
+      "vin": "ZZZCM82633A004352",
+      "trial": 6,
+      "build": "candidate",
+      "stdout": "0.065\n",
+      "stderr": "cold_ms=0.065 elements=6\n"
+    },
+    {
+      "vin": "ZZZCM82633A004352",
+      "trial": 6,
+      "build": "baseline",
+      "stdout": "0.064\n",
+      "stderr": "cold_ms=0.064 elements=6\n"
+    },
+    {
+      "vin": "ZZZCM82633A004352",
+      "trial": 7,
+      "build": "baseline",
+      "stdout": "0.058\n",
+      "stderr": "cold_ms=0.058 elements=6\n"
+    },
+    {
+      "vin": "ZZZCM82633A004352",
+      "trial": 7,
+      "build": "candidate",
+      "stdout": "0.067\n",
+      "stderr": "cold_ms=0.067 elements=6\n"
+    }
+  ],
+  "cold_median_ms": {
+    "1HGCM82633A004352": {
+      "baseline": 1.459,
+      "candidate": 1.755
+    },
+    "1FTFW1ET5DFC10312": {
+      "baseline": 3.082,
+      "candidate": 3.367
+    },
+    "ZZZCM82633A004352": {
+      "baseline": 0.062,
+      "candidate": 0.066
+    }
+  },
+  "validation": {
+    "command": "make check checku",
+    "rust_tests": 160,
+    "python_tests": 825,
+    "existing_python_warnings": 1
+  },
+  "power_after": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded",
+  "load_after": "23:07  up 29 days, 21:44, 44 users, load averages: 19.46 19.58 18.97"
+}

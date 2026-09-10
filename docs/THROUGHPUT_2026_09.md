@@ -4,6 +4,13 @@ The goal was twice the decoding throughput with identical answers. These changes
 improve the existing decoder without an alternate output mode, an artifact
 format change, or a cache of previously decoded VINs.
 
+## September 9 follow-up
+
+A later pass adds **1.19× single-core and 1.10× four-worker batch throughput**
+over the code measured below, with all 1,862,306 full-result fingerprints still
+identical. The new 2× target remains unmet. See the
+[follow-up measurements and reproduction commands](THROUGHPUT_2026_09_09_FOLLOWUP.md).
+
 ## September 9 rerun
 
 **1.67× single-core and 1.40× four-core batch throughput over the previous
