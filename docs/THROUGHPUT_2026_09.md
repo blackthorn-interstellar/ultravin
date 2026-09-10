@@ -17,13 +17,13 @@ identical. The new 2× target remains unmet. See the
 release, with byte-identical output.** Medians of three 60-second windows per
 build and mode:
 
-| Mode | v2.1.2 VIN/s | Current VIN/s | Speedup | Before / after process CPU µs per VIN |
+| Mode | v2.1.2 VIN/s | Candidate VIN/s | Speedup | Before / after process CPU µs per VIN |
 |---|---:|---:|---:|---:|
 | Single core | 45,990 | 76,581 | 1.67× | 21.91 / 13.16 |
 | Batch, four cores | 128,998 | 181,135 | 1.40× | 24.68 / 16.09 |
 
 This round's baseline is the released `v2.1.2` (`50261f1`) — the commit whose
-numbers the README carried until now — and the candidate is `ddc6ee3`, seventeen
+numbers the README carried before this rerun — and the candidate is `ddc6ee3`, seventeen
 `perf:` commits later. The baseline remeasured at 45,990 / 128,998 VIN/s against
 the 45,376 / 130,381 published with that release: within 1.4% and 1.1%. The
 before/after rates here are therefore directly comparable with the figures the
@@ -34,7 +34,7 @@ batch samples ranged from 128,573–130,517 before and 180,951–182,849 after. 
 sample is retained in
 [`throughput_2026_09_09.json`](../scripts/bench/throughput_2026_09_09.json), along
 with commit ids, toolchain, input and executable hashes, and process CPU times.
-The README and chart now use these medians.
+The README and chart used these medians after this rerun.
 
 Single-core throughput gained more than the batch path, so the parallel multiple
 fell from ~2.9× to ~2.4×: the batch path is bound by marshalling and thread
@@ -103,7 +103,7 @@ batch samples ranged from 90,039–94,582 before and 125,445–131,708 after. Ev
 sample is retained in
 [`throughput_2026_09_08.json`](../scripts/bench/throughput_2026_09_08.json), along
 with commit ids, toolchain, input and executable hashes, and process CPU times.
-The README and chart now use these medians.
+The README and chart used these medians after this rerun.
 
 Both executables used the same harness, 5,000-VIN corpus, embedded artifact,
 Cargo.lock, mimalloc allocator and standard release profile (`opt-level=3`,

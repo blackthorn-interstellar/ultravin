@@ -9,17 +9,17 @@
 **An extremely fast, fully offline NHTSA vPIC VIN decoder, written in Rust.**
 
 <p align="center">
-  <img src="assets/benchmark.svg" alt="VINs decoded per second: ultravin 181,135 batched on 4 cores / 76,581 single-core vs corgi v3 83, corgi v2 33, NHTSA MSSQL 22.5, NHTSA Postgres 19.5" width="640"><br>
+  <img src="assets/benchmark.svg" alt="VINs decoded per second: ultravin 195,203 batched on 4 cores / 84,822 single-core vs corgi v3 83, corgi v2 33, NHTSA MSSQL 22.5, NHTSA Postgres 19.5" width="640"><br>
   <sub>VINs decoded per second over a random corpus, single sequential caller — ultravin also batches across cores.</sub>
 </p>
 
-- ⚡️ ~76,600 VIN/s on one core — orders of magnitude faster than the NHTSA SQL procedures
+- ⚡️ ~84,800 VIN/s on one core — orders of magnitude faster than the NHTSA SQL procedures
 - 🦀 Pure Rust core, shipped as a Python library and a Rust crate
 - 📦 The entire vPIC vehicle database baked into the wheel
 - 🔌 Fully offline — no network, no database, no data files at runtime
 - 🎯 Byte-for-byte parity with vPIC's `spVinDecode`, verified across every decodable VIN — except documented vPIC defects, which ultravin deliberately does not reproduce ([the registry](scripts/known_problems.json), [evidence](docs/KNOWN_DEVIATIONS.md))
 - 🐍 Installable via `pip`, with a CLI and a library API
-- 🧵 Batches in parallel to ~181,000 VIN/s on 4 cores
+- 🧵 Batches in parallel to ~195,000 VIN/s on 4 cores
 - 🗃️ Parquet in, parquet out — decodes a dataset of any size in the memory of one chunk
 
 ultravin is a faithful port of NHTSA's `spVinDecode` — the SQL procedure behind
@@ -246,23 +246,25 @@ capped at four cores. The other engines retain their earlier comparison figures:
 
 | engine | VIN/s | vs ultravin (1 core) |
 |---|---|---|
-| **ultravin** — batched, 4 cores | **181,135** | ~2.4× faster |
-| **ultravin** — 1 core | **76,581** | 1× |
-| corgi v3 — `@cardog/corgi` (binary index) | ~83 | ~923× slower |
-| corgi v2 — `@cardog/corgi` 2.0.1 (SQLite) | ~33 | ~2,321× slower |
-| NHTSA MSSQL — `spVinDecode` (SQL Server) | 22.5 | ~3,404× slower |
-| NHTSA Postgres — `spvindecode` | 19.5 | ~3,927× slower |
-| NHTSA vPIC web API — public rate limit | ~10 | ~7,658× slower |
+| **ultravin** — batched, 4 cores | **195,203** | ~2.3× faster |
+| **ultravin** — 1 core | **84,822** | 1× |
+| corgi v3 — `@cardog/corgi` (binary index) | ~83 | ~1,022× slower |
+| corgi v2 — `@cardog/corgi` 2.0.1 (SQLite) | ~33 | ~2,570× slower |
+| NHTSA MSSQL — `spVinDecode` (SQL Server) | 22.5 | ~3,770× slower |
+| NHTSA Postgres — `spvindecode` | 19.5 | ~4,350× slower |
+| NHTSA vPIC web API — public rate limit | ~10 | ~8,482× slower |
 
 ultravin runs in-process with the database embedded — no server, no round-trip.
 These measure the Rust engine on a shared host. Python output construction
-and parquet I/O have separate costs. The [paired benchmark report](docs/THROUGHPUT_2026_09.md)
-records a 1.67× single-core and 1.40× batch improvement over the previous release,
-with startup and memory tradeoffs. The corgi figures are derived from its project's
+and parquet I/O have separate costs. The [latest paired benchmark report](docs/THROUGHPUT_2026_09_09_FOLLOWUP.md)
+records a further 1.19× single-core and 1.10× batch improvement over the starting
+September 9 build, with identical output on 1,862,306 compatibility cases and
+about 0.3 ms more startup time on the two measured registered WMIs. The 2× target
+remains unmet. The corgi figures are derived from its project's
 published per-VIN latency (~12 ms v3 / ~30 ms v2, not re-measured here). The NHTSA
 Postgres and MSSQL oracles run the **unmodified** `spVinDecode` over localhost;
 MSSQL is SQL Server under amd64 emulation on Apple Silicon, so its number
-understates native hardware — ultravin is still ~3,404× faster. The NHTSA vPIC web API row is its
+understates native hardware — ultravin is still ~3,770× faster. The NHTSA vPIC web API row is its
 [published](https://cardog.app/blog/corgi-vin-decoder) ~10 req/s rate limit, not
 a decode time — a hard ceiling regardless of hardware. Methodology and
 reproduction: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).

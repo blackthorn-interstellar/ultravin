@@ -43,7 +43,7 @@ TICKS = [
 ]
 
 X0, X1 = 220, 690  # plot area (px); X0 leaves room for the longest label
-WIDTH = X1 + 50
+WIDTH = X1 + 70  # leave room for the value label beside a bar near AXIS_MAX
 ROW_H, TOP = 30, 16
 BAR_H = 18
 

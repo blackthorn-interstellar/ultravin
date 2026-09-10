@@ -2,44 +2,53 @@
 
 ## Throughput (random corpus)
 
-Measured September 9, 2026: the Rust engine decodes **76,581 VIN/s on one core** and **181,135 VIN/s in
+Measured September 9, 2026: the Rust engine decodes **84,822 VIN/s on one core** and **195,203 VIN/s in
 four-core batches** over the random 5,000-VIN corpus. Both are medians of three
-60-second windows after warming the entire corpus; the previous release and the
-current build ran in alternating order on the same Apple M1 Max.
+60-second windows after warming the entire corpus; the starting September 9
+build (`d536710`) and candidate (`54cbf7f`) ran in alternating order on the same
+Apple M1 Max.
 
 | engine | VIN/s | vs ultravin (1 core) |
 |---|---|---|
-| **ultravin** — batched, 4 cores | **181,135** | ~2.4× faster |
-| **ultravin** — 1 core | **76,581** | 1× |
-| corgi v3 (binary index, published) | ~83 | ~923× slower |
-| corgi v2 (SQLite, published) | ~33 | ~2,321× slower |
-| NHTSA MSSQL (`spVinDecode`, SQL Server) | 22.5 | ~3,404× slower |
-| NHTSA Postgres (`spvindecode`) | 19.5 | ~3,927× slower |
-| NHTSA vPIC web API (public rate limit) | ~10 | ~7,658× slower |
+| **ultravin** — batched, 4 cores | **195,203** | ~2.3× faster |
+| **ultravin** — 1 core | **84,822** | 1× |
+| corgi v3 (binary index, published) | ~83 | ~1,022× slower |
+| corgi v2 (SQLite, published) | ~33 | ~2,570× slower |
+| NHTSA MSSQL (`spVinDecode`, SQL Server) | 22.5 | ~3,770× slower |
+| NHTSA Postgres (`spvindecode`) | 19.5 | ~4,350× slower |
+| NHTSA vPIC web API (public rate limit) | ~10 | ~8,482× slower |
 
-The paired baseline is the previous release, v2.1.2, which measured 45,990 VIN/s
-single-core and 128,998 VIN/s batched: **1.67× and 1.40× improvements**,
-respectively. Both builds produced identical output over all **1,862,306
-full-result fingerprints** in the `2026_08` answer key. The
-[September report](THROUGHPUT_2026_09.md) includes reproduction commands,
-all samples, and the startup and memory tradeoffs.
+The paired baseline measured 71,556 VIN/s single-core and 178,083 VIN/s batched:
+**1.19× and 1.10× improvements**, respectively. The 2× target remains unmet.
+Both builds produced identical output over all **1,862,306 full-result
+fingerprints** in the compatibility suite derived from the `2026_08` answer key;
+this was not a new SQL-oracle comparison. The
+[follow-up report](THROUGHPUT_2026_09_09_FOLLOWUP.md) includes reproduction
+commands, broader-corpus results and startup costs;
+[the raw report](../scripts/bench/throughput_2026_09_09_followup.json) retains
+every sample and build/input hash.
 
-The baseline reproduces v2.1.2's published 45,376 / 130,381 VIN/s to within about
-1.4% single-core and 1.1% batched, so this round's before/after rates are directly
-comparable with the figures that shipped with that release. An older 121,359 VIN/s
-result used ten cores, not four.
+The [earlier September report](THROUGHPUT_2026_09.md) preserves the separate
+comparison against v2.1.2. Compare each paired session on its own; do not multiply
+successive speedups. An older 121,359 VIN/s result used ten cores, not four.
 
 Measurement notes:
 
-- The host was shared. Current samples ranged from 75,860–77,093 VIN/s
-  single-core and 180,951–182,849 VIN/s batched. These measure the Rust engine;
+- The host was shared. Current samples ranged from 84,806–87,979 VIN/s
+  single-core and 194,519–195,458 VIN/s batched. These measure the Rust engine;
   Python dictionary construction and parquet I/O have separate costs.
 - Batches use `RAYON_NUM_THREADS=4`; the machine has 10 physical cores. Batched
-  throughput is about 2.4× the single-core rate — the single-core path gained
-  more than the batch path this round, so the parallel multiple fell from 2.9×.
-- The September 9 rerun used the release profile (`opt-level=3`, `lto="fat"`,
+  throughput is about 2.3× the single-core rate.
+- The September 9 follow-up used the release profile (`opt-level=3`, `lto="fat"`,
   `codegen-units=1`) without debug information, with the same artifact,
-  allocator, lockfile and harness in both builds.
+  allocator, lockfile, harness and Rust 1.98.1 compiler in both builds.
+- On a separate 100,000-VIN stress corpus, two alternating 20-second windows
+  per build/mode measured 1.16× single-core and 1.08× batch improvement. That
+  synthetic compatibility sample is not a fleet distribution.
+- Median first-decode time increased from 1.459 to 1.755 ms for the Honda VIN
+  and from 3.082 to 3.367 ms for the Ford VIN: about 0.3 ms extra for the new
+  indexes. These used seven alternating fresh processes per build/VIN, the
+  system allocator and an unflushed filesystem cache; see the follow-up report.
 - corgi figures are derived from previously published latency (~12 ms v3,
   ~30 ms v2), not re-measured here. SQL-oracle figures are carried forward from
   earlier runs over the shared corpus; neither SQL engine was re-run in September.
@@ -66,8 +75,9 @@ decode-bound. These August measurements used a contended host (load average
 5–9); their methodology differs from the September throughput runs above.
 
 These measurements predate the September optimization. Warm single-VIN latency
-and the Criterion corpus were not re-measured in September; the latest measured
-cold-start is **1.597 ms**. The tables below preserve the August results.
+and the Criterion corpus were not re-measured in September. The latest
+first-decode measurements are summarized above; the tables below preserve the
+August results.
 
 ### Acceptance targets (August snapshot)
 

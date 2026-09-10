@@ -4,7 +4,7 @@ This is the engineering history of ultravin's performance work through September
 9, 2026: what was expensive, what changed, what we measured, and what must remain
 true when changing it again. It covers the decoder, Python output, Arrow/parquet,
 corpus generation, build resources, and the SQL oracle used for differential
-testing. The two September optimization batches have their own detailed sections.
+testing. The September optimization batches and follow-up have their own sections.
 
 Measurements below are historical observations, not new benchmarks of the current
 checkout. Different dates used different toolchains, artifacts, worker counts,
@@ -17,6 +17,7 @@ identified as such.
 - [July and August: reuse, locality, and columnar output](#july-and-august-reuse-locality-and-columnar-output)
 - [September batch 1: index candidates and defer copies](#september-batch-1-index-candidates-and-defer-copies)
 - [September batch 2: remove remaining work and output allocations](#september-batch-2-remove-remaining-work-and-output-allocations)
+- [September 9 follow-up: index joins and narrow matching](#september-9-follow-up-index-joins-and-narrow-matching)
 - [Experiments we rejected or replaced](#experiments-we-rejected-or-replaced)
 - [SQL oracle and development resources](#sql-oracle-and-development-resources)
 - [Correctness and measurement rules](#correctness-and-measurement-rules)
@@ -479,6 +480,47 @@ and **4.176 → 4.269 ms** full. These are different timing boundaries; neither
 establishes cold-storage latency. The steady-state improvements have a small
 first-call cost on this case.
 
+## September 9 follow-up: index joins and narrow matching
+
+Commit **`54cbf7f`** compares against the starting September 9 revision
+**`d536710`**. The additional **2× throughput target was not reached**.
+
+- Compact, bounded indexes replace repeated schema-position, WMI/schema and
+  model/make searches. Sparse IDs retain the original searches; duplicate rows
+  retain their original selection and order. Normalized engine names are
+  indexed once per database, keeping the first match.
+- Pattern buckets use the first and last required literal bytes to narrow
+  candidates before the existing matcher checks them.
+- Plain ASCII correction keys use direct character membership checks; bracket
+  and Unicode keys keep their expansion. Public output sort keys are precomputed.
+
+Three alternating 60-second windows per build/mode used the unchanged 5,000-VIN
+corpus, Apple M1 Max, Rust 1.98.1, artifact, allocator, lockfile and release
+settings. Values are median VIN/s with all-sample ranges.
+
+| Path | Before | After | Speedup |
+|---|---:|---:|---:|
+| Single core | 71,556 (70,903–74,751) | 84,822 (84,806–87,979) | 1.19× |
+| Four-worker batch | 178,083 (174,951–179,079) | 195,203 (194,519–195,458) | 1.10× |
+
+A separate 100,000-VIN stress sample measured **1.16× single-core and 1.08×
+batch** gains in two alternating 20-second windows per build/mode. It is not a
+fleet distribution. All **1,862,306 complete serialized-result fingerprints**
+matched the starting revision. `make check checku` passed with 160 Rust tests and
+825 Python tests.
+
+The indexes add about **0.3 ms** to the first decode on the two registered WMIs
+measured: Honda **1.459 → 1.755 ms**, Ford **3.082 → 3.367 ms**. These are medians
+of seven alternating fresh processes per VIN/build using the system allocator;
+filesystem caches were not flushed. A 64-pattern bitmap matcher and copied
+output-metadata templates were rejected because they did not establish a useful
+batch improvement. Hash indexes that added about 1.3 ms to startup were replaced
+with the compact arrays.
+
+The [follow-up report](docs/THROUGHPUT_2026_09_09_FOLLOWUP.md) records the full
+methodology, reproduction commands and limits. These gains are relative to this
+round's baseline; they must not be multiplied by earlier incremental results.
+
 ## Experiments we rejected or replaced
 
 Keeping these failures is part of preserving the performance work. A compatible
@@ -605,7 +647,7 @@ artifact format, or change requested output shapes.
 - **Measure the cost moved elsewhere.** Check startup and peak RSS as well as
   throughput; separate Rust work from Python output and Arrow/parquet I/O. Time
   Python release wheels in separate environments, not the development extension.
-- **Run the repository checks.** Both batches passed `make check checku` in their
+- **Run the repository checks.** All three rounds passed `make check checku` in their
   recorded final states. The overnight result included 825 passing Python tests
   plus Rust tests, feature configurations, formatting, lints, and type checking.
 
@@ -620,6 +662,8 @@ The committed sources of historical measurements are:
 | [throughput_2026_09.json](scripts/bench/throughput_2026_09.json) | Initial September 7 samples, resources, and correctness digests |
 | [throughput_2026_09_08.json](scripts/bench/throughput_2026_09_08.json) | Batch 1's later paired 60-second rerun |
 | [throughput_2026_09_09.json](scripts/bench/throughput_2026_09_09.json) | Batch 2's later paired 60-second rerun, build/input hashes, and CPU measurements |
+| [THROUGHPUT_2026_09_09_FOLLOWUP.md](docs/THROUGHPUT_2026_09_09_FOLLOWUP.md) | Follow-up changes, paired results, startup costs, and reproduction commands |
+| [throughput_2026_09_09_followup.json](scripts/bench/throughput_2026_09_09_followup.json) | Follow-up raw samples, broader-corpus results, startup measurements, hashes, and correctness evidence |
 | [ORACLE_TUNING.md](docs/ORACLE_TUNING.md) | SQL tuning ladders, rejected steps, equivalence limits, and local application |
 
 The original overnight `REPORT.md`, `STATUS.md`, trial JSON, Python/Arrow runners,
