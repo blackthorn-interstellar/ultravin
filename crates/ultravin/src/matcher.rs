@@ -22,8 +22,8 @@ use crate::{db::Db, tables::ArchivedPattern};
 /// Owned by its database, so string ids cannot alias another loaded artifact.
 pub(crate) struct PatternIndex {
     groups: Vec<KeyGroup>,
-    literals: IntMap<u16, Vec<usize>>,
-    positions: Vec<usize>,
+    literals: IntMap<u32, Vec<usize>>,
+    positions: Vec<(usize, usize)>,
     fallback: Vec<usize>,
     pub(crate) formula_rows: Vec<u32>,
 }
@@ -68,33 +68,39 @@ impl PatternIndex {
             });
             groups[group].rows.push(start + i as u32);
         }
-        let mut literals: IntMap<u16, Vec<usize>> = IntMap::default();
+        let mut literals: IntMap<u32, Vec<usize>> = IntMap::default();
         let mut positions = Vec::new();
         let mut fallback = Vec::new();
         for (i, group) in groups.iter().enumerate() {
-            let literal = match &group.matcher {
-                Some(Matcher::Sets(sets)) => sets.iter().enumerate().find_map(|(pos, set)| {
-                    if set.iter().map(|word| word.count_ones()).sum::<u32>() != 1 {
-                        return None;
-                    }
-                    let word = set.iter().position(|word| *word != 0).unwrap();
-                    Some((pos, (word * 64 + set[word].trailing_zeros() as usize) as u8))
-                }),
-                Some(Matcher::Fallback(_)) => None,
+            let required: Vec<_> = match &group.matcher {
+                Some(Matcher::Sets(sets)) => sets
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(pos, set)| {
+                        if set.iter().map(|word| word.count_ones()).sum::<u32>() != 1 {
+                            return None;
+                        }
+                        let word = set.iter().position(|word| *word != 0).unwrap();
+                        Some((pos, (word * 64 + set[word].trailing_zeros() as usize) as u8))
+                    })
+                    .filter(|(pos, _)| *pos < 14)
+                    .collect(),
+                Some(Matcher::Fallback(_)) => Vec::new(),
                 None => db
                     .s(group.key)
                     .bytes()
                     .enumerate()
-                    .find(|(_, b)| !matches!(b, b'*' | b'_')),
+                    .filter(|(pos, b)| *pos < 14 && !matches!(b, b'*' | b'_'))
+                    .collect(),
             };
-            // Normalized VIN keys have at most 14 bytes. Longer or unusual
-            // patterns keep the ordinary matcher as the authority.
-            if let Some((pos, byte)) = literal.filter(|(pos, _)| *pos < 14) {
+            // Two required bytes reject entire candidate buckets before matching.
+            // A single-literal key repeats its position; other patterns fall back.
+            if let (Some(&(first, a)), Some(&(last, b))) = (required.first(), required.last()) {
                 literals
-                    .entry((pos as u16) * 256 + u16::from(byte))
+                    .entry(literal_pair(first, last, a, b))
                     .or_default()
                     .push(i);
-                positions.push(pos);
+                positions.push((first, last));
             } else {
                 fallback.push(i);
             }
@@ -115,9 +121,10 @@ impl PatternIndex {
         let candidates = self
             .positions
             .iter()
-            .filter_map(|&pos| {
-                let byte = *keys.as_bytes().get(pos)?;
-                self.literals.get(&((pos as u16) * 256 + u16::from(byte)))
+            .filter_map(|&(first, last)| {
+                let a = *keys.as_bytes().get(first)?;
+                let b = *keys.as_bytes().get(last)?;
+                self.literals.get(&literal_pair(first, last, a, b))
             })
             .flatten()
             .chain(&self.fallback);
@@ -133,6 +140,10 @@ impl PatternIndex {
         }
         hits
     }
+}
+
+fn literal_pair(first: usize, last: usize, a: u8, b: u8) -> u32 {
+    ((first as u32) << 24) | ((last as u32) << 16) | (u32::from(a) << 8) | u32::from(b)
 }
 
 /// Port of `vpic.sqlwild_to_regex`: turn a wildcard key into an anchored regex.

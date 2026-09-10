@@ -70,6 +70,7 @@ pub struct Db {
     /// use. Resolution and projection repeatedly consult element metadata, so
     /// an O(1) index avoids searching the element table for every output row.
     element_index: OnceLock<Box<[i32]>>,
+    output_order: OnceLock<Box<[u32]>>,
     /// Initialize lookup tables separately: a first error-code lookup should not
     /// allocate an index for every make/model/engine name in the archive.
     lookup_index: OnceLock<Box<[OnceLock<LookupIndex>]>>,
@@ -85,6 +86,10 @@ pub struct Db {
     /// When public variable names are unique, sorted flat rows can be grouped
     /// by adjacent element ids without constructing a per-VIN string hash map.
     unique_public_variables: OnceLock<bool>,
+    /// Fixed archive joins: bounded by database rows, including sparse ids.
+    schema_positions: OnceLock<Option<RowIndex>>,
+    wmi_schema_ranges: OnceLock<Option<RowIndex>>,
+    model_make_ranges: OnceLock<Option<RowIndex>>,
     /// Packed WMI bytes -> archive row range. Year selection, core passes and
     /// error correction all consult the same WMI; avoid repeating string searches.
     wmi_index: OnceLock<Box<[OnceLock<WmiRangeIndex>]>>,
@@ -92,6 +97,8 @@ pub struct Db {
     /// archive order so decoding need not scan every model of a manufacturer's
     /// every schema. Vehicle type, year and QC checks still run on each pass.
     spec_model_index: OnceLock<IntMap<(i32, i32), Vec<u32>>>,
+    engine_name_index:
+        OnceLock<std::collections::HashMap<String, usize, crate::hash::FxBuildHasher>>,
 }
 
 // SAFETY: the archive is immutable, validated bytes; sharing `&Db` across threads
@@ -115,13 +122,18 @@ impl Db {
             _backing: backing,
             archive,
             element_index: OnceLock::new(),
+            output_order: OnceLock::new(),
             lookup_index: OnceLock::new(),
             pattern_element_ok: OnceLock::new(),
             pattern_indexes: OnceLock::new(),
+            schema_positions: OnceLock::new(),
+            wmi_schema_ranges: OnceLock::new(),
+            model_make_ranges: OnceLock::new(),
             model_from_conversion: OnceLock::new(),
             unique_public_variables: OnceLock::new(),
             wmi_index: OnceLock::new(),
             spec_model_index: OnceLock::new(),
+            engine_name_index: OnceLock::new(),
         })
     }
 
@@ -141,13 +153,18 @@ impl Db {
             _backing: backing,
             archive,
             element_index: OnceLock::new(),
+            output_order: OnceLock::new(),
             lookup_index: OnceLock::new(),
             pattern_element_ok: OnceLock::new(),
             pattern_indexes: OnceLock::new(),
+            schema_positions: OnceLock::new(),
+            wmi_schema_ranges: OnceLock::new(),
+            model_make_ranges: OnceLock::new(),
             model_from_conversion: OnceLock::new(),
             unique_public_variables: OnceLock::new(),
             wmi_index: OnceLock::new(),
             spec_model_index: OnceLock::new(),
+            engine_name_index: OnceLock::new(),
         }
     }
 
@@ -302,9 +319,14 @@ impl Db {
 
     /// Contiguous `wmi_vinschema` rows for a wmi id.
     pub fn wmi_vinschema_for(&self, wmiid: i32) -> &[ArchivedWmiVinSchema] {
-        slice_eq(self.a().wmi_vinschema.as_slice(), wmiid, |r| {
-            r.wmiid.to_native()
-        })
+        let rows = self.a().wmi_vinschema.as_slice();
+        match self
+            .wmi_schema_ranges
+            .get_or_init(|| RowIndex::build(rows, |r| r.wmiid.to_native()))
+        {
+            Some(index) => index.slice(rows, wmiid),
+            None => slice_eq(rows, wmiid, |r| r.wmiid.to_native()),
+        }
     }
 
     /// Conservative preflight for a pass that needs a PatternId-bearing row to
@@ -332,18 +354,29 @@ impl Db {
         })
     }
 
+    fn schema_position(&self, id: i32) -> Option<usize> {
+        let rows = self.a().vinschema.as_slice();
+        if let Some(index) = self
+            .schema_positions
+            .get_or_init(|| RowIndex::build(rows, |r| r.id.to_native()))
+        {
+            let (start, end) = index.range(id)?;
+            if end == start + 1 {
+                return Some(start);
+            }
+        }
+        // Preserve binary_search's row choice for duplicate or sparse ids.
+        rows.binary_search_by_key(&id, |r| r.id.to_native()).ok()
+    }
+
     pub fn vinschema_by_id(&self, id: i32) -> Option<&ArchivedVinSchema> {
-        let v = self.a().vinschema.as_slice();
-        v.binary_search_by(|r| r.id.to_native().cmp(&id))
-            .ok()
-            .map(|i| &v[i])
+        self.schema_position(id)
+            .map(|i| &self.a().vinschema.as_slice()[i])
     }
 
     pub(crate) fn pattern_index(&self, id: i32) -> Option<&PatternIndex> {
         let schemas = self.a().vinschema.as_slice();
-        let i = schemas
-            .binary_search_by_key(&id, |s| s.id.to_native())
-            .ok()?;
+        let i = self.schema_position(id)?;
         let indexes = self
             .pattern_indexes
             .get_or_init(|| (0..schemas.len()).map(|_| OnceLock::new()).collect());
@@ -367,6 +400,30 @@ impl Db {
         } else {
             Some(&self.a().element.as_slice()[slot as usize])
         }
+    }
+
+    /// Public output ordering is a property of the database, not the VIN.
+    /// The validated element-id cap keeps (group rank, id) in one u32 key.
+    pub(crate) fn output_sort_key(&self, id: i32) -> Option<u32> {
+        let slot = *self.element_index().get(id as usize)?;
+        let order = self.output_order.get_or_init(|| {
+            self.elements()
+                .iter()
+                .map(|e| {
+                    if e.id.to_native() < 0 || crate::public_decode(self, e).is_none() {
+                        u32::MAX
+                    } else {
+                        crate::tables::group_rank(self.s(e.groupname.to_native())) as u32
+                            * (crate::tables::MAX_ELEMENT_ID as u32 + 1)
+                            + e.id.to_native() as u32
+                    }
+                })
+                .collect()
+        });
+        order
+            .get(slot as usize)
+            .copied()
+            .filter(|&key| key != u32::MAX)
     }
 
     /// `element_id -> eligible for the pattern pass`: the element exists, has a
@@ -473,24 +530,38 @@ impl Db {
     }
 
     pub fn makes_for_model(&self, modelid: i32) -> &[ArchivedMakeModel] {
-        slice_eq(self.a().make_model.as_slice(), modelid, |r| {
-            r.modelid.to_native()
-        })
+        let rows = self.a().make_model.as_slice();
+        match self
+            .model_make_ranges
+            .get_or_init(|| RowIndex::build(rows, |r| r.modelid.to_native()))
+        {
+            Some(index) => index.slice(rows, modelid),
+            None => slice_eq(rows, modelid, |r| r.modelid.to_native()),
+        }
     }
 
     pub fn wmi_makes_for(&self, wmiid: i32) -> &[ArchivedWmiMake] {
         slice_eq(self.a().wmi_make.as_slice(), wmiid, |r| r.wmiid.to_native())
     }
 
-    /// Engine model whose `lower(trim(name))` equals `norm` (already lowercased by
-    /// the caller). Case-insensitive compare avoids allocating a lowercased copy of
-    /// every row's name during the linear scan.
+    /// First engine model whose trimmed name equals `norm`, ignoring ASCII case.
+    /// Normalization is indexed once; the decode path supplies a lowercase key.
     pub fn enginemodel_by_norm(&self, norm: &str) -> Option<&ArchivedEngineModel> {
-        self.a().enginemodel.iter().find(|em| {
-            self.s(em.name.to_native())
-                .trim()
-                .eq_ignore_ascii_case(norm)
-        })
+        let index = self.engine_name_index.get_or_init(|| {
+            let mut index = std::collections::HashMap::default();
+            for (i, model) in self.enginemodels().iter().enumerate() {
+                index
+                    .entry(self.s(model.name.to_native()).trim().to_ascii_lowercase())
+                    .or_insert(i);
+            }
+            index
+        });
+        let key = if norm.bytes().any(|b| b.is_ascii_uppercase()) {
+            std::borrow::Cow::Owned(norm.to_ascii_lowercase())
+        } else {
+            std::borrow::Cow::Borrowed(norm)
+        };
+        index.get(key.as_ref()).map(|&i| &self.enginemodels()[i])
     }
 
     pub fn enginemodelpatterns_for(&self, emid: i32) -> &[ArchivedEngineModelPattern] {
@@ -722,6 +793,48 @@ fn packed_wmi(wmi: &str) -> Option<u64> {
     Some(u64::from_le_bytes(key))
 }
 
+/// Compact ranges for dense, sorted archive ids. Sparse tables retain their
+/// original searches; initialization and memory are bounded by the row count.
+struct RowIndex {
+    first: i32,
+    ranges: Box<[(u32, u32)]>,
+}
+
+impl RowIndex {
+    fn build<T>(rows: &[T], key: impl Fn(&T) -> i32) -> Option<Self> {
+        let first = key(rows.first()?);
+        let last = key(rows.last()?);
+        let span = usize::try_from(i64::from(last) - i64::from(first) + 1).ok()?;
+        if span > rows.len().saturating_mul(2) || span > 1_048_576 || rows.len() > u32::MAX as usize
+        {
+            return None;
+        }
+        let mut ranges = vec![(0, 0); span];
+        for (i, row) in rows.iter().enumerate() {
+            let offset = usize::try_from(i64::from(key(row)) - i64::from(first)).ok()?;
+            let range = ranges.get_mut(offset)?;
+            if range.0 == range.1 {
+                range.0 = i as u32;
+            }
+            range.1 = i as u32 + 1;
+        }
+        Some(Self {
+            first,
+            ranges: ranges.into_boxed_slice(),
+        })
+    }
+
+    fn range(&self, id: i32) -> Option<(usize, usize)> {
+        let offset = usize::try_from(i64::from(id) - i64::from(self.first)).ok()?;
+        let &(start, end) = self.ranges.get(offset)?;
+        (start != end).then_some((start as usize, end as usize))
+    }
+
+    fn slice<'a, T>(&self, rows: &'a [T], id: i32) -> &'a [T] {
+        self.range(id).map_or(&[], |(start, end)| &rows[start..end])
+    }
+}
+
 /// Contiguous sub-slice of `v` (sorted by `key`) whose key equals `target`.
 fn slice_eq<T, F: Fn(&T) -> i32>(v: &[T], target: i32, key: F) -> &[T] {
     let lo = v.partition_point(|r| key(r) < target);
@@ -734,6 +847,128 @@ fn slice_eq<T, F: Fn(&T) -> i32>(v: &[T], target: i32, key: F) -> &[T] {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn indexed_joins_match_archive_searches() {
+        let Some(db) = Db::try_embedded() else { return };
+        let schemas = db.a().vinschema.as_slice();
+        for id in schemas
+            .iter()
+            .map(|s| s.id.to_native())
+            .chain([i32::MIN, -1, 0, i32::MAX])
+        {
+            let expected = schemas.binary_search_by_key(&id, |s| s.id.to_native()).ok();
+            assert_eq!(db.schema_position(id), expected, "schema {id}");
+        }
+        let links = db.a().wmi_vinschema.as_slice();
+        for id in links
+            .iter()
+            .map(|r| r.wmiid.to_native())
+            .chain([i32::MIN, -1, 0, i32::MAX])
+        {
+            let expected = slice_eq(links, id, |r| r.wmiid.to_native());
+            let actual = db.wmi_vinschema_for(id);
+            assert_eq!(actual.len(), expected.len(), "WMI {id}");
+            if !actual.is_empty() {
+                assert!(std::ptr::eq(actual, expected));
+            }
+        }
+        let models = db.a().make_model.as_slice();
+        for id in models
+            .iter()
+            .map(|r| r.modelid.to_native())
+            .chain([i32::MIN, -1, 0, i32::MAX])
+        {
+            let expected = slice_eq(models, id, |r| r.modelid.to_native());
+            let actual = db.makes_for_model(id);
+            assert_eq!(actual.len(), expected.len(), "model {id}");
+            if !actual.is_empty() {
+                assert!(std::ptr::eq(actual, expected));
+            }
+        }
+    }
+
+    #[test]
+    fn engine_name_index_preserves_first_match_and_ascii_case() {
+        let Some(db) = Db::try_embedded() else { return };
+        for model in db.enginemodels() {
+            let name = db.s(model.name.to_native()).trim();
+            for text in [
+                name.to_string(),
+                name.to_ascii_lowercase(),
+                name.to_ascii_uppercase(),
+                format!(" {name} "),
+            ] {
+                let expected = db
+                    .enginemodels()
+                    .iter()
+                    .find(|em| db.s(em.name.to_native()).trim().eq_ignore_ascii_case(&text));
+                assert_eq!(
+                    db.enginemodel_by_norm(&text).map(|em| em.id.to_native()),
+                    expected.map(|em| em.id.to_native()),
+                    "{text:?}"
+                );
+            }
+        }
+        assert!(db
+            .enginemodel_by_norm("not an archived engine model")
+            .is_none());
+    }
+
+    #[test]
+    fn cached_output_order_matches_public_group_and_element_order() {
+        let Some(db) = Db::try_embedded() else { return };
+        let mut old = Vec::new();
+        let mut indexed = Vec::new();
+        for e in db.elements() {
+            let id = e.id.to_native();
+            assert_eq!(
+                db.output_sort_key(id).is_some(),
+                crate::public_decode(db, e).is_some()
+            );
+            if let Some(key) = db.output_sort_key(id) {
+                old.push((crate::tables::group_rank(db.s(e.groupname.to_native())), id));
+                indexed.push((key, id));
+            }
+        }
+        old.sort_unstable();
+        indexed.sort_unstable();
+        assert_eq!(
+            old.iter().map(|&(_, id)| id).collect::<Vec<_>>(),
+            indexed.iter().map(|&(_, id)| id).collect::<Vec<_>>()
+        );
+        for id in [i32::MIN, -1, i32::MAX] {
+            assert_eq!(db.output_sort_key(id), None);
+        }
+    }
+
+    #[test]
+    fn row_range_index_keeps_duplicates_gaps_and_extreme_keys() {
+        for rows in [
+            &[][..],
+            &[i32::MIN, i32::MIN, i32::MIN + 2][..],
+            &[-2, -1, -1, 1][..],
+            &[0, 0, 2][..],
+            &[i32::MAX - 2, i32::MAX][..],
+            &[i32::MIN, -1, 0, i32::MAX][..],
+        ] {
+            let index = RowIndex::build(rows, |&id| id);
+            for id in rows
+                .iter()
+                .copied()
+                .chain([i32::MIN, -3, -2, -1, 0, 1, 2, i32::MAX])
+            {
+                let expected = slice_eq(rows, id, |&id| id);
+                let actual = index.as_ref().map_or_else(
+                    || slice_eq(rows, id, |&id| id),
+                    |index| index.slice(rows, id),
+                );
+                assert_eq!(actual, expected, "rows {rows:?}, id {id}");
+            }
+        }
+        assert!(RowIndex::build(&[i32::MIN, i32::MAX], |&id| id).is_none());
+        assert!(RowIndex::build(&[-2, 0], |&id| id).is_some());
+    }
 
     #[test]
     fn lookup_ranges_keep_negative_sparse_duplicate_and_empty_names() {

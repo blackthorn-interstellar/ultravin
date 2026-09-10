@@ -1008,20 +1008,12 @@ fn project<'a>(db: &'a Db, items: Vec<decode::DecodingItem<'a>>) -> Vec<DecodedE
     let mut order: Vec<_> = items
         .iter()
         .enumerate()
-        .filter_map(|(index, it)| {
-            let e = db.element_by_id(it.element_id)?;
-            public_decode(db, e)?;
-            Some((
-                tables::group_rank(db.s(e.groupname.to_native())),
-                it.element_id,
-                index,
-            ))
-        })
+        .filter_map(|(index, it)| Some((db.output_sort_key(it.element_id)?, index)))
         .collect();
     order.sort_unstable();
     let mut items: Vec<_> = items.into_iter().map(Some).collect();
     let mut elements: Vec<DecodedElement> = Vec::with_capacity(order.len());
-    for (_, _, index) in order {
+    for (_, index) in order {
         let it = items[index]
             .take()
             .expect("each projected item appears once");

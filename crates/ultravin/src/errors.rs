@@ -530,11 +530,34 @@ fn used_key_positions<'a>(vin: &[char], matched_keys: impl Iterator<Item = &'a s
         if key.len() <= remaining.trailing_zeros() as usize {
             continue;
         }
-        for &(pos, c) in key_chars(key).iter() {
-            if matches!(pos, 1..=5 | 8) && c != '|' && vin.get((pos + 2) as usize) == Some(&c) {
-                let index = (pos - 1) as usize;
-                used[index] = true;
-                remaining &= !(1 << index);
+        if key.is_ascii() && !key.contains('[') {
+            let bytes = key.as_bytes();
+            let mut todo = remaining;
+            while todo != 0 {
+                let i = todo.trailing_zeros() as usize;
+                todo &= todo - 1;
+                if let Some(&byte) = bytes.get(i) {
+                    let c = vin[i + 3];
+                    if byte != b'*'
+                        && byte != b'|'
+                        && (if byte == b'#' {
+                            c.is_ascii_digit()
+                        } else {
+                            c == char::from(byte)
+                        })
+                    {
+                        used[i] = true;
+                        remaining &= !(1 << i);
+                    }
+                }
+            }
+        } else {
+            for &(pos, c) in key_chars(key).iter() {
+                if matches!(pos, 1..=5 | 8) && c != '|' && vin.get((pos + 2) as usize) == Some(&c) {
+                    let index = (pos - 1) as usize;
+                    used[index] = true;
+                    remaining &= !(1 << index);
+                }
             }
         }
         if remaining == 0 {
@@ -575,6 +598,8 @@ mod tests {
             &["CM82[67]", "CM82[67]", "*****|*A"],
             &["[A-Z][1-9]*", "#", "_______________"],
             &["|", "abc", "é"],
+            &["#_]*|A#_", "AB#***|#"],
+            &["[", "[ABC", "]_#", "***#***#"],
         ];
         for keys in key_sets {
             let expected: IntSet<(i32, char)> = keys
@@ -582,7 +607,15 @@ mod tests {
                 .flat_map(|key| valid_chars_in_key(key))
                 .filter(|(_, c)| *c != '|')
                 .collect();
-            for vin in ["1HGCM82633A004352", "ABCZ1Z9|*1X", "123abc", "123é", ""] {
+            for vin in [
+                "1HGCM82633A004352",
+                "ABCZ1Z9|*1X",
+                "123abc",
+                "123é",
+                "1239_]5|A9_",
+                "123#*|_]2",
+                "",
+            ] {
                 let vin: Vec<char> = vin.chars().collect();
                 let actual = used_key_positions(&vin, keys.iter().copied());
                 for i in [0, 1, 2, 3, 4, 7] {
