@@ -9,7 +9,7 @@
 
 /// Transliterate a VIN character to its numeric value. `None` for I/O/Q or any
 /// non-VIN byte (the SQL `CASE ... ELSE -1`).
-fn translit(c: u8) -> Option<u32> {
+const fn translit(c: u8) -> Option<u32> {
     Some(match c {
         b'0'..=b'9' => (c - b'0') as u32,
         b'A' | b'J' => 1,
@@ -65,8 +65,39 @@ enum PosRule {
     V1,
 }
 
+// The largest valid weighted sum is 9 * 89 = 801. An invalid byte contributes
+// 1024, so one final comparison detects invalid positions without a branch for
+// every character. The WMI-dependent rules for positions 13/14 stay per-call.
+const INVALID: u16 = 1024;
+const WEIGHTED: [[u16; 256]; 17] = {
+    let weights = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
+    let mut values = [[INVALID; 256]; 17];
+    let mut pos = 0;
+    while pos < 17 {
+        let mut byte = 0;
+        while byte < 256 {
+            let c = byte as u8;
+            let allowed = if pos == 9 {
+                is_my_char(c)
+            } else if pos >= 14 {
+                c.is_ascii_digit()
+            } else {
+                is_default_char(c)
+            };
+            if allowed {
+                if let Some(value) = translit(c) {
+                    values[pos][byte] = value as u16 * weights[pos];
+                }
+            }
+            byte += 1;
+        }
+        pos += 1;
+    }
+    values
+};
+
 /// Shared body of both `fVINCheckDigit*` ports: transliterate-and-weight over the
-/// 17 positions, returning `Some('?')` on the first character invalid at its
+/// 17 positions, returning `Some('?')` for any character invalid at its
 /// position or untransliteratable, `None` when the VIN is not 17 characters. The
 /// only thing that differs between the ports is the per-position validity rule.
 ///
@@ -80,21 +111,23 @@ fn check_digit_kernel(vin: &str, pos3: u8, rule: PosRule) -> Option<char> {
     if b.len() != 17 {
         return None;
     }
-    let weights: [u32; 17] = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
-    let mut sum: u32 = 0;
-    for (idx, &c) in b.iter().enumerate() {
-        let i = idx + 1; // 1-based, matching the SQL
-        let ok = match rule {
-            PosRule::V2 { is_car_mpv_lt } => valid_at(i, c, pos3, is_car_mpv_lt),
-            PosRule::V1 => valid_at_v1(i, c, pos3),
-        };
-        if !ok {
-            return Some('?');
-        }
-        let Some(v) = translit(c) else {
-            return Some('?');
-        };
-        sum += v * weights[idx];
+    let numeric13 = matches!(
+        rule,
+        PosRule::V1
+            | PosRule::V2 {
+                is_car_mpv_lt: true
+            }
+    );
+    if pos3 != b'9' && (!b[13].is_ascii_digit() || numeric13 && !b[12].is_ascii_digit()) {
+        return Some('?');
+    }
+    let sum: u16 = b
+        .iter()
+        .enumerate()
+        .map(|(i, &c)| WEIGHTED[i][c as usize])
+        .sum();
+    if sum >= INVALID {
+        return Some('?');
     }
     let r = sum % 11;
     Some(if r == 10 {
@@ -122,6 +155,7 @@ pub fn check_digit(vin: &str) -> Option<char> {
 /// Per-position validity for the single-arg `fVINCheckDigit` (used by error code
 /// 3). Differs from `fVINCheckDigit2`: positions 13 AND 14 are numeric whenever
 /// position 3 is not `'9'` (no car/MPV/LT gating on position 13).
+#[cfg(test)]
 fn valid_at_v1(i: usize, c: u8, pos3: u8) -> bool {
     let my = is_my_char(c);
     let nums = c.is_ascii_digit();
@@ -145,6 +179,78 @@ pub fn check_digit_v1(vin: &str) -> Option<char> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn weighted_kernel_matches_positional_rules_for_every_ascii_mutation() {
+        fn reference(vin: &str, rule: PosRule) -> Option<char> {
+            let bytes = vin.as_bytes();
+            if bytes.len() != 17 {
+                return None;
+            }
+            let weights = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
+            let mut sum = 0;
+            for (i, &byte) in bytes.iter().enumerate() {
+                let valid = match rule {
+                    PosRule::V1 => valid_at_v1(i + 1, byte, bytes[2]),
+                    PosRule::V2 { is_car_mpv_lt } => valid_at(i + 1, byte, bytes[2], is_car_mpv_lt),
+                };
+                if !valid {
+                    return Some('?');
+                }
+                let Some(value) = translit(byte) else {
+                    return Some('?');
+                };
+                sum += weights[i] * value;
+            }
+            Some(if sum % 11 == 10 {
+                'X'
+            } else {
+                (b'0' + (sum % 11) as u8) as char
+            })
+        }
+
+        for low_volume in [false, true] {
+            let mut base = *b"1HGCM82633A004352";
+            if low_volume {
+                base[2] = b'9';
+            }
+            for rule in [
+                PosRule::V1,
+                PosRule::V2 {
+                    is_car_mpv_lt: false,
+                },
+                PosRule::V2 {
+                    is_car_mpv_lt: true,
+                },
+            ] {
+                for pos in 0..17 {
+                    for byte in 0..=127 {
+                        let mut bytes = base;
+                        bytes[pos] = byte;
+                        let vin = std::str::from_utf8(&bytes).unwrap();
+                        assert_eq!(
+                            check_digit_kernel(vin, bytes[2], rule),
+                            reference(vin, rule),
+                            "{vin:?}"
+                        );
+                    }
+                }
+                for vin in [
+                    "",
+                    "1HGCM82633A00435",
+                    "1HGCM82633A004352X",
+                    "éGCM82633A004352",
+                    "AAAAAAAAAAAAAAAAA",
+                ] {
+                    assert_eq!(
+                        check_digit_kernel(vin, vin.as_bytes().get(2).copied().unwrap_or(0), rule),
+                        reference(vin, rule),
+                        "{vin:?}"
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn canonical_vin_check_digit_is_3() {

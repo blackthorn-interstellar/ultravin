@@ -266,7 +266,7 @@ fn scrub(v: std::borrow::Cow<'_, str>) -> String {
 /// Column builders can copy clean borrowed text directly into their final
 /// buffers; only values containing control characters need an intermediate.
 fn scrub_value(v: std::borrow::Cow<'_, str>) -> std::borrow::Cow<'_, str> {
-    if v.bytes().any(|b| matches!(b, b'\t' | b'\r' | b'\n')) {
+    if memchr::memchr3(b'\t', b'\r', b'\n', v.as_bytes()).is_some() {
         std::borrow::Cow::Owned(v.replace(['\t', '\r', '\n'], " "))
     } else {
         v
@@ -1023,14 +1023,11 @@ fn projection_order(db: &Db, items: &[decode::DecodingItem<'_>]) -> Vec<(u32, us
 
 /// Project the surviving items into output elements (non-empty Decode, public),
 /// ordered by the GroupName CASE rank then element id.
-fn project<'a>(db: &'a Db, items: Vec<decode::DecodingItem<'a>>) -> Vec<DecodedElement<'a>> {
+fn project<'a>(db: &'a Db, mut items: Vec<decode::DecodingItem<'a>>) -> Vec<DecodedElement<'a>> {
     let order = projection_order(db, &items);
-    let mut items: Vec<_> = items.into_iter().map(Some).collect();
     let mut elements: Vec<DecodedElement> = Vec::with_capacity(order.len());
     for (_, index) in order {
-        let it = items[index]
-            .take()
-            .expect("each projected item appears once");
+        let it = &mut items[index];
         let Some(e) = db.element_by_id(it.element_id) else {
             continue;
         };
@@ -1040,16 +1037,16 @@ fn project<'a>(db: &'a Db, items: Vec<decode::DecodingItem<'a>>) -> Vec<DecodedE
         elements.push(DecodedElement {
             group_name: db.s(e.groupname.to_native()),
             variable: db.s(e.name.to_native()),
-            value: scrub(it.value),
+            value: scrub(std::mem::take(&mut it.value)),
             element_id: it.element_id,
-            attribute_id: it.attribute_id.into_owned(),
+            attribute_id: std::mem::take(&mut it.attribute_id).into_owned(),
             code: db.s(e.code.to_native()),
             data_type: db.s(e.datatype.to_native()),
             decode: decode_str,
-            source: it.source,
+            source: std::mem::take(&mut it.source),
             pattern_id: opt_i32(it.pattern_id),
             vin_schema_id: opt_i32(it.vin_schema_id),
-            keys: it.keys.into_owned(),
+            keys: std::mem::take(&mut it.keys).into_owned(),
             created_on: opt_i64(it.created_on),
             wmi_id: opt_i32(it.wmi_id),
             to_be_qced: it.to_be_qced,
@@ -1125,6 +1122,26 @@ mod tests {
     #[test]
     fn check_digit_helper_still_works() {
         assert_eq!(check_digit("1HGCM82633A004352"), Some('3'));
+    }
+
+    #[test]
+    fn value_cleanup_preserves_text_and_ownership_across_vector_boundaries() {
+        use std::borrow::Cow;
+        for offset in 0..65 {
+            for marker in ["", "\t", "\r", "\n", "\0", "é", "日本語", "\t\r\n"] {
+                let text = format!("{}{marker}value", "a".repeat(offset));
+                let expected = text.replace(['\t', '\r', '\n'], " ");
+                for value in [Cow::Borrowed(text.as_str()), Cow::Owned(text.clone())] {
+                    assert_eq!(scrub_value(value), expected);
+                }
+                if text == expected {
+                    assert!(matches!(
+                        scrub_value(Cow::Borrowed(&text)),
+                        Cow::Borrowed(_)
+                    ));
+                }
+            }
+        }
     }
 
     #[test]

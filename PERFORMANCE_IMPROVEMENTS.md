@@ -1,7 +1,7 @@
 # Performance improvements
 
 This is the engineering history of ultravin's performance work through September
-10, 2026: what was expensive, what changed, what we measured, and what must remain
+11, 2026: what was expensive, what changed, what we measured, and what must remain
 true when changing it again. It covers the decoder, Python output, Arrow/parquet,
 corpus generation, build resources, and the SQL oracle used for differential
 testing. Each dated optimization round has its own section.
@@ -19,6 +19,7 @@ identified as such.
 - [September batch 2: remove remaining work and output allocations](#september-batch-2-remove-remaining-work-and-output-allocations)
 - [September 9 follow-up: index joins and narrow matching](#september-9-follow-up-index-joins-and-narrow-matching)
 - [September 10: direct full JSON output](#september-10-direct-full-json-output)
+- [September 11: check digits and result projection](#september-11-check-digits-and-result-projection)
 - [Experiments we rejected or replaced](#experiments-we-rejected-or-replaced)
 - [SQL oracle and development resources](#sql-oracle-and-development-resources)
 - [Correctness and measurement rules](#correctness-and-measurement-rules)
@@ -543,6 +544,22 @@ JSON outputs match serde byte-for-byte. `make check checku` passed with 168 Rust
 and 825 Python tests. The [full report](docs/THROUGHPUT_2026_09_10_JSON.md) records
 ordinary-struct controls, the broader stress sample, peak RSS, startup, rejected
 experiments, exact samples and reproduction commands.
+
+## September 11: check digits and result projection
+
+Against `38fb2ff`, precomputed check-digit contributions, vectorized text cleanup
+and direct movement of output fields improved full Rust-result throughput by
+**6.3% single-core** and **5.3% with four workers**. The **2× target was not met**.
+Three alternating 60-second windows per build and mode measured medians of
+**80,768 → 85,847 VIN/s** and **178,326 → 187,707 VIN/s**, respectively.
+
+The 100,000-distinct-VIN stress corpus improved **4.5% single-core** and **1.7%
+batch**. All **1,862,306 complete-result fingerprints** matched the baseline;
+`make check checku` passed with 170 Rust tests and 825 Python tests. Public APIs
+and output ownership remain unchanged. The
+[September 11 report](docs/THROUGHPUT_2026_09_11.md) records the measurements,
+startup/memory checks, rejected experiments and reproduction commands, with
+[raw evidence](scripts/bench/throughput_2026_09_11.json).
 
 ## Experiments we rejected or replaced
 

@@ -1,0 +1,992 @@
+{
+  "date": "2026-09-11",
+  "target": "2x decode throughput relative to 38fb2ff, with identical complete outputs",
+  "target_met": false,
+  "provenance": {
+    "baseline": "38fb2ffe3cab638ca17f5ff06ee8c42b02a76508",
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: aarch64-apple-darwin\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+    "platform": "macOS-26.6.1-arm64-arm-64bit-Mach-O",
+    "build_overrides": {
+      "RUSTFLAGS": null,
+      "CARGO_ENCODED_RUSTFLAGS": null,
+      "CARGO_PROFILE_RELEASE_DEBUG": null
+    },
+    "sha256": {
+      "Cargo.toml": "a85692348ace983f4e8dba935f913f4bb2edf7181194ce554d9290afb454cfb2",
+      "Cargo.lock": "06333688674e70f089b043d466bf8e0abda8dca1f45161fefbf368cfec9c384d",
+      "crates/ultravin/Cargo.toml": "1876d114c5b0e4c381567fb30845ba00025ad6724e7a7c66f2875448e642c4bc",
+      "crates/ultravin/src/lib.rs": "c08bef22d4e4e86f4a5d88eeb53059c85535bc14b96245626a8fcf8daa31a280",
+      "crates/ultravin/src/checkdigit.rs": "7781bbc5b1bacd13e57ffc2962ca149d33d865ebc2672f693d17e5e0dcdffe8d",
+      "crates/ultravin/examples/throughput.rs": "009fca3cf2ba5eaf6d4f77651d81ab7bdbb68d3a896847fdc256d34fb6a57c6a",
+      "crates/ultravin/examples/fingerprint.rs": "d557924e59e12d5bb88be0b4c8e3c0ba65fa4dd06465c71e54e4b67000a7a128",
+      "scripts/bench/corpus.txt": "b45ad4472c202ee176f86e8bc3c39609c76b6258df963ea04e08439aa3a1eb09",
+      "target/perf-2x-20260909/broad-corpus.txt": "a656df49a66e0a98ff1b366105e0b7f87b9524ac3865a5c8d79f94c66bb18f7d",
+      "target/perf-20260907/all-cases.jsonl": "93d318f511450137545ee64bfe0311dc737233748ee9bf32250e8043e12b6ea8",
+      "crates/ultravin/data/vpic.rkyv": "2d555d4db3fde3867f41e415ec6e848285a286b2fe5fb45f0bdcb88245bd7787"
+    },
+    "executable_sha256": {
+      "baseline-throughput": "db37a5e4ecb87001152c52892e26fe654285866640e017ee502bc2d34b2aa2bd",
+      "candidate-throughput": "5b61f3275ae9e47442d27b85959edc67e7c22800f3a50b10a38f5b8ab41f1639",
+      "baseline-fingerprint": "cc80020df88a717da8c5bc00cf03a86c1bdac15c9d95debdd233a90064bb3fef",
+      "candidate-fingerprint": "6e91d23924c911a0b75c0afaa4c2a1722944f8d95e70328925fb674a46906ce8",
+      "baseline-cold": "231ee66f9bba03f0e3da2ed71c7bb4a801573c84bc133f52ac6c189a17f0b5a0",
+      "candidate-cold": "fdbe3e554366b2b2dc599e23c876bf126f7c344d20ca6eaef23fdf32dab2c1d3"
+    },
+    "fingerprint_sha256": {
+      "baseline.hashes": "e985b2617222a111cb2444b02af3fa62e0f7bfb18345170dbd6829e9e047ba52",
+      "candidate.hashes": "e985b2617222a111cb2444b02af3fa62e0f7bfb18345170dbd6829e9e047ba52"
+    }
+  },
+  "methodology": "Identical full-result throughput harness, corpus, artifact, compiler, allocator and release profile. Dependency versions unchanged; memchr 2.8.3 is newly declared as a direct dependency. Each process warms the complete corpus before timing. Alternate baseline/candidate order and retain every trial. Builds, tests and profiling stopped during timing; the M1 Max remained shared with other work. CPU times include startup, warmup and teardown.",
+  "main": {
+    "corpus": "scripts/bench/corpus.txt",
+    "vins": 5000,
+    "seconds": 60,
+    "rounds": 3,
+    "batch_workers": 4,
+    "measurements": [
+      {
+        "build": "baseline",
+        "mode": "single",
+        "format": "full",
+        "trial": 1,
+        "timed_vins": 4710000,
+        "seconds": 60.0,
+        "vins_per_second": 78472,
+        "process_cpu_seconds": 57.279106999999996,
+        "process_cpu_us_per_vin": 12.148272958642629
+      },
+      {
+        "build": "candidate",
+        "mode": "single",
+        "format": "full",
+        "trial": 1,
+        "timed_vins": 5170000,
+        "seconds": 60.0,
+        "vins_per_second": 86117,
+        "process_cpu_seconds": 58.170383,
+        "process_cpu_us_per_vin": 11.240653719806764
+      },
+      {
+        "build": "candidate",
+        "mode": "single",
+        "format": "full",
+        "trial": 2,
+        "timed_vins": 5155000,
+        "seconds": 60.0,
+        "vins_per_second": 85847,
+        "process_cpu_seconds": 58.01417300000003,
+        "process_cpu_us_per_vin": 11.243056782945743
+      },
+      {
+        "build": "baseline",
+        "mode": "single",
+        "format": "full",
+        "trial": 2,
+        "timed_vins": 4850000,
+        "seconds": 60.0,
+        "vins_per_second": 80768,
+        "process_cpu_seconds": 58.06011099999999,
+        "process_cpu_us_per_vin": 11.958828218331615
+      },
+      {
+        "build": "baseline",
+        "mode": "single",
+        "format": "full",
+        "trial": 3,
+        "timed_vins": 4865000,
+        "seconds": 60.0,
+        "vins_per_second": 81030,
+        "process_cpu_seconds": 58.444385999999945,
+        "process_cpu_us_per_vin": 12.000900616016416
+      },
+      {
+        "build": "candidate",
+        "mode": "single",
+        "format": "full",
+        "trial": 3,
+        "timed_vins": 5105000,
+        "seconds": 60.0,
+        "vins_per_second": 85069,
+        "process_cpu_seconds": 58.23793800000003,
+        "process_cpu_us_per_vin": 11.396856751467716
+      },
+      {
+        "build": "baseline",
+        "mode": "batch",
+        "format": "full",
+        "trial": 1,
+        "timed_vins": 11100000,
+        "seconds": 60.0,
+        "vins_per_second": 184979,
+        "process_cpu_seconds": 161.93465099999995,
+        "process_cpu_us_per_vin": 14.58213876632147
+      },
+      {
+        "build": "candidate",
+        "mode": "batch",
+        "format": "full",
+        "trial": 1,
+        "timed_vins": 11265000,
+        "seconds": 60.0,
+        "vins_per_second": 187707,
+        "process_cpu_seconds": 160.62465400000002,
+        "process_cpu_us_per_vin": 14.252409405501334
+      },
+      {
+        "build": "candidate",
+        "mode": "batch",
+        "format": "full",
+        "trial": 2,
+        "timed_vins": 11350000,
+        "seconds": 60.0,
+        "vins_per_second": 189092,
+        "process_cpu_seconds": 159.64312800000002,
+        "process_cpu_us_per_vin": 14.059280317040955
+      },
+      {
+        "build": "baseline",
+        "mode": "batch",
+        "format": "full",
+        "trial": 2,
+        "timed_vins": 10705000,
+        "seconds": 60.0,
+        "vins_per_second": 178326,
+        "process_cpu_seconds": 159.37796699999996,
+        "process_cpu_us_per_vin": 14.881229411764703
+      },
+      {
+        "build": "baseline",
+        "mode": "batch",
+        "format": "full",
+        "trial": 3,
+        "timed_vins": 10700000,
+        "seconds": 60.0,
+        "vins_per_second": 178286,
+        "process_cpu_seconds": 158.756511,
+        "process_cpu_us_per_vin": 14.830127136851939
+      },
+      {
+        "build": "candidate",
+        "mode": "batch",
+        "format": "full",
+        "trial": 3,
+        "timed_vins": 11060000,
+        "seconds": 60.0,
+        "vins_per_second": 184329,
+        "process_cpu_seconds": 158.17492200000024,
+        "process_cpu_us_per_vin": 14.295067510167215
+      }
+    ],
+    "summary": {
+      "single": {
+        "baseline": {
+          "median_vins_per_second": 80768,
+          "range_vins_per_second": [
+            78472,
+            81030
+          ],
+          "median_process_cpu_us_per_vin": 12.000900616016416
+        },
+        "candidate": {
+          "median_vins_per_second": 85847,
+          "range_vins_per_second": [
+            85069,
+            86117
+          ],
+          "median_process_cpu_us_per_vin": 11.243056782945743
+        },
+        "speedup": 1.0628838153724247
+      },
+      "batch": {
+        "baseline": {
+          "median_vins_per_second": 178326,
+          "range_vins_per_second": [
+            178286,
+            184979
+          ],
+          "median_process_cpu_us_per_vin": 14.830127136851939
+        },
+        "candidate": {
+          "median_vins_per_second": 187707,
+          "range_vins_per_second": [
+            184329,
+            189092
+          ],
+          "median_process_cpu_us_per_vin": 14.252409405501334
+        },
+        "speedup": 1.0526059015510918
+      }
+    }
+  },
+  "broad": {
+    "corpus": "target/perf-2x-20260909/broad-corpus.txt",
+    "vins": 100000,
+    "seconds": 20,
+    "rounds": 2,
+    "batch_workers": 4,
+    "distribution": "Distinct 17-byte ASCII stress inputs, not a fleet distribution. Reused September 9 sample; caller years omitted for throughput.",
+    "measurements": [
+      {
+        "build": "baseline",
+        "mode": "single",
+        "format": "full",
+        "trial": 1,
+        "timed_vins": 1600000,
+        "seconds": 20.2,
+        "vins_per_second": 79245,
+        "process_cpu_seconds": 21.606542,
+        "process_cpu_us_per_vin": 12.709730588235294
+      },
+      {
+        "build": "candidate",
+        "mode": "single",
+        "format": "full",
+        "trial": 1,
+        "timed_vins": 1700000,
+        "seconds": 20.8,
+        "vins_per_second": 81920,
+        "process_cpu_seconds": 21.959370000000003,
+        "process_cpu_us_per_vin": 12.199650000000002
+      },
+      {
+        "build": "candidate",
+        "mode": "single",
+        "format": "full",
+        "trial": 2,
+        "timed_vins": 1700000,
+        "seconds": 20.3,
+        "vins_per_second": 83807,
+        "process_cpu_seconds": 21.60997,
+        "process_cpu_us_per_vin": 12.00553888888889
+      },
+      {
+        "build": "baseline",
+        "mode": "single",
+        "format": "full",
+        "trial": 2,
+        "timed_vins": 1600000,
+        "seconds": 20.2,
+        "vins_per_second": 79287,
+        "process_cpu_seconds": 21.540958999999983,
+        "process_cpu_us_per_vin": 12.671152352941165
+      },
+      {
+        "build": "baseline",
+        "mode": "batch",
+        "format": "full",
+        "trial": 1,
+        "timed_vins": 4000000,
+        "seconds": 20.4,
+        "vins_per_second": 196449,
+        "process_cpu_seconds": 50.729046000000004,
+        "process_cpu_us_per_vin": 12.37293804878049
+      },
+      {
+        "build": "candidate",
+        "mode": "batch",
+        "format": "full",
+        "trial": 1,
+        "timed_vins": 4000000,
+        "seconds": 20.0,
+        "vins_per_second": 199912,
+        "process_cpu_seconds": 48.85796400000001,
+        "process_cpu_us_per_vin": 11.916576585365856
+      },
+      {
+        "build": "candidate",
+        "mode": "batch",
+        "format": "full",
+        "trial": 2,
+        "timed_vins": 4000000,
+        "seconds": 20.2,
+        "vins_per_second": 198057,
+        "process_cpu_seconds": 48.871857999999975,
+        "process_cpu_us_per_vin": 11.919965365853653
+      },
+      {
+        "build": "baseline",
+        "mode": "batch",
+        "format": "full",
+        "trial": 2,
+        "timed_vins": 3900000,
+        "seconds": 20.0,
+        "vins_per_second": 194991,
+        "process_cpu_seconds": 50.078941000000036,
+        "process_cpu_us_per_vin": 12.519735250000009
+      }
+    ],
+    "summary": {
+      "single": {
+        "baseline": {
+          "median_vins_per_second": 79266.0,
+          "range_vins_per_second": [
+            79245,
+            79287
+          ],
+          "median_process_cpu_us_per_vin": 12.69044147058823
+        },
+        "candidate": {
+          "median_vins_per_second": 82863.5,
+          "range_vins_per_second": [
+            81920,
+            83807
+          ],
+          "median_process_cpu_us_per_vin": 12.102594444444446
+        },
+        "speedup": 1.0453851588322862
+      },
+      "batch": {
+        "baseline": {
+          "median_vins_per_second": 195720.0,
+          "range_vins_per_second": [
+            194991,
+            196449
+          ],
+          "median_process_cpu_us_per_vin": 12.44633664939025
+        },
+        "candidate": {
+          "median_vins_per_second": 198984.5,
+          "range_vins_per_second": [
+            198057,
+            199912
+          ],
+          "median_process_cpu_us_per_vin": 11.918270975609754
+        },
+        "speedup": 1.01667944001635
+      }
+    }
+  },
+  "correctness": {
+    "full_results": 1862306,
+    "fixed_clock_micros": 1788739200000000,
+    "current_year": 2026,
+    "byte_identical": true,
+    "fingerprint_sha256": {
+      "baseline.hashes": "e985b2617222a111cb2444b02af3fa62e0f7bfb18345170dbd6829e9e047ba52",
+      "candidate.hashes": "e985b2617222a111cb2444b02af3fa62e0f7bfb18345170dbd6829e9e047ba52"
+    },
+    "gate": "make check checku",
+    "rust_tests": 170,
+    "python_tests": 825,
+    "python_warnings": 1
+  },
+  "cold": {
+    "rounds": 7,
+    "allocator": "system",
+    "filesystem_cache_flushed": false,
+    "measurements": [
+      {
+        "build": "baseline",
+        "vin": "1HGCM82633A004352",
+        "trial": 1,
+        "first_decode_ms": 8.517
+      },
+      {
+        "build": "candidate",
+        "vin": "1HGCM82633A004352",
+        "trial": 1,
+        "first_decode_ms": 12.006
+      },
+      {
+        "build": "candidate",
+        "vin": "1HGCM82633A004352",
+        "trial": 2,
+        "first_decode_ms": 3.117
+      },
+      {
+        "build": "baseline",
+        "vin": "1HGCM82633A004352",
+        "trial": 2,
+        "first_decode_ms": 2.854
+      },
+      {
+        "build": "baseline",
+        "vin": "1HGCM82633A004352",
+        "trial": 3,
+        "first_decode_ms": 2.422
+      },
+      {
+        "build": "candidate",
+        "vin": "1HGCM82633A004352",
+        "trial": 3,
+        "first_decode_ms": 2.238
+      },
+      {
+        "build": "candidate",
+        "vin": "1HGCM82633A004352",
+        "trial": 4,
+        "first_decode_ms": 1.952
+      },
+      {
+        "build": "baseline",
+        "vin": "1HGCM82633A004352",
+        "trial": 4,
+        "first_decode_ms": 2.264
+      },
+      {
+        "build": "baseline",
+        "vin": "1HGCM82633A004352",
+        "trial": 5,
+        "first_decode_ms": 1.846
+      },
+      {
+        "build": "candidate",
+        "vin": "1HGCM82633A004352",
+        "trial": 5,
+        "first_decode_ms": 1.978
+      },
+      {
+        "build": "candidate",
+        "vin": "1HGCM82633A004352",
+        "trial": 6,
+        "first_decode_ms": 1.911
+      },
+      {
+        "build": "baseline",
+        "vin": "1HGCM82633A004352",
+        "trial": 6,
+        "first_decode_ms": 1.809
+      },
+      {
+        "build": "baseline",
+        "vin": "1HGCM82633A004352",
+        "trial": 7,
+        "first_decode_ms": 1.935
+      },
+      {
+        "build": "candidate",
+        "vin": "1HGCM82633A004352",
+        "trial": 7,
+        "first_decode_ms": 1.971
+      },
+      {
+        "build": "baseline",
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 1,
+        "first_decode_ms": 5.445
+      },
+      {
+        "build": "candidate",
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 1,
+        "first_decode_ms": 5.314
+      },
+      {
+        "build": "candidate",
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 2,
+        "first_decode_ms": 3.434
+      },
+      {
+        "build": "baseline",
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 2,
+        "first_decode_ms": 3.452
+      },
+      {
+        "build": "baseline",
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 3,
+        "first_decode_ms": 3.667
+      },
+      {
+        "build": "candidate",
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 3,
+        "first_decode_ms": 3.437
+      },
+      {
+        "build": "candidate",
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 4,
+        "first_decode_ms": 3.422
+      },
+      {
+        "build": "baseline",
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 4,
+        "first_decode_ms": 3.398
+      },
+      {
+        "build": "baseline",
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 5,
+        "first_decode_ms": 3.31
+      },
+      {
+        "build": "candidate",
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 5,
+        "first_decode_ms": 3.521
+      },
+      {
+        "build": "candidate",
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 6,
+        "first_decode_ms": 3.478
+      },
+      {
+        "build": "baseline",
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 6,
+        "first_decode_ms": 3.592
+      },
+      {
+        "build": "baseline",
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 7,
+        "first_decode_ms": 3.28
+      },
+      {
+        "build": "candidate",
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 7,
+        "first_decode_ms": 3.517
+      },
+      {
+        "build": "baseline",
+        "vin": "ZZZCM82633A004352",
+        "trial": 1,
+        "first_decode_ms": 0.197
+      },
+      {
+        "build": "candidate",
+        "vin": "ZZZCM82633A004352",
+        "trial": 1,
+        "first_decode_ms": 0.177
+      },
+      {
+        "build": "candidate",
+        "vin": "ZZZCM82633A004352",
+        "trial": 2,
+        "first_decode_ms": 0.063
+      },
+      {
+        "build": "baseline",
+        "vin": "ZZZCM82633A004352",
+        "trial": 2,
+        "first_decode_ms": 0.059
+      },
+      {
+        "build": "baseline",
+        "vin": "ZZZCM82633A004352",
+        "trial": 3,
+        "first_decode_ms": 0.076
+      },
+      {
+        "build": "candidate",
+        "vin": "ZZZCM82633A004352",
+        "trial": 3,
+        "first_decode_ms": 0.08
+      },
+      {
+        "build": "candidate",
+        "vin": "ZZZCM82633A004352",
+        "trial": 4,
+        "first_decode_ms": 0.064
+      },
+      {
+        "build": "baseline",
+        "vin": "ZZZCM82633A004352",
+        "trial": 4,
+        "first_decode_ms": 0.066
+      },
+      {
+        "build": "baseline",
+        "vin": "ZZZCM82633A004352",
+        "trial": 5,
+        "first_decode_ms": 0.077
+      },
+      {
+        "build": "candidate",
+        "vin": "ZZZCM82633A004352",
+        "trial": 5,
+        "first_decode_ms": 0.081
+      },
+      {
+        "build": "candidate",
+        "vin": "ZZZCM82633A004352",
+        "trial": 6,
+        "first_decode_ms": 0.065
+      },
+      {
+        "build": "baseline",
+        "vin": "ZZZCM82633A004352",
+        "trial": 6,
+        "first_decode_ms": 0.075
+      },
+      {
+        "build": "baseline",
+        "vin": "ZZZCM82633A004352",
+        "trial": 7,
+        "first_decode_ms": 0.062
+      },
+      {
+        "build": "candidate",
+        "vin": "ZZZCM82633A004352",
+        "trial": 7,
+        "first_decode_ms": 0.084
+      }
+    ]
+  },
+  "memory": {
+    "seconds_per_probe": 2,
+    "rounds": 3,
+    "batch_workers": 4,
+    "measurements": [
+      {
+        "build": "baseline",
+        "mode": "single",
+        "trial": 1,
+        "peak_rss_bytes": 141049856
+      },
+      {
+        "build": "candidate",
+        "mode": "single",
+        "trial": 1,
+        "peak_rss_bytes": 141148160
+      },
+      {
+        "build": "candidate",
+        "mode": "single",
+        "trial": 2,
+        "peak_rss_bytes": 141131776
+      },
+      {
+        "build": "baseline",
+        "mode": "single",
+        "trial": 2,
+        "peak_rss_bytes": 140984320
+      },
+      {
+        "build": "baseline",
+        "mode": "single",
+        "trial": 3,
+        "peak_rss_bytes": 141131776
+      },
+      {
+        "build": "candidate",
+        "mode": "single",
+        "trial": 3,
+        "peak_rss_bytes": 141131776
+      },
+      {
+        "build": "baseline",
+        "mode": "batch",
+        "trial": 1,
+        "peak_rss_bytes": 265338880
+      },
+      {
+        "build": "candidate",
+        "mode": "batch",
+        "trial": 1,
+        "peak_rss_bytes": 268238848
+      },
+      {
+        "build": "candidate",
+        "mode": "batch",
+        "trial": 2,
+        "peak_rss_bytes": 272990208
+      },
+      {
+        "build": "baseline",
+        "mode": "batch",
+        "trial": 2,
+        "peak_rss_bytes": 267714560
+      },
+      {
+        "build": "baseline",
+        "mode": "batch",
+        "trial": 3,
+        "peak_rss_bytes": 269402112
+      },
+      {
+        "build": "candidate",
+        "mode": "batch",
+        "trial": 3,
+        "peak_rss_bytes": 268713984
+      }
+    ]
+  },
+  "experiments": {
+    "shared_prefix_matcher": {
+      "retained": false,
+      "reason": "No repeatable throughput gain; retained literal-pair index.",
+      "exploratory_measurements": [
+        {
+          "build": "baseline",
+          "mode": "single",
+          "format": "full",
+          "trial": 1,
+          "timed_vins": 185000,
+          "seconds": 5.0,
+          "vins_per_second": 36774,
+          "process_cpu_seconds": 4.26201,
+          "process_cpu_us_per_vin": 22.431631578947368
+        },
+        {
+          "build": "candidate",
+          "mode": "single",
+          "format": "full",
+          "trial": 1,
+          "timed_vins": 240000,
+          "seconds": 5.4,
+          "vins_per_second": 44191,
+          "process_cpu_seconds": 5.116213,
+          "process_cpu_us_per_vin": 20.882502040816327
+        },
+        {
+          "build": "candidate",
+          "mode": "single",
+          "format": "full",
+          "trial": 2,
+          "timed_vins": 205000,
+          "seconds": 5.0,
+          "vins_per_second": 40695,
+          "process_cpu_seconds": 4.721881,
+          "process_cpu_us_per_vin": 22.48514761904762
+        },
+        {
+          "build": "baseline",
+          "mode": "single",
+          "format": "full",
+          "trial": 2,
+          "timed_vins": 255000,
+          "seconds": 5.0,
+          "vins_per_second": 50605,
+          "process_cpu_seconds": 4.646781999999999,
+          "process_cpu_us_per_vin": 17.87223846153846
+        },
+        {
+          "build": "baseline",
+          "mode": "batch",
+          "format": "full",
+          "trial": 1,
+          "timed_vins": 505000,
+          "seconds": 5.0,
+          "vins_per_second": 100436,
+          "process_cpu_seconds": 11.592103000000003,
+          "process_cpu_us_per_vin": 22.729613725490204
+        },
+        {
+          "build": "candidate",
+          "mode": "batch",
+          "format": "full",
+          "trial": 1,
+          "timed_vins": 505000,
+          "seconds": 5.0,
+          "vins_per_second": 100510,
+          "process_cpu_seconds": 11.488953999999998,
+          "process_cpu_us_per_vin": 22.52736078431372
+        },
+        {
+          "build": "candidate",
+          "mode": "batch",
+          "format": "full",
+          "trial": 2,
+          "timed_vins": 615000,
+          "seconds": 5.0,
+          "vins_per_second": 122799,
+          "process_cpu_seconds": 13.160718000000001,
+          "process_cpu_us_per_vin": 21.226964516129037
+        },
+        {
+          "build": "baseline",
+          "mode": "batch",
+          "format": "full",
+          "trial": 2,
+          "timed_vins": 680000,
+          "seconds": 5.0,
+          "vins_per_second": 135633,
+          "process_cpu_seconds": 13.339266,
+          "process_cpu_us_per_vin": 19.47338102189781
+        }
+      ]
+    },
+    "borrowed_output_fields": {
+      "retained": false,
+      "reason": "Did not establish 2x and would change public Rust field types.",
+      "exploratory_measurements": [
+        {
+          "build": "baseline",
+          "mode": "single",
+          "format": "full",
+          "trial": 1,
+          "timed_vins": 415000,
+          "seconds": 5.0,
+          "vins_per_second": 82201,
+          "process_cpu_seconds": 5.748105000000001,
+          "process_cpu_us_per_vin": 13.685964285714288
+        },
+        {
+          "build": "candidate",
+          "mode": "single",
+          "format": "full",
+          "trial": 1,
+          "timed_vins": 405000,
+          "seconds": 5.0,
+          "vins_per_second": 80631,
+          "process_cpu_seconds": 5.21575,
+          "process_cpu_us_per_vin": 12.721341463414634
+        },
+        {
+          "build": "candidate",
+          "mode": "single",
+          "format": "full",
+          "trial": 2,
+          "timed_vins": 435000,
+          "seconds": 5.0,
+          "vins_per_second": 86668,
+          "process_cpu_seconds": 5.451828999999998,
+          "process_cpu_us_per_vin": 12.39052045454545
+        },
+        {
+          "build": "baseline",
+          "mode": "single",
+          "format": "full",
+          "trial": 2,
+          "timed_vins": 415000,
+          "seconds": 5.0,
+          "vins_per_second": 82307,
+          "process_cpu_seconds": 5.739788,
+          "process_cpu_us_per_vin": 13.666161904761905
+        },
+        {
+          "build": "baseline",
+          "mode": "batch",
+          "format": "full",
+          "trial": 1,
+          "timed_vins": 720000,
+          "seconds": 5.0,
+          "vins_per_second": 143314,
+          "process_cpu_seconds": 12.781605000000004,
+          "process_cpu_us_per_vin": 17.629800000000007
+        },
+        {
+          "build": "candidate",
+          "mode": "batch",
+          "format": "full",
+          "trial": 1,
+          "timed_vins": 1165000,
+          "seconds": 5.0,
+          "vins_per_second": 232502,
+          "process_cpu_seconds": 16.028940999999996,
+          "process_cpu_us_per_vin": 13.699949572649569
+        },
+        {
+          "build": "candidate",
+          "mode": "batch",
+          "format": "full",
+          "trial": 2,
+          "timed_vins": 1015000,
+          "seconds": 5.0,
+          "vins_per_second": 202716,
+          "process_cpu_seconds": 14.359249999999998,
+          "process_cpu_us_per_vin": 14.077696078431371
+        },
+        {
+          "build": "baseline",
+          "mode": "batch",
+          "format": "full",
+          "trial": 2,
+          "timed_vins": 890000,
+          "seconds": 5.0,
+          "vins_per_second": 177118,
+          "process_cpu_seconds": 14.565125000000004,
+          "process_cpu_us_per_vin": 16.27388268156425
+        }
+      ]
+    },
+    "compatible_changes_quick": [
+      {
+        "build": "baseline",
+        "mode": "single",
+        "format": "full",
+        "trial": 1,
+        "timed_vins": 780000,
+        "seconds": 10.0,
+        "vins_per_second": 77709,
+        "process_cpu_seconds": 10.1069,
+        "process_cpu_us_per_vin": 12.875031847133759
+      },
+      {
+        "build": "candidate",
+        "mode": "single",
+        "format": "full",
+        "trial": 1,
+        "timed_vins": 815000,
+        "seconds": 10.0,
+        "vins_per_second": 81248,
+        "process_cpu_seconds": 9.994308,
+        "process_cpu_us_per_vin": 12.188180487804878
+      },
+      {
+        "build": "candidate",
+        "mode": "single",
+        "format": "full",
+        "trial": 2,
+        "timed_vins": 830000,
+        "seconds": 10.0,
+        "vins_per_second": 82966,
+        "process_cpu_seconds": 10.100593,
+        "process_cpu_us_per_vin": 12.096518562874252
+      },
+      {
+        "build": "baseline",
+        "mode": "single",
+        "format": "full",
+        "trial": 2,
+        "timed_vins": 805000,
+        "seconds": 10.1,
+        "vins_per_second": 80071,
+        "process_cpu_seconds": 10.308112999999993,
+        "process_cpu_us_per_vin": 12.726065432098757
+      },
+      {
+        "build": "baseline",
+        "mode": "batch",
+        "format": "full",
+        "trial": 1,
+        "timed_vins": 1755000,
+        "seconds": 10.0,
+        "vins_per_second": 175455,
+        "process_cpu_seconds": 27.35423799999999,
+        "process_cpu_us_per_vin": 15.542180681818177
+      },
+      {
+        "build": "candidate",
+        "mode": "batch",
+        "format": "full",
+        "trial": 1,
+        "timed_vins": 1770000,
+        "seconds": 10.0,
+        "vins_per_second": 176965,
+        "process_cpu_seconds": 27.042165000000004,
+        "process_cpu_us_per_vin": 15.23502253521127
+      },
+      {
+        "build": "candidate",
+        "mode": "batch",
+        "format": "full",
+        "trial": 2,
+        "timed_vins": 1795000,
+        "seconds": 10.0,
+        "vins_per_second": 179278,
+        "process_cpu_seconds": 27.125764999999998,
+        "process_cpu_us_per_vin": 15.069869444444443
+      },
+      {
+        "build": "baseline",
+        "mode": "batch",
+        "format": "full",
+        "trial": 2,
+        "timed_vins": 1655000,
+        "seconds": 10.0,
+        "vins_per_second": 165264,
+        "process_cpu_seconds": 26.939883999999978,
+        "process_cpu_us_per_vin": 16.228845783132517
+      }
+    ]
+  }
+}
