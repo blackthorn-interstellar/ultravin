@@ -1,0 +1,922 @@
+{
+  "date": "2026-09-10",
+  "recorded_at_utc": "2026-09-11T05:50:41.861175+00:00",
+  "baseline": "8bce73a823efed72d47c45e7cff1548ff75b2f9c",
+  "candidate": "4117c1a4edecd11aa15fe1a133ecb37f9066b5d2",
+  "scope": "Existing full JSON APIs; no requested columns, provenance, errors or row order removed.",
+  "host": {
+    "cpu": "Apple M1 Max",
+    "memory_bytes": 34359738368,
+    "macos": "26.6.1"
+  },
+  "build": {
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: aarch64-apple-darwin\nrelease: 1.98.1\nLLVM version: 22.1.8\n",
+    "profile": "release, opt-level 3, fat LTO, one codegen unit, no debug information",
+    "allocator": "mimalloc v2 with local_dynamic_tls, except cold probes use system allocator",
+    "overrides": {
+      "RUSTFLAGS": null,
+      "CARGO_ENCODED_RUSTFLAGS": null,
+      "CARGO_PROFILE_RELEASE_DEBUG": null
+    },
+    "lock_sha256": "1339f46ace2921b69e29686f13b48471582658d4a1429d42d8b2a0092e98b16b",
+    "artifact_sha256": "2d555d4db3fde3867f41e415ec6e848285a286b2fe5fb45f0bdcb88245bd7787",
+    "sources_sha256": {
+      "Cargo.lock": "1339f46ace2921b69e29686f13b48471582658d4a1429d42d8b2a0092e98b16b",
+      "Cargo.toml": "a85692348ace983f4e8dba935f913f4bb2edf7181194ce554d9290afb454cfb2",
+      "crates/ultravin/Cargo.toml": "d7f7544e3ef285cff166ed33b4105ff7c425e0a214ddc23f2ed42b64dc8e1977",
+      "crates/ultravin/examples/fingerprint.rs": "d557924e59e12d5bb88be0b4c8e3c0ba65fa4dd06465c71e54e4b67000a7a128",
+      "crates/ultravin/examples/throughput.rs": "009fca3cf2ba5eaf6d4f77651d81ab7bdbb68d3a896847fdc256d34fb6a57c6a",
+      "crates/ultravin/src/arrow_io.rs": "d8fa3fb1a6ffa6d30bb878a980c9af6d1e2d7420e5d39f44ce13bc173789ab2e",
+      "crates/ultravin/src/checkdigit.rs": "43f1dfd1dd938509b714cd0228006937e528cdcefeebde19f5bfa2eb58c9eb4e",
+      "crates/ultravin/src/conversion.rs": "1467227c6e7992005c7bc04b5c243876a93c7c5f04abd7a0917cf80b6f854048",
+      "crates/ultravin/src/cover.rs": "644650176080492667dbf70ae07a41c3b6ec8475ac40af1bab25a9e25b18d115",
+      "crates/ultravin/src/db.rs": "41b0ee420788651558969986973c3a1dedb26e842f6dfee8b13cd6dff9485314",
+      "crates/ultravin/src/decode.rs": "c79f1f42636d4e0547ae040dfe2edc83cc88686d47d220994823541fd8310a42",
+      "crates/ultravin/src/errors.rs": "b08f85ab416ea1a9aa8c0122da07369eae66e29b04e52026fe1b397df3262750",
+      "crates/ultravin/src/generate.rs": "3da67b6b45af7982fa13217140ae51ad3587fed37d8b6f9a181ec2fcf9d88e38",
+      "crates/ultravin/src/hash.rs": "c6cbe2360a1b17095a70d4c4a58657bdfd963fea6e5d7539e290ce018e0d562e",
+      "crates/ultravin/src/ids.rs": "dc14a1066b2ca026a877a542f1b8424f6a965e90133e07f6554c0adf972bc0cc",
+      "crates/ultravin/src/json.rs": "0b987c71ed88b9f16f1c4615bb4bae890b09106e5ddcdf3408e32d9878ddf853",
+      "crates/ultravin/src/keyspec.rs": "5ff20b7bbeed8d1cc9c9a879e1d07f0c727a50d45dda7cb6520ab8dfa2d3eebd",
+      "crates/ultravin/src/lib.rs": "d48cb48dc65311352219733334479831f640383d0df28bc11b18b273d83abee9",
+      "crates/ultravin/src/matcher.rs": "3e36ce839ae2d109a5f58fd8801c8deec14eb14fb015b2c39de4f560d5133f8e",
+      "crates/ultravin/src/parquet_io.rs": "9ca1a984069b1e6cff63385df7b20db72a10ace811d2bccf7e6422fa42550db9",
+      "crates/ultravin/src/resolve.rs": "f8d3f62c832c28f966c0ba720e2e48821b2be0a24253217839e3ffc538ac3321",
+      "crates/ultravin/src/tables.rs": "c840afcf2d6fd057c69dde622f612bbee59fb62a121d399261705d891677bdfd",
+      "crates/ultravin/src/wmi.rs": "27ba20c7aa0732e00f79e425ac4e46491cd21e75a8e5ccf051f432dc1eb42559",
+      "crates/ultravin/src/year.rs": "5091f71838845b013500d6bd11c113bf0c44765605da23e2fc1bfd19e5e6b182"
+    }
+  },
+  "executables_sha256": {
+    "baseline-json-throughput": "b8170c2a41fe448a6b394aff2276abb09b9bf98998670bd6511aa29fc8186d18",
+    "candidate-throughput": "db37a5e4ecb87001152c52892e26fe654285866640e017ee502bc2d34b2aa2bd",
+    "candidate-cold": "231ee66f9bba03f0e3da2ed71c7bb4a801573c84bc133f52ac6c189a17f0b5a0",
+    "baseline-cold": "3830fd6a448cd9028569161870d33314d73655e5b54f33b5388a61fac24828d7",
+    "baseline-fingerprint": "3e1b76719349e2e746e40bec8969ccbb2bfbb27bede6f648489ed80bed2287cf",
+    "candidate-fingerprint": "cc80020df88a717da8c5bc00cf03a86c1bdac15c9d95debdd233a90064bb3fef"
+  },
+  "main_corpus": {
+    "path": "scripts/bench/corpus.txt",
+    "count": 5000,
+    "sha256": "b45ad4472c202ee176f86e8bc3c39609c76b6258df963ea04e08439aa3a1eb09"
+  },
+  "broad_corpus": {
+    "count": 10000,
+    "sha256": "366eb08fecd228c4b913e92da879a573b1deffa096c8f638d476d679c81e3074",
+    "source_100000_sha256": "a656df49a66e0a98ff1b366105e0b7f87b9524ac3865a5c8d79f94c66bb18f7d",
+    "construction": "First 10000 entries of random.Random(20260909).sample(sorted(distinct 17-byte ASCII VINs without CR/LF in full compatibility inputs), 100000). No caller years.",
+    "semantics": "Stress corpus, not a fleet distribution."
+  },
+  "full_json": {
+    "seconds": 60,
+    "rounds": 3,
+    "workers": 4,
+    "summary": {
+      "single": {
+        "baseline": {
+          "median": 42241,
+          "min": 41762,
+          "max": 42295,
+          "median_process_cpu_us_per_vin": 23.84351889763779
+        },
+        "candidate": {
+          "median": 83607,
+          "min": 82174,
+          "max": 83731,
+          "median_process_cpu_us_per_vin": 12.047801791044774
+        },
+        "speedup": 1.9792855282782131
+      },
+      "batch": {
+        "baseline": {
+          "median": 136985,
+          "min": 136716,
+          "max": 137021,
+          "median_process_cpu_us_per_vin": 25.13274310030396
+        },
+        "candidate": {
+          "median": 229174,
+          "min": 227991,
+          "max": 230399,
+          "median_process_cpu_us_per_vin": 13.433942443962387
+        },
+        "speedup": 1.672986093367887
+      }
+    },
+    "samples": [
+      {
+        "build": "baseline",
+        "mode": "single",
+        "format": "json",
+        "trial": 1,
+        "timed_vins": 2510000,
+        "seconds": 60.1,
+        "vins_per_second": 41762,
+        "process_cpu_seconds": 60.631713,
+        "process_cpu_us_per_vin": 24.108036978131214
+      },
+      {
+        "build": "candidate",
+        "mode": "single",
+        "format": "json",
+        "trial": 1,
+        "timed_vins": 5020000,
+        "seconds": 60.0,
+        "vins_per_second": 83607,
+        "process_cpu_seconds": 60.540203999999996,
+        "process_cpu_us_per_vin": 12.047801791044774
+      },
+      {
+        "build": "candidate",
+        "mode": "single",
+        "format": "json",
+        "trial": 2,
+        "timed_vins": 5025000,
+        "seconds": 60.0,
+        "vins_per_second": 83731,
+        "process_cpu_seconds": 60.500568,
+        "process_cpu_us_per_vin": 12.027945924453281
+      },
+      {
+        "build": "baseline",
+        "mode": "single",
+        "format": "json",
+        "trial": 2,
+        "timed_vins": 2535000,
+        "seconds": 60.0,
+        "vins_per_second": 42241,
+        "process_cpu_seconds": 60.56253799999998,
+        "process_cpu_us_per_vin": 23.84351889763779
+      },
+      {
+        "build": "baseline",
+        "mode": "single",
+        "format": "json",
+        "trial": 3,
+        "timed_vins": 2540000,
+        "seconds": 60.1,
+        "vins_per_second": 42295,
+        "process_cpu_seconds": 60.60423799999998,
+        "process_cpu_us_per_vin": 23.813060117878184
+      },
+      {
+        "build": "candidate",
+        "mode": "single",
+        "format": "json",
+        "trial": 3,
+        "timed_vins": 4935000,
+        "seconds": 60.1,
+        "vins_per_second": 82174,
+        "process_cpu_seconds": 60.48597199999999,
+        "process_cpu_us_per_vin": 12.244123886639674
+      },
+      {
+        "build": "baseline",
+        "mode": "batch",
+        "format": "json",
+        "trial": 1,
+        "timed_vins": 8220000,
+        "seconds": 60.0,
+        "vins_per_second": 136985,
+        "process_cpu_seconds": 206.71681200000006,
+        "process_cpu_us_per_vin": 25.13274310030396
+      },
+      {
+        "build": "candidate",
+        "mode": "batch",
+        "format": "json",
+        "trial": 1,
+        "timed_vins": 13680000,
+        "seconds": 60.0,
+        "vins_per_second": 227991,
+        "process_cpu_seconds": 184.94126599999996,
+        "process_cpu_us_per_vin": 13.514159006211178
+      },
+      {
+        "build": "candidate",
+        "mode": "batch",
+        "format": "json",
+        "trial": 2,
+        "timed_vins": 13755000,
+        "seconds": 60.0,
+        "vins_per_second": 229174,
+        "process_cpu_seconds": 184.56349699999993,
+        "process_cpu_us_per_vin": 13.413044840116275
+      },
+      {
+        "build": "baseline",
+        "mode": "batch",
+        "format": "json",
+        "trial": 2,
+        "timed_vins": 8225000,
+        "seconds": 60.0,
+        "vins_per_second": 137021,
+        "process_cpu_seconds": 206.79976099999985,
+        "process_cpu_us_per_vin": 25.127552976913712
+      },
+      {
+        "build": "baseline",
+        "mode": "batch",
+        "format": "json",
+        "trial": 3,
+        "timed_vins": 8205000,
+        "seconds": 60.0,
+        "vins_per_second": 136716,
+        "process_cpu_seconds": 207.14670200000018,
+        "process_cpu_us_per_vin": 25.231023386114515
+      },
+      {
+        "build": "candidate",
+        "mode": "batch",
+        "format": "json",
+        "trial": 3,
+        "timed_vins": 13825000,
+        "seconds": 60.0,
+        "vins_per_second": 230399,
+        "process_cpu_seconds": 185.7914239999998,
+        "process_cpu_us_per_vin": 13.433942443962387
+      }
+    ]
+  },
+  "native_struct_control": {
+    "seconds": 20,
+    "rounds": 2,
+    "workers": 4,
+    "summary": {
+      "single": {
+        "baseline": {
+          "median": 91769.0,
+          "min": 91713,
+          "max": 91825,
+          "median_process_cpu_us_per_vin": 11.156075022829032
+        },
+        "candidate": {
+          "median": 93072.5,
+          "min": 92671,
+          "max": 93474,
+          "median_process_cpu_us_per_vin": 11.005189427956989
+        },
+        "speedup": 1.0142041430112565
+      },
+      "batch": {
+        "baseline": {
+          "median": 200148.5,
+          "min": 200141,
+          "max": 200156,
+          "median_process_cpu_us_per_vin": 14.294691271820446
+        },
+        "candidate": {
+          "median": 202211.5,
+          "min": 201944,
+          "max": 202479,
+          "median_process_cpu_us_per_vin": 14.150362755315893
+        },
+        "speedup": 1.0103073467950048
+      }
+    },
+    "samples": [
+      {
+        "build": "baseline",
+        "mode": "single",
+        "format": "full",
+        "trial": 1,
+        "timed_vins": 1840000,
+        "seconds": 20.0,
+        "vins_per_second": 91825,
+        "process_cpu_seconds": 20.573933,
+        "process_cpu_us_per_vin": 11.151183197831978
+      },
+      {
+        "build": "candidate",
+        "mode": "single",
+        "format": "full",
+        "trial": 1,
+        "timed_vins": 1855000,
+        "seconds": 20.0,
+        "vins_per_second": 92671,
+        "process_cpu_seconds": 20.566684,
+        "process_cpu_us_per_vin": 11.057356989247312
+      },
+      {
+        "build": "candidate",
+        "mode": "single",
+        "format": "full",
+        "trial": 2,
+        "timed_vins": 1870000,
+        "seconds": 20.0,
+        "vins_per_second": 93474,
+        "process_cpu_seconds": 20.536915999999998,
+        "process_cpu_us_per_vin": 10.953021866666665
+      },
+      {
+        "build": "baseline",
+        "mode": "single",
+        "format": "full",
+        "trial": 2,
+        "timed_vins": 1835000,
+        "seconds": 20.0,
+        "vins_per_second": 91713,
+        "process_cpu_seconds": 20.536179000000004,
+        "process_cpu_us_per_vin": 11.160966847826089
+      },
+      {
+        "build": "baseline",
+        "mode": "batch",
+        "format": "full",
+        "trial": 1,
+        "timed_vins": 4005000,
+        "seconds": 20.0,
+        "vins_per_second": 200156,
+        "process_cpu_seconds": 57.42418700000001,
+        "process_cpu_us_per_vin": 14.320246134663343
+      },
+      {
+        "build": "candidate",
+        "mode": "batch",
+        "format": "full",
+        "trial": 1,
+        "timed_vins": 4040000,
+        "seconds": 20.0,
+        "vins_per_second": 201944,
+        "process_cpu_seconds": 57.261807000000005,
+        "process_cpu_us_per_vin": 14.156194561186652
+      },
+      {
+        "build": "candidate",
+        "mode": "batch",
+        "format": "full",
+        "trial": 2,
+        "timed_vins": 4050000,
+        "seconds": 20.0,
+        "vins_per_second": 202479,
+        "process_cpu_seconds": 57.35607300000001,
+        "process_cpu_us_per_vin": 14.144530949445132
+      },
+      {
+        "build": "baseline",
+        "mode": "batch",
+        "format": "full",
+        "trial": 2,
+        "timed_vins": 4005000,
+        "seconds": 20.0,
+        "vins_per_second": 200141,
+        "process_cpu_seconds": 57.21923699999997,
+        "process_cpu_us_per_vin": 14.269136408977548
+      }
+    ]
+  },
+  "broad_full_json": {
+    "seconds": 20,
+    "rounds": 2,
+    "workers": 4,
+    "summary": {
+      "single": {
+        "baseline": {
+          "median": 46120.5,
+          "min": 45431,
+          "max": 46810,
+          "median_process_cpu_us_per_vin": 22.19652650457666
+        },
+        "candidate": {
+          "median": 89489.5,
+          "min": 89394,
+          "max": 89585,
+          "median_process_cpu_us_per_vin": 11.457380004604055
+        },
+        "speedup": 1.9403410630847453
+      },
+      "batch": {
+        "baseline": {
+          "median": 157474.5,
+          "min": 157210,
+          "max": 157739,
+          "median_process_cpu_us_per_vin": 22.107808517350165
+        },
+        "candidate": {
+          "median": 265123.0,
+          "min": 262335,
+          "max": 267911,
+          "median_process_cpu_us_per_vin": 11.767443113586957
+        },
+        "speedup": 1.683593216679526
+      }
+    },
+    "samples": [
+      {
+        "build": "baseline",
+        "mode": "single",
+        "format": "json",
+        "trial": 1,
+        "timed_vins": 940000,
+        "seconds": 20.1,
+        "vins_per_second": 46810,
+        "process_cpu_seconds": 20.806464,
+        "process_cpu_us_per_vin": 21.90154105263158
+      },
+      {
+        "build": "candidate",
+        "mode": "single",
+        "format": "json",
+        "trial": 1,
+        "timed_vins": 1790000,
+        "seconds": 20.0,
+        "vins_per_second": 89394,
+        "process_cpu_seconds": 20.644851000000003,
+        "process_cpu_us_per_vin": 11.46936166666667
+      },
+      {
+        "build": "candidate",
+        "mode": "single",
+        "format": "json",
+        "trial": 2,
+        "timed_vins": 1800000,
+        "seconds": 20.1,
+        "vins_per_second": 89585,
+        "process_cpu_seconds": 20.716171000000003,
+        "process_cpu_us_per_vin": 11.445398342541438
+      },
+      {
+        "build": "baseline",
+        "mode": "single",
+        "format": "json",
+        "trial": 2,
+        "timed_vins": 910000,
+        "seconds": 20.0,
+        "vins_per_second": 45431,
+        "process_cpu_seconds": 20.692191,
+        "process_cpu_us_per_vin": 22.491511956521737
+      },
+      {
+        "build": "baseline",
+        "mode": "batch",
+        "format": "json",
+        "trial": 1,
+        "timed_vins": 3160000,
+        "seconds": 20.0,
+        "vins_per_second": 157739,
+        "process_cpu_seconds": 70.142327,
+        "process_cpu_us_per_vin": 22.126917034700316
+      },
+      {
+        "build": "candidate",
+        "mode": "batch",
+        "format": "json",
+        "trial": 1,
+        "timed_vins": 5250000,
+        "seconds": 20.0,
+        "vins_per_second": 262335,
+        "process_cpu_seconds": 62.22972300000002,
+        "process_cpu_us_per_vin": 11.830745817490499
+      },
+      {
+        "build": "candidate",
+        "mode": "batch",
+        "format": "json",
+        "trial": 2,
+        "timed_vins": 5360000,
+        "seconds": 20.0,
+        "vins_per_second": 267911,
+        "process_cpu_seconds": 62.85123399999994,
+        "process_cpu_us_per_vin": 11.704140409683415
+      },
+      {
+        "build": "baseline",
+        "mode": "batch",
+        "format": "json",
+        "trial": 2,
+        "timed_vins": 3150000,
+        "seconds": 20.0,
+        "vins_per_second": 157210,
+        "process_cpu_seconds": 69.80029200000004,
+        "process_cpu_us_per_vin": 22.088700000000014
+      }
+    ]
+  },
+  "correctness": {
+    "fixed_clock_full_results": {
+      "cases": 1862306,
+      "byte_identical": true,
+      "first_difference_after_case": null,
+      "fingerprint_sha256": [
+        "e985b2617222a111cb2444b02af3fa62e0f7bfb18345170dbd6829e9e047ba52",
+        "e985b2617222a111cb2444b02af3fa62e0f7bfb18345170dbd6829e9e047ba52"
+      ],
+      "exit_codes": [
+        0,
+        0
+      ],
+      "elapsed_seconds": 114.47765716724098,
+      "input_sha256": "93d318f511450137545ee64bfe0311dc737233748ee9bf32250e8043e12b6ea8"
+    },
+    "json_bytes_against_serde": {
+      "cases": 1862306,
+      "exit_code": 0,
+      "matches_serde_bytes": true,
+      "fingerprint_sha256": "e985b2617222a111cb2444b02af3fa62e0f7bfb18345170dbd6829e9e047ba52",
+      "clock": "system clock, retried across seconds so both paths use the same instant",
+      "elapsed_seconds": 100.78234845772386
+    },
+    "checks": "make check checku passed: 168 Rust tests and 825 Python tests; existing Python fork warning"
+  },
+  "cold": {
+    "api": "Rust struct decode, system allocator; filesystem caches were not flushed",
+    "samples": [
+      {
+        "vin": "1HGCM82633A004352",
+        "trial": 1,
+        "build": "baseline",
+        "first_decode_ms": 6.18,
+        "process_seconds": 1.7717200419865549
+      },
+      {
+        "vin": "1HGCM82633A004352",
+        "trial": 1,
+        "build": "candidate",
+        "first_decode_ms": 8.795,
+        "process_seconds": 2.0858703749254346
+      },
+      {
+        "vin": "1HGCM82633A004352",
+        "trial": 2,
+        "build": "candidate",
+        "first_decode_ms": 1.784,
+        "process_seconds": 0.007251667324453592
+      },
+      {
+        "vin": "1HGCM82633A004352",
+        "trial": 2,
+        "build": "baseline",
+        "first_decode_ms": 1.944,
+        "process_seconds": 0.006922583095729351
+      },
+      {
+        "vin": "1HGCM82633A004352",
+        "trial": 3,
+        "build": "baseline",
+        "first_decode_ms": 1.832,
+        "process_seconds": 0.006293791811913252
+      },
+      {
+        "vin": "1HGCM82633A004352",
+        "trial": 3,
+        "build": "candidate",
+        "first_decode_ms": 2.426,
+        "process_seconds": 0.007501833140850067
+      },
+      {
+        "vin": "1HGCM82633A004352",
+        "trial": 4,
+        "build": "candidate",
+        "first_decode_ms": 2.151,
+        "process_seconds": 0.007407292257994413
+      },
+      {
+        "vin": "1HGCM82633A004352",
+        "trial": 4,
+        "build": "baseline",
+        "first_decode_ms": 2.199,
+        "process_seconds": 0.007518291939049959
+      },
+      {
+        "vin": "1HGCM82633A004352",
+        "trial": 5,
+        "build": "baseline",
+        "first_decode_ms": 2.182,
+        "process_seconds": 0.007269499823451042
+      },
+      {
+        "vin": "1HGCM82633A004352",
+        "trial": 5,
+        "build": "candidate",
+        "first_decode_ms": 1.982,
+        "process_seconds": 0.007194750010967255
+      },
+      {
+        "vin": "1HGCM82633A004352",
+        "trial": 6,
+        "build": "candidate",
+        "first_decode_ms": 1.848,
+        "process_seconds": 0.0065032499842345715
+      },
+      {
+        "vin": "1HGCM82633A004352",
+        "trial": 6,
+        "build": "baseline",
+        "first_decode_ms": 1.916,
+        "process_seconds": 0.006681249942630529
+      },
+      {
+        "vin": "1HGCM82633A004352",
+        "trial": 7,
+        "build": "baseline",
+        "first_decode_ms": 1.812,
+        "process_seconds": 0.006350917275995016
+      },
+      {
+        "vin": "1HGCM82633A004352",
+        "trial": 7,
+        "build": "candidate",
+        "first_decode_ms": 2.015,
+        "process_seconds": 0.006518458016216755
+      },
+      {
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 1,
+        "build": "baseline",
+        "first_decode_ms": 5.339,
+        "process_seconds": 0.009434458333998919
+      },
+      {
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 1,
+        "build": "candidate",
+        "first_decode_ms": 5.526,
+        "process_seconds": 0.009810000192373991
+      },
+      {
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 2,
+        "build": "candidate",
+        "first_decode_ms": 3.283,
+        "process_seconds": 0.0071274577639997005
+      },
+      {
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 2,
+        "build": "baseline",
+        "first_decode_ms": 3.443,
+        "process_seconds": 0.007651499938219786
+      },
+      {
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 3,
+        "build": "baseline",
+        "first_decode_ms": 3.237,
+        "process_seconds": 0.007160250097513199
+      },
+      {
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 3,
+        "build": "candidate",
+        "first_decode_ms": 3.448,
+        "process_seconds": 0.007658042013645172
+      },
+      {
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 4,
+        "build": "candidate",
+        "first_decode_ms": 3.282,
+        "process_seconds": 0.007234292104840279
+      },
+      {
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 4,
+        "build": "baseline",
+        "first_decode_ms": 3.421,
+        "process_seconds": 0.007424917072057724
+      },
+      {
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 5,
+        "build": "baseline",
+        "first_decode_ms": 3.304,
+        "process_seconds": 0.007362457923591137
+      },
+      {
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 5,
+        "build": "candidate",
+        "first_decode_ms": 3.361,
+        "process_seconds": 0.012207624968141317
+      },
+      {
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 6,
+        "build": "candidate",
+        "first_decode_ms": 3.343,
+        "process_seconds": 0.010580874979496002
+      },
+      {
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 6,
+        "build": "baseline",
+        "first_decode_ms": 3.597,
+        "process_seconds": 0.007765334099531174
+      },
+      {
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 7,
+        "build": "baseline",
+        "first_decode_ms": 3.259,
+        "process_seconds": 0.007362541742622852
+      },
+      {
+        "vin": "1FTFW1ET5DFC10312",
+        "trial": 7,
+        "build": "candidate",
+        "first_decode_ms": 3.45,
+        "process_seconds": 0.00761837512254715
+      },
+      {
+        "vin": "ZZZCM82633A004352",
+        "trial": 1,
+        "build": "baseline",
+        "first_decode_ms": 0.194,
+        "process_seconds": 0.003916999790817499
+      },
+      {
+        "vin": "ZZZCM82633A004352",
+        "trial": 1,
+        "build": "candidate",
+        "first_decode_ms": 0.193,
+        "process_seconds": 0.0035966248251497746
+      },
+      {
+        "vin": "ZZZCM82633A004352",
+        "trial": 2,
+        "build": "candidate",
+        "first_decode_ms": 0.068,
+        "process_seconds": 0.00340262521058321
+      },
+      {
+        "vin": "ZZZCM82633A004352",
+        "trial": 2,
+        "build": "baseline",
+        "first_decode_ms": 0.069,
+        "process_seconds": 0.0036721667274832726
+      },
+      {
+        "vin": "ZZZCM82633A004352",
+        "trial": 3,
+        "build": "baseline",
+        "first_decode_ms": 0.064,
+        "process_seconds": 0.003539165947586298
+      },
+      {
+        "vin": "ZZZCM82633A004352",
+        "trial": 3,
+        "build": "candidate",
+        "first_decode_ms": 0.068,
+        "process_seconds": 0.003429750446230173
+      },
+      {
+        "vin": "ZZZCM82633A004352",
+        "trial": 4,
+        "build": "candidate",
+        "first_decode_ms": 0.061,
+        "process_seconds": 0.0031830421648919582
+      },
+      {
+        "vin": "ZZZCM82633A004352",
+        "trial": 4,
+        "build": "baseline",
+        "first_decode_ms": 0.065,
+        "process_seconds": 0.003296332899481058
+      },
+      {
+        "vin": "ZZZCM82633A004352",
+        "trial": 5,
+        "build": "baseline",
+        "first_decode_ms": 0.061,
+        "process_seconds": 0.0033207503147423267
+      },
+      {
+        "vin": "ZZZCM82633A004352",
+        "trial": 5,
+        "build": "candidate",
+        "first_decode_ms": 0.066,
+        "process_seconds": 0.0035612499341368675
+      },
+      {
+        "vin": "ZZZCM82633A004352",
+        "trial": 6,
+        "build": "candidate",
+        "first_decode_ms": 0.068,
+        "process_seconds": 0.0035321246832609177
+      },
+      {
+        "vin": "ZZZCM82633A004352",
+        "trial": 6,
+        "build": "baseline",
+        "first_decode_ms": 0.074,
+        "process_seconds": 0.0035976250655949116
+      },
+      {
+        "vin": "ZZZCM82633A004352",
+        "trial": 7,
+        "build": "baseline",
+        "first_decode_ms": 0.069,
+        "process_seconds": 0.004033958073705435
+      },
+      {
+        "vin": "ZZZCM82633A004352",
+        "trial": 7,
+        "build": "candidate",
+        "first_decode_ms": 0.075,
+        "process_seconds": 0.004138916730880737
+      }
+    ]
+  },
+  "memory": {
+    "api": "full JSON",
+    "seconds": 2,
+    "workers": 4,
+    "samples": [
+      {
+        "mode": "single",
+        "trial": 1,
+        "build": "baseline",
+        "max_rss_bytes": 140460032,
+        "stderr": "single: 85000 VINs in 2.0s = 42343 VIN/s (2540565 in 60s, 1 core(s))\n        2.64 real         2.61 user         0.02 sys\n           140460032  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n                8756  page reclaims\n                   0  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                   0  voluntary context switches\n                 119  involuntary context switches\n         33483855767  instructions retired\n          8320877217  cycles elapsed\n            56050072  peak memory footprint\n"
+      },
+      {
+        "mode": "single",
+        "trial": 1,
+        "build": "candidate",
+        "max_rss_bytes": 141623296,
+        "stderr": "single: 170000 VINs in 2.0s = 84002 VIN/s (5040128 in 60s, 1 core(s))\n        2.59 real         2.56 user         0.02 sys\n           141623296  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n                8827  page reclaims\n                   0  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                   0  voluntary context switches\n                 116  involuntary context switches\n         26013806385  instructions retired\n          8175160437  cycles elapsed\n            57393584  peak memory footprint\n"
+      },
+      {
+        "mode": "single",
+        "trial": 2,
+        "build": "candidate",
+        "max_rss_bytes": 141672448,
+        "stderr": "single: 170000 VINs in 2.0s = 83794 VIN/s (5027640 in 60s, 1 core(s))\n        2.61 real         2.58 user         0.02 sys\n           141672448  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n                8830  page reclaims\n                   0  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                   0  voluntary context switches\n                 187  involuntary context switches\n         26030116773  instructions retired\n          8216532483  cycles elapsed\n            57344432  peak memory footprint\n"
+      },
+      {
+        "mode": "single",
+        "trial": 2,
+        "build": "baseline",
+        "max_rss_bytes": 140394496,
+        "stderr": "single: 85000 VINs in 2.0s = 42032 VIN/s (2521926 in 60s, 1 core(s))\n        2.66 real         2.63 user         0.02 sys\n           140394496  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n                8752  page reclaims\n                   0  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                   0  voluntary context switches\n                 163  involuntary context switches\n         33489174094  instructions retired\n          8366014994  cycles elapsed\n            56033712  peak memory footprint\n"
+      },
+      {
+        "mode": "single",
+        "trial": 3,
+        "build": "baseline",
+        "max_rss_bytes": 140378112,
+        "stderr": "single: 85000 VINs in 2.0s = 42135 VIN/s (2528106 in 60s, 1 core(s))\n        2.64 real         2.61 user         0.02 sys\n           140378112  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n                8751  page reclaims\n                   0  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                   0  voluntary context switches\n                 118  involuntary context switches\n         33492998409  instructions retired\n          8332898437  cycles elapsed\n            56164784  peak memory footprint\n"
+      },
+      {
+        "mode": "single",
+        "trial": 3,
+        "build": "candidate",
+        "max_rss_bytes": 141656064,
+        "stderr": "single: 170000 VINs in 2.0s = 83662 VIN/s (5019705 in 60s, 1 core(s))\n        2.61 real         2.58 user         0.02 sys\n           141656064  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n                8829  page reclaims\n                   0  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                   0  voluntary context switches\n                 156  involuntary context switches\n         26011327273  instructions retired\n          8208870926  cycles elapsed\n            57409968  peak memory footprint\n"
+      },
+      {
+        "mode": "batch",
+        "trial": 1,
+        "build": "baseline",
+        "max_rss_bytes": 366510080,
+        "stderr": "batch: 250000 VINs in 2.0s = 123002 VIN/s (7380103 in 60s, 4 core(s))\n        2.21 real         7.50 user         0.12 sys\n           366510080  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               22560  page reclaims\n                   0  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                   0  voluntary context switches\n                2569  involuntary context switches\n         94404050532  instructions retired\n         23365273320  cycles elapsed\n           256770720  peak memory footprint\n"
+      },
+      {
+        "mode": "batch",
+        "trial": 1,
+        "build": "candidate",
+        "max_rss_bytes": 392937472,
+        "stderr": "batch: 390000 VINs in 2.0s = 193695 VIN/s (11621708 in 60s, 4 core(s))\n        2.18 real         6.58 user         0.17 sys\n           392937472  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               24170  page reclaims\n                   0  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                   0  voluntary context switches\n                3033  involuntary context switches\n         64938153048  instructions retired\n         20637970032  cycles elapsed\n           286769824  peak memory footprint\n"
+      },
+      {
+        "mode": "batch",
+        "trial": 2,
+        "build": "candidate",
+        "max_rss_bytes": 401702912,
+        "stderr": "batch: 375000 VINs in 2.0s = 185716 VIN/s (11142987 in 60s, 4 core(s))\n        2.25 real         6.58 user         0.17 sys\n           401702912  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               24727  page reclaims\n                   0  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                   0  voluntary context switches\n                3067  involuntary context switches\n         65602956665  instructions retired\n         20692615493  cycles elapsed\n           274072224  peak memory footprint\n"
+      },
+      {
+        "mode": "batch",
+        "trial": 2,
+        "build": "baseline",
+        "max_rss_bytes": 389070848,
+        "stderr": "batch: 225000 VINs in 2.0s = 111974 VIN/s (6718437 in 60s, 4 core(s))\n        2.25 real         7.29 user         0.11 sys\n           389070848  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               23945  page reclaims\n                   0  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                   0  voluntary context switches\n                2607  involuntary context switches\n         91866961797  instructions retired\n         22701319954  cycles elapsed\n           267272888  peak memory footprint\n"
+      },
+      {
+        "mode": "batch",
+        "trial": 3,
+        "build": "baseline",
+        "max_rss_bytes": 377126912,
+        "stderr": "batch: 245000 VINs in 2.0s = 121792 VIN/s (7307523 in 60s, 4 core(s))\n        2.19 real         7.54 user         0.13 sys\n           377126912  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               23204  page reclaims\n                   0  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                   0  voluntary context switches\n                2484  involuntary context switches\n         95038806129  instructions retired\n         23491508013  cycles elapsed\n           258196152  peak memory footprint\n"
+      },
+      {
+        "mode": "batch",
+        "trial": 3,
+        "build": "candidate",
+        "max_rss_bytes": 395231232,
+        "stderr": "batch: 380000 VINs in 2.0s = 189331 VIN/s (11359870 in 60s, 4 core(s))\n        2.17 real         6.49 user         0.17 sys\n           395231232  maximum resident set size\n                   0  average shared memory size\n                   0  average unshared data size\n                   0  average unshared stack size\n               24311  page reclaims\n                   0  page faults\n                   0  swaps\n                   0  block input operations\n                   0  block output operations\n                   0  messages sent\n                   0  messages received\n                   0  signals received\n                   0  voluntary context switches\n                3368  involuntary context switches\n         64518020315  instructions retired\n         20441967175  cycles elapsed\n           271254176  peak memory footprint\n"
+      }
+    ]
+  },
+  "limits": [
+    "Measured paths include their normal result allocation and destruction; no decoded-VIN cache.",
+    "Our builds and tests were stopped during timed comparisons; the Mac remained shared with other work.",
+    "These rates describe the recorded workloads and API shapes; no cumulative gain is claimed.",
+    "Cold probes measure the ordinary Rust result API, not additional first-use JSON template initialization."
+  ],
+  "rejected": [
+    "Generic borrowed-result API: about 1.08x single / 1.33x batch in quick tests, but added an API surface; direct JSON avoids it.",
+    "Early regular-pattern deduplication: no useful end-to-end improvement.",
+    "Per-pattern JSON-row cache: small improvement, extra storage and decode bookkeeping; removed."
+  ]
+}

@@ -1,10 +1,10 @@
 # Performance improvements
 
 This is the engineering history of ultravin's performance work through September
-9, 2026: what was expensive, what changed, what we measured, and what must remain
+10, 2026: what was expensive, what changed, what we measured, and what must remain
 true when changing it again. It covers the decoder, Python output, Arrow/parquet,
 corpus generation, build resources, and the SQL oracle used for differential
-testing. The September optimization batches and follow-up have their own sections.
+testing. Each dated optimization round has its own section.
 
 Measurements below are historical observations, not new benchmarks of the current
 checkout. Different dates used different toolchains, artifacts, worker counts,
@@ -18,6 +18,7 @@ identified as such.
 - [September batch 1: index candidates and defer copies](#september-batch-1-index-candidates-and-defer-copies)
 - [September batch 2: remove remaining work and output allocations](#september-batch-2-remove-remaining-work-and-output-allocations)
 - [September 9 follow-up: index joins and narrow matching](#september-9-follow-up-index-joins-and-narrow-matching)
+- [September 10: direct full JSON output](#september-10-direct-full-json-output)
 - [Experiments we rejected or replaced](#experiments-we-rejected-or-replaced)
 - [SQL oracle and development resources](#sql-oracle-and-development-resources)
 - [Correctness and measurement rules](#correctness-and-measurement-rules)
@@ -521,6 +522,28 @@ The [follow-up report](docs/THROUGHPUT_2026_09_09_FOLLOWUP.md) records the full
 methodology, reproduction commands and limits. These gains are relative to this
 round's baseline; they must not be multiplied by earlier incremental results.
 
+## September 10: direct full JSON output
+
+Commit **`4117c1a`**, against **`8bce73a`**, improves the existing full JSON APIs
+by **1.98× single-core** and **1.67× with four workers**.
+These are medians of three alternating 60-second windows on the same 5,000 VINs,
+with matched artifact, compiler, allocator, lockfile and release settings.
+The roughly 2× gain describes full JSON decoding, including encoding, rather
+than every output representation.
+
+The JSON writer copies fixed, pre-escaped element metadata into a correctly sized
+buffer and writes variable values directly from the winning decode items.
+Matching, year selection, errors, corrections, output order and all provenance
+remain identical. WMI string preparation and fixed source-label checks also
+reduce work in the common decode path. No new public API or decoded-VIN cache
+was added.
+
+All 1,862,306 complete-result fingerprints match the baseline, and all 1,862,306
+JSON outputs match serde byte-for-byte. `make check checku` passed with 168 Rust
+and 825 Python tests. The [full report](docs/THROUGHPUT_2026_09_10_JSON.md) records
+ordinary-struct controls, the broader stress sample, peak RSS, startup, rejected
+experiments, exact samples and reproduction commands.
+
 ## Experiments we rejected or replaced
 
 Keeping these failures is part of preserving the performance work. A compatible
@@ -647,7 +670,7 @@ artifact format, or change requested output shapes.
 - **Measure the cost moved elsewhere.** Check startup and peak RSS as well as
   throughput; separate Rust work from Python output and Arrow/parquet I/O. Time
   Python release wheels in separate environments, not the development extension.
-- **Run the repository checks.** All three rounds passed `make check checku` in their
+- **Run the repository checks.** The documented rounds passed `make check checku` in their
   recorded final states. The overnight result included 825 passing Python tests
   plus Rust tests, feature configurations, formatting, lints, and type checking.
 
@@ -664,6 +687,8 @@ The committed sources of historical measurements are:
 | [throughput_2026_09_09.json](scripts/bench/throughput_2026_09_09.json) | Batch 2's later paired 60-second rerun, build/input hashes, and CPU measurements |
 | [THROUGHPUT_2026_09_09_FOLLOWUP.md](docs/THROUGHPUT_2026_09_09_FOLLOWUP.md) | Follow-up changes, paired results, startup costs, and reproduction commands |
 | [throughput_2026_09_09_followup.json](scripts/bench/throughput_2026_09_09_followup.json) | Follow-up raw samples, broader-corpus results, startup measurements, hashes, and correctness evidence |
+| [THROUGHPUT_2026_09_10_JSON.md](docs/THROUGHPUT_2026_09_10_JSON.md) | Direct full JSON encoding, controls, correctness and resource measurements |
+| [throughput_2026_09_10_json.json](scripts/bench/throughput_2026_09_10_json.json) | Full JSON raw samples, input/build identities, controls and correctness digests |
 | [ORACLE_TUNING.md](docs/ORACLE_TUNING.md) | SQL tuning ladders, rejected steps, equivalence limits, and local application |
 
 The original overnight `REPORT.md`, `STATUS.md`, trial JSON, Python/Arrow runners,
