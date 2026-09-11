@@ -5,7 +5,8 @@
 //! the single-stream path and the parallel `decode_batch` path. This is the
 //! engine ceiling the SQL oracles in scripts/bench/throughput.py are measured
 //! against. Run:
-//! `cargo run -p ultravin --example throughput --release -- scripts/bench/corpus.txt [secs] [both|single|batch]`
+//! `cargo run -p ultravin --example throughput --release -- scripts/bench/corpus.txt [secs] [both|single|batch] [full|json]`
+//! `json` includes full-provenance JSON encoding; `full` returns the Rust structs.
 //! Select one path to measure its CPU time and memory with `/usr/bin/time -l`.
 
 use std::time::{Duration, Instant};
@@ -28,6 +29,25 @@ fn main() {
         matches!(mode.as_str(), "both" | "single" | "batch"),
         "mode must be both, single or batch"
     );
+    let format = args.next().unwrap_or_else(|| "full".into());
+    assert!(
+        matches!(format.as_str(), "full" | "json"),
+        "format must be full or json"
+    );
+    let decode = |vin: &str| {
+        if format == "json" {
+            std::hint::black_box(ultravin::decode_json(vin, None));
+        } else {
+            std::hint::black_box(ultravin::decode(vin, None));
+        }
+    };
+    let decode_batch = |vins: &[String]| {
+        if format == "json" {
+            std::hint::black_box(ultravin::decode_batch_json(vins, None));
+        } else {
+            std::hint::black_box(ultravin::decode_batch(vins, None));
+        }
+    };
     let budget = Duration::from_secs(secs);
 
     let corpus = std::fs::read_to_string(&path).expect("read corpus");
@@ -37,14 +57,14 @@ fn main() {
     // Single-stream: one sequential caller, system-clock path (what a caller sees).
     if mode != "batch" {
         for vin in &vins {
-            std::hint::black_box(ultravin::decode(vin, None));
+            decode(vin);
         }
         let t = Instant::now();
         let mut n: u64 = 0;
         while t.elapsed() < budget {
             // Decode a full pass so we never check the clock more than per-corpus.
             for v in &vins {
-                std::hint::black_box(ultravin::decode(v, None));
+                decode(v);
             }
             n += vins.len() as u64;
         }
@@ -55,11 +75,11 @@ fn main() {
     // Batched: rayon over the shared archive across all cores.
     if mode != "single" {
         let owned: Vec<String> = vins.iter().map(|s| s.to_string()).collect();
-        let _ = ultravin::decode_batch(&owned, None); // warm per-thread caches
+        decode_batch(&owned); // warm per-thread caches
         let t = Instant::now();
         let mut n: u64 = 0;
         while t.elapsed() < budget {
-            std::hint::black_box(ultravin::decode_batch(&owned, None));
+            decode_batch(&owned);
             n += owned.len() as u64;
         }
         let dt = t.elapsed().as_secs_f64();

@@ -21,6 +21,7 @@ mod errors;
 pub mod generate;
 mod hash;
 mod ids;
+mod json;
 mod keyspec;
 mod matcher;
 #[cfg(feature = "parquet")]
@@ -516,7 +517,14 @@ fn batch<'a, T: Send>(
 /// Decode one VIN to a compact JSON object string (same shape as the [`decode`]
 /// dict). Serializing in Rust avoids the per-field Python dict construction.
 pub fn decode_json(input: &str, year: Option<i32>) -> String {
-    serde_json::to_string(&decode(input, year)).expect("DecodeResult is infallibly serializable")
+    let secs = now_secs();
+    json::encode(decode_items(
+        Db::embedded(),
+        input,
+        secs * 1_000_000,
+        epoch_to_year(secs),
+        year,
+    ))
 }
 
 /// [`decode_json`] with the [`FlatResult`] shape.
@@ -533,20 +541,22 @@ pub fn decode_json_flat(input: &str, year: Option<i32>) -> String {
 /// otherwise caps `decode_batch`. `json.loads` of the output equals
 /// `decode_batch` element-for-element.
 pub fn decode_batch_json(inputs: &[String], years: Option<&[Option<i32>]>) -> String {
-    batch_json(inputs, years, RawResult::full)
+    batch_json(inputs, years, json::encode)
 }
 
 /// [`decode_batch_json`] with the [`FlatResult`] shape.
 pub fn decode_batch_json_flat(inputs: &[String], years: Option<&[Option<i32>]>) -> String {
-    batch_json(inputs, years, RawResult::flat)
+    batch_json(inputs, years, |r| {
+        serde_json::to_string(&r.flat()).expect("FlatResult is infallibly serializable")
+    })
 }
 
-/// Shared body of the batch-JSON paths: decode + serialize in parallel through
-/// `shape`, then stitch one array serially.
-fn batch_json<T: serde::Serialize + Send>(
+/// Shared body of the batch-JSON paths: decode + encode in parallel,
+/// then stitch one array serially.
+fn batch_json(
     inputs: &[String],
     years: Option<&[Option<i32>]>,
-    shape: impl Fn(RawResult<'static>) -> T + Sync,
+    encode: impl Fn(RawResult<'static>) -> String + Sync,
 ) -> String {
     use rayon::prelude::*;
 
@@ -563,14 +573,13 @@ fn batch_json<T: serde::Serialize + Send>(
         order
             .par_iter()
             .map(|&i| {
-                serde_json::to_string(&shape(decode_items(
+                encode(decode_items(
                     db,
                     &inputs[i as usize],
                     now_micros,
                     current_year,
                     year_at(years, i as usize),
-                )))
-                .expect("decode results are infallibly serializable")
+                ))
             })
             .collect_into_vec(&mut decoded);
         let mut slots: Vec<Option<String>> = (0..inputs.len()).map(|_| None).collect();
@@ -1000,9 +1009,7 @@ fn cmp_year_nulls_last(a: Option<i32>, b: Option<i32>) -> std::cmp::Ordering {
     }
 }
 
-/// Project the surviving items into output elements (non-empty Decode, public),
-/// ordered by the GroupName CASE rank then element id.
-fn project<'a>(db: &'a Db, items: Vec<decode::DecodingItem<'a>>) -> Vec<DecodedElement<'a>> {
+fn projection_order(db: &Db, items: &[decode::DecodingItem<'_>]) -> Vec<(u32, usize)> {
     // Sort small keys before constructing the large output records. The original
     // item index breaks ties, preserving repeated notes in insertion order.
     let mut order: Vec<_> = items
@@ -1011,6 +1018,13 @@ fn project<'a>(db: &'a Db, items: Vec<decode::DecodingItem<'a>>) -> Vec<DecodedE
         .filter_map(|(index, it)| Some((db.output_sort_key(it.element_id)?, index)))
         .collect();
     order.sort_unstable();
+    order
+}
+
+/// Project the surviving items into output elements (non-empty Decode, public),
+/// ordered by the GroupName CASE rank then element id.
+fn project<'a>(db: &'a Db, items: Vec<decode::DecodingItem<'a>>) -> Vec<DecodedElement<'a>> {
+    let order = projection_order(db, &items);
     let mut items: Vec<_> = items.into_iter().map(Some).collect();
     let mut elements: Vec<DecodedElement> = Vec::with_capacity(order.len());
     for (_, index) in order {

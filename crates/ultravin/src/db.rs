@@ -58,6 +58,12 @@ impl Backing {
 
 type WmiRangeIndex = IntMap<u64, (usize, usize)>;
 
+pub(crate) struct WmiStrings {
+    pub wmi: String,
+    pub vehicle: Option<(String, String)>,
+    pub manufacturer: Option<(String, String)>,
+}
+
 /// The decode database: validated archived bytes plus a pointer to the root.
 ///
 /// The pointer references the heap/static buffer owned by `_backing`; that buffer
@@ -70,7 +76,9 @@ pub struct Db {
     /// use. Resolution and projection repeatedly consult element metadata, so
     /// an O(1) index avoids searching the element table for every output row.
     element_index: OnceLock<Box<[i32]>>,
+    wmi_strings: OnceLock<Box<[OnceLock<Box<WmiStrings>>]>>,
     output_order: OnceLock<Box<[u32]>>,
+    json_elements: OnceLock<Box<[OnceLock<crate::json::ElementJson>]>>,
     /// Initialize lookup tables separately: a first error-code lookup should not
     /// allocate an index for every make/model/engine name in the archive.
     lookup_index: OnceLock<Box<[OnceLock<LookupIndex>]>>,
@@ -122,7 +130,9 @@ impl Db {
             _backing: backing,
             archive,
             element_index: OnceLock::new(),
+            wmi_strings: OnceLock::new(),
             output_order: OnceLock::new(),
+            json_elements: OnceLock::new(),
             lookup_index: OnceLock::new(),
             pattern_element_ok: OnceLock::new(),
             pattern_indexes: OnceLock::new(),
@@ -153,7 +163,9 @@ impl Db {
             _backing: backing,
             archive,
             element_index: OnceLock::new(),
+            wmi_strings: OnceLock::new(),
             output_order: OnceLock::new(),
+            json_elements: OnceLock::new(),
             lookup_index: OnceLock::new(),
             pattern_element_ok: OnceLock::new(),
             pattern_indexes: OnceLock::new(),
@@ -389,6 +401,39 @@ impl Db {
         }))
     }
 
+    /// `wmi` is the row returned by this database's WMI lookup. Row positions
+    /// distinguish even duplicate ids; addresses are only used to compute an
+    /// array index, never to reconstruct a pointer.
+    pub(crate) fn wmi_strings(&self, wmi: &ArchivedWmi) -> &WmiStrings {
+        let position = (std::ptr::from_ref(wmi) as usize - self.wmis().as_ptr() as usize)
+            / std::mem::size_of::<ArchivedWmi>();
+        let slots = self
+            .wmi_strings
+            .get_or_init(|| (0..self.wmis().len()).map(|_| OnceLock::new()).collect());
+        slots[position].get_or_init(|| {
+            let vehicle_id = wmi.vehicletypeid.to_native();
+            let vehicle = (vehicle_id != crate::tables::NULL_I32)
+                .then(|| {
+                    crate::tables::element_lookup_tag(39)
+                        .and_then(|tag| self.lookup(tag, vehicle_id))
+                })
+                .flatten()
+                .map(|name| (vehicle_id.to_string(), name.to_uppercase()));
+            let manufacturer_id = wmi.manufacturerid.to_native();
+            let manufacturer = (manufacturer_id != crate::tables::NULL_I32).then(|| {
+                let name = crate::tables::element_lookup_tag(27)
+                    .and_then(|tag| self.lookup(tag, manufacturer_id))
+                    .unwrap_or_default();
+                (manufacturer_id.to_string(), name.to_uppercase())
+            });
+            Box::new(WmiStrings {
+                wmi: self.s(wmi.wmi.to_native()).to_ascii_uppercase(),
+                vehicle,
+                manufacturer,
+            })
+        })
+    }
+
     pub fn element_by_id(&self, id: i32) -> Option<&ArchivedElement> {
         if id < 0 {
             return None;
@@ -400,6 +445,17 @@ impl Db {
         } else {
             Some(&self.a().element.as_slice()[slot as usize])
         }
+    }
+
+    /// Called only for elements admitted by the public projection order.
+    pub(crate) fn element_json(&self, id: i32) -> &crate::json::ElementJson {
+        let slot = self.element_index()[id as usize] as usize;
+        let templates = self.json_elements.get_or_init(|| {
+            (0..self.elements().len())
+                .map(|_| OnceLock::new())
+                .collect()
+        });
+        templates[slot].get_or_init(|| crate::json::ElementJson::new(self, &self.elements()[slot]))
     }
 
     /// Public output ordering is a property of the database, not the VIN.
@@ -1122,6 +1178,32 @@ mod tests {
         let db = load(&data);
         assert!(db.may_have_pattern_rows("ABC", Some(2999), 100));
         assert!(!db.may_have_pattern_rows("ABC", Some(3000), 100));
+    }
+
+    #[test]
+    fn prepared_wmi_strings_match_the_archive() {
+        let db = Db::embedded_raw();
+        for wmi in db.wmis() {
+            let strings = db.wmi_strings(wmi);
+            assert_eq!(strings.wmi, db.s(wmi.wmi.to_native()).to_ascii_uppercase());
+            let vehicle = wmi.vehicletypeid.to_native();
+            let expected_vehicle = (vehicle != crate::tables::NULL_I32)
+                .then(|| {
+                    crate::tables::element_lookup_tag(39).and_then(|tag| db.lookup(tag, vehicle))
+                })
+                .flatten()
+                .map(|name| (vehicle.to_string(), name.to_uppercase()));
+            assert_eq!(strings.vehicle, expected_vehicle);
+            let manufacturer = wmi.manufacturerid.to_native();
+            let expected_manufacturer = (manufacturer != crate::tables::NULL_I32).then(|| {
+                let name = crate::tables::element_lookup_tag(27)
+                    .and_then(|tag| db.lookup(tag, manufacturer))
+                    .unwrap_or_default();
+                (manufacturer.to_string(), name.to_uppercase())
+            });
+            assert_eq!(strings.manufacturer, expected_manufacturer);
+            assert!(std::ptr::eq(strings, db.wmi_strings(wmi)));
+        }
     }
 
     #[test]

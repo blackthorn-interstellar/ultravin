@@ -573,6 +573,34 @@ mod tests {
     use crate::hash::IntSet;
 
     #[test]
+    fn source_labels_preserve_the_case_insensitive_substring_rule() {
+        for source in [
+            "Pattern",
+            "EngineModelPattern",
+            "Formula Pattern",
+            "pattern - model",
+            "VehType",
+            "Manu. Name",
+            "Manu. Id",
+            "ModelYear",
+            "Make",
+            "Vehicle Specs",
+            "Default",
+            "Corrections",
+            "Conversion 1: PATTERN",
+            "a pAtTeRn suffix",
+            "",
+            "日本語pattern",
+        ] {
+            assert_eq!(
+                pattern_source(source),
+                contains_ci(source, b"pattern"),
+                "{source:?}"
+            );
+        }
+    }
+
+    #[test]
     fn compact_valid_chars_preserve_membership_and_render_order() {
         let mut actual = ValidChars::default();
         let mut expected = BTreeSet::new();
@@ -655,6 +683,17 @@ fn contains_ci(haystack: &str, needle: &[u8]) -> bool {
         .any(|w| w.iter().zip(needle).all(|(a, b)| a.eq_ignore_ascii_case(b)))
 }
 
+/// Fixed source labels need no case-insensitive substring scan. A conversion
+/// formula may itself contain "pattern", so dynamic sources retain the scan.
+fn pattern_source(source: &str) -> bool {
+    match source {
+        "Pattern" | "EngineModelPattern" | "Formula Pattern" | "pattern - model" => true,
+        "VehType" | "Manu. Name" | "Manu. Id" | "ModelYear" | "Make" | "Vehicle Specs"
+        | "Default" | "Corrections" => false,
+        _ => contains_ci(source, b"pattern"),
+    }
+}
+
 /// Codes 0..14 and 400 are the entire error domain produced below.
 /// One word preserves uniqueness and numeric order without a tree allocation.
 #[derive(Default)]
@@ -707,7 +746,7 @@ pub fn compute_errors(
     } else {
         let matched_keys = items
             .iter()
-            .filter(|it| contains_ci(it.source.as_ref(), b"pattern") && !it.keys.is_empty())
+            .filter(|it| !it.keys.is_empty() && pattern_source(it.source.as_ref()))
             .map(|it| it.keys.as_ref());
         let ec = errorcode(db, vin, var_wmi, model_year, matched_keys);
         for c in ec.codes {

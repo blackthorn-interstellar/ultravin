@@ -27,10 +27,13 @@ def main(
     rounds: int = 3,
     threads: int = 4,
     output: Path = Path("target/throughput-comparison.json"),
+    output_format: str = typer.Option("full", "--format"),
 ) -> None:
     """Compare original and changed executables, alternating their run order."""
     if min(seconds, rounds, threads) < 1:
         raise typer.BadParameter("seconds, rounds and threads must be positive")
+    if output_format not in {"full", "json"}:
+        raise typer.BadParameter("format must be full or json")
     warmup = sum(len(v) == 17 for v in corpus.read_text().splitlines())
     env = {**os.environ, "RAYON_NUM_THREADS": str(threads)}
     records = []
@@ -42,7 +45,7 @@ def main(
             for label, executable in builds:
                 before = resource.getrusage(resource.RUSAGE_CHILDREN)
                 result = subprocess.run(
-                    [str(executable.resolve()), str(corpus), str(seconds), mode],
+                    [str(executable.resolve()), str(corpus), str(seconds), mode, output_format],
                     env=env,
                     text=True,
                     capture_output=True,
@@ -58,6 +61,7 @@ def main(
                 record = {
                     "build": label,
                     "mode": mode,
+                    "format": output_format,
                     "trial": trial + 1,
                     "timed_vins": int(count),
                     "seconds": float(elapsed),

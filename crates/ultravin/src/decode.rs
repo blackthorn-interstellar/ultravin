@@ -186,37 +186,28 @@ pub fn decode_core<'a>(
         }
     }
 
-    let wmi_upper = uppercase_key(db.s(wmi.wmi.to_native()));
+    let strings = db.wmi_strings(wmi);
+    let wmi_upper = Cow::Borrowed(strings.wmi.as_str());
 
     // --- (b) VehType 39 (priority 100).
-    let veh_type_id = wmi.vehicletypeid.to_native();
-    if veh_type_id != NULL_I32 {
-        if let Some(tag) = element_lookup_tag(39) {
-            if let Some(name) = db.lookup(tag, veh_type_id) {
-                items.push(DecodingItem {
-                    created_on: wmi.createdon_key.to_native(),
-                    pattern_id: NULL_I32,
-                    keys: wmi_upper.clone(),
-                    vin_schema_id: NULL_I32,
-                    wmi_id: wmiid,
-                    element_id: 39,
-                    attribute_id: Cow::Owned(veh_type_id.to_string()),
-                    value: uppercase_name(name),
-                    source: Cow::Borrowed("VehType"),
-                    priority: 100,
-                    to_be_qced: false,
-                });
-            }
-        }
+    if let Some((id, name)) = &strings.vehicle {
+        items.push(DecodingItem {
+            created_on: wmi.createdon_key.to_native(),
+            pattern_id: NULL_I32,
+            keys: wmi_upper.clone(),
+            vin_schema_id: NULL_I32,
+            wmi_id: wmiid,
+            element_id: 39,
+            attribute_id: Cow::Borrowed(id.as_str()),
+            value: Cow::Borrowed(name.as_str()),
+            source: Cow::Borrowed("VehType"),
+            priority: 100,
+            to_be_qced: false,
+        });
     }
 
     // --- (c)/(d) Manufacturer Name 27 and Id 157 (priority 100).
-    let mfr_id = wmi.manufacturerid.to_native();
-    if mfr_id != NULL_I32 {
-        let mfr_name = element_lookup_tag(27)
-            .and_then(|t| db.lookup(t, mfr_id))
-            .map(uppercase_name)
-            .unwrap_or_default();
+    if let Some((id, name)) = &strings.manufacturer {
         items.push(DecodingItem {
             created_on: NULL_I64,
             pattern_id: NULL_I32,
@@ -224,8 +215,8 @@ pub fn decode_core<'a>(
             vin_schema_id: NULL_I32,
             wmi_id: wmiid,
             element_id: 27,
-            attribute_id: Cow::Owned(mfr_id.to_string()),
-            value: mfr_name,
+            attribute_id: Cow::Borrowed(id.as_str()),
+            value: Cow::Borrowed(name.as_str()),
             source: Cow::Borrowed("Manu. Name"),
             priority: 100,
             to_be_qced: false,
@@ -237,8 +228,8 @@ pub fn decode_core<'a>(
             vin_schema_id: NULL_I32,
             wmi_id: wmiid,
             element_id: 157,
-            attribute_id: Cow::Owned(mfr_id.to_string()),
-            value: Cow::Owned(mfr_id.to_string()),
+            attribute_id: Cow::Borrowed(id.as_str()),
+            value: Cow::Borrowed(id.as_str()),
             source: Cow::Borrowed("Manu. Id"),
             priority: 100,
             to_be_qced: false,
