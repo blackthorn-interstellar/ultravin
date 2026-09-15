@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Native profile flamegraph</title>
+  <style>
+    :root { color-scheme: dark; --bg:#090d16; --panel:#111827; --line:#263247; --text:#e5edf8; --muted:#91a0b7; --accent:#5eead4; --match:#fde047; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:radial-gradient(circle at 20% -10%,#17233a 0,#090d16 42%); color:var(--text); font:14px/1.45 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif; }
+    header, main { width:min(1500px,calc(100% - 32px)); margin:auto; }
+    header { padding:28px 0 18px; }
+    h1 { margin:0 0 5px; font-size:clamp(24px,3vw,38px); letter-spacing:-.025em; }
+    #description { color:var(--muted); max-width:1000px; margin:0; }
+    .panel { background:color-mix(in srgb,var(--panel) 94%,transparent); border:1px solid var(--line); border-radius:14px; box-shadow:0 18px 55px #0005; }
+    .controls { display:flex; flex-wrap:wrap; gap:12px 18px; align-items:end; padding:14px 16px; }
+    label { display:grid; gap:5px; color:var(--muted); font-size:12px; font-weight:650; letter-spacing:.02em; }
+    select,input[type="search"] { min-height:35px; border:1px solid #34435b; border-radius:8px; background:#0b1220; color:var(--text); padding:6px 10px; font:inherit; }
+    input[type="search"] { width:min(340px,70vw); }
+    .check { display:flex; align-items:center; gap:7px; min-height:35px; color:var(--text); font-size:13px; font-weight:500; }
+    button { border:1px solid #34435b; border-radius:8px; background:#172033; color:var(--text); padding:7px 11px; cursor:pointer; font:inherit; }
+    button:hover { border-color:var(--accent); }
+    #status { margin-left:auto; color:var(--muted); font-variant-numeric:tabular-nums; }
+    .crumbs { display:flex; gap:6px; align-items:center; overflow:auto; padding:10px 16px; border-top:1px solid var(--line); min-height:48px; }
+    .crumbs button { white-space:nowrap; max-width:280px; overflow:hidden; text-overflow:ellipsis; }
+    .crumbs span { color:#64748b; }
+    #chartWrap { margin-top:14px; overflow:auto; max-height:68vh; min-height:260px; }
+    svg { display:block; width:100%; min-width:760px; }
+    .frame { cursor:pointer; }
+    .frame rect { stroke:#070b12; stroke-width:.6; transition:filter .12s,opacity .12s; }
+    .frame:hover rect { filter:brightness(1.24); }
+    .frame text { fill:#08101c; font-size:11px; pointer-events:none; font-weight:600; }
+    .frame.dim rect { opacity:.2; }
+    .frame.match rect { stroke:var(--match); stroke-width:2.4; filter:saturate(1.3) brightness(1.13); }
+    .empty { padding:70px 20px; text-align:center; color:var(--muted); }
+    .below { display:grid; grid-template-columns:minmax(0,1fr) minmax(320px,.55fr); gap:14px; margin:14px 0 30px; }
+    .notes,.top { padding:16px; }
+    h2 { font-size:15px; margin:0 0 10px; }
+    .notes p { overflow-wrap:anywhere; color:var(--muted); margin:8px 0; }
+    code { color:#b8c7dd; }
+    table { table-layout:fixed; width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+    th,td { border-top:1px solid var(--line); padding:7px 5px; text-align:right; }
+    th:first-child,td:first-child { text-align:left; width:68%; }
+    td:first-child { max-width:390px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    tbody tr { cursor:pointer; }
+    tbody tr:hover { background:#172033; }
+    #tooltip { position:fixed; z-index:20; display:none; max-width:min(720px,90vw); padding:10px 12px; border:1px solid #50617c; border-radius:9px; background:#060a12f2; box-shadow:0 12px 36px #0009; pointer-events:none; }
+    #tooltip strong { color:var(--accent); }
+    #tooltip .stack { color:#b8c7dd; overflow-wrap:anywhere; margin-top:5px; }
+    @media (max-width:900px) { .below { grid-template-columns:1fr; } #status { width:100%; margin:0; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 id="title">Native profile flamegraph</h1>
+    <p id="description"></p>
+  </header>
+  <main>
+    <section class="panel">
+      <div class="controls">
+        <label id="profileLabel">Profile<select id="profile"></select></label>
+        <label>Threads<select id="thread"></select></label>
+        <label>Waiting-leaf samples
+          <select id="wait"><option value="all">Include all</option><option value="exclude">Exclude waiting leaves</option><option value="only">Only waiting leaves</option></select>
+        </label>
+        <label>Search frames<input id="search" type="search" placeholder="Function or module name" autocomplete="off"></label>
+        <label class="check"><input id="collapse" type="checkbox"> Collapse common runtime plumbing</label>
+        <button id="back" type="button">Back</button>
+        <button id="reset" type="button">Reset zoom</button>
+        <div id="status"></div>
+      </div>
+      <nav id="crumbs" class="crumbs" aria-label="Zoom breadcrumb"></nav>
+    </section>
+    <section id="chartWrap" class="panel"><svg id="chart" role="img" aria-label="Flamegraph of sampled thread stacks"></svg></section>
+    <section class="below">
+      <div class="panel notes">
+        <h2>How to read this</h2>
+        <p>Width is the number of sampled thread observations containing a stack path. It is not elapsed time, CPU time, or a per-worker timeline.</p>
+        <p>Click a frame to zoom. Search highlights matching names without changing weights. Waiting filters use the parser's explicit leaf classification. Plumbing collapse removes named runtime frames while preserving every included sample's weight.</p>
+        <p id="meta"></p>
+      </div>
+      <div class="panel top">
+        <h2>Top self frames <span id="topScope"></span></h2>
+        <table><thead><tr><th>Leaf frame</th><th>Weight</th><th>Share</th></tr></thead><tbody id="topRows"></tbody></table>
+      </div>
+    </section>
+  </main>
+  <div id="tooltip"></div>
+  <script>
+    "use strict";
+    const PROFILE = __PROFILE_JSON__;
+    const $ = id => document.getElementById(id);
+    const profiles = Array.isArray(PROFILE.profiles) ? PROFILE.profiles : [{id:"default",label:PROFILE.meta?.title || "Profile",meta:PROFILE.meta || {},stacks:PROFILE.stacks || []}];
+    if (PROFILE.symbols) for (const profile of profiles) for (const stack of profile.stacks) stack.frames=stack.frames.map(id=>PROFILE.symbols[id]);
+    const state = { root:null, zoom:[], samples:[], profile:profiles[0] };
+    const plumbing = /^(rayon(?:_core)?::|std::(?:thread|sys|panic|rt)::|core::ops::function::|__pthread|start_wqthread|thread_start|_?pthread_)/i;
+    const color = name => {
+      let hash=2166136261;
+      for (const ch of name) hash=Math.imul(hash^ch.charCodeAt(0),16777619);
+      return `hsl(${18+(hash>>>0)%48} 78% ${53+((hash>>>8)%12)}%)`;
+    };
+    function setup() {
+      profiles.forEach(profile=>$("profile").append(new Option(profile.label || profile.id,profile.id)));
+      $("profileLabel").hidden=profiles.length===1;
+      $("profile").addEventListener("change",()=>{state.profile=profiles.find(p=>p.id===$("profile").value) || profiles[0];state.zoom=[];refreshProfile();render();});
+      refreshProfile();
+      ["thread","wait","collapse"].forEach(id=>$(id).addEventListener("change",()=>{state.zoom=[];render();}));
+      $("search").addEventListener("input",paintSearch);
+      $("back").addEventListener("click",()=>{state.zoom.pop();render();});
+      $("reset").addEventListener("click",()=>{state.zoom=[];render();});
+      render();
+    }
+    function refreshProfile() {
+      const meta={...(PROFILE.meta || {}),...(state.profile.meta || {})};
+      $("title").textContent=meta.title || PROFILE.meta?.title || "Native profile flamegraph";
+      document.title=$("title").textContent;
+      $("description").textContent=meta.description || "Sampled stack observations";
+      $("meta").textContent=Object.entries(meta).filter(([k])=>!["title","description"].includes(k)).map(([k,v])=>`${k}: ${v}`).join(" · ");
+      const select=$("thread");select.replaceChildren(new Option("Workers (default)","__workers__"),new Option("All threads","__all__"));
+      [...new Set(state.profile.stacks.map(s=>s.thread))].sort().forEach(t=>select.append(new Option(t,t)));
+    }
+    function includedSamples() {
+      const thread=$("thread").value, wait=$("wait").value, collapse=$("collapse").checked;
+      return state.profile.stacks.filter(s => {
+        const threadOK=thread==="__all__" || (thread==="__workers__" ? !/^(main|process)$/i.test(s.thread) : s.thread===thread);
+        const waitOK=wait==="all" || (wait==="exclude" ? !s.wait : s.wait);
+        return threadOK && waitOK && Number.isFinite(s.weight) && s.weight>0 && Array.isArray(s.frames);
+      }).map(s=>({...s,leaf:s.frames.at(-1),frames:collapse?s.frames.filter(f=>!plumbing.test(f)):s.frames}));
+    }
+    function trie(samples) {
+      const root={name:"all included stacks",weight:0,self:0,children:new Map(),parent:null,depth:0};
+      for (const sample of samples) {
+        let node=root; root.weight+=sample.weight;
+        for (const frame of sample.frames) {
+          if (!node.children.has(frame)) node.children.set(frame,{name:frame,weight:0,self:0,children:new Map(),parent:node,depth:node.depth+1});
+          node=node.children.get(frame); node.weight+=sample.weight;
+        }
+        node.self+=sample.weight;
+      }
+      return root;
+    }
+    function locate(root,path) { let n=root; for(const name of path){n=n.children.get(name);if(!n)return root;} return n; }
+    function render() {
+      hideTooltip();
+      state.samples=includedSamples(); state.root=trie(state.samples);
+      const focus=locate(state.root,state.zoom); if(focus===state.root && state.zoom.length) state.zoom=[];
+      draw(focus); breadcrumbs(focus); topFrames();
+      const total=state.root.weight, shown=focus.weight;
+      $("status").textContent=`${shown.toLocaleString()} shown / ${total.toLocaleString()} included observations`;
+    }
+    function draw(focus) {
+      const svg=$("chart"); svg.replaceChildren();
+      if (!focus.weight) { svg.removeAttribute("viewBox"); svg.innerHTML='<foreignObject width="100%" height="260"><div xmlns="http://www.w3.org/1999/xhtml" class="empty">No samples match these filters.</div></foreignObject>'; return; }
+      let maxDepth=focus.depth;
+      (function visit(n){maxDepth=Math.max(maxDepth,n.depth);n.children.forEach(visit);})(focus);
+      const row=23, width=1200, height=Math.max(260,(maxDepth-focus.depth+1)*row+28);
+      svg.setAttribute("viewBox",`0 0 ${width} ${height}`); svg.setAttribute("height",height);
+      const nodes=[];
+      function layout(node,x,w) {
+        nodes.push({node,x,w}); let cursor=x;
+        [...node.children.values()].sort((a,b)=>b.weight-a.weight).forEach(child=>{const cw=w*child.weight/node.weight;layout(child,cursor,cw);cursor+=cw;});
+      }
+      layout(focus,0,width);
+      for (const item of nodes) {
+        const {node,x,w}=item, y=height-((node.depth-focus.depth+1)*row);
+        if(w<.35)continue;
+        const g=document.createElementNS("http://www.w3.org/2000/svg","g"); g.classList.add("frame"); g.dataset.name=node.name.toLowerCase();
+        const rect=document.createElementNS(g.namespaceURI,"rect"); rect.setAttribute("x",x);rect.setAttribute("y",y);rect.setAttribute("width",Math.max(0,w-.5));rect.setAttribute("height",row-1);rect.setAttribute("rx",2);rect.setAttribute("fill",node===focus?"#94a3b8":color(node.name));g.append(rect);
+        if(w>38){const text=document.createElementNS(g.namespaceURI,"text");text.setAttribute("x",x+5);text.setAttribute("y",y+15);text.textContent=fit(shortName(node.name),w);g.append(text);}
+        g.addEventListener("click",()=>{state.zoom=pathOf(node);render();});
+        g.addEventListener("mousemove",event=>tooltip(event,node,focus.weight));g.addEventListener("mouseleave",hideTooltip);svg.append(g);
+      }
+      paintSearch();
+      requestAnimationFrame(()=>{$("chartWrap").scrollTop=$("chartWrap").scrollHeight;});
+    }
+    function shortName(name){const clean=name.replace(/::h[0-9a-f]{12,}$/i,"");if(clean.length<=42)return clean;const parts=clean.split("::");return parts.length>2?parts.slice(-2).join("::"):clean;}
+    function fit(text,width){const chars=Math.max(2,Math.floor((width-9)/6.4));return text.length>chars?text.slice(0,Math.max(1,chars-1))+"…":text;}
+    function pathOf(node){const out=[];while(node.parent){out.push(node.name);node=node.parent;}return out.reverse();}
+    function breadcrumbs(focus){const box=$("crumbs");box.replaceChildren();const root=document.createElement("button");root.textContent="All included stacks";root.onclick=()=>{state.zoom=[];render();};box.append(root);let path=[];for(const name of pathOf(focus)){box.append(Object.assign(document.createElement("span"),{textContent:"›"}));path.push(name);const p=[...path],b=document.createElement("button");b.textContent=name;b.title=name;b.onclick=()=>{state.zoom=p;render();};box.append(b);}}
+    function paintSearch(){const q=$("search").value.trim().toLowerCase();document.querySelectorAll(".frame").forEach(g=>{const match=q&&g.dataset.name.includes(q);g.classList.toggle("match",!!match);g.classList.toggle("dim",!!q&&!match);});}
+    function tooltip(event,node,total){const tip=$("tooltip"),path=pathOf(node);tip.innerHTML=`<strong>${escapeHTML(node.name)}</strong><div>${node.weight.toLocaleString()} observations · ${(100*node.weight/total).toFixed(2)}% of view · self ${node.self.toLocaleString()}</div><div class="stack">${path.map(escapeHTML).join(" → ")}</div>`;tip.style.display="block";tip.style.left=Math.min(innerWidth-tip.offsetWidth-12,event.clientX+14)+"px";tip.style.top=Math.min(innerHeight-tip.offsetHeight-12,event.clientY+14)+"px";}
+    function hideTooltip(){$("tooltip").style.display="none";}
+    function escapeHTML(value){const span=document.createElement("span");span.textContent=value;return span.innerHTML;}
+    function topFrames(){const totals=new Map();for(const s of state.samples){const leaf=s.leaf||"(empty stack)";totals.set(leaf,(totals.get(leaf)||0)+s.weight);}const rows=[...totals].sort((a,b)=>b[1]-a[1]).slice(0,12),total=state.root.weight;$("topScope").textContent=`· ${rows.length} shown`;const body=$("topRows");body.replaceChildren();for(const [name,weight] of rows){const tr=document.createElement("tr");tr.title=`Search for ${name}`;tr.innerHTML=`<td>${escapeHTML(name)}</td><td>${weight.toLocaleString()}</td><td>${(100*weight/total).toFixed(1)}%</td>`;tr.onclick=()=>{$("search").value=name;paintSearch();zoomFirst(name);};body.append(tr);}}
+    function zoomFirst(name){let found=null;(function visit(n){if(found)return;if(n.name===name){found=n;return;}n.children.forEach(visit);})(state.root);if(found){state.zoom=pathOf(found);render();$("search").value=name;paintSearch();}}
+    setup();
+  </script>
+</body>
+</html>

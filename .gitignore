@@ -47,3 +47,8 @@ downloads/
 # `git add -A`s after applying them, which would otherwise commit the artifact
 /fix-bundle/
 /fix/
+
+# Generated interactive figures (rebuild with scripts/bench/flamegraph.py and worker_timeline.py)
+docs/figures/*.html
+docs/figures/*.png
+docs/figures/*.json.gz
