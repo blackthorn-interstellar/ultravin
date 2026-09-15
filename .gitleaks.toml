@@ -14,6 +14,14 @@ paths = [
   '''^campaign/''',
   '''^downloads/''',
 ]
+# Benchmark provenance JSON (scripts/bench/*.json) records a sha256 per source
+# file, keyed by path. One of those paths is keyspec.rs, and "key" followed by
+# 64 hex characters is exactly generic-api-key's shape. Match the whole line,
+# path included, so nothing but that one file's hash is ever excused.
+regexTarget = "line"
+regexes = [
+  '''"crates/ultravin/src/keyspec\.rs": "[0-9a-f]{64}"''',
+]
 
 # Deliberately NOT allowlisted: the repo's fake local-dev credentials
 # (Ultravin!2026 in scripts/bench/*, `postgres` in docker-compose.yml and
