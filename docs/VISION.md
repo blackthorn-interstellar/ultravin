@@ -1,6 +1,6 @@
 # ultravin
 
-**A pure-Rust reimplementation of NHTSA's vPIC VIN decoder that produces byte-identical results to `spVinDecode` — shipped as one Python wheel that is both a CLI and a library, and as a Rust crate. Clear, fast, boring.**
+**A pure-Rust reimplementation of NHTSA's vPIC VIN decoder with full-field `spVinDecode` parity and documented upstream defects corrected — shipped as one Python wheel that is both a CLI and a library, and as a Rust crate. Clear, fast, boring.**
 
 ## The problem
 
@@ -17,17 +17,21 @@ Decoding is not a database problem. It is WMI lookup → schema selection by mod
 3. **Build** an embedded, content-addressed Rust artifact — same input bytes always yield the same artifact.
 4. **Decode** in pure Rust: WMI via positions 1-3 (or 1-3+12-14 when position 3 is `9`), `Wmi → Wmi_VinSchema → VinSchema` year filtering, `Pattern.Keys` matched over positions 4-8 + 10-17, and per-`ElementId` resolution mirroring vPIC's `RANK() PARTITION BY ElementId` priority/specificity ordering. Check digit (weights `8,7,6,5,4,3,2,10,0,9,...`, mod 11, X=10), `SuggestedVIN`, and space-delimited error codes included.
 
-## Correctness: exact parity or it's a bug
+## Correctness: vPIC fidelity, upstream defects corrected
 
-Parity is measured against the official `.plain` dump and live vPIC API as oracle. We **generate VINs exhaustively** — every WMI, every schema, every pattern path, partial and corrupted VINs, error-correction cases — and assert field-for-field equality. The dedup tie-break resolves deterministically — lowest `id` wins, with no `NEWID` randomness — and we mirror that ordering exactly.
+The unmodified Postgres `spVinDecode` from the official monthly dump is the oracle. We compare all 15 output fields and the specified group ordering. Generated corpora exercise the data's decoding rules and pairwise descriptor interactions, alongside partial VINs, malformed inputs, caller years, and error-correction cases. The [acceptance policy](ACCEPTANCE.md) defines the contract; the [corpus design](CORPUS.md) makes coverage reproducible.
+
+An unexplained difference is a decoder bug. A proven upstream defect gets a correction backed by the defective data or procedure, a regression case, and a [documented explanation](KNOWN_DEVIATIONS.md). That is how ultravin delivers vPIC fidelity and improves on vPIC's own wrong answers.
 
 ## Why we win on numbers
 
-corgi — the current open-source bar — reduces vPIC's **1.5GB to 64MB uncompressed / 21MB gzip** and decodes at **~30ms (v2 SQLite)**, with **~12ms** targeted by its unreleased v3 binary-index/`corgi-rs` (FST + rkyv) rewrite. It self-reports **93.6% Tier-1 accuracy** and concedes trim "falls apart." We beat both axes: **exact parity** (not 93.6%) and **sub-millisecond** in-process decode — faster than corgi, MS SQL, and Postgres baselines — published as honest, reproducible benchmarks.
+The published September 9 benchmark delivers **84,822 VIN/s on one core** and **195,203 VIN/s on four cores**. Single-core throughput exceeds the published corgi v3 rate by **over 1,000×** and the measured NHTSA SQL baselines by **over 3,700×**. The complete decoder runs in-process, with the database embedded and no service to host.
+
+Speed and correctness advance together: preserve the full decoding algorithm, remove unnecessary work, and measure the result. [Benchmarks](BENCHMARKS.md) record the inputs, hardware, comparison sources, and reproduction commands.
 
 ## Principles & non-goals
 
 - **No code beats clever code.** No SQL engine at runtime. The artifact is the product.
 - **Diffable data.** Schema and procs live as text in git, not opaque binaries.
-- **Parity is the spec.** We replicate vPIC; we don't "improve" decode logic.
+- **Parity is the spec; defects need evidence.** Match the official procedure. Correct upstream bugs only when their cause is proven and their regression is covered.
 - **Non-goals:** non-vPIC/community WMIs, recalls, market values, listings. Decode only.
