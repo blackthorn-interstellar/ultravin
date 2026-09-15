@@ -1,0 +1,735 @@
+{
+  "measured_at_utc": "2026-09-14T04:23:21.604184+00:00",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "configured_workers": "1",
+  "method": "Production private one-thread Rayon calibration; first 256 real rows warm the kernel, next 256 time native decode plus output construction. Offsets sweep the 5000-VIN corpus; three rounds by default.",
+  "corpus_sha256": "b45ad4472c202ee176f86e8bc3c39609c76b6258df963ea04e08439aa3a1eb09",
+  "extension_sha256": "14000a4fab8ce155fc3aeb0eef9eab173c78b62e0e6e4fbdea9d3aaa3b858f47",
+  "runner_sha256": "8fec8d4f9efec1148c18ee4e3a9bc2e66d36e64f573ba58ce3dcc9c9d4849e8d",
+  "samples": [
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 0,
+      "native_rows_per_second": 5284.147606718728
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 0,
+      "native_rows_per_second": 90488.68484947243
+    },
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 256,
+      "native_rows_per_second": 6545.13844501828
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 256,
+      "native_rows_per_second": 99978.8326065341
+    },
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 512,
+      "native_rows_per_second": 8327.74219782454
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 512,
+      "native_rows_per_second": 99515.7160972113
+    },
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 768,
+      "native_rows_per_second": 7483.848335136083
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 768,
+      "native_rows_per_second": 100605.87530451945
+    },
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 1024,
+      "native_rows_per_second": 7387.714317664501
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 1024,
+      "native_rows_per_second": 96138.21069515061
+    },
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 1280,
+      "native_rows_per_second": 7380.091459513122
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 1280,
+      "native_rows_per_second": 96991.15258829984
+    },
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 1536,
+      "native_rows_per_second": 8469.856558016383
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 1536,
+      "native_rows_per_second": 98725.74374036364
+    },
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 1792,
+      "native_rows_per_second": 11090.032348238106
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 1792,
+      "native_rows_per_second": 91414.95712959892
+    },
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 2048,
+      "native_rows_per_second": 9528.447197719039
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 2048,
+      "native_rows_per_second": 87376.9640191219
+    },
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 2304,
+      "native_rows_per_second": 12235.631497192018
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 2304,
+      "native_rows_per_second": 95451.15585384042
+    },
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 2560,
+      "native_rows_per_second": 11272.856542288162
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 2560,
+      "native_rows_per_second": 116932.78009511752
+    },
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 2816,
+      "native_rows_per_second": 9647.256361743775
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 2816,
+      "native_rows_per_second": 110916.52578245975
+    },
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 3072,
+      "native_rows_per_second": 9241.26573140485
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 3072,
+      "native_rows_per_second": 116648.63017599817
+    },
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 3328,
+      "native_rows_per_second": 11653.57915101855
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 3328,
+      "native_rows_per_second": 101154.10511808161
+    },
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 3584,
+      "native_rows_per_second": 13154.908918699373
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 3584,
+      "native_rows_per_second": 107651.63426534698
+    },
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 3840,
+      "native_rows_per_second": 12577.664004509094
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 3840,
+      "native_rows_per_second": 102056.39652418238
+    },
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 4096,
+      "native_rows_per_second": 11888.222658237235
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 4096,
+      "native_rows_per_second": 105065.12396042985
+    },
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 4352,
+      "native_rows_per_second": 11086.170115374985
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 4352,
+      "native_rows_per_second": 100643.76627844121
+    },
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 4608,
+      "native_rows_per_second": 18597.55543851365
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 4608,
+      "native_rows_per_second": 106472.5760332727
+    },
+    {
+      "format": "jsonl",
+      "trial": 0,
+      "corpus_offset": 4864,
+      "native_rows_per_second": 85735.83449768848
+    },
+    {
+      "format": "parquet",
+      "trial": 0,
+      "corpus_offset": 4864,
+      "native_rows_per_second": 103968.17274311901
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 0,
+      "native_rows_per_second": 75946.56565773433
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 0,
+      "native_rows_per_second": 123880.95814178561
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 256,
+      "native_rows_per_second": 89509.17504008682
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 256,
+      "native_rows_per_second": 105223.52600747417
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 512,
+      "native_rows_per_second": 89075.76241545632
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 512,
+      "native_rows_per_second": 106281.04361342263
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 768,
+      "native_rows_per_second": 89210.26266498235
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 768,
+      "native_rows_per_second": 126518.65631256434
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 1024,
+      "native_rows_per_second": 84935.77727184955
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 1024,
+      "native_rows_per_second": 100166.29169519711
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 1280,
+      "native_rows_per_second": 88682.33295504775
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 1280,
+      "native_rows_per_second": 125254.85203536687
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 1536,
+      "native_rows_per_second": 81424.93638676844
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 1536,
+      "native_rows_per_second": 125610.75777633631
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 1792,
+      "native_rows_per_second": 84733.14025651634
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 1792,
+      "native_rows_per_second": 102032.68234356318
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 2048,
+      "native_rows_per_second": 85975.77296753778
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 2048,
+      "native_rows_per_second": 114209.23488735221
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 2304,
+      "native_rows_per_second": 83986.05700225549
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 2304,
+      "native_rows_per_second": 114586.24741229787
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 2560,
+      "native_rows_per_second": 84522.14612294274
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 2560,
+      "native_rows_per_second": 123420.60198398617
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 2816,
+      "native_rows_per_second": 77166.5410700829
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 2816,
+      "native_rows_per_second": 101726.89349114777
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 3072,
+      "native_rows_per_second": 88471.62842745482
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 3072,
+      "native_rows_per_second": 124931.37314707496
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 3328,
+      "native_rows_per_second": 81984.51197278114
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 3328,
+      "native_rows_per_second": 122387.96123170096
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 3584,
+      "native_rows_per_second": 83913.79169056789
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 3584,
+      "native_rows_per_second": 103697.96670971213
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 3840,
+      "native_rows_per_second": 85485.32624339408
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 3840,
+      "native_rows_per_second": 107521.59777094287
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 4096,
+      "native_rows_per_second": 85940.8780472084
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 4096,
+      "native_rows_per_second": 105730.51109963862
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 4352,
+      "native_rows_per_second": 82587.30542785708
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 4352,
+      "native_rows_per_second": 100040.71969919006
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 4608,
+      "native_rows_per_second": 80475.73735108452
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 4608,
+      "native_rows_per_second": 103724.22645429672
+    },
+    {
+      "format": "jsonl",
+      "trial": 1,
+      "corpus_offset": 4864,
+      "native_rows_per_second": 79664.95905656772
+    },
+    {
+      "format": "parquet",
+      "trial": 1,
+      "corpus_offset": 4864,
+      "native_rows_per_second": 111103.10628661304
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 0,
+      "native_rows_per_second": 82925.05162570352
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 0,
+      "native_rows_per_second": 118249.33704155863
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 256,
+      "native_rows_per_second": 82410.08287363959
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 256,
+      "native_rows_per_second": 99335.49983023718
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 512,
+      "native_rows_per_second": 83397.8091786456
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 512,
+      "native_rows_per_second": 113881.13123109951
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 768,
+      "native_rows_per_second": 90979.10217130868
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 768,
+      "native_rows_per_second": 129067.45236478295
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 1024,
+      "native_rows_per_second": 89423.2237002282
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 1024,
+      "native_rows_per_second": 100502.15745939968
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 1280,
+      "native_rows_per_second": 89174.02903938321
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 1280,
+      "native_rows_per_second": 127893.4008503912
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 1536,
+      "native_rows_per_second": 87114.32768666882
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 1536,
+      "native_rows_per_second": 126785.01916137652
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 1792,
+      "native_rows_per_second": 88402.85734610479
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 1792,
+      "native_rows_per_second": 113149.17127071822
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 2048,
+      "native_rows_per_second": 88642.6592797784
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 2048,
+      "native_rows_per_second": 116943.89068669819
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 2304,
+      "native_rows_per_second": 89380.26309220098
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 2304,
+      "native_rows_per_second": 113794.61938144623
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 2560,
+      "native_rows_per_second": 90460.70648398316
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 2560,
+      "native_rows_per_second": 130299.26075528782
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 2816,
+      "native_rows_per_second": 82653.96722899345
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 2816,
+      "native_rows_per_second": 111627.92320173304
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 3072,
+      "native_rows_per_second": 90969.66197308223
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 3072,
+      "native_rows_per_second": 122336.78552449984
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 3328,
+      "native_rows_per_second": 88447.41956380912
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 3328,
+      "native_rows_per_second": 121502.12699914903
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 3584,
+      "native_rows_per_second": 86326.08329118193
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 3584,
+      "native_rows_per_second": 120147.85695646706
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 3840,
+      "native_rows_per_second": 88559.5886683855
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 3840,
+      "native_rows_per_second": 128707.89341377578
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 4096,
+      "native_rows_per_second": 90443.38456103162
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 4096,
+      "native_rows_per_second": 106999.16657680408
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 4352,
+      "native_rows_per_second": 81385.02045116549
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 4352,
+      "native_rows_per_second": 109975.50896966265
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 4608,
+      "native_rows_per_second": 87303.72009336042
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 4608,
+      "native_rows_per_second": 115780.36645390517
+    },
+    {
+      "format": "jsonl",
+      "trial": 2,
+      "corpus_offset": 4864,
+      "native_rows_per_second": 82018.42210652784
+    },
+    {
+      "format": "parquet",
+      "trial": 2,
+      "corpus_offset": 4864,
+      "native_rows_per_second": 109048.28112646873
+    }
+  ],
+  "reference_single_core_rows_per_second": {
+    "jsonl": 82789.50942734849,
+    "parquet": 108349.95769590785
+  }
+}

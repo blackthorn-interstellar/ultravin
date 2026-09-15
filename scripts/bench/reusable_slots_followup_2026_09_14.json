@@ -1,0 +1,462 @@
+{
+  "schema_version": 1,
+  "status": "complete",
+  "measured_at_utc": "2026-09-15T05:40:22+00:00",
+  "corpus": {
+    "path": "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+    "rows": 20000000,
+    "distinct_rows": 20000000,
+    "sha256": "0d6224e99d0a7f241e3dcd052ce973c8baea774feb0831db0071423de726bd9a",
+    "manifest": "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.manifest.json",
+    "manifest_sha256": "74511c8048925936662a849d1e33d6d7c406d81b15fd5325587a4ae318778822",
+    "generation_manifest": {
+      "candidates_examined": 20001831,
+      "chunk_size": 100000,
+      "chunks_used": 201,
+      "corpus": {
+        "bytes": 360000000,
+        "path": "target/bench/independent-sink-corpus.txt",
+        "sha256": "0d6224e99d0a7f241e3dcd052ce973c8baea774feb0831db0071423de726bd9a"
+      },
+      "count": 20000000,
+      "database": {
+        "artifact_blake3": "907eedd5f2794a10e586e01ca6c2a5af4e8d7e0f966bcfdf030a9889d77ac538",
+        "data_month": "2026_08"
+      },
+      "distinct_rows": 20000000,
+      "diversity": {
+        "distinct_descriptor_year_keys": 19575350,
+        "distinct_wmis": 12933,
+        "distinct_year_characters": 30
+      },
+      "format_version": 1,
+      "frozen_now": "2026-09-01T00:00:00+00:00",
+      "generator": {
+        "api": "ultravin.generate(n, seed=seed + chunk_index, now=frozen_now)",
+        "decoder_version": "0.0.0",
+        "script": "/Volumes/fast-4tb/projects/ultravin/scripts/bench/large_corpus.py",
+        "script_sha256": "a5196e5aa07f1a3e14d01cb7d10e5419e6a9190af6fe84f7946fc86bf4f4621e"
+      },
+      "seed": 42,
+      "verification": {
+        "check_digits": true,
+        "unique": true,
+        "vin_alphabet": true
+      }
+    }
+  },
+  "immutable_binary": "/Volumes/fast-4tb/projects/ultravin/target/bench/reusable-slots-probe",
+  "binary_sha256": "169b8dacfb7078ab291cd9092ce0a748ee9db9ee1c53f9955b7fd3fb41a686ea",
+  "runs": [
+    {
+      "average_busy_cores": 10.189826616945268,
+      "batch_size": 12000,
+      "elapsed_seconds": 24.427456458,
+      "max_output_owned_bytes": 0,
+      "mode": "shared",
+      "now_micros": 1788220800000000,
+      "ordered_delivery": true,
+      "process_counters": {
+        "cycles": 754481728413,
+        "instructions": 1540244966177
+      },
+      "process_system_cpu_seconds": 9.174684,
+      "process_user_cpu_seconds": 239.736862,
+      "rows": 20000000,
+      "rows_per_second": 818750.81977477,
+      "workers": 12,
+      "peak_rss_bytes": 2014380032,
+      "process_wall_seconds": 49.63707891601371,
+      "instructions_per_vin": 77012.24830885,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/reusable-slots-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "shared",
+        "12",
+        "12000",
+        "false"
+      ],
+      "raw": {
+        "stdout": "{\"average_busy_cores\":10.189826616945268,\"batch_size\":12000,\"elapsed_seconds\":24.427456458,\"max_output_owned_bytes\":0,\"mode\":\"shared\",\"now_micros\":1788220800000000,\"ordered_delivery\":true,\"process_counters\":{\"cycles\":754481728413,\"instructions\":1540244966177},\"process_system_cpu_seconds\":9.174684,\"process_user_cpu_seconds\":239.736862,\"rows\":20000000,\"rows_per_second\":818750.81977477,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "active_threads_including_consumer": 13,
+      "admission_batch_cap": 120,
+      "aggregate_worker_decode_seconds": 228.335542301,
+      "aggregate_worker_recycle_scan_and_cleanup_seconds": 25.042426717,
+      "aggregate_worker_wait_and_publish_seconds": 2.305975091,
+      "average_busy_cores": 10.728880533963844,
+      "batch_size": 100,
+      "consumer_delivery_seconds": 21.331534042,
+      "credits_released_after_owner_destruction": true,
+      "elapsed_seconds": 21.331676709,
+      "full_output_materialized": true,
+      "live_result_row_budget": 12000,
+      "mode": "slots",
+      "now_micros": 1788220800000000,
+      "ordered_delivery": true,
+      "peak_completed_result_owned_bytes_excluding_construction_and_empty_preallocation": null,
+      "peak_live_result_batches": 107,
+      "peak_live_result_rows": 10700,
+      "physical_slot_row_capacity": 12000,
+      "physical_slots": 120,
+      "process_counters": {
+        "cycles": 695520444253,
+        "instructions": 1496219485867
+      },
+      "process_system_cpu_seconds": 2.5990909999999996,
+      "process_user_cpu_seconds": 226.26592000000002,
+      "recycled_batches": 200000,
+      "rows": 20000000,
+      "rows_per_second": 937572.8065277609,
+      "slots_per_owner": 10,
+      "unsafe_used": false,
+      "workers": 12,
+      "peak_rss_bytes": 2018328576,
+      "process_wall_seconds": 43.22410275001312,
+      "instructions_per_vin": 74810.97429335,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/reusable-slots-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "slots",
+        "12",
+        "100",
+        "false"
+      ],
+      "raw": {
+        "stdout": "{\"active_threads_including_consumer\":13,\"admission_batch_cap\":120,\"aggregate_worker_decode_seconds\":228.335542301,\"aggregate_worker_recycle_scan_and_cleanup_seconds\":25.042426717,\"aggregate_worker_wait_and_publish_seconds\":2.305975091,\"average_busy_cores\":10.728880533963844,\"batch_size\":100,\"consumer_delivery_seconds\":21.331534042,\"credits_released_after_owner_destruction\":true,\"elapsed_seconds\":21.331676709,\"full_output_materialized\":true,\"live_result_row_budget\":12000,\"mode\":\"slots\",\"now_micros\":1788220800000000,\"ordered_delivery\":true,\"peak_completed_result_owned_bytes_excluding_construction_and_empty_preallocation\":null,\"peak_live_result_batches\":107,\"peak_live_result_rows\":10700,\"physical_slot_row_capacity\":12000,\"physical_slots\":120,\"process_counters\":{\"cycles\":695520444253,\"instructions\":1496219485867},\"process_system_cpu_seconds\":2.5990909999999996,\"process_user_cpu_seconds\":226.26592000000002,\"recycled_batches\":200000,\"rows\":20000000,\"rows_per_second\":937572.8065277609,\"slots_per_owner\":10,\"unsafe_used\":false,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "active_threads_including_consumer": 13,
+      "admission_batch_cap": 60,
+      "aggregate_worker_decode_seconds": 226.604715325,
+      "aggregate_worker_recycle_scan_and_cleanup_seconds": 24.905208296,
+      "aggregate_worker_wait_and_publish_seconds": 2.81208597,
+      "average_busy_cores": 10.884204460186355,
+      "batch_size": 200,
+      "consumer_delivery_seconds": 21.205043,
+      "credits_released_after_owner_destruction": true,
+      "elapsed_seconds": 21.205319125,
+      "full_output_materialized": true,
+      "live_result_row_budget": 12000,
+      "mode": "slots",
+      "now_micros": 1788220800000000,
+      "ordered_delivery": true,
+      "peak_completed_result_owned_bytes_excluding_construction_and_empty_preallocation": null,
+      "peak_live_result_batches": 57,
+      "peak_live_result_rows": 11400,
+      "physical_slot_row_capacity": 12000,
+      "physical_slots": 60,
+      "process_counters": {
+        "cycles": 699257370847,
+        "instructions": 1495696605880
+      },
+      "process_system_cpu_seconds": 2.1661980000000005,
+      "process_user_cpu_seconds": 228.636831,
+      "recycled_batches": 100000,
+      "rows": 20000000,
+      "rows_per_second": 943159.5856730593,
+      "slots_per_owner": 5,
+      "unsafe_used": false,
+      "workers": 12,
+      "peak_rss_bytes": 2017689600,
+      "process_wall_seconds": 43.23982029198669,
+      "instructions_per_vin": 74784.830294,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/reusable-slots-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "slots",
+        "12",
+        "200",
+        "false"
+      ],
+      "raw": {
+        "stdout": "{\"active_threads_including_consumer\":13,\"admission_batch_cap\":60,\"aggregate_worker_decode_seconds\":226.604715325,\"aggregate_worker_recycle_scan_and_cleanup_seconds\":24.905208296,\"aggregate_worker_wait_and_publish_seconds\":2.81208597,\"average_busy_cores\":10.884204460186355,\"batch_size\":200,\"consumer_delivery_seconds\":21.205043,\"credits_released_after_owner_destruction\":true,\"elapsed_seconds\":21.205319125,\"full_output_materialized\":true,\"live_result_row_budget\":12000,\"mode\":\"slots\",\"now_micros\":1788220800000000,\"ordered_delivery\":true,\"peak_completed_result_owned_bytes_excluding_construction_and_empty_preallocation\":null,\"peak_live_result_batches\":57,\"peak_live_result_rows\":11400,\"physical_slot_row_capacity\":12000,\"physical_slots\":60,\"process_counters\":{\"cycles\":699257370847,\"instructions\":1495696605880},\"process_system_cpu_seconds\":2.1661980000000005,\"process_user_cpu_seconds\":228.636831,\"recycled_batches\":100000,\"rows\":20000000,\"rows_per_second\":943159.5856730593,\"slots_per_owner\":5,\"unsafe_used\":false,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "active_threads_including_consumer": 13,
+      "admission_batch_cap": 36,
+      "aggregate_worker_decode_seconds": 225.260604096,
+      "aggregate_worker_recycle_scan_and_cleanup_seconds": 25.278478227,
+      "aggregate_worker_wait_and_publish_seconds": 8.595677119,
+      "average_busy_cores": 10.564508373378422,
+      "batch_size": 400,
+      "consumer_delivery_seconds": 21.607528458,
+      "credits_released_after_owner_destruction": true,
+      "elapsed_seconds": 21.608325625,
+      "full_output_materialized": true,
+      "live_result_row_budget": 12000,
+      "mode": "slots",
+      "now_micros": 1788220800000000,
+      "ordered_delivery": true,
+      "peak_completed_result_owned_bytes_excluding_construction_and_empty_preallocation": null,
+      "peak_live_result_batches": 30,
+      "peak_live_result_rows": 12000,
+      "physical_slot_row_capacity": 14400,
+      "physical_slots": 36,
+      "process_counters": {
+        "cycles": 693228637391,
+        "instructions": 1496980532215
+      },
+      "process_system_cpu_seconds": 2.148189,
+      "process_user_cpu_seconds": 226.133148,
+      "recycled_batches": 50000,
+      "rows": 20000000,
+      "rows_per_second": 925569.1693603863,
+      "slots_per_owner": 3,
+      "unsafe_used": false,
+      "workers": 12,
+      "peak_rss_bytes": 2020458496,
+      "process_wall_seconds": 43.59542849997524,
+      "instructions_per_vin": 74849.02661075,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/reusable-slots-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "slots",
+        "12",
+        "400",
+        "false"
+      ],
+      "raw": {
+        "stdout": "{\"active_threads_including_consumer\":13,\"admission_batch_cap\":36,\"aggregate_worker_decode_seconds\":225.260604096,\"aggregate_worker_recycle_scan_and_cleanup_seconds\":25.278478227,\"aggregate_worker_wait_and_publish_seconds\":8.595677119,\"average_busy_cores\":10.564508373378422,\"batch_size\":400,\"consumer_delivery_seconds\":21.607528458,\"credits_released_after_owner_destruction\":true,\"elapsed_seconds\":21.608325625,\"full_output_materialized\":true,\"live_result_row_budget\":12000,\"mode\":\"slots\",\"now_micros\":1788220800000000,\"ordered_delivery\":true,\"peak_completed_result_owned_bytes_excluding_construction_and_empty_preallocation\":null,\"peak_live_result_batches\":30,\"peak_live_result_rows\":12000,\"physical_slot_row_capacity\":14400,\"physical_slots\":36,\"process_counters\":{\"cycles\":693228637391,\"instructions\":1496980532215},\"process_system_cpu_seconds\":2.148189,\"process_user_cpu_seconds\":226.133148,\"recycled_batches\":50000,\"rows\":20000000,\"rows_per_second\":925569.1693603863,\"slots_per_owner\":3,\"unsafe_used\":false,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "average_busy_cores": 10.20156204269665,
+      "batch_size": 12000,
+      "elapsed_seconds": 24.372033416,
+      "max_output_owned_bytes": 0,
+      "mode": "shared",
+      "now_micros": 1788220800000000,
+      "ordered_delivery": true,
+      "process_counters": {
+        "cycles": 753348694680,
+        "instructions": 1540013707180
+      },
+      "process_system_cpu_seconds": 9.009304,
+      "process_user_cpu_seconds": 239.623507,
+      "rows": 20000000,
+      "rows_per_second": 820612.6940097741,
+      "workers": 12,
+      "peak_rss_bytes": 2014347264,
+      "process_wall_seconds": 50.03760258300463,
+      "instructions_per_vin": 77000.685359,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/reusable-slots-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "shared",
+        "12",
+        "12000",
+        "false"
+      ],
+      "raw": {
+        "stdout": "{\"average_busy_cores\":10.20156204269665,\"batch_size\":12000,\"elapsed_seconds\":24.372033416,\"max_output_owned_bytes\":0,\"mode\":\"shared\",\"now_micros\":1788220800000000,\"ordered_delivery\":true,\"process_counters\":{\"cycles\":753348694680,\"instructions\":1540013707180},\"process_system_cpu_seconds\":9.009304,\"process_user_cpu_seconds\":239.623507,\"rows\":20000000,\"rows_per_second\":820612.6940097741,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "average_busy_cores": 7.617878868877152,
+      "batch_size": 12000,
+      "elapsed_seconds": 26.712429208,
+      "max_output_owned_bytes": 0,
+      "mode": "shared",
+      "now_micros": 1788220800000000,
+      "ordered_delivery": true,
+      "process_counters": {
+        "cycles": 658292584335,
+        "instructions": 1524980709943
+      },
+      "process_system_cpu_seconds": 2.412121,
+      "process_user_cpu_seconds": 201.07992900000002,
+      "rows": 20000000,
+      "rows_per_second": 748715.1334783989,
+      "workers": 8,
+      "peak_rss_bytes": 2013708288,
+      "process_wall_seconds": 53.94608575000893,
+      "instructions_per_vin": 76249.03549715,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/reusable-slots-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "shared",
+        "8",
+        "12000",
+        "false"
+      ],
+      "raw": {
+        "stdout": "{\"average_busy_cores\":7.617878868877152,\"batch_size\":12000,\"elapsed_seconds\":26.712429208,\"max_output_owned_bytes\":0,\"mode\":\"shared\",\"now_micros\":1788220800000000,\"ordered_delivery\":true,\"process_counters\":{\"cycles\":658292584335,\"instructions\":1524980709943},\"process_system_cpu_seconds\":2.412121,\"process_user_cpu_seconds\":201.07992900000002,\"rows\":20000000,\"rows_per_second\":748715.1334783989,\"workers\":8}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "active_threads_including_consumer": 9,
+      "admission_batch_cap": 64,
+      "aggregate_worker_decode_seconds": 173.148936486,
+      "aggregate_worker_recycle_scan_and_cleanup_seconds": 13.105424476,
+      "aggregate_worker_wait_and_publish_seconds": 0.442863052,
+      "average_busy_cores": 7.981603029973251,
+      "batch_size": 200,
+      "consumer_delivery_seconds": 23.342097375,
+      "credits_released_after_owner_destruction": true,
+      "elapsed_seconds": 23.342177292,
+      "full_output_materialized": true,
+      "live_result_row_budget": 12000,
+      "mode": "slots",
+      "now_micros": 1788220800000000,
+      "ordered_delivery": true,
+      "peak_completed_result_owned_bytes_excluding_construction_and_empty_preallocation": null,
+      "peak_live_result_batches": 60,
+      "peak_live_result_rows": 12000,
+      "physical_slot_row_capacity": 12800,
+      "physical_slots": 64,
+      "process_counters": {
+        "cycles": 603941548719,
+        "instructions": 1493490802982
+      },
+      "process_system_cpu_seconds": 1.2158410000000002,
+      "process_user_cpu_seconds": 185.092152,
+      "recycled_batches": 100000,
+      "rows": 20000000,
+      "rows_per_second": 856818.1001201866,
+      "slots_per_owner": 8,
+      "unsafe_used": false,
+      "workers": 8,
+      "peak_rss_bytes": 1994113024,
+      "process_wall_seconds": 47.40224358299747,
+      "instructions_per_vin": 74674.5401491,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/reusable-slots-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "slots",
+        "8",
+        "200",
+        "false"
+      ],
+      "raw": {
+        "stdout": "{\"active_threads_including_consumer\":9,\"admission_batch_cap\":64,\"aggregate_worker_decode_seconds\":173.148936486,\"aggregate_worker_recycle_scan_and_cleanup_seconds\":13.105424476,\"aggregate_worker_wait_and_publish_seconds\":0.442863052,\"average_busy_cores\":7.981603029973251,\"batch_size\":200,\"consumer_delivery_seconds\":23.342097375,\"credits_released_after_owner_destruction\":true,\"elapsed_seconds\":23.342177292,\"full_output_materialized\":true,\"live_result_row_budget\":12000,\"mode\":\"slots\",\"now_micros\":1788220800000000,\"ordered_delivery\":true,\"peak_completed_result_owned_bytes_excluding_construction_and_empty_preallocation\":null,\"peak_live_result_batches\":60,\"peak_live_result_rows\":12000,\"physical_slot_row_capacity\":12800,\"physical_slots\":64,\"process_counters\":{\"cycles\":603941548719,\"instructions\":1493490802982},\"process_system_cpu_seconds\":1.2158410000000002,\"process_user_cpu_seconds\":185.092152,\"recycled_batches\":100000,\"rows\":20000000,\"rows_per_second\":856818.1001201866,\"slots_per_owner\":8,\"unsafe_used\":false,\"workers\":8}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "average_busy_cores": 7.623912219458343,
+      "batch_size": 12000,
+      "elapsed_seconds": 26.639140792,
+      "max_output_owned_bytes": 0,
+      "mode": "shared",
+      "now_micros": 1788220800000000,
+      "ordered_delivery": true,
+      "process_counters": {
+        "cycles": 658886633509,
+        "instructions": 1525434869376
+      },
+      "process_system_cpu_seconds": 2.3483449999999997,
+      "process_user_cpu_seconds": 200.746126,
+      "rows": 20000000,
+      "rows_per_second": 750774.9651597698,
+      "workers": 8,
+      "peak_rss_bytes": 2014511104,
+      "process_wall_seconds": 53.90533045795746,
+      "instructions_per_vin": 76271.7434688,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/reusable-slots-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "shared",
+        "8",
+        "12000",
+        "false"
+      ],
+      "raw": {
+        "stdout": "{\"average_busy_cores\":7.623912219458343,\"batch_size\":12000,\"elapsed_seconds\":26.639140792,\"max_output_owned_bytes\":0,\"mode\":\"shared\",\"now_micros\":1788220800000000,\"ordered_delivery\":true,\"process_counters\":{\"cycles\":658886633509,\"instructions\":1525434869376},\"process_system_cpu_seconds\":2.3483449999999997,\"process_user_cpu_seconds\":200.746126,\"rows\":20000000,\"rows_per_second\":750774.9651597698,\"workers\":8}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "average_busy_cores": 6.501547891118831,
+      "batch_size": 12000,
+      "elapsed_seconds": 41.994162709,
+      "max_output_owned_bytes": 174050277,
+      "mode": "shared",
+      "now_micros": 1788220800000000,
+      "ordered_delivery": true,
+      "process_counters": {
+        "cycles": 834298028671,
+        "instructions": 1581418186906
+      },
+      "process_system_cpu_seconds": 14.77892,
+      "process_user_cpu_seconds": 258.24814000000003,
+      "rows": 20000000,
+      "rows_per_second": 476256.6678276381,
+      "workers": 12,
+      "peak_rss_bytes": 2013609984,
+      "process_wall_seconds": 67.35578466701554,
+      "instructions_per_vin": 79070.9093453,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/reusable-slots-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "shared",
+        "12",
+        "12000",
+        "true"
+      ],
+      "raw": {
+        "stdout": "{\"average_busy_cores\":6.501547891118831,\"batch_size\":12000,\"elapsed_seconds\":41.994162709,\"max_output_owned_bytes\":174050277,\"mode\":\"shared\",\"now_micros\":1788220800000000,\"ordered_delivery\":true,\"process_counters\":{\"cycles\":834298028671,\"instructions\":1581418186906},\"process_system_cpu_seconds\":14.77892,\"process_user_cpu_seconds\":258.24814000000003,\"rows\":20000000,\"rows_per_second\":476256.6678276381,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "active_threads_including_consumer": 13,
+      "admission_batch_cap": 60,
+      "aggregate_worker_decode_seconds": 251.624758937,
+      "aggregate_worker_recycle_scan_and_cleanup_seconds": 24.801287721,
+      "aggregate_worker_wait_and_publish_seconds": 2.810645889,
+      "average_busy_cores": 10.841809004730097,
+      "batch_size": 200,
+      "consumer_delivery_seconds": 23.27675,
+      "credits_released_after_owner_destruction": true,
+      "elapsed_seconds": 23.277401667,
+      "full_output_materialized": true,
+      "live_result_row_budget": 12000,
+      "mode": "slots",
+      "now_micros": 1788220800000000,
+      "ordered_delivery": true,
+      "peak_completed_result_owned_bytes_excluding_construction_and_empty_preallocation": 152619602,
+      "peak_live_result_batches": 58,
+      "peak_live_result_rows": 11600,
+      "physical_slot_row_capacity": 12000,
+      "physical_slots": 60,
+      "process_counters": {
+        "cycles": 765412917925,
+        "instructions": 1522395247145
+      },
+      "process_system_cpu_seconds": 3.4460770000000003,
+      "process_user_cpu_seconds": 248.92306599999998,
+      "recycled_batches": null,
+      "rows": 20000000,
+      "rows_per_second": 859202.4267190302,
+      "slots_per_owner": 5,
+      "unsafe_used": false,
+      "workers": 12,
+      "peak_rss_bytes": 2020245504,
+      "process_wall_seconds": 45.348444124974776,
+      "instructions_per_vin": 76119.76235725,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/reusable-slots-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "slots",
+        "12",
+        "200",
+        "true"
+      ],
+      "raw": {
+        "stdout": "{\"active_threads_including_consumer\":13,\"admission_batch_cap\":60,\"aggregate_worker_decode_seconds\":251.624758937,\"aggregate_worker_recycle_scan_and_cleanup_seconds\":24.801287721,\"aggregate_worker_wait_and_publish_seconds\":2.810645889,\"average_busy_cores\":10.841809004730097,\"batch_size\":200,\"consumer_delivery_seconds\":23.27675,\"credits_released_after_owner_destruction\":true,\"elapsed_seconds\":23.277401667,\"full_output_materialized\":true,\"live_result_row_budget\":12000,\"mode\":\"slots\",\"now_micros\":1788220800000000,\"ordered_delivery\":true,\"peak_completed_result_owned_bytes_excluding_construction_and_empty_preallocation\":152619602,\"peak_live_result_batches\":58,\"peak_live_result_rows\":11600,\"physical_slot_row_capacity\":12000,\"physical_slots\":60,\"process_counters\":{\"cycles\":765412917925,\"instructions\":1522395247145},\"process_system_cpu_seconds\":3.4460770000000003,\"process_user_cpu_seconds\":248.92306599999998,\"recycled_batches\":null,\"rows\":20000000,\"rows_per_second\":859202.4267190302,\"slots_per_owner\":5,\"unsafe_used\":false,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    }
+  ]
+}

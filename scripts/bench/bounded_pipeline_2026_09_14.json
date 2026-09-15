@@ -1,0 +1,630 @@
+{
+  "experiment": "pipeline",
+  "status": "complete",
+  "date_utc": "2026-09-14T22:26:52.397879+00:00",
+  "corpus_manifest": {
+    "candidates_examined": 10000490,
+    "chunk_size": 100000,
+    "chunks_used": 101,
+    "corpus": {
+      "bytes": 180000000,
+      "path": "target/bench/multicore-corpus.txt",
+      "sha256": "de80fb8727de3d89a7885929645953eed7b51a67c1dc988d309bbaa0ab4ec5f3"
+    },
+    "count": 10000000,
+    "database": {
+      "artifact_blake3": "907eedd5f2794a10e586e01ca6c2a5af4e8d7e0f966bcfdf030a9889d77ac538",
+      "data_month": "2026_08"
+    },
+    "distinct_rows": 10000000,
+    "diversity": {
+      "distinct_descriptor_year_keys": 9808848,
+      "distinct_wmis": 12933,
+      "distinct_year_characters": 30
+    },
+    "format_version": 1,
+    "frozen_now": "2026-09-01T00:00:00+00:00",
+    "generator": {
+      "api": "ultravin.generate(n, seed=seed + chunk_index, now=frozen_now)",
+      "decoder_version": "0.0.0",
+      "script": "/Volumes/fast-4tb/projects/ultravin/scripts/bench/large_corpus.py",
+      "script_sha256": "a5196e5aa07f1a3e14d01cb7d10e5419e6a9190af6fe84f7946fc86bf4f4621e"
+    },
+    "seed": 42,
+    "verification": {
+      "check_digits": true,
+      "unique": true,
+      "vin_alphabet": true
+    }
+  },
+  "binary_sha256": {
+    "before": "d98e4a3fba3dc7947ad0bfc2f3bbcc957722931ad0f646716b82fa96d75a1f39",
+    "after": "d98e4a3fba3dc7947ad0bfc2f3bbcc957722931ad0f646716b82fa96d75a1f39"
+  },
+  "runner_sha256": "65e75936ab8d3240728e1dc712f3fa0ca7669c811af249a4ff4ff3eb20e9aabf",
+  "rounds": 2,
+  "samples": [
+    {
+      "round": 1,
+      "workers": 12,
+      "label": "sequential_budget",
+      "rows_per_second": 642555.7113672836,
+      "peak_rss_bytes": 1732313088,
+      "native_json": {
+        "actual_rows_per_second": 642555.7113672836,
+        "backpressure": null,
+        "batch_rows": 24000,
+        "benchmark": "pipeline_probe",
+        "corpus_rows": 10000000,
+        "decoder_pool": "one process-owned ultravin pool shared by decode and cleanup",
+        "elapsed_seconds": 15.562852875,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 24000,
+        "maximum_live_batches": 1,
+        "maximum_live_rows_limit": 24000,
+        "maximum_observed_live_rows": 24000,
+        "memory_comparison": "bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal",
+        "mode": "sequential_budget",
+        "phase_seconds": {
+          "decode": 13.194653753,
+          "drop_results": 2.368137305,
+          "whole_pass_wall": 15.562852417
+        },
+        "phase_time_basis": "decode and drop wall durations are accumulated serially",
+        "queue_capacity_batches": null,
+        "rows": 10000000,
+        "semantics": "ordered full managed results; synchronous cleanup included",
+        "whole_passes": 1,
+        "workers": 12
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-baseline-pipeline_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "12",
+        "24000",
+        "sequential_budget"
+      ],
+      "stdout": "{\"actual_rows_per_second\":642555.7113672836,\"backpressure\":null,\"batch_rows\":24000,\"benchmark\":\"pipeline_probe\",\"corpus_rows\":10000000,\"decoder_pool\":\"one process-owned ultravin pool shared by decode and cleanup\",\"elapsed_seconds\":15.562852875,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":24000,\"maximum_live_batches\":1,\"maximum_live_rows_limit\":24000,\"maximum_observed_live_rows\":24000,\"memory_comparison\":\"bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal\",\"mode\":\"sequential_budget\",\"phase_seconds\":{\"decode\":13.194653753,\"drop_results\":2.368137305,\"whole_pass_wall\":15.562852417},\"phase_time_basis\":\"decode and drop wall durations are accumulated serially\",\"queue_capacity_batches\":null,\"rows\":10000000,\"semantics\":\"ordered full managed results; synchronous cleanup included\",\"whole_passes\":1,\"workers\":12}\n",
+      "stderr": "pipeline probe: warmup complete; starting timed whole passes\nsequential_budget: 10000000 VINs in 15.562853s = 642556 VIN/s (12 workers)\n"
+    },
+    {
+      "round": 1,
+      "workers": 12,
+      "label": "sequential_batch",
+      "rows_per_second": 610892.7631894592,
+      "peak_rss_bytes": 1403650048,
+      "native_json": {
+        "actual_rows_per_second": 610892.7631894592,
+        "backpressure": null,
+        "batch_rows": 12000,
+        "benchmark": "pipeline_probe",
+        "corpus_rows": 10000000,
+        "decoder_pool": "one process-owned ultravin pool shared by decode and cleanup",
+        "elapsed_seconds": 16.369485125,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 24000,
+        "maximum_live_batches": 1,
+        "maximum_live_rows_limit": 12000,
+        "maximum_observed_live_rows": 12000,
+        "memory_comparison": "bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal",
+        "mode": "sequential_batch",
+        "phase_seconds": {
+          "decode": 13.765999917,
+          "drop_results": 2.603354114,
+          "whole_pass_wall": 16.369484792
+        },
+        "phase_time_basis": "decode and drop wall durations are accumulated serially",
+        "queue_capacity_batches": null,
+        "rows": 10000000,
+        "semantics": "ordered full managed results; synchronous cleanup included",
+        "whole_passes": 1,
+        "workers": 12
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-baseline-pipeline_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "12",
+        "24000",
+        "sequential_batch"
+      ],
+      "stdout": "{\"actual_rows_per_second\":610892.7631894592,\"backpressure\":null,\"batch_rows\":12000,\"benchmark\":\"pipeline_probe\",\"corpus_rows\":10000000,\"decoder_pool\":\"one process-owned ultravin pool shared by decode and cleanup\",\"elapsed_seconds\":16.369485125,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":24000,\"maximum_live_batches\":1,\"maximum_live_rows_limit\":12000,\"maximum_observed_live_rows\":12000,\"memory_comparison\":\"bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal\",\"mode\":\"sequential_batch\",\"phase_seconds\":{\"decode\":13.765999917,\"drop_results\":2.603354114,\"whole_pass_wall\":16.369484792},\"phase_time_basis\":\"decode and drop wall durations are accumulated serially\",\"queue_capacity_batches\":null,\"rows\":10000000,\"semantics\":\"ordered full managed results; synchronous cleanup included\",\"whole_passes\":1,\"workers\":12}\n",
+      "stderr": "pipeline probe: warmup complete; starting timed whole passes\nsequential_batch: 10000000 VINs in 16.369485s = 610893 VIN/s (12 workers)\n"
+    },
+    {
+      "round": 1,
+      "workers": 12,
+      "label": "pipeline",
+      "rows_per_second": 568953.689236648,
+      "peak_rss_bytes": 1398865920,
+      "native_json": {
+        "actual_rows_per_second": 568953.689236648,
+        "backpressure": "rendezvous handoff prevents producer from starting N+2 before consumer receives N+1",
+        "batch_rows": 12000,
+        "benchmark": "pipeline_probe",
+        "corpus_rows": 10000000,
+        "decoder_pool": "one process-owned ultravin pool shared by decode and cleanup",
+        "elapsed_seconds": 17.576122959,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 24000,
+        "maximum_live_batches": 2,
+        "maximum_live_rows_limit": 24000,
+        "maximum_observed_live_rows": 24000,
+        "memory_comparison": "bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal",
+        "mode": "pipeline",
+        "phase_seconds": {
+          "decode": 17.516711076,
+          "drop_results": 14.90765322,
+          "whole_pass_wall": 17.576122166
+        },
+        "phase_time_basis": "decode producer time and consumer drop time overlap; both are summed separately",
+        "queue_capacity_batches": 0,
+        "rows": 10000000,
+        "semantics": "ordered full managed results; synchronous cleanup included",
+        "whole_passes": 1,
+        "workers": 12
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-baseline-pipeline_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "12",
+        "24000",
+        "pipeline"
+      ],
+      "stdout": "{\"actual_rows_per_second\":568953.689236648,\"backpressure\":\"rendezvous handoff prevents producer from starting N+2 before consumer receives N+1\",\"batch_rows\":12000,\"benchmark\":\"pipeline_probe\",\"corpus_rows\":10000000,\"decoder_pool\":\"one process-owned ultravin pool shared by decode and cleanup\",\"elapsed_seconds\":17.576122959,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":24000,\"maximum_live_batches\":2,\"maximum_live_rows_limit\":24000,\"maximum_observed_live_rows\":24000,\"memory_comparison\":\"bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal\",\"mode\":\"pipeline\",\"phase_seconds\":{\"decode\":17.516711076,\"drop_results\":14.90765322,\"whole_pass_wall\":17.576122166},\"phase_time_basis\":\"decode producer time and consumer drop time overlap; both are summed separately\",\"queue_capacity_batches\":0,\"rows\":10000000,\"semantics\":\"ordered full managed results; synchronous cleanup included\",\"whole_passes\":1,\"workers\":12}\n",
+      "stderr": "pipeline probe: warmup complete; starting timed whole passes\npipeline: 10000000 VINs in 17.576123s = 568954 VIN/s (12 workers)\n"
+    },
+    {
+      "round": 1,
+      "workers": 8,
+      "label": "sequential_budget",
+      "rows_per_second": 599941.6286792377,
+      "peak_rss_bytes": 1532477440,
+      "native_json": {
+        "actual_rows_per_second": 599941.6286792377,
+        "backpressure": null,
+        "batch_rows": 24000,
+        "benchmark": "pipeline_probe",
+        "corpus_rows": 10000000,
+        "decoder_pool": "one process-owned ultravin pool shared by decode and cleanup",
+        "elapsed_seconds": 16.66828825,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 24000,
+        "maximum_live_batches": 1,
+        "maximum_live_rows_limit": 24000,
+        "maximum_observed_live_rows": 24000,
+        "memory_comparison": "bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal",
+        "mode": "sequential_budget",
+        "phase_seconds": {
+          "decode": 14.26441741,
+          "drop_results": 2.40380726,
+          "whole_pass_wall": 16.668286833
+        },
+        "phase_time_basis": "decode and drop wall durations are accumulated serially",
+        "queue_capacity_batches": null,
+        "rows": 10000000,
+        "semantics": "ordered full managed results; synchronous cleanup included",
+        "whole_passes": 1,
+        "workers": 8
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-baseline-pipeline_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "8",
+        "24000",
+        "sequential_budget"
+      ],
+      "stdout": "{\"actual_rows_per_second\":599941.6286792377,\"backpressure\":null,\"batch_rows\":24000,\"benchmark\":\"pipeline_probe\",\"corpus_rows\":10000000,\"decoder_pool\":\"one process-owned ultravin pool shared by decode and cleanup\",\"elapsed_seconds\":16.66828825,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":24000,\"maximum_live_batches\":1,\"maximum_live_rows_limit\":24000,\"maximum_observed_live_rows\":24000,\"memory_comparison\":\"bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal\",\"mode\":\"sequential_budget\",\"phase_seconds\":{\"decode\":14.26441741,\"drop_results\":2.40380726,\"whole_pass_wall\":16.668286833},\"phase_time_basis\":\"decode and drop wall durations are accumulated serially\",\"queue_capacity_batches\":null,\"rows\":10000000,\"semantics\":\"ordered full managed results; synchronous cleanup included\",\"whole_passes\":1,\"workers\":8}\n",
+      "stderr": "pipeline probe: warmup complete; starting timed whole passes\nsequential_budget: 10000000 VINs in 16.668288s = 599942 VIN/s (8 workers)\n"
+    },
+    {
+      "round": 1,
+      "workers": 8,
+      "label": "sequential_batch",
+      "rows_per_second": 601196.8160406444,
+      "peak_rss_bytes": 1219739648,
+      "native_json": {
+        "actual_rows_per_second": 601196.8160406444,
+        "backpressure": null,
+        "batch_rows": 12000,
+        "benchmark": "pipeline_probe",
+        "corpus_rows": 10000000,
+        "decoder_pool": "one process-owned ultravin pool shared by decode and cleanup",
+        "elapsed_seconds": 16.633487958,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 24000,
+        "maximum_live_batches": 1,
+        "maximum_live_rows_limit": 12000,
+        "maximum_observed_live_rows": 12000,
+        "memory_comparison": "bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal",
+        "mode": "sequential_batch",
+        "phase_seconds": {
+          "decode": 14.184119417,
+          "drop_results": 2.449237233,
+          "whole_pass_wall": 16.633487208
+        },
+        "phase_time_basis": "decode and drop wall durations are accumulated serially",
+        "queue_capacity_batches": null,
+        "rows": 10000000,
+        "semantics": "ordered full managed results; synchronous cleanup included",
+        "whole_passes": 1,
+        "workers": 8
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-baseline-pipeline_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "8",
+        "24000",
+        "sequential_batch"
+      ],
+      "stdout": "{\"actual_rows_per_second\":601196.8160406444,\"backpressure\":null,\"batch_rows\":12000,\"benchmark\":\"pipeline_probe\",\"corpus_rows\":10000000,\"decoder_pool\":\"one process-owned ultravin pool shared by decode and cleanup\",\"elapsed_seconds\":16.633487958,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":24000,\"maximum_live_batches\":1,\"maximum_live_rows_limit\":12000,\"maximum_observed_live_rows\":12000,\"memory_comparison\":\"bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal\",\"mode\":\"sequential_batch\",\"phase_seconds\":{\"decode\":14.184119417,\"drop_results\":2.449237233,\"whole_pass_wall\":16.633487208},\"phase_time_basis\":\"decode and drop wall durations are accumulated serially\",\"queue_capacity_batches\":null,\"rows\":10000000,\"semantics\":\"ordered full managed results; synchronous cleanup included\",\"whole_passes\":1,\"workers\":8}\n",
+      "stderr": "pipeline probe: warmup complete; starting timed whole passes\nsequential_batch: 10000000 VINs in 16.633488s = 601197 VIN/s (8 workers)\n"
+    },
+    {
+      "round": 1,
+      "workers": 8,
+      "label": "pipeline",
+      "rows_per_second": 643884.5986820161,
+      "peak_rss_bytes": 1407418368,
+      "native_json": {
+        "actual_rows_per_second": 643884.5986820161,
+        "backpressure": "rendezvous handoff prevents producer from starting N+2 before consumer receives N+1",
+        "batch_rows": 12000,
+        "benchmark": "pipeline_probe",
+        "corpus_rows": 10000000,
+        "decoder_pool": "one process-owned ultravin pool shared by decode and cleanup",
+        "elapsed_seconds": 15.530733334,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 24000,
+        "maximum_live_batches": 2,
+        "maximum_live_rows_limit": 24000,
+        "maximum_observed_live_rows": 24000,
+        "memory_comparison": "bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal",
+        "mode": "pipeline",
+        "phase_seconds": {
+          "decode": 15.519984829,
+          "drop_results": 13.291771924,
+          "whole_pass_wall": 15.530732875
+        },
+        "phase_time_basis": "decode producer time and consumer drop time overlap; both are summed separately",
+        "queue_capacity_batches": 0,
+        "rows": 10000000,
+        "semantics": "ordered full managed results; synchronous cleanup included",
+        "whole_passes": 1,
+        "workers": 8
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-baseline-pipeline_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "8",
+        "24000",
+        "pipeline"
+      ],
+      "stdout": "{\"actual_rows_per_second\":643884.5986820161,\"backpressure\":\"rendezvous handoff prevents producer from starting N+2 before consumer receives N+1\",\"batch_rows\":12000,\"benchmark\":\"pipeline_probe\",\"corpus_rows\":10000000,\"decoder_pool\":\"one process-owned ultravin pool shared by decode and cleanup\",\"elapsed_seconds\":15.530733334,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":24000,\"maximum_live_batches\":2,\"maximum_live_rows_limit\":24000,\"maximum_observed_live_rows\":24000,\"memory_comparison\":\"bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal\",\"mode\":\"pipeline\",\"phase_seconds\":{\"decode\":15.519984829,\"drop_results\":13.291771924,\"whole_pass_wall\":15.530732875},\"phase_time_basis\":\"decode producer time and consumer drop time overlap; both are summed separately\",\"queue_capacity_batches\":0,\"rows\":10000000,\"semantics\":\"ordered full managed results; synchronous cleanup included\",\"whole_passes\":1,\"workers\":8}\n",
+      "stderr": "pipeline probe: warmup complete; starting timed whole passes\npipeline: 10000000 VINs in 15.530733s = 643885 VIN/s (8 workers)\n"
+    },
+    {
+      "round": 2,
+      "workers": 8,
+      "label": "pipeline",
+      "rows_per_second": 621151.4089557999,
+      "peak_rss_bytes": 1430405120,
+      "native_json": {
+        "actual_rows_per_second": 621151.4089557999,
+        "backpressure": "rendezvous handoff prevents producer from starting N+2 before consumer receives N+1",
+        "batch_rows": 12000,
+        "benchmark": "pipeline_probe",
+        "corpus_rows": 10000000,
+        "decoder_pool": "one process-owned ultravin pool shared by decode and cleanup",
+        "elapsed_seconds": 16.099134375,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 24000,
+        "maximum_live_batches": 2,
+        "maximum_live_rows_limit": 24000,
+        "maximum_observed_live_rows": 24000,
+        "memory_comparison": "bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal",
+        "mode": "pipeline",
+        "phase_seconds": {
+          "decode": 16.038741584,
+          "drop_results": 13.947138925,
+          "whole_pass_wall": 16.099133958
+        },
+        "phase_time_basis": "decode producer time and consumer drop time overlap; both are summed separately",
+        "queue_capacity_batches": 0,
+        "rows": 10000000,
+        "semantics": "ordered full managed results; synchronous cleanup included",
+        "whole_passes": 1,
+        "workers": 8
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-baseline-pipeline_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "8",
+        "24000",
+        "pipeline"
+      ],
+      "stdout": "{\"actual_rows_per_second\":621151.4089557999,\"backpressure\":\"rendezvous handoff prevents producer from starting N+2 before consumer receives N+1\",\"batch_rows\":12000,\"benchmark\":\"pipeline_probe\",\"corpus_rows\":10000000,\"decoder_pool\":\"one process-owned ultravin pool shared by decode and cleanup\",\"elapsed_seconds\":16.099134375,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":24000,\"maximum_live_batches\":2,\"maximum_live_rows_limit\":24000,\"maximum_observed_live_rows\":24000,\"memory_comparison\":\"bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal\",\"mode\":\"pipeline\",\"phase_seconds\":{\"decode\":16.038741584,\"drop_results\":13.947138925,\"whole_pass_wall\":16.099133958},\"phase_time_basis\":\"decode producer time and consumer drop time overlap; both are summed separately\",\"queue_capacity_batches\":0,\"rows\":10000000,\"semantics\":\"ordered full managed results; synchronous cleanup included\",\"whole_passes\":1,\"workers\":8}\n",
+      "stderr": "pipeline probe: warmup complete; starting timed whole passes\npipeline: 10000000 VINs in 16.099134s = 621151 VIN/s (8 workers)\n"
+    },
+    {
+      "round": 2,
+      "workers": 8,
+      "label": "sequential_batch",
+      "rows_per_second": 568799.0176329046,
+      "peak_rss_bytes": 1187282944,
+      "native_json": {
+        "actual_rows_per_second": 568799.0176329046,
+        "backpressure": null,
+        "batch_rows": 12000,
+        "benchmark": "pipeline_probe",
+        "corpus_rows": 10000000,
+        "decoder_pool": "one process-owned ultravin pool shared by decode and cleanup",
+        "elapsed_seconds": 17.580902375,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 24000,
+        "maximum_live_batches": 1,
+        "maximum_live_rows_limit": 12000,
+        "maximum_observed_live_rows": 12000,
+        "memory_comparison": "bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal",
+        "mode": "sequential_batch",
+        "phase_seconds": {
+          "decode": 14.846746611,
+          "drop_results": 2.7340300170000003,
+          "whole_pass_wall": 17.580902083
+        },
+        "phase_time_basis": "decode and drop wall durations are accumulated serially",
+        "queue_capacity_batches": null,
+        "rows": 10000000,
+        "semantics": "ordered full managed results; synchronous cleanup included",
+        "whole_passes": 1,
+        "workers": 8
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-baseline-pipeline_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "8",
+        "24000",
+        "sequential_batch"
+      ],
+      "stdout": "{\"actual_rows_per_second\":568799.0176329046,\"backpressure\":null,\"batch_rows\":12000,\"benchmark\":\"pipeline_probe\",\"corpus_rows\":10000000,\"decoder_pool\":\"one process-owned ultravin pool shared by decode and cleanup\",\"elapsed_seconds\":17.580902375,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":24000,\"maximum_live_batches\":1,\"maximum_live_rows_limit\":12000,\"maximum_observed_live_rows\":12000,\"memory_comparison\":\"bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal\",\"mode\":\"sequential_batch\",\"phase_seconds\":{\"decode\":14.846746611,\"drop_results\":2.7340300170000003,\"whole_pass_wall\":17.580902083},\"phase_time_basis\":\"decode and drop wall durations are accumulated serially\",\"queue_capacity_batches\":null,\"rows\":10000000,\"semantics\":\"ordered full managed results; synchronous cleanup included\",\"whole_passes\":1,\"workers\":8}\n",
+      "stderr": "pipeline probe: warmup complete; starting timed whole passes\nsequential_batch: 10000000 VINs in 17.580902s = 568799 VIN/s (8 workers)\n"
+    },
+    {
+      "round": 2,
+      "workers": 8,
+      "label": "sequential_budget",
+      "rows_per_second": 633453.2755995572,
+      "peak_rss_bytes": 1464303616,
+      "native_json": {
+        "actual_rows_per_second": 633453.2755995572,
+        "backpressure": null,
+        "batch_rows": 24000,
+        "benchmark": "pipeline_probe",
+        "corpus_rows": 10000000,
+        "decoder_pool": "one process-owned ultravin pool shared by decode and cleanup",
+        "elapsed_seconds": 15.786484,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 24000,
+        "maximum_live_batches": 1,
+        "maximum_live_rows_limit": 24000,
+        "maximum_observed_live_rows": 24000,
+        "memory_comparison": "bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal",
+        "mode": "sequential_budget",
+        "phase_seconds": {
+          "decode": 13.533050962,
+          "drop_results": 2.253376777,
+          "whole_pass_wall": 15.786483458
+        },
+        "phase_time_basis": "decode and drop wall durations are accumulated serially",
+        "queue_capacity_batches": null,
+        "rows": 10000000,
+        "semantics": "ordered full managed results; synchronous cleanup included",
+        "whole_passes": 1,
+        "workers": 8
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-baseline-pipeline_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "8",
+        "24000",
+        "sequential_budget"
+      ],
+      "stdout": "{\"actual_rows_per_second\":633453.2755995572,\"backpressure\":null,\"batch_rows\":24000,\"benchmark\":\"pipeline_probe\",\"corpus_rows\":10000000,\"decoder_pool\":\"one process-owned ultravin pool shared by decode and cleanup\",\"elapsed_seconds\":15.786484,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":24000,\"maximum_live_batches\":1,\"maximum_live_rows_limit\":24000,\"maximum_observed_live_rows\":24000,\"memory_comparison\":\"bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal\",\"mode\":\"sequential_budget\",\"phase_seconds\":{\"decode\":13.533050962,\"drop_results\":2.253376777,\"whole_pass_wall\":15.786483458},\"phase_time_basis\":\"decode and drop wall durations are accumulated serially\",\"queue_capacity_batches\":null,\"rows\":10000000,\"semantics\":\"ordered full managed results; synchronous cleanup included\",\"whole_passes\":1,\"workers\":8}\n",
+      "stderr": "pipeline probe: warmup complete; starting timed whole passes\nsequential_budget: 10000000 VINs in 15.786484s = 633453 VIN/s (8 workers)\n"
+    },
+    {
+      "round": 2,
+      "workers": 12,
+      "label": "pipeline",
+      "rows_per_second": 625643.2557390314,
+      "peak_rss_bytes": 1383104512,
+      "native_json": {
+        "actual_rows_per_second": 625643.2557390314,
+        "backpressure": "rendezvous handoff prevents producer from starting N+2 before consumer receives N+1",
+        "batch_rows": 12000,
+        "benchmark": "pipeline_probe",
+        "corpus_rows": 10000000,
+        "decoder_pool": "one process-owned ultravin pool shared by decode and cleanup",
+        "elapsed_seconds": 15.983549584,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 24000,
+        "maximum_live_batches": 2,
+        "maximum_live_rows_limit": 24000,
+        "maximum_observed_live_rows": 24000,
+        "memory_comparison": "bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal",
+        "mode": "pipeline",
+        "phase_seconds": {
+          "decode": 15.932824139000001,
+          "drop_results": 13.587966976,
+          "whole_pass_wall": 15.983548875
+        },
+        "phase_time_basis": "decode producer time and consumer drop time overlap; both are summed separately",
+        "queue_capacity_batches": 0,
+        "rows": 10000000,
+        "semantics": "ordered full managed results; synchronous cleanup included",
+        "whole_passes": 1,
+        "workers": 12
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-baseline-pipeline_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "12",
+        "24000",
+        "pipeline"
+      ],
+      "stdout": "{\"actual_rows_per_second\":625643.2557390314,\"backpressure\":\"rendezvous handoff prevents producer from starting N+2 before consumer receives N+1\",\"batch_rows\":12000,\"benchmark\":\"pipeline_probe\",\"corpus_rows\":10000000,\"decoder_pool\":\"one process-owned ultravin pool shared by decode and cleanup\",\"elapsed_seconds\":15.983549584,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":24000,\"maximum_live_batches\":2,\"maximum_live_rows_limit\":24000,\"maximum_observed_live_rows\":24000,\"memory_comparison\":\"bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal\",\"mode\":\"pipeline\",\"phase_seconds\":{\"decode\":15.932824139000001,\"drop_results\":13.587966976,\"whole_pass_wall\":15.983548875},\"phase_time_basis\":\"decode producer time and consumer drop time overlap; both are summed separately\",\"queue_capacity_batches\":0,\"rows\":10000000,\"semantics\":\"ordered full managed results; synchronous cleanup included\",\"whole_passes\":1,\"workers\":12}\n",
+      "stderr": "pipeline probe: warmup complete; starting timed whole passes\npipeline: 10000000 VINs in 15.983550s = 625643 VIN/s (12 workers)\n"
+    },
+    {
+      "round": 2,
+      "workers": 12,
+      "label": "sequential_batch",
+      "rows_per_second": 573552.474489362,
+      "peak_rss_bytes": 1344126976,
+      "native_json": {
+        "actual_rows_per_second": 573552.474489362,
+        "backpressure": null,
+        "batch_rows": 12000,
+        "benchmark": "pipeline_probe",
+        "corpus_rows": 10000000,
+        "decoder_pool": "one process-owned ultravin pool shared by decode and cleanup",
+        "elapsed_seconds": 17.435196333,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 24000,
+        "maximum_live_batches": 1,
+        "maximum_live_rows_limit": 12000,
+        "maximum_observed_live_rows": 12000,
+        "memory_comparison": "bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal",
+        "mode": "sequential_batch",
+        "phase_seconds": {
+          "decode": 14.650171626,
+          "drop_results": 2.784881747,
+          "whole_pass_wall": 17.435195708
+        },
+        "phase_time_basis": "decode and drop wall durations are accumulated serially",
+        "queue_capacity_batches": null,
+        "rows": 10000000,
+        "semantics": "ordered full managed results; synchronous cleanup included",
+        "whole_passes": 1,
+        "workers": 12
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-baseline-pipeline_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "12",
+        "24000",
+        "sequential_batch"
+      ],
+      "stdout": "{\"actual_rows_per_second\":573552.474489362,\"backpressure\":null,\"batch_rows\":12000,\"benchmark\":\"pipeline_probe\",\"corpus_rows\":10000000,\"decoder_pool\":\"one process-owned ultravin pool shared by decode and cleanup\",\"elapsed_seconds\":17.435196333,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":24000,\"maximum_live_batches\":1,\"maximum_live_rows_limit\":12000,\"maximum_observed_live_rows\":12000,\"memory_comparison\":\"bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal\",\"mode\":\"sequential_batch\",\"phase_seconds\":{\"decode\":14.650171626,\"drop_results\":2.784881747,\"whole_pass_wall\":17.435195708},\"phase_time_basis\":\"decode and drop wall durations are accumulated serially\",\"queue_capacity_batches\":null,\"rows\":10000000,\"semantics\":\"ordered full managed results; synchronous cleanup included\",\"whole_passes\":1,\"workers\":12}\n",
+      "stderr": "pipeline probe: warmup complete; starting timed whole passes\nsequential_batch: 10000000 VINs in 17.435196s = 573552 VIN/s (12 workers)\n"
+    },
+    {
+      "round": 2,
+      "workers": 12,
+      "label": "sequential_budget",
+      "rows_per_second": 628126.9221682933,
+      "peak_rss_bytes": 1730527232,
+      "native_json": {
+        "actual_rows_per_second": 628126.9221682933,
+        "backpressure": null,
+        "batch_rows": 24000,
+        "benchmark": "pipeline_probe",
+        "corpus_rows": 10000000,
+        "decoder_pool": "one process-owned ultravin pool shared by decode and cleanup",
+        "elapsed_seconds": 15.920349291,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 24000,
+        "maximum_live_batches": 1,
+        "maximum_live_rows_limit": 24000,
+        "maximum_observed_live_rows": 24000,
+        "memory_comparison": "bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal",
+        "mode": "sequential_budget",
+        "phase_seconds": {
+          "decode": 13.370334378999999,
+          "drop_results": 2.549961325,
+          "whole_pass_wall": 15.92034875
+        },
+        "phase_time_basis": "decode and drop wall durations are accumulated serially",
+        "queue_capacity_batches": null,
+        "rows": 10000000,
+        "semantics": "ordered full managed results; synchronous cleanup included",
+        "whole_passes": 1,
+        "workers": 12
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-baseline-pipeline_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "12",
+        "24000",
+        "sequential_budget"
+      ],
+      "stdout": "{\"actual_rows_per_second\":628126.9221682933,\"backpressure\":null,\"batch_rows\":24000,\"benchmark\":\"pipeline_probe\",\"corpus_rows\":10000000,\"decoder_pool\":\"one process-owned ultravin pool shared by decode and cleanup\",\"elapsed_seconds\":15.920349291,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":24000,\"maximum_live_batches\":1,\"maximum_live_rows_limit\":24000,\"maximum_observed_live_rows\":24000,\"memory_comparison\":\"bounds live or under-construction batch rows; transient decode, container, worklist, allocator, resident input, and database memory are not asserted equal\",\"mode\":\"sequential_budget\",\"phase_seconds\":{\"decode\":13.370334378999999,\"drop_results\":2.549961325,\"whole_pass_wall\":15.92034875},\"phase_time_basis\":\"decode and drop wall durations are accumulated serially\",\"queue_capacity_batches\":null,\"rows\":10000000,\"semantics\":\"ordered full managed results; synchronous cleanup included\",\"whole_passes\":1,\"workers\":12}\n",
+      "stderr": "pipeline probe: warmup complete; starting timed whole passes\nsequential_budget: 10000000 VINs in 15.920349s = 628127 VIN/s (12 workers)\n"
+    }
+  ],
+  "summary": {
+    "8": {
+      "sequential_budget": {
+        "median_rows_per_second": 616697.4521393974,
+        "range_rows_per_second": [
+          599941.6286792377,
+          633453.2755995572
+        ],
+        "median_peak_rss_bytes": 1498390528.0
+      },
+      "sequential_batch": {
+        "median_rows_per_second": 584997.9168367744,
+        "range_rows_per_second": [
+          568799.0176329046,
+          601196.8160406444
+        ],
+        "median_peak_rss_bytes": 1203511296.0
+      },
+      "pipeline": {
+        "median_rows_per_second": 632518.003818908,
+        "range_rows_per_second": [
+          621151.4089557999,
+          643884.5986820161
+        ],
+        "median_peak_rss_bytes": 1418911744.0
+      }
+    },
+    "12": {
+      "sequential_budget": {
+        "median_rows_per_second": 635341.3167677885,
+        "range_rows_per_second": [
+          628126.9221682933,
+          642555.7113672836
+        ],
+        "median_peak_rss_bytes": 1731420160.0
+      },
+      "sequential_batch": {
+        "median_rows_per_second": 592222.6188394106,
+        "range_rows_per_second": [
+          573552.474489362,
+          610892.7631894592
+        ],
+        "median_peak_rss_bytes": 1373888512.0
+      },
+      "pipeline": {
+        "median_rows_per_second": 597298.4724878396,
+        "range_rows_per_second": [
+          568953.689236648,
+          625643.2557390314
+        ],
+        "median_peak_rss_bytes": 1390985216.0
+      }
+    }
+  }
+}

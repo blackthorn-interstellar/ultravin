@@ -1,0 +1,443 @@
+{
+  "schema_version": 1,
+  "status": "complete",
+  "measured_at_utc": "2026-09-15T05:50:06+00:00",
+  "configuration": {
+    "workers": 12,
+    "batch_rows": 12000,
+    "full_warm_pass": true,
+    "timed_exact_full_pass": true,
+    "throughput_sequence": [
+      "owned",
+      "slab64",
+      "slab256",
+      "converted64",
+      "owned"
+    ],
+    "allocation_diagnostic_rows": 1000000
+  },
+  "corpus": {
+    "path": "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+    "rows": 20000000,
+    "distinct_rows": 20000000,
+    "sha256": "0d6224e99d0a7f241e3dcd052ce973c8baea774feb0831db0071423de726bd9a",
+    "manifest": "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.manifest.json",
+    "manifest_sha256": "74511c8048925936662a849d1e33d6d7c406d81b15fd5325587a4ae318778822",
+    "generation_manifest": {
+      "candidates_examined": 20001831,
+      "chunk_size": 100000,
+      "chunks_used": 201,
+      "corpus": {
+        "bytes": 360000000,
+        "path": "target/bench/independent-sink-corpus.txt",
+        "sha256": "0d6224e99d0a7f241e3dcd052ce973c8baea774feb0831db0071423de726bd9a"
+      },
+      "count": 20000000,
+      "database": {
+        "artifact_blake3": "907eedd5f2794a10e586e01ca6c2a5af4e8d7e0f966bcfdf030a9889d77ac538",
+        "data_month": "2026_08"
+      },
+      "distinct_rows": 20000000,
+      "diversity": {
+        "distinct_descriptor_year_keys": 19575350,
+        "distinct_wmis": 12933,
+        "distinct_year_characters": 30
+      },
+      "format_version": 1,
+      "frozen_now": "2026-09-01T00:00:00+00:00",
+      "generator": {
+        "api": "ultravin.generate(n, seed=seed + chunk_index, now=frozen_now)",
+        "decoder_version": "0.0.0",
+        "script": "/Volumes/fast-4tb/projects/ultravin/scripts/bench/large_corpus.py",
+        "script_sha256": "a5196e5aa07f1a3e14d01cb7d10e5419e6a9190af6fe84f7946fc86bf4f4621e"
+      },
+      "seed": 42,
+      "verification": {
+        "check_digits": true,
+        "unique": true,
+        "vin_alphabet": true
+      }
+    }
+  },
+  "build": {
+    "binary": "/Volumes/fast-4tb/projects/ultravin/target/bench/storage-probe-v2",
+    "binary_sha256": "b393522f5e086ca07be0fae7ac3bf78a36051b2562d36ed46ff6384ceeadeb14",
+    "source_snapshot": "/Volumes/fast-4tb/projects/ultravin/target/bench/storage-v2-source",
+    "source_hashes": {
+      "crates/ultravin/src/experimental_batch.rs": "e70888fa056620d3ec2e1a7d568fed2a30813408b250b79f00b9dab99739870e",
+      "crates/ultravin/src/lib.rs": "d780f6298f2b858b94ae7b7be2655d16b396d17f7ea071db3ed993654a59be2a",
+      "crates/ultravin/examples/storage_probe.rs": "94309e7542a57805858781b13f74dbebfbd3b6814af9f54dcbb56f0a502592ff",
+      "crates/ultravin/examples/support/allocation_counter.rs": "39580681c98d62066dd5e0798706ae52ccd086f0387753301c0dd63d4e526a97",
+      "crates/ultravin/examples/support/counters.rs": "b1db2cb48609acfb613fe7ce15ebec889de400b89cb5a902dbd3ea939ccc65dc",
+      "crates/ultravin/examples/support/cpu.rs": "4e1f57582372716d041ba5403a00d8135e6127e41d51539ebdd295eeb743eff5",
+      "crates/ultravin/Cargo.toml": "995bd1828fdc371d7b5bc389dd60fe2dd43b5b95caf2bef46b5bc3807edb009e",
+      "crates/ultravin/build.rs": "a7bb3fd6497464e096caea0112a267fe852142ec31ec20b5fc71f7b639fb248e",
+      "Cargo.lock": "e2867a45c510420bdbf469bbdfa3713e05824162be62176bad88aa89d77041e0"
+    },
+    "runner_sha256": "febc16621c273e007c1a84810920337e389be61d2f310b185b2135a73a05a5b8"
+  },
+  "environment": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "cpu_model": "Apple M2 Max"
+  },
+  "runs": [
+    {
+      "actual_rows_per_second": 796687.1782180438,
+      "allocation_diagnostic": null,
+      "average_busy_cores": 9.981461302078344,
+      "batch_rows": 12000,
+      "elapsed_seconds": 25.103956166,
+      "kind": "batch_storage_probe",
+      "maximum_live_output_bytes": null,
+      "mode": "owned",
+      "now_micros": 1788220800000000,
+      "parity_rows": 1000,
+      "process_counters": {
+        "cycles": 760357968117,
+        "instructions": 1579487431857
+      },
+      "process_system_cpu_seconds": 9.839069,
+      "process_user_cpu_seconds": 240.73509800000002,
+      "rows": 20000000,
+      "shard_rows": 64,
+      "unique_input_rows": 20000000,
+      "workers": 12,
+      "peak_rss_bytes": 2015084544,
+      "process_wall_seconds": 52.20134254102595,
+      "instructions_per_vin": 78974.37159285,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/storage-probe-v2",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "10",
+        "owned",
+        "12000",
+        "64"
+      ],
+      "raw": {
+        "stdout": "{\"actual_rows_per_second\":796687.1782180438,\"allocation_diagnostic\":null,\"average_busy_cores\":9.981461302078344,\"batch_rows\":12000,\"elapsed_seconds\":25.103956166,\"kind\":\"batch_storage_probe\",\"maximum_live_output_bytes\":null,\"mode\":\"owned\",\"now_micros\":1788220800000000,\"parity_rows\":1000,\"process_counters\":{\"cycles\":760357968117,\"instructions\":1579487431857},\"process_system_cpu_seconds\":9.839069,\"process_user_cpu_seconds\":240.73509800000002,\"rows\":20000000,\"shard_rows\":64,\"unique_input_rows\":20000000,\"workers\":12}\n",
+        "stderr": "storage probe: warmup complete; starting whole passes\n"
+      }
+    },
+    {
+      "actual_rows_per_second": 818518.3794748309,
+      "allocation_diagnostic": null,
+      "average_busy_cores": 10.134026576841842,
+      "batch_rows": 12000,
+      "elapsed_seconds": 24.434393291,
+      "kind": "batch_storage_probe",
+      "maximum_live_output_bytes": null,
+      "mode": "slab",
+      "now_micros": 1788220800000000,
+      "parity_rows": 1000,
+      "process_counters": {
+        "cycles": 751220462728,
+        "instructions": 1599965590490
+      },
+      "process_system_cpu_seconds": 9.874097,
+      "process_user_cpu_seconds": 237.74469399999998,
+      "rows": 20000000,
+      "shard_rows": 64,
+      "unique_input_rows": 20000000,
+      "workers": 12,
+      "peak_rss_bytes": 2024701952,
+      "process_wall_seconds": 49.906559416034725,
+      "instructions_per_vin": 79998.2795245,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/storage-probe-v2",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "10",
+        "slab",
+        "12000",
+        "64"
+      ],
+      "raw": {
+        "stdout": "{\"actual_rows_per_second\":818518.3794748309,\"allocation_diagnostic\":null,\"average_busy_cores\":10.134026576841842,\"batch_rows\":12000,\"elapsed_seconds\":24.434393291,\"kind\":\"batch_storage_probe\",\"maximum_live_output_bytes\":null,\"mode\":\"slab\",\"now_micros\":1788220800000000,\"parity_rows\":1000,\"process_counters\":{\"cycles\":751220462728,\"instructions\":1599965590490},\"process_system_cpu_seconds\":9.874097,\"process_user_cpu_seconds\":237.74469399999998,\"rows\":20000000,\"shard_rows\":64,\"unique_input_rows\":20000000,\"workers\":12}\n",
+        "stderr": "storage probe: warmup complete; starting whole passes\n"
+      }
+    },
+    {
+      "actual_rows_per_second": 744785.4197766308,
+      "allocation_diagnostic": null,
+      "average_busy_cores": 9.800576001283996,
+      "batch_rows": 12000,
+      "elapsed_seconds": 26.853372084,
+      "kind": "batch_storage_probe",
+      "maximum_live_output_bytes": null,
+      "mode": "slab",
+      "now_micros": 1788220800000000,
+      "parity_rows": 1000,
+      "process_counters": {
+        "cycles": 800912814421,
+        "instructions": 1604115522523
+      },
+      "process_system_cpu_seconds": 10.512424,
+      "process_user_cpu_seconds": 252.66609,
+      "rows": 20000000,
+      "shard_rows": 256,
+      "unique_input_rows": 20000000,
+      "workers": 12,
+      "peak_rss_bytes": 2088992768,
+      "process_wall_seconds": 54.663642542029265,
+      "instructions_per_vin": 80205.77612615,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/storage-probe-v2",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "10",
+        "slab",
+        "12000",
+        "256"
+      ],
+      "raw": {
+        "stdout": "{\"actual_rows_per_second\":744785.4197766308,\"allocation_diagnostic\":null,\"average_busy_cores\":9.800576001283996,\"batch_rows\":12000,\"elapsed_seconds\":26.853372084,\"kind\":\"batch_storage_probe\",\"maximum_live_output_bytes\":null,\"mode\":\"slab\",\"now_micros\":1788220800000000,\"parity_rows\":1000,\"process_counters\":{\"cycles\":800912814421,\"instructions\":1604115522523},\"process_system_cpu_seconds\":10.512424,\"process_user_cpu_seconds\":252.66609,\"rows\":20000000,\"shard_rows\":256,\"unique_input_rows\":20000000,\"workers\":12}\n",
+        "stderr": "storage probe: warmup complete; starting whole passes\n"
+      }
+    },
+    {
+      "actual_rows_per_second": 631335.4014302746,
+      "allocation_diagnostic": null,
+      "average_busy_cores": 9.838132326795304,
+      "batch_rows": 12000,
+      "elapsed_seconds": 31.6788825,
+      "kind": "batch_storage_probe",
+      "maximum_live_output_bytes": null,
+      "mode": "converted",
+      "now_micros": 1788220800000000,
+      "parity_rows": 1000,
+      "process_counters": {
+        "cycles": 946009926154,
+        "instructions": 1647714118060
+      },
+      "process_system_cpu_seconds": 14.324829000000001,
+      "process_user_cpu_seconds": 297.336209,
+      "rows": 20000000,
+      "shard_rows": 64,
+      "unique_input_rows": 20000000,
+      "workers": 12,
+      "peak_rss_bytes": 2204336128,
+      "process_wall_seconds": 63.71284245798597,
+      "instructions_per_vin": 82385.705903,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/storage-probe-v2",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "10",
+        "converted",
+        "12000",
+        "64"
+      ],
+      "raw": {
+        "stdout": "{\"actual_rows_per_second\":631335.4014302746,\"allocation_diagnostic\":null,\"average_busy_cores\":9.838132326795304,\"batch_rows\":12000,\"elapsed_seconds\":31.6788825,\"kind\":\"batch_storage_probe\",\"maximum_live_output_bytes\":null,\"mode\":\"converted\",\"now_micros\":1788220800000000,\"parity_rows\":1000,\"process_counters\":{\"cycles\":946009926154,\"instructions\":1647714118060},\"process_system_cpu_seconds\":14.324829000000001,\"process_user_cpu_seconds\":297.336209,\"rows\":20000000,\"shard_rows\":64,\"unique_input_rows\":20000000,\"workers\":12}\n",
+        "stderr": "storage probe: warmup complete; starting whole passes\n"
+      }
+    },
+    {
+      "actual_rows_per_second": 795896.0178964383,
+      "allocation_diagnostic": null,
+      "average_busy_cores": 9.99969403767332,
+      "batch_rows": 12000,
+      "elapsed_seconds": 25.12891075,
+      "kind": "batch_storage_probe",
+      "maximum_live_output_bytes": null,
+      "mode": "owned",
+      "now_micros": 1788220800000000,
+      "parity_rows": 1000,
+      "process_counters": {
+        "cycles": 762875834077,
+        "instructions": 1580615736004
+      },
+      "process_system_cpu_seconds": 10.226946000000002,
+      "process_user_cpu_seconds": 241.054473,
+      "rows": 20000000,
+      "shard_rows": 64,
+      "unique_input_rows": 20000000,
+      "workers": 12,
+      "peak_rss_bytes": 2015526912,
+      "process_wall_seconds": 51.4085919589852,
+      "instructions_per_vin": 79030.7868002,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/storage-probe-v2",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "10",
+        "owned",
+        "12000",
+        "64"
+      ],
+      "raw": {
+        "stdout": "{\"actual_rows_per_second\":795896.0178964383,\"allocation_diagnostic\":null,\"average_busy_cores\":9.99969403767332,\"batch_rows\":12000,\"elapsed_seconds\":25.12891075,\"kind\":\"batch_storage_probe\",\"maximum_live_output_bytes\":null,\"mode\":\"owned\",\"now_micros\":1788220800000000,\"parity_rows\":1000,\"process_counters\":{\"cycles\":762875834077,\"instructions\":1580615736004},\"process_system_cpu_seconds\":10.226946000000002,\"process_user_cpu_seconds\":241.054473,\"rows\":20000000,\"shard_rows\":64,\"unique_input_rows\":20000000,\"workers\":12}\n",
+        "stderr": "storage probe: warmup complete; starting whole passes\n"
+      }
+    },
+    {
+      "actual_rows_per_second": null,
+      "allocation_diagnostic": {
+        "allocations": 36797079,
+        "frees": 36733733,
+        "reallocations": 8304189,
+        "requested_bytes": 31905813307
+      },
+      "average_busy_cores": 10.060583950726627,
+      "batch_rows": 12000,
+      "elapsed_seconds": 9.341618584,
+      "kind": "batch_storage_probe",
+      "maximum_live_output_bytes": 173613934,
+      "mode": "owned",
+      "now_micros": 1788220800000000,
+      "parity_rows": 1000,
+      "process_counters": {
+        "cycles": 284140862547,
+        "instructions": 81741037380
+      },
+      "process_system_cpu_seconds": 1.0997590000000002,
+      "process_user_cpu_seconds": 92.882379,
+      "rows": 1000000,
+      "shard_rows": 64,
+      "unique_input_rows": 1000000,
+      "workers": 12,
+      "peak_rss_bytes": 697483264,
+      "process_wall_seconds": 10.938586958975065,
+      "instructions_per_vin": 81741.03738,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/storage-probe-v2",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "10",
+        "owned",
+        "12000",
+        "64",
+        "1000000"
+      ],
+      "raw": {
+        "stdout": "{\"actual_rows_per_second\":null,\"allocation_diagnostic\":{\"allocations\":36797079,\"frees\":36733733,\"reallocations\":8304189,\"requested_bytes\":31905813307},\"average_busy_cores\":10.060583950726627,\"batch_rows\":12000,\"elapsed_seconds\":9.341618584,\"kind\":\"batch_storage_probe\",\"maximum_live_output_bytes\":173613934,\"mode\":\"owned\",\"now_micros\":1788220800000000,\"parity_rows\":1000,\"process_counters\":{\"cycles\":284140862547,\"instructions\":81741037380},\"process_system_cpu_seconds\":1.0997590000000002,\"process_user_cpu_seconds\":92.882379,\"rows\":1000000,\"shard_rows\":64,\"unique_input_rows\":1000000,\"workers\":12}\n",
+        "stderr": "storage probe: warmup complete; starting whole passes\n"
+      }
+    },
+    {
+      "actual_rows_per_second": null,
+      "allocation_diagnostic": {
+        "allocations": 35842782,
+        "frees": 35778848,
+        "reallocations": 8304200,
+        "requested_bytes": 32086310646
+      },
+      "average_busy_cores": 10.086969839253944,
+      "batch_rows": 12000,
+      "elapsed_seconds": 9.036808125,
+      "kind": "batch_storage_probe",
+      "maximum_live_output_bytes": 173814958,
+      "mode": "slab",
+      "now_micros": 1788220800000000,
+      "parity_rows": 1000,
+      "process_counters": {
+        "cycles": 275680493511,
+        "instructions": 83457398461
+      },
+      "process_system_cpu_seconds": 1.2739610000000001,
+      "process_user_cpu_seconds": 89.88005,
+      "rows": 1000000,
+      "shard_rows": 64,
+      "unique_input_rows": 1000000,
+      "workers": 12,
+      "peak_rss_bytes": 698499072,
+      "process_wall_seconds": 10.61709937499836,
+      "instructions_per_vin": 83457.398461,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/storage-probe-v2",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "10",
+        "slab",
+        "12000",
+        "64",
+        "1000000"
+      ],
+      "raw": {
+        "stdout": "{\"actual_rows_per_second\":null,\"allocation_diagnostic\":{\"allocations\":35842782,\"frees\":35778848,\"reallocations\":8304200,\"requested_bytes\":32086310646},\"average_busy_cores\":10.086969839253944,\"batch_rows\":12000,\"elapsed_seconds\":9.036808125,\"kind\":\"batch_storage_probe\",\"maximum_live_output_bytes\":173814958,\"mode\":\"slab\",\"now_micros\":1788220800000000,\"parity_rows\":1000,\"process_counters\":{\"cycles\":275680493511,\"instructions\":83457398461},\"process_system_cpu_seconds\":1.2739610000000001,\"process_user_cpu_seconds\":89.88005,\"rows\":1000000,\"shard_rows\":64,\"unique_input_rows\":1000000,\"workers\":12}\n",
+        "stderr": "storage probe: warmup complete; starting whole passes\n"
+      }
+    },
+    {
+      "actual_rows_per_second": null,
+      "allocation_diagnostic": {
+        "allocations": 35828807,
+        "frees": 35764249,
+        "reallocations": 8307626,
+        "requested_bytes": 32087800743
+      },
+      "average_busy_cores": 9.919982020782095,
+      "batch_rows": 12000,
+      "elapsed_seconds": 8.93920975,
+      "kind": "batch_storage_probe",
+      "maximum_live_output_bytes": 173808190,
+      "mode": "slab",
+      "now_micros": 1788220800000000,
+      "parity_rows": 1000,
+      "process_counters": {
+        "cycles": 268908481897,
+        "instructions": 85201482870
+      },
+      "process_system_cpu_seconds": 1.900172,
+      "process_user_cpu_seconds": 86.776628,
+      "rows": 1000000,
+      "shard_rows": 256,
+      "unique_input_rows": 1000000,
+      "workers": 12,
+      "peak_rss_bytes": 704757760,
+      "process_wall_seconds": 10.6752012919751,
+      "instructions_per_vin": 85201.48287,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/storage-probe-v2",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "10",
+        "slab",
+        "12000",
+        "256",
+        "1000000"
+      ],
+      "raw": {
+        "stdout": "{\"actual_rows_per_second\":null,\"allocation_diagnostic\":{\"allocations\":35828807,\"frees\":35764249,\"reallocations\":8307626,\"requested_bytes\":32087800743},\"average_busy_cores\":9.919982020782095,\"batch_rows\":12000,\"elapsed_seconds\":8.93920975,\"kind\":\"batch_storage_probe\",\"maximum_live_output_bytes\":173808190,\"mode\":\"slab\",\"now_micros\":1788220800000000,\"parity_rows\":1000,\"process_counters\":{\"cycles\":268908481897,\"instructions\":85201482870},\"process_system_cpu_seconds\":1.900172,\"process_user_cpu_seconds\":86.776628,\"rows\":1000000,\"shard_rows\":256,\"unique_input_rows\":1000000,\"workers\":12}\n",
+        "stderr": "storage probe: warmup complete; starting whole passes\n"
+      }
+    },
+    {
+      "actual_rows_per_second": null,
+      "allocation_diagnostic": {
+        "allocations": 36874495,
+        "frees": 36809771,
+        "reallocations": 8307012,
+        "requested_bytes": 45480101647
+      },
+      "average_busy_cores": 9.780210320583356,
+      "batch_rows": 12000,
+      "elapsed_seconds": 9.409568709,
+      "kind": "batch_storage_probe",
+      "maximum_live_output_bytes": 173613934,
+      "mode": "converted",
+      "now_micros": 1788220800000000,
+      "parity_rows": 1000,
+      "process_counters": {
+        "cycles": 278898973924,
+        "instructions": 86902376935
+      },
+      "process_system_cpu_seconds": 1.833581,
+      "process_user_cpu_seconds": 90.19398000000001,
+      "rows": 1000000,
+      "shard_rows": 64,
+      "unique_input_rows": 1000000,
+      "workers": 12,
+      "peak_rss_bytes": 981549056,
+      "process_wall_seconds": 11.35085812502075,
+      "instructions_per_vin": 86902.376935,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/storage-probe-v2",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "10",
+        "converted",
+        "12000",
+        "64",
+        "1000000"
+      ],
+      "raw": {
+        "stdout": "{\"actual_rows_per_second\":null,\"allocation_diagnostic\":{\"allocations\":36874495,\"frees\":36809771,\"reallocations\":8307012,\"requested_bytes\":45480101647},\"average_busy_cores\":9.780210320583356,\"batch_rows\":12000,\"elapsed_seconds\":9.409568709,\"kind\":\"batch_storage_probe\",\"maximum_live_output_bytes\":173613934,\"mode\":\"converted\",\"now_micros\":1788220800000000,\"parity_rows\":1000,\"process_counters\":{\"cycles\":278898973924,\"instructions\":86902376935},\"process_system_cpu_seconds\":1.833581,\"process_user_cpu_seconds\":90.19398000000001,\"rows\":1000000,\"shard_rows\":64,\"unique_input_rows\":1000000,\"workers\":12}\n",
+        "stderr": "storage probe: warmup complete; starting whole passes\n"
+      }
+    }
+  ]
+}

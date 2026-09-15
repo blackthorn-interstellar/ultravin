@@ -1,0 +1,247 @@
+{
+  "rows_per_call": 50000,
+  "seconds": 3,
+  "rounds": 3,
+  "threads": 8,
+  "now": "2026-09-13T00:00:00+00:00",
+  "records": [
+    {
+      "variant": "before",
+      "mode": "full-dict",
+      "trial": 0,
+      "rows": 150000,
+      "seconds": 3.2108897090074606,
+      "rows_per_second": 46716.02377970419,
+      "peak_rss_bytes": 2428682240
+    },
+    {
+      "variant": "candidate",
+      "mode": "full-dict",
+      "trial": 0,
+      "rows": 150000,
+      "seconds": 3.1593224160023965,
+      "rows_per_second": 47478.535030242456,
+      "peak_rss_bytes": 1783300096
+    },
+    {
+      "variant": "before",
+      "mode": "flat-dict",
+      "trial": 0,
+      "rows": 450000,
+      "seconds": 3.184396750002634,
+      "rows_per_second": 141314.04951334276,
+      "peak_rss_bytes": 683114496
+    },
+    {
+      "variant": "candidate",
+      "mode": "flat-dict",
+      "trial": 0,
+      "rows": 500000,
+      "seconds": 3.2042153750080615,
+      "rows_per_second": 156044.44192480104,
+      "peak_rss_bytes": 675397632
+    },
+    {
+      "variant": "before",
+      "mode": "full-json",
+      "trial": 0,
+      "rows": 550000,
+      "seconds": 3.0505759159568697,
+      "rows_per_second": 180293.82488830222,
+      "peak_rss_bytes": 4270702592
+    },
+    {
+      "variant": "candidate",
+      "mode": "full-json",
+      "trial": 0,
+      "rows": 600000,
+      "seconds": 3.218338791979477,
+      "rows_per_second": 186431.58436124836,
+      "peak_rss_bytes": 4194222080
+    },
+    {
+      "variant": "before",
+      "mode": "flat-json",
+      "trial": 0,
+      "rows": 1400000,
+      "seconds": 3.072786291013472,
+      "rows_per_second": 455612.55076357734,
+      "peak_rss_bytes": 905052160
+    },
+    {
+      "variant": "candidate",
+      "mode": "flat-json",
+      "trial": 0,
+      "rows": 1400000,
+      "seconds": 3.0614282919559628,
+      "rows_per_second": 457302.8882233046,
+      "peak_rss_bytes": 879116288
+    },
+    {
+      "variant": "candidate",
+      "mode": "full-dict",
+      "trial": 1,
+      "rows": 150000,
+      "seconds": 3.4342991250450723,
+      "rows_per_second": 43677.03410169065,
+      "peak_rss_bytes": 1784168448
+    },
+    {
+      "variant": "before",
+      "mode": "full-dict",
+      "trial": 1,
+      "rows": 150000,
+      "seconds": 3.1660445829620585,
+      "rows_per_second": 47377.728288230355,
+      "peak_rss_bytes": 2423586816
+    },
+    {
+      "variant": "candidate",
+      "mode": "flat-dict",
+      "trial": 1,
+      "rows": 500000,
+      "seconds": 3.1181424590176903,
+      "rows_per_second": 160351.87826457268,
+      "peak_rss_bytes": 648675328
+    },
+    {
+      "variant": "before",
+      "mode": "flat-dict",
+      "trial": 1,
+      "rows": 450000,
+      "seconds": 3.0840082920040004,
+      "rows_per_second": 145914.00456565837,
+      "peak_rss_bytes": 682803200
+    },
+    {
+      "variant": "candidate",
+      "mode": "full-json",
+      "trial": 1,
+      "rows": 600000,
+      "seconds": 3.226393749995623,
+      "rows_per_second": 185966.14253942625,
+      "peak_rss_bytes": 4172185600
+    },
+    {
+      "variant": "before",
+      "mode": "full-json",
+      "trial": 1,
+      "rows": 600000,
+      "seconds": 3.1436562500311993,
+      "rows_per_second": 190860.56244032574,
+      "peak_rss_bytes": 4208279552
+    },
+    {
+      "variant": "candidate",
+      "mode": "flat-json",
+      "trial": 1,
+      "rows": 1450000,
+      "seconds": 3.0560604170314036,
+      "rows_per_second": 474467.05959056306,
+      "peak_rss_bytes": 896958464
+    },
+    {
+      "variant": "before",
+      "mode": "flat-json",
+      "trial": 1,
+      "rows": 1500000,
+      "seconds": 3.078617542050779,
+      "rows_per_second": 487231.68094494636,
+      "peak_rss_bytes": 868106240
+    },
+    {
+      "variant": "before",
+      "mode": "full-dict",
+      "trial": 2,
+      "rows": 150000,
+      "seconds": 3.0052418329869397,
+      "rows_per_second": 49912.7884995909,
+      "peak_rss_bytes": 2509078528
+    },
+    {
+      "variant": "candidate",
+      "mode": "full-dict",
+      "trial": 2,
+      "rows": 200000,
+      "seconds": 3.768600540992338,
+      "rows_per_second": 53070.09799115948,
+      "peak_rss_bytes": 1778745344
+    },
+    {
+      "variant": "before",
+      "mode": "flat-dict",
+      "trial": 2,
+      "rows": 450000,
+      "seconds": 3.1175274580018595,
+      "rows_per_second": 144345.16008671242,
+      "peak_rss_bytes": 675921920
+    },
+    {
+      "variant": "candidate",
+      "mode": "flat-dict",
+      "trial": 2,
+      "rows": 500000,
+      "seconds": 3.101424249995034,
+      "rows_per_second": 161216.25411318705,
+      "peak_rss_bytes": 657899520
+    },
+    {
+      "variant": "before",
+      "mode": "full-json",
+      "trial": 2,
+      "rows": 600000,
+      "seconds": 3.207276917004492,
+      "rows_per_second": 187074.58555227699,
+      "peak_rss_bytes": 4353228800
+    },
+    {
+      "variant": "candidate",
+      "mode": "full-json",
+      "trial": 2,
+      "rows": 600000,
+      "seconds": 3.153571374947205,
+      "rows_per_second": 190260.4788864323,
+      "peak_rss_bytes": 4336238592
+    },
+    {
+      "variant": "before",
+      "mode": "flat-json",
+      "trial": 2,
+      "rows": 1500000,
+      "seconds": 3.065186374995392,
+      "rows_per_second": 489366.6539289165,
+      "peak_rss_bytes": 874872832
+    },
+    {
+      "variant": "candidate",
+      "mode": "flat-json",
+      "trial": 2,
+      "rows": 1500000,
+      "seconds": 3.0729387080064043,
+      "rows_per_second": 488132.0919586899,
+      "peak_rss_bytes": 865812480
+    }
+  ],
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+  "baseline_source_sha256": "78cb763446d33af455d37c44f24b4295ca9359a0204fab1d8bc9404dccf7ac9a",
+  "before_wheel_sha256": "ff6aba1abef46d18961a0ede5c051e5ea0e39863ad498cc130a91feb3ebb4030",
+  "candidate_wheel_sha256": "802e9a796eced7045cb22147c2c8b65ea6c3fd0049d99a8985336f0bb6bff060",
+  "before_extension": {
+    "path": "/Volumes/fast-4tb/projects/ultravin/target/batch-memory-before-venv/lib/python3.13/site-packages/ultravin/_ultravin.abi3.so",
+    "sha256": "e379affbb8d28e13a37355770da43bd558ea3ea83b42090e452d38fdbfc9719f"
+  },
+  "candidate_extension": {
+    "path": "/Volumes/fast-4tb/projects/ultravin/target/batch-memory-candidate-venv/lib/python3.13/site-packages/ultravin/_ultravin.abi3.so",
+    "sha256": "dc0041189bffe2fa93930e3d392cdc50faf5a14bbae8a6dfd8f49f7fb670cdb9"
+  },
+  "corpus_sha256": "b45ad4472c202ee176f86e8bc3c39609c76b6258df963ea04e08439aa3a1eb09",
+  "worker_sha256": "a6d58ef4196fe5a87deee35284e307933e4429794148514ae077fbf07ceb90fd",
+  "year_hint_pattern": "1995 at every seventh row; None otherwise",
+  "parity_sha256": {
+    "full-dict": "a41d2e0ba1fbdd31d54ee483414e3a098299902e48e9661920ab5c4d0b6ad9bc",
+    "flat-dict": "8db419de7ebf2c209d19945de3103ae182530de6ce742583aaefecbc1f6b0218",
+    "full-json": "a967451092312d9b21f9303b1dd70dbc69e31d2b6a62070dd694eb2ec482a203",
+    "flat-json": "e74a9542501e34f7e1887298b25b6a3a7ac3619b01e78ad850a0055506837bf1"
+  },
+  "parity_rows": 5000
+}

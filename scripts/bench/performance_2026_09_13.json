@@ -1,0 +1,278 @@
+{
+  "schema_version": 1,
+  "measured_at_utc": "2026-09-13T17:23:29+00:00",
+  "command": "uv run --frozen python -m scripts.bench.end_to_end --rows 50000 --rounds 3 --seconds 10 --threads 4 --now 2026-09-01T00:00:00+00:00",
+  "configuration": {
+    "rows": 50000,
+    "rounds": 3,
+    "seconds": 10,
+    "threads": 4,
+    "now": "2026-09-01T00:00:00+00:00",
+    "output": "scripts/bench/performance_2026_09_13.json",
+    "report": "docs/PERFORMANCE_2026_09_13.md"
+  },
+  "environment": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "python": "3.13.12 (main, Feb 12 2026, 01:06:02) [Clang 21.1.4 ]",
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "ultravin_version": "0.0.0",
+    "git_revision": "d8d233dd7a1aaa87a1c3b594a7b11353baf86a26",
+    "git_dirty": true,
+    "logical_cpus": 12,
+    "cpu_model": "Apple M2 Max",
+    "build_profile": "release (maturin develop --release; Cargo workspace release profile)"
+  },
+  "inputs": {
+    "corpus": "scripts/bench/corpus.txt",
+    "corpus_sha256": "b45ad4472c202ee176f86e8bc3c39609c76b6258df963ea04e08439aa3a1eb09",
+    "cargo_lock_sha256": "06333688674e70f089b043d466bf8e0abda8dca1f45161fefbf368cfec9c384d",
+    "uv_lock_sha256": "5ca117e340690822658c6b42e13ade269b9d02f75f166eacf7af53d23b8f4d21"
+  },
+  "artifact": {
+    "month": "2026_08",
+    "sha256": "2d555d4db3fde3867f41e415ec6e848285a286b2fe5fb45f0bdcb88245bd7787",
+    "dump_sha256": "dd95bc6d6aa6e4f5103f38c792b8eccba2f4b06dad865a696327ac4dd37213c8",
+    "runtime": {
+      "data_month": "2026_08",
+      "artifact_blake3": "907eedd5f2794a10e586e01ca6c2a5af4e8d7e0f966bcfdf030a9889d77ac538",
+      "decoder_version": "0.0.0"
+    }
+  },
+  "executables": {
+    "python_extension": "/Volumes/fast-4tb/projects/ultravin/python/ultravin/_ultravin.abi3.so",
+    "python_extension_sha256": "3a6cf3e5314802ad6f4ab6b569af2f6770baca8008eb5c94cc228099fc8d222a",
+    "rust_throughput": "/Volumes/fast-4tb/projects/ultravin/target/release/examples/throughput",
+    "rust_throughput_sha256": "e0d4bd675b5d827b393a5f1f623751cb6981cee24bb6f77e14446e50992cb608",
+    "rust_cold_sha256": "5fb2ffd67d6a9744c4920026cd7bcb05a981c1a953606812dce53d65abdc9e2e"
+  },
+  "samples": [
+    {
+      "path": "rust-results",
+      "trial": 1,
+      "rows": 2300000,
+      "seconds": 10.2,
+      "rows_per_second": 226316,
+      "process_wall_seconds": 10.533158290956635,
+      "peak_rss_bytes": 1035321344
+    },
+    {
+      "path": "rust-results",
+      "trial": 2,
+      "rows": 2300000,
+      "seconds": 10.2,
+      "rows_per_second": 225982,
+      "process_wall_seconds": 10.47787000000244,
+      "peak_rss_bytes": 1056112640
+    },
+    {
+      "path": "rust-results",
+      "trial": 3,
+      "rows": 2250000,
+      "seconds": 10.1,
+      "rows_per_second": 223537,
+      "process_wall_seconds": 10.366966374975163,
+      "peak_rss_bytes": 1029488640
+    },
+    {
+      "path": "python-dicts",
+      "trial": 1,
+      "rows": 1500000,
+      "seconds": 10.066161082999315,
+      "rows_per_second": 149014.1065329604,
+      "process_wall_seconds": 10.552876125031617,
+      "peak_rss_bytes": 645316608
+    },
+    {
+      "path": "direct-json",
+      "trial": 1,
+      "rows": 3500000,
+      "seconds": 10.143311250023544,
+      "rows_per_second": 345054.9740344285,
+      "process_wall_seconds": 10.508941916981712,
+      "peak_rss_bytes": 807731200
+    },
+    {
+      "path": "parquet",
+      "trial": 1,
+      "rows": 2600000,
+      "seconds": 10.103673250006977,
+      "rows_per_second": 257332.1539271081,
+      "process_wall_seconds": 10.746203374990728,
+      "peak_rss_bytes": 521551872
+    },
+    {
+      "path": "python-dicts",
+      "trial": 2,
+      "rows": 1400000,
+      "seconds": 10.173534375033341,
+      "rows_per_second": 137611.95946176886,
+      "process_wall_seconds": 10.645564374979585,
+      "peak_rss_bytes": 636895232
+    },
+    {
+      "path": "direct-json",
+      "trial": 2,
+      "rows": 3450000,
+      "seconds": 10.000891875009984,
+      "rows_per_second": 344969.2330561824,
+      "process_wall_seconds": 10.365949207975063,
+      "peak_rss_bytes": 737165312
+    },
+    {
+      "path": "parquet",
+      "trial": 2,
+      "rows": 2600000,
+      "seconds": 10.097805250028614,
+      "rows_per_second": 257481.69385546749,
+      "process_wall_seconds": 10.736757082981057,
+      "peak_rss_bytes": 521945088
+    },
+    {
+      "path": "direct-json",
+      "trial": 3,
+      "rows": 3500000,
+      "seconds": 10.061666499997955,
+      "rows_per_second": 347854.9005774254,
+      "process_wall_seconds": 10.42876158398576,
+      "peak_rss_bytes": 780075008
+    },
+    {
+      "path": "parquet",
+      "trial": 3,
+      "rows": 2600000,
+      "seconds": 10.0851372909965,
+      "rows_per_second": 257805.11707273917,
+      "process_wall_seconds": 10.722693916992284,
+      "peak_rss_bytes": 535838720
+    },
+    {
+      "path": "python-dicts",
+      "trial": 3,
+      "rows": 1500000,
+      "seconds": 10.149712832993828,
+      "rows_per_second": 147787.4324802498,
+      "process_wall_seconds": 10.600756457948592,
+      "peak_rss_bytes": 621821952
+    }
+  ],
+  "startup_samples": [
+    {
+      "path": "rust-results",
+      "trial": 1,
+      "operation_seconds": 0.017768,
+      "process_wall_seconds": 2.742779874999542,
+      "peak_rss_bytes": 14843904
+    },
+    {
+      "path": "python-dicts",
+      "trial": 1,
+      "operation_seconds": 0.0017370000132359564,
+      "process_wall_seconds": 0.024644584045745432,
+      "peak_rss_bytes": 35291136
+    },
+    {
+      "path": "direct-json",
+      "trial": 1,
+      "operation_seconds": 0.0016165830311365426,
+      "process_wall_seconds": 0.024397958011832088,
+      "peak_rss_bytes": 35356672
+    },
+    {
+      "path": "parquet",
+      "trial": 1,
+      "operation_seconds": 0.002967959037050605,
+      "process_wall_seconds": 0.02618375001475215,
+      "peak_rss_bytes": 40173568
+    },
+    {
+      "path": "python-dicts",
+      "trial": 2,
+      "operation_seconds": 0.0016963749658316374,
+      "process_wall_seconds": 0.024911292013712227,
+      "peak_rss_bytes": 35471360
+    },
+    {
+      "path": "direct-json",
+      "trial": 2,
+      "operation_seconds": 0.001629917009267956,
+      "process_wall_seconds": 0.025049791962374002,
+      "peak_rss_bytes": 35340288
+    },
+    {
+      "path": "parquet",
+      "trial": 2,
+      "operation_seconds": 0.0029001670191064477,
+      "process_wall_seconds": 0.025713249982800335,
+      "peak_rss_bytes": 40222720
+    },
+    {
+      "path": "rust-results",
+      "trial": 2,
+      "operation_seconds": 0.001667,
+      "process_wall_seconds": 0.005712958984076977,
+      "peak_rss_bytes": 14811136
+    },
+    {
+      "path": "direct-json",
+      "trial": 3,
+      "operation_seconds": 0.0017647499917075038,
+      "process_wall_seconds": 0.024611207947600633,
+      "peak_rss_bytes": 35520512
+    },
+    {
+      "path": "parquet",
+      "trial": 3,
+      "operation_seconds": 0.003002250043209642,
+      "process_wall_seconds": 0.0260881669819355,
+      "peak_rss_bytes": 40189952
+    },
+    {
+      "path": "rust-results",
+      "trial": 3,
+      "operation_seconds": 0.001593,
+      "process_wall_seconds": 0.005820791993755847,
+      "peak_rss_bytes": 14794752
+    },
+    {
+      "path": "python-dicts",
+      "trial": 3,
+      "operation_seconds": 0.0016182499821297824,
+      "process_wall_seconds": 0.02469108294462785,
+      "peak_rss_bytes": 35323904
+    }
+  ],
+  "summary": {
+    "rust-results": {
+      "median_rows_per_second": 225982,
+      "range_rows_per_second": [
+        223537,
+        226316
+      ],
+      "median_peak_rss_bytes": 1035321344
+    },
+    "python-dicts": {
+      "median_rows_per_second": 147787.4324802498,
+      "range_rows_per_second": [
+        137611.95946176886,
+        149014.1065329604
+      ],
+      "median_peak_rss_bytes": 636895232
+    },
+    "direct-json": {
+      "median_rows_per_second": 345054.9740344285,
+      "range_rows_per_second": [
+        344969.2330561824,
+        347854.9005774254
+      ],
+      "median_peak_rss_bytes": 780075008
+    },
+    "parquet": {
+      "median_rows_per_second": 257481.69385546749,
+      "range_rows_per_second": [
+        257332.1539271081,
+        257805.11707273917
+      ],
+      "median_peak_rss_bytes": 521945088
+    }
+  }
+}

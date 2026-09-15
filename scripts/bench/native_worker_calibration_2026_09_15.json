@@ -1,0 +1,32 @@
+{
+  "model_version": "ultravin-native-slots-v1",
+  "kernel": "256 evenly spaced actual inputs; warmed serial full decode and destruction; width measured separately",
+  "parent_benchmark": "scripts/bench/native_worker_auto_2026_09_15.json",
+  "parent_sha256": "703a91f1119b04b994a510a4d6cf7320e94c3a7a383fa450d6a3f924a8902dcf",
+  "corpus_sha256": "0d6224e99d0a7f241e3dcd052ce973c8baea774feb0831db0071423de726bd9a",
+  "samples": [
+    {
+      "workers": 12,
+      "single_core_rows_per_second": 158407.6075253514,
+      "sample_max_row_bytes": 17288.0
+    },
+    {
+      "workers": 12,
+      "single_core_rows_per_second": 174006.54835580805,
+      "sample_max_row_bytes": 17288.0
+    },
+    {
+      "workers": 8,
+      "single_core_rows_per_second": 181678.4390983356,
+      "sample_max_row_bytes": 17288.0
+    },
+    {
+      "workers": 4,
+      "single_core_rows_per_second": 174768.840900278,
+      "sample_max_row_bytes": 17288.0
+    }
+  ],
+  "reference_single_core_rows_per_second": 174387.69462804304,
+  "default_bytes_per_row": 17408,
+  "method": "Median of all four production calibration observations; 256-byte ceiling of maximum sampled row width. Same-host/corpus alignment, not independent hardware validation."
+}

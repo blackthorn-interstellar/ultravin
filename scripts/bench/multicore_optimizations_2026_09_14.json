@@ -1,0 +1,1757 @@
+{
+  "schema_version": 1,
+  "scope": "Native managed multicore optimization ablations; fixed sizes, not final auto scaling",
+  "corpus_manifest": {
+    "candidates_examined": 10000490,
+    "chunk_size": 100000,
+    "chunks_used": 101,
+    "corpus": {
+      "bytes": 180000000,
+      "path": "target/bench/multicore-corpus.txt",
+      "sha256": "de80fb8727de3d89a7885929645953eed7b51a67c1dc988d309bbaa0ab4ec5f3"
+    },
+    "count": 10000000,
+    "database": {
+      "artifact_blake3": "907eedd5f2794a10e586e01ca6c2a5af4e8d7e0f966bcfdf030a9889d77ac538",
+      "data_month": "2026_08"
+    },
+    "distinct_rows": 10000000,
+    "diversity": {
+      "distinct_descriptor_year_keys": 9808848,
+      "distinct_wmis": 12933,
+      "distinct_year_characters": 30
+    },
+    "format_version": 1,
+    "frozen_now": "2026-09-01T00:00:00+00:00",
+    "generator": {
+      "api": "ultravin.generate(n, seed=seed + chunk_index, now=frozen_now)",
+      "decoder_version": "0.0.0",
+      "script": "/Volumes/fast-4tb/projects/ultravin/scripts/bench/large_corpus.py",
+      "script_sha256": "a5196e5aa07f1a3e14d01cb7d10e5419e6a9190af6fe84f7946fc86bf4f4621e"
+    },
+    "seed": 42,
+    "verification": {
+      "check_digits": true,
+      "unique": true,
+      "vin_alphabet": true
+    }
+  },
+  "artifacts": {
+    "cache-screen": {
+      "corpus": "target/bench/multicore-corpus.txt",
+      "binaries": {
+        "stack": {
+          "path": "target/bench/multicore-stack-multicore_probe",
+          "sha256": "c610c276e555acf0c1e948c64dff048f50ac77e6384a03611a047fe97ece3a59"
+        },
+        "cache": {
+          "path": "target/bench/multicore-cache-multicore_probe",
+          "sha256": "42cf587ace2350d48a4834094594444b83fc93279e7e0c10ee9c629fef92b48e"
+        }
+      },
+      "samples": [
+        {
+          "mode": "managed",
+          "workers": 12,
+          "live_row_budget": 12000,
+          "rows": 10000000,
+          "seconds": 21.517096417,
+          "rows_per_second": 464746.7207563984,
+          "whole_passes": 1,
+          "process_wall_seconds": 45.62948350002989,
+          "peak_rss_bytes": 3467247616,
+          "command": [
+            "target/bench/multicore-stack-multicore_probe",
+            "target/bench/multicore-corpus.txt",
+            "10",
+            "12",
+            "12000",
+            "managed"
+          ],
+          "native_json": {
+            "actual_rows_per_second": 464746.7207563984,
+            "benchmark": "multicore_probe",
+            "corpus_rows": 10000000,
+            "elapsed_seconds": 21.517096417,
+            "frozen_now_micros": 1788220800000000,
+            "live_row_budget": 12000,
+            "local_rows": null,
+            "maximum_active_streaming_rows": null,
+            "mode": "managed",
+            "phase_seconds": {
+              "decode_and_local_sort": 18.480460713,
+              "drop_results": 3.036542091,
+              "whole_pass_wall": 21.517095916
+            },
+            "phase_time_basis": "wall time accumulated across serial API calls",
+            "rows": 10000000,
+            "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+            "whole_passes": 1,
+            "workers": 12
+          },
+          "raw": {
+            "stdout": "{\"actual_rows_per_second\":464746.7207563984,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":21.517096417,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":18.480460713,\"drop_results\":3.036542091,\"whole_pass_wall\":21.517095916},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":12}\n",
+            "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 21.517096s = 464747 VIN/s (12 core(s))\n"
+          },
+          "label": "stack"
+        },
+        {
+          "mode": "managed",
+          "workers": 12,
+          "live_row_budget": 12000,
+          "rows": 10000000,
+          "seconds": 17.116990625,
+          "rows_per_second": 584214.8435481777,
+          "whole_passes": 1,
+          "process_wall_seconds": 37.64870504196733,
+          "peak_rss_bytes": 1381613568,
+          "command": [
+            "target/bench/multicore-cache-multicore_probe",
+            "target/bench/multicore-corpus.txt",
+            "10",
+            "12",
+            "12000",
+            "managed"
+          ],
+          "native_json": {
+            "actual_rows_per_second": 584214.8435481777,
+            "benchmark": "multicore_probe",
+            "corpus_rows": 10000000,
+            "elapsed_seconds": 17.116990625,
+            "frozen_now_micros": 1788220800000000,
+            "live_row_budget": 12000,
+            "local_rows": null,
+            "maximum_active_streaming_rows": null,
+            "mode": "managed",
+            "phase_seconds": {
+              "decode_and_local_sort": 14.481809352,
+              "drop_results": 2.6350928270000002,
+              "whole_pass_wall": 17.116990083
+            },
+            "phase_time_basis": "wall time accumulated across serial API calls",
+            "rows": 10000000,
+            "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+            "whole_passes": 1,
+            "workers": 12
+          },
+          "raw": {
+            "stdout": "{\"actual_rows_per_second\":584214.8435481777,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":17.116990625,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":14.481809352,\"drop_results\":2.6350928270000002,\"whole_pass_wall\":17.116990083},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":12}\n",
+            "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 17.116991s = 584215 VIN/s (12 core(s))\n"
+          },
+          "label": "cache"
+        },
+        {
+          "mode": "managed",
+          "workers": 12,
+          "live_row_budget": 12000,
+          "rows": 10000000,
+          "seconds": 16.320350459,
+          "rows_per_second": 612731.9401088849,
+          "whole_passes": 1,
+          "process_wall_seconds": 33.22112120798556,
+          "peak_rss_bytes": 1353089024,
+          "command": [
+            "target/bench/multicore-cache-multicore_probe",
+            "target/bench/multicore-corpus.txt",
+            "10",
+            "12",
+            "12000",
+            "managed"
+          ],
+          "native_json": {
+            "actual_rows_per_second": 612731.9401088849,
+            "benchmark": "multicore_probe",
+            "corpus_rows": 10000000,
+            "elapsed_seconds": 16.320350459,
+            "frozen_now_micros": 1788220800000000,
+            "live_row_budget": 12000,
+            "local_rows": null,
+            "maximum_active_streaming_rows": null,
+            "mode": "managed",
+            "phase_seconds": {
+              "decode_and_local_sort": 13.713956621,
+              "drop_results": 2.606312504,
+              "whole_pass_wall": 16.320349958
+            },
+            "phase_time_basis": "wall time accumulated across serial API calls",
+            "rows": 10000000,
+            "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+            "whole_passes": 1,
+            "workers": 12
+          },
+          "raw": {
+            "stdout": "{\"actual_rows_per_second\":612731.9401088849,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":16.320350459,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":13.713956621,\"drop_results\":2.606312504,\"whole_pass_wall\":16.320349958},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":12}\n",
+            "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 16.320350s = 612732 VIN/s (12 core(s))\n"
+          },
+          "label": "cache"
+        },
+        {
+          "mode": "managed",
+          "workers": 12,
+          "live_row_budget": 12000,
+          "rows": 10000000,
+          "seconds": 19.216551667,
+          "rows_per_second": 520384.72735837905,
+          "whole_passes": 1,
+          "process_wall_seconds": 42.54232662497088,
+          "peak_rss_bytes": 3459645440,
+          "command": [
+            "target/bench/multicore-stack-multicore_probe",
+            "target/bench/multicore-corpus.txt",
+            "10",
+            "12",
+            "12000",
+            "managed"
+          ],
+          "native_json": {
+            "actual_rows_per_second": 520384.72735837905,
+            "benchmark": "multicore_probe",
+            "corpus_rows": 10000000,
+            "elapsed_seconds": 19.216551667,
+            "frozen_now_micros": 1788220800000000,
+            "live_row_budget": 12000,
+            "local_rows": null,
+            "maximum_active_streaming_rows": null,
+            "mode": "managed",
+            "phase_seconds": {
+              "decode_and_local_sort": 16.373955044,
+              "drop_results": 2.8424859959999997,
+              "whole_pass_wall": 19.216550958
+            },
+            "phase_time_basis": "wall time accumulated across serial API calls",
+            "rows": 10000000,
+            "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+            "whole_passes": 1,
+            "workers": 12
+          },
+          "raw": {
+            "stdout": "{\"actual_rows_per_second\":520384.72735837905,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":19.216551667,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":16.373955044,\"drop_results\":2.8424859959999997,\"whole_pass_wall\":19.216550958},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":12}\n",
+            "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 19.216552s = 520385 VIN/s (12 core(s))\n"
+          },
+          "label": "stack"
+        },
+        {
+          "mode": "managed",
+          "workers": 12,
+          "live_row_budget": 1500,
+          "rows": 10000000,
+          "seconds": 21.603574375,
+          "rows_per_second": 462886.36437737633,
+          "whole_passes": 1,
+          "process_wall_seconds": 44.63889445899986,
+          "peak_rss_bytes": 1051738112,
+          "command": [
+            "target/bench/multicore-cache-multicore_probe",
+            "target/bench/multicore-corpus.txt",
+            "10",
+            "12",
+            "1500",
+            "managed"
+          ],
+          "native_json": {
+            "actual_rows_per_second": 462886.36437737633,
+            "benchmark": "multicore_probe",
+            "corpus_rows": 10000000,
+            "elapsed_seconds": 21.603574375,
+            "frozen_now_micros": 1788220800000000,
+            "live_row_budget": 1500,
+            "local_rows": null,
+            "maximum_active_streaming_rows": null,
+            "mode": "managed",
+            "phase_seconds": {
+              "decode_and_local_sort": 17.43553122,
+              "drop_results": 4.167337181,
+              "whole_pass_wall": 21.603573584
+            },
+            "phase_time_basis": "wall time accumulated across serial API calls",
+            "rows": 10000000,
+            "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+            "whole_passes": 1,
+            "workers": 12
+          },
+          "raw": {
+            "stdout": "{\"actual_rows_per_second\":462886.36437737633,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":21.603574375,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":1500,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":17.43553122,\"drop_results\":4.167337181,\"whole_pass_wall\":21.603573584},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":12}\n",
+            "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 21.603574s = 462886 VIN/s (12 core(s))\n"
+          },
+          "label": "cache"
+        }
+      ]
+    },
+    "capacity-screen": {
+      "corpus": "target/bench/multicore-corpus.txt",
+      "binaries": {
+        "cache": {
+          "path": "target/bench/multicore-cache-multicore_probe",
+          "sha256": "42cf587ace2350d48a4834094594444b83fc93279e7e0c10ee9c629fef92b48e"
+        },
+        "cap96": {
+          "path": "target/bench/multicore-cap96-multicore_probe",
+          "sha256": "b8ce53ace84f814c4c61a1349c40dd3b7cc56c6648762438d0fd2cc513ddecf8"
+        }
+      },
+      "samples": [
+        {
+          "mode": "managed",
+          "workers": 12,
+          "live_row_budget": 12000,
+          "rows": 10000000,
+          "seconds": 17.452038708,
+          "rows_per_second": 572998.9583060006,
+          "whole_passes": 1,
+          "process_wall_seconds": 35.03397416701773,
+          "peak_rss_bytes": 1399832576,
+          "command": [
+            "target/bench/multicore-cache-multicore_probe",
+            "target/bench/multicore-corpus.txt",
+            "10",
+            "12",
+            "12000",
+            "managed"
+          ],
+          "native_json": {
+            "actual_rows_per_second": 572998.9583060006,
+            "benchmark": "multicore_probe",
+            "corpus_rows": 10000000,
+            "elapsed_seconds": 17.452038708,
+            "frozen_now_micros": 1788220800000000,
+            "live_row_budget": 12000,
+            "local_rows": null,
+            "maximum_active_streaming_rows": null,
+            "mode": "managed",
+            "phase_seconds": {
+              "decode_and_local_sort": 14.750107625,
+              "drop_results": 2.701848666,
+              "whole_pass_wall": 17.452037875
+            },
+            "phase_time_basis": "wall time accumulated across serial API calls",
+            "rows": 10000000,
+            "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+            "whole_passes": 1,
+            "workers": 12
+          },
+          "raw": {
+            "stdout": "{\"actual_rows_per_second\":572998.9583060006,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":17.452038708,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":14.750107625,\"drop_results\":2.701848666,\"whole_pass_wall\":17.452037875},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":12}\n",
+            "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 17.452039s = 572999 VIN/s (12 core(s))\n"
+          },
+          "label": "cache"
+        },
+        {
+          "mode": "managed",
+          "workers": 12,
+          "live_row_budget": 12000,
+          "rows": 10000000,
+          "seconds": 16.484902292,
+          "rows_per_second": 606615.6670429842,
+          "whole_passes": 1,
+          "process_wall_seconds": 37.18413804098964,
+          "peak_rss_bytes": 1350254592,
+          "command": [
+            "target/bench/multicore-cap96-multicore_probe",
+            "target/bench/multicore-corpus.txt",
+            "10",
+            "12",
+            "12000",
+            "managed"
+          ],
+          "native_json": {
+            "actual_rows_per_second": 606615.6670429842,
+            "benchmark": "multicore_probe",
+            "corpus_rows": 10000000,
+            "elapsed_seconds": 16.484902292,
+            "frozen_now_micros": 1788220800000000,
+            "live_row_budget": 12000,
+            "local_rows": null,
+            "maximum_active_streaming_rows": null,
+            "mode": "managed",
+            "phase_seconds": {
+              "decode_and_local_sort": 13.913169716,
+              "drop_results": 2.571637411,
+              "whole_pass_wall": 16.484901708
+            },
+            "phase_time_basis": "wall time accumulated across serial API calls",
+            "rows": 10000000,
+            "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+            "whole_passes": 1,
+            "workers": 12
+          },
+          "raw": {
+            "stdout": "{\"actual_rows_per_second\":606615.6670429842,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":16.484902292,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":13.913169716,\"drop_results\":2.571637411,\"whole_pass_wall\":16.484901708},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":12}\n",
+            "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 16.484902s = 606616 VIN/s (12 core(s))\n"
+          },
+          "label": "cap96"
+        },
+        {
+          "mode": "managed",
+          "workers": 12,
+          "live_row_budget": 12000,
+          "rows": 10000000,
+          "seconds": 16.388250917,
+          "rows_per_second": 610193.2445778404,
+          "whole_passes": 1,
+          "process_wall_seconds": 33.46956825000234,
+          "peak_rss_bytes": 1363574784,
+          "command": [
+            "target/bench/multicore-cap96-multicore_probe",
+            "target/bench/multicore-corpus.txt",
+            "10",
+            "12",
+            "12000",
+            "managed"
+          ],
+          "native_json": {
+            "actual_rows_per_second": 610193.2445778404,
+            "benchmark": "multicore_probe",
+            "corpus_rows": 10000000,
+            "elapsed_seconds": 16.388250917,
+            "frozen_now_micros": 1788220800000000,
+            "live_row_budget": 12000,
+            "local_rows": null,
+            "maximum_active_streaming_rows": null,
+            "mode": "managed",
+            "phase_seconds": {
+              "decode_and_local_sort": 13.694149652,
+              "drop_results": 2.694009498,
+              "whole_pass_wall": 16.388250541
+            },
+            "phase_time_basis": "wall time accumulated across serial API calls",
+            "rows": 10000000,
+            "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+            "whole_passes": 1,
+            "workers": 12
+          },
+          "raw": {
+            "stdout": "{\"actual_rows_per_second\":610193.2445778404,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":16.388250917,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":13.694149652,\"drop_results\":2.694009498,\"whole_pass_wall\":16.388250541},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":12}\n",
+            "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 16.388251s = 610193 VIN/s (12 core(s))\n"
+          },
+          "label": "cap96"
+        },
+        {
+          "mode": "managed",
+          "workers": 12,
+          "live_row_budget": 12000,
+          "rows": 10000000,
+          "seconds": 17.062827417,
+          "rows_per_second": 586069.3398350159,
+          "whole_passes": 1,
+          "process_wall_seconds": 35.32511637499556,
+          "peak_rss_bytes": 1415561216,
+          "command": [
+            "target/bench/multicore-cache-multicore_probe",
+            "target/bench/multicore-corpus.txt",
+            "10",
+            "12",
+            "12000",
+            "managed"
+          ],
+          "native_json": {
+            "actual_rows_per_second": 586069.3398350159,
+            "benchmark": "multicore_probe",
+            "corpus_rows": 10000000,
+            "elapsed_seconds": 17.062827417,
+            "frozen_now_micros": 1788220800000000,
+            "live_row_budget": 12000,
+            "local_rows": null,
+            "maximum_active_streaming_rows": null,
+            "mode": "managed",
+            "phase_seconds": {
+              "decode_and_local_sort": 14.397361665,
+              "drop_results": 2.665365327,
+              "whole_pass_wall": 17.062826875
+            },
+            "phase_time_basis": "wall time accumulated across serial API calls",
+            "rows": 10000000,
+            "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+            "whole_passes": 1,
+            "workers": 12
+          },
+          "raw": {
+            "stdout": "{\"actual_rows_per_second\":586069.3398350159,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":17.062827417,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":14.397361665,\"drop_results\":2.665365327,\"whole_pass_wall\":17.062826875},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":12}\n",
+            "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 17.062827s = 586069 VIN/s (12 core(s))\n"
+          },
+          "label": "cache"
+        }
+      ]
+    },
+    "buffers-screen": {
+      "corpus": "target/bench/multicore-corpus.txt",
+      "binaries": {
+        "cap96": {
+          "path": "target/bench/multicore-cap96-multicore_probe",
+          "sha256": "b8ce53ace84f814c4c61a1349c40dd3b7cc56c6648762438d0fd2cc513ddecf8"
+        },
+        "buffers": {
+          "path": "target/bench/multicore-buffers-multicore_probe",
+          "sha256": "1ffdaa1fb7fffd98208ddd723dda791ad90302d0320ce135aafe8f12dc85d894"
+        }
+      },
+      "samples": [
+        {
+          "mode": "managed",
+          "workers": 12,
+          "live_row_budget": 12000,
+          "rows": 10000000,
+          "seconds": 16.586637875,
+          "rows_per_second": 602894.9371995619,
+          "whole_passes": 1,
+          "process_wall_seconds": 34.19917987502413,
+          "peak_rss_bytes": 1385889792,
+          "command": [
+            "target/bench/multicore-cap96-multicore_probe",
+            "target/bench/multicore-corpus.txt",
+            "10",
+            "12",
+            "12000",
+            "managed"
+          ],
+          "native_json": {
+            "actual_rows_per_second": 602894.9371995619,
+            "benchmark": "multicore_probe",
+            "corpus_rows": 10000000,
+            "elapsed_seconds": 16.586637875,
+            "frozen_now_micros": 1788220800000000,
+            "live_row_budget": 12000,
+            "local_rows": null,
+            "maximum_active_streaming_rows": null,
+            "mode": "managed",
+            "phase_seconds": {
+              "decode_and_local_sort": 13.987003712,
+              "drop_results": 2.599538056,
+              "whole_pass_wall": 16.586637375
+            },
+            "phase_time_basis": "wall time accumulated across serial API calls",
+            "rows": 10000000,
+            "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+            "whole_passes": 1,
+            "workers": 12
+          },
+          "raw": {
+            "stdout": "{\"actual_rows_per_second\":602894.9371995619,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":16.586637875,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":13.987003712,\"drop_results\":2.599538056,\"whole_pass_wall\":16.586637375},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":12}\n",
+            "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 16.586638s = 602895 VIN/s (12 core(s))\n"
+          },
+          "label": "cap96"
+        },
+        {
+          "mode": "managed",
+          "workers": 12,
+          "live_row_budget": 12000,
+          "rows": 10000000,
+          "seconds": 16.173864083,
+          "rows_per_second": 618281.4415085127,
+          "whole_passes": 1,
+          "process_wall_seconds": 34.52871233300539,
+          "peak_rss_bytes": 1371865088,
+          "command": [
+            "target/bench/multicore-buffers-multicore_probe",
+            "target/bench/multicore-corpus.txt",
+            "10",
+            "12",
+            "12000",
+            "managed"
+          ],
+          "native_json": {
+            "actual_rows_per_second": 618281.4415085127,
+            "benchmark": "multicore_probe",
+            "corpus_rows": 10000000,
+            "elapsed_seconds": 16.173864083,
+            "frozen_now_micros": 1788220800000000,
+            "live_row_budget": 12000,
+            "local_rows": null,
+            "maximum_active_streaming_rows": null,
+            "mode": "managed",
+            "phase_seconds": {
+              "decode_and_local_sort": 13.552052008,
+              "drop_results": 2.621701877,
+              "whole_pass_wall": 16.173863625
+            },
+            "phase_time_basis": "wall time accumulated across serial API calls",
+            "rows": 10000000,
+            "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+            "whole_passes": 1,
+            "workers": 12
+          },
+          "raw": {
+            "stdout": "{\"actual_rows_per_second\":618281.4415085127,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":16.173864083,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":13.552052008,\"drop_results\":2.621701877,\"whole_pass_wall\":16.173863625},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":12}\n",
+            "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 16.173864s = 618281 VIN/s (12 core(s))\n"
+          },
+          "label": "buffers"
+        },
+        {
+          "mode": "managed",
+          "workers": 12,
+          "live_row_budget": 12000,
+          "rows": 10000000,
+          "seconds": 16.01976625,
+          "rows_per_second": 624228.8335511762,
+          "whole_passes": 1,
+          "process_wall_seconds": 32.665951500006486,
+          "peak_rss_bytes": 1357266944,
+          "command": [
+            "target/bench/multicore-buffers-multicore_probe",
+            "target/bench/multicore-corpus.txt",
+            "10",
+            "12",
+            "12000",
+            "managed"
+          ],
+          "native_json": {
+            "actual_rows_per_second": 624228.8335511762,
+            "benchmark": "multicore_probe",
+            "corpus_rows": 10000000,
+            "elapsed_seconds": 16.01976625,
+            "frozen_now_micros": 1788220800000000,
+            "live_row_budget": 12000,
+            "local_rows": null,
+            "maximum_active_streaming_rows": null,
+            "mode": "managed",
+            "phase_seconds": {
+              "decode_and_local_sort": 13.43752442,
+              "drop_results": 2.582149705,
+              "whole_pass_wall": 16.01976575
+            },
+            "phase_time_basis": "wall time accumulated across serial API calls",
+            "rows": 10000000,
+            "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+            "whole_passes": 1,
+            "workers": 12
+          },
+          "raw": {
+            "stdout": "{\"actual_rows_per_second\":624228.8335511762,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":16.01976625,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":13.43752442,\"drop_results\":2.582149705,\"whole_pass_wall\":16.01976575},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":12}\n",
+            "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 16.019766s = 624229 VIN/s (12 core(s))\n"
+          },
+          "label": "buffers"
+        },
+        {
+          "mode": "managed",
+          "workers": 12,
+          "live_row_budget": 12000,
+          "rows": 10000000,
+          "seconds": 16.00769925,
+          "rows_per_second": 624699.3927000471,
+          "whole_passes": 1,
+          "process_wall_seconds": 33.56614745798288,
+          "peak_rss_bytes": 1348599808,
+          "command": [
+            "target/bench/multicore-cap96-multicore_probe",
+            "target/bench/multicore-corpus.txt",
+            "10",
+            "12",
+            "12000",
+            "managed"
+          ],
+          "native_json": {
+            "actual_rows_per_second": 624699.3927000471,
+            "benchmark": "multicore_probe",
+            "corpus_rows": 10000000,
+            "elapsed_seconds": 16.00769925,
+            "frozen_now_micros": 1788220800000000,
+            "live_row_budget": 12000,
+            "local_rows": null,
+            "maximum_active_streaming_rows": null,
+            "mode": "managed",
+            "phase_seconds": {
+              "decode_and_local_sort": 13.443302603,
+              "drop_results": 2.5643161279999998,
+              "whole_pass_wall": 16.007698833
+            },
+            "phase_time_basis": "wall time accumulated across serial API calls",
+            "rows": 10000000,
+            "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+            "whole_passes": 1,
+            "workers": 12
+          },
+          "raw": {
+            "stdout": "{\"actual_rows_per_second\":624699.3927000471,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":16.00769925,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":13.443302603,\"drop_results\":2.5643161279999998,\"whole_pass_wall\":16.007698833},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":12}\n",
+            "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 16.007699s = 624699 VIN/s (12 core(s))\n"
+          },
+          "label": "cap96"
+        }
+      ]
+    },
+    "short-screen": [
+      {
+        "variant": "current",
+        "binary_sha256": "7d22f17719f5ed57903df4379d61ef975eac4039a06576900d7994ff0fef6acb",
+        "wall_seconds": 28.250006914138794,
+        "records": [
+          {
+            "median_single_core_rows_per_second": 148391.43109043935,
+            "memory_bytes": 536870912,
+            "offset_samples": [
+              145582.0124324764,
+              169494.3308780932,
+              141717.07956528285,
+              148391.43109043935,
+              149111.6788227633
+            ],
+            "record": "calibration",
+            "sample_rows": 256,
+            "workers": 12
+          },
+          {
+            "actual_rows_per_second": 621776.0799189106,
+            "average_busy_cores": 8.070101326676614,
+            "batch_size": 12000,
+            "calibration_median_single_core_rows_per_second": 148391.43109043935,
+            "completed_corpus_passes": 0,
+            "corpus_rows": 10000000,
+            "decode_seconds": 8.420545578,
+            "drop_results_seconds": 1.588508841,
+            "elapsed_seconds": 10.016467666,
+            "estimated_peak_returned_output_bytes": 198164250,
+            "estimated_peak_working_bytes": 396328500,
+            "frozen_now_micros": 1788220800000000,
+            "output_estimator_sample_rows": 16,
+            "output_sample_seconds": 0.007278213,
+            "process_system_cpu_seconds": 4.5375309999999995,
+            "process_user_cpu_seconds": 76.296378,
+            "record": "cell",
+            "result_owner": "BatchResults",
+            "round": 1,
+            "rows": 6228000,
+            "timing_policy": "unique_prefix_complete_batches",
+            "unique_rows": 6228000,
+            "workers": 12
+          }
+        ],
+        "stderr": "native grid: warmup complete; measuring calibration\ngrid: B=12000 round 1/1: 6228000 VINs in 10.016468s = 621776 VIN/s\n"
+      },
+      {
+        "variant": "short",
+        "binary_sha256": "63e694aca85cd50b958805a6fcc1756971b39d027187b6993c083ef8cf300d2a",
+        "wall_seconds": 30.040455102920532,
+        "records": [
+          {
+            "median_single_core_rows_per_second": 154375.7070527989,
+            "memory_bytes": 536870912,
+            "offset_samples": [
+              147267.44112466305,
+              172052.72340642888,
+              135749.02973911265,
+              161154.06454472087,
+              154375.7070527989
+            ],
+            "record": "calibration",
+            "sample_rows": 256,
+            "workers": 12
+          },
+          {
+            "actual_rows_per_second": 627998.5900868371,
+            "average_busy_cores": 8.055184610680662,
+            "batch_size": 12000,
+            "calibration_median_single_core_rows_per_second": 154375.7070527989,
+            "completed_corpus_passes": 0,
+            "corpus_rows": 10000000,
+            "decode_seconds": 8.394879089,
+            "drop_results_seconds": 1.610561361,
+            "elapsed_seconds": 10.012761333,
+            "estimated_peak_returned_output_bytes": 198164250,
+            "estimated_peak_working_bytes": 396328500,
+            "frozen_now_micros": 1788220800000000,
+            "output_estimator_sample_rows": 16,
+            "output_sample_seconds": 0.007221675,
+            "process_system_cpu_seconds": 4.533336000000001,
+            "process_user_cpu_seconds": 76.12130499999999,
+            "record": "cell",
+            "result_owner": "BatchResults",
+            "round": 1,
+            "rows": 6288000,
+            "timing_policy": "unique_prefix_complete_batches",
+            "unique_rows": 6288000,
+            "workers": 12
+          }
+        ],
+        "stderr": "native grid: warmup complete; measuring calibration\ngrid: B=12000 round 1/1: 6288000 VINs in 10.012761s = 627999 VIN/s\n"
+      },
+      {
+        "variant": "short",
+        "binary_sha256": "63e694aca85cd50b958805a6fcc1756971b39d027187b6993c083ef8cf300d2a",
+        "wall_seconds": 26.652160167694092,
+        "records": [
+          {
+            "median_single_core_rows_per_second": 150643.6189775653,
+            "memory_bytes": 536870912,
+            "offset_samples": [
+              146104.79480551797,
+              158903.3681306881,
+              147561.06347719577,
+              154620.5575279072,
+              150643.6189775653
+            ],
+            "record": "calibration",
+            "sample_rows": 256,
+            "workers": 12
+          },
+          {
+            "actual_rows_per_second": 621832.6952168354,
+            "average_busy_cores": 7.999862148038485,
+            "batch_size": 12000,
+            "calibration_median_single_core_rows_per_second": 150643.6189775653,
+            "completed_corpus_passes": 0,
+            "corpus_rows": 10000000,
+            "decode_seconds": 8.365408111,
+            "drop_results_seconds": 1.64273792,
+            "elapsed_seconds": 10.015555708,
+            "estimated_peak_returned_output_bytes": 198164250,
+            "estimated_peak_working_bytes": 396328500,
+            "frozen_now_micros": 1788220800000000,
+            "output_estimator_sample_rows": 16,
+            "output_sample_seconds": 0.007306094,
+            "process_system_cpu_seconds": 4.524875999999999,
+            "process_user_cpu_seconds": 75.59818899999999,
+            "record": "cell",
+            "result_owner": "BatchResults",
+            "round": 1,
+            "rows": 6228000,
+            "timing_policy": "unique_prefix_complete_batches",
+            "unique_rows": 6228000,
+            "workers": 12
+          }
+        ],
+        "stderr": "native grid: warmup complete; measuring calibration\ngrid: B=12000 round 1/1: 6228000 VINs in 10.015556s = 621833 VIN/s\n"
+      },
+      {
+        "variant": "current",
+        "binary_sha256": "7d22f17719f5ed57903df4379d61ef975eac4039a06576900d7994ff0fef6acb",
+        "wall_seconds": 28.239073038101196,
+        "records": [
+          {
+            "median_single_core_rows_per_second": 158849.92653190898,
+            "memory_bytes": 536870912,
+            "offset_samples": [
+              144967.17569398787,
+              160560.35564118775,
+              151778.6261307063,
+              161535.393919202,
+              158849.92653190898
+            ],
+            "record": "calibration",
+            "sample_rows": 256,
+            "workers": 12
+          },
+          {
+            "actual_rows_per_second": 640601.5203169752,
+            "average_busy_cores": 8.237458461061397,
+            "batch_size": 12000,
+            "calibration_median_single_core_rows_per_second": 158849.92653190898,
+            "completed_corpus_passes": 0,
+            "corpus_rows": 10000000,
+            "decode_seconds": 8.413747488,
+            "drop_results_seconds": 1.581799251,
+            "elapsed_seconds": 10.003098333,
+            "estimated_peak_returned_output_bytes": 198164250,
+            "estimated_peak_working_bytes": 396328500,
+            "frozen_now_micros": 1788220800000000,
+            "output_estimator_sample_rows": 16,
+            "output_sample_seconds": 0.007390913,
+            "process_system_cpu_seconds": 4.4240330000000005,
+            "process_user_cpu_seconds": 77.97607400000001,
+            "record": "cell",
+            "result_owner": "BatchResults",
+            "round": 1,
+            "rows": 6408000,
+            "timing_policy": "unique_prefix_complete_batches",
+            "unique_rows": 6408000,
+            "workers": 12
+          }
+        ],
+        "stderr": "native grid: warmup complete; measuring calibration\ngrid: B=12000 round 1/1: 6408000 VINs in 10.003098s = 640602 VIN/s\n"
+      }
+    ],
+    "scheduler-screen": [
+      {
+        "variant": "current",
+        "binary_sha256": "7d22f17719f5ed57903df4379d61ef975eac4039a06576900d7994ff0fef6acb",
+        "wall_seconds": 41.89449906349182,
+        "records": [
+          {
+            "median_single_core_rows_per_second": 150984.16907395984,
+            "memory_bytes": 536870912,
+            "offset_samples": [
+              150984.16907395984,
+              150326.66689372258,
+              145747.8630288911,
+              151025.05305049958,
+              157833.92664914875
+            ],
+            "record": "calibration",
+            "sample_rows": 256,
+            "workers": 12
+          },
+          {
+            "actual_rows_per_second": 615994.0026472362,
+            "average_busy_cores": 7.991295789024853,
+            "batch_size": 12000,
+            "calibration_median_single_core_rows_per_second": 150984.16907395984,
+            "completed_corpus_passes": 0,
+            "corpus_rows": 10000000,
+            "decode_seconds": 8.410523652,
+            "drop_results_seconds": 1.595094291,
+            "elapsed_seconds": 10.0130845,
+            "estimated_peak_returned_output_bytes": 198164250,
+            "estimated_peak_working_bytes": 396328500,
+            "frozen_now_micros": 1788220800000000,
+            "output_estimator_sample_rows": 16,
+            "output_sample_seconds": 0.007337878,
+            "process_system_cpu_seconds": 4.479070999999999,
+            "process_user_cpu_seconds": 75.53844900000001,
+            "record": "cell",
+            "result_owner": "BatchResults",
+            "round": 1,
+            "rows": 6168000,
+            "timing_policy": "unique_prefix_complete_batches",
+            "unique_rows": 6168000,
+            "workers": 12
+          },
+          {
+            "actual_rows_per_second": 466694.11681213294,
+            "average_busy_cores": 7.5211478080022385,
+            "batch_size": 1500,
+            "calibration_median_single_core_rows_per_second": 150984.16907395984,
+            "completed_corpus_passes": 0,
+            "corpus_rows": 10000000,
+            "decode_seconds": 7.881890133,
+            "drop_results_seconds": 2.088973937,
+            "elapsed_seconds": 10.002268792,
+            "estimated_peak_returned_output_bytes": 24637593,
+            "estimated_peak_working_bytes": 49275186,
+            "frozen_now_micros": 1788220800000000,
+            "output_estimator_sample_rows": 16,
+            "output_sample_seconds": 0.031001753,
+            "process_system_cpu_seconds": 11.827857999999999,
+            "process_user_cpu_seconds": 63.40068400000001,
+            "record": "cell",
+            "result_owner": "BatchResults",
+            "round": 1,
+            "rows": 4668000,
+            "timing_policy": "unique_prefix_complete_batches",
+            "unique_rows": 4668000,
+            "workers": 12
+          }
+        ],
+        "stderr": "native grid: warmup complete; measuring calibration\ngrid: B=12000 round 1/1: 6168000 VINs in 10.013084s = 615994 VIN/s\ngrid: B=1500 round 1/1: 4668000 VINs in 10.002269s = 466694 VIN/s\n"
+      },
+      {
+        "variant": "maxlen",
+        "binary_sha256": "ea20ee917b7bb37a7953c0b39e922da0d63423345d2a9a4c0473f0927f29615e",
+        "wall_seconds": 44.48158121109009,
+        "records": [
+          {
+            "median_single_core_rows_per_second": 162320.67844971071,
+            "memory_bytes": 536870912,
+            "offset_samples": [
+              152881.4571513885,
+              169312.1693121693,
+              169014.15889707697,
+              162320.67844971071,
+              159954.21310649827
+            ],
+            "record": "calibration",
+            "sample_rows": 256,
+            "workers": 12
+          },
+          {
+            "actual_rows_per_second": 475774.4172289661,
+            "average_busy_cores": 7.745717606567721,
+            "batch_size": 1500,
+            "calibration_median_single_core_rows_per_second": 162320.67844971071,
+            "completed_corpus_passes": 0,
+            "corpus_rows": 10000000,
+            "decode_seconds": 7.933857282,
+            "drop_results_seconds": 2.023732177,
+            "elapsed_seconds": 10.000537708,
+            "estimated_peak_returned_output_bytes": 24637593,
+            "estimated_peak_working_bytes": 49275186,
+            "frozen_now_micros": 1788220800000000,
+            "output_estimator_sample_rows": 16,
+            "output_sample_seconds": 0.042305694,
+            "process_system_cpu_seconds": 11.987357,
+            "process_user_cpu_seconds": 65.473984,
+            "record": "cell",
+            "result_owner": "BatchResults",
+            "round": 1,
+            "rows": 4758000,
+            "timing_policy": "unique_prefix_complete_batches",
+            "unique_rows": 4758000,
+            "workers": 12
+          },
+          {
+            "actual_rows_per_second": 647240.8781639461,
+            "average_busy_cores": 8.326682780988852,
+            "batch_size": 12000,
+            "calibration_median_single_core_rows_per_second": 162320.67844971071,
+            "completed_corpus_passes": 0,
+            "corpus_rows": 10000000,
+            "decode_seconds": 8.333628327,
+            "drop_results_seconds": 1.664358832,
+            "elapsed_seconds": 10.011728583,
+            "estimated_peak_returned_output_bytes": 198164250,
+            "estimated_peak_working_bytes": 396328500,
+            "frozen_now_micros": 1788220800000000,
+            "output_estimator_sample_rows": 16,
+            "output_sample_seconds": 0.013543372,
+            "process_system_cpu_seconds": 4.338461000000002,
+            "process_user_cpu_seconds": 79.02602700000003,
+            "record": "cell",
+            "result_owner": "BatchResults",
+            "round": 1,
+            "rows": 6480000,
+            "timing_policy": "unique_prefix_complete_batches",
+            "unique_rows": 6480000,
+            "workers": 12
+          }
+        ],
+        "stderr": "native grid: warmup complete; measuring calibration\ngrid: B=1500 round 1/1: 4758000 VINs in 10.000538s = 475774 VIN/s\ngrid: B=12000 round 1/1: 6480000 VINs in 10.011729s = 647241 VIN/s\n"
+      },
+      {
+        "variant": "droplen",
+        "binary_sha256": "a7accdeb19d9d2a58f09ac890e600656b2fd9b93bd4eb40fc3c052bd6e6691bb",
+        "wall_seconds": 39.82524514198303,
+        "records": [
+          {
+            "median_single_core_rows_per_second": 155788.83310512704,
+            "memory_bytes": 536870912,
+            "offset_samples": [
+              146897.81650167442,
+              155788.83310512704,
+              155328.02427000378,
+              164997.14477597128,
+              157833.8293384728
+            ],
+            "record": "calibration",
+            "sample_rows": 256,
+            "workers": 12
+          },
+          {
+            "actual_rows_per_second": 608535.1800302875,
+            "average_busy_cores": 7.81068459847983,
+            "batch_size": 12000,
+            "calibration_median_single_core_rows_per_second": 155788.83310512704,
+            "completed_corpus_passes": 0,
+            "corpus_rows": 10000000,
+            "decode_seconds": 8.417915419,
+            "drop_results_seconds": 1.587025503,
+            "elapsed_seconds": 10.017498084,
+            "estimated_peak_returned_output_bytes": 198164250,
+            "estimated_peak_working_bytes": 396328500,
+            "frozen_now_micros": 1788220800000000,
+            "output_estimator_sample_rows": 16,
+            "output_sample_seconds": 0.012386705,
+            "process_system_cpu_seconds": 4.087083999999999,
+            "process_user_cpu_seconds": 74.156434,
+            "record": "cell",
+            "result_owner": "BatchResults",
+            "round": 1,
+            "rows": 6096000,
+            "timing_policy": "unique_prefix_complete_batches",
+            "unique_rows": 6096000,
+            "workers": 12
+          },
+          {
+            "actual_rows_per_second": 468969.77296576294,
+            "average_busy_cores": 7.217697062789307,
+            "batch_size": 1500,
+            "calibration_median_single_core_rows_per_second": 155788.83310512704,
+            "completed_corpus_passes": 0,
+            "corpus_rows": 10000000,
+            "decode_seconds": 8.079210577,
+            "drop_results_seconds": 1.877711855,
+            "elapsed_seconds": 10.001710708,
+            "estimated_peak_returned_output_bytes": 24637593,
+            "estimated_peak_working_bytes": 49275186,
+            "frozen_now_micros": 1788220800000000,
+            "output_estimator_sample_rows": 16,
+            "output_sample_seconds": 0.04410774,
+            "process_system_cpu_seconds": 9.762588999999998,
+            "process_user_cpu_seconds": 62.426728999999966,
+            "record": "cell",
+            "result_owner": "BatchResults",
+            "round": 1,
+            "rows": 4690500,
+            "timing_policy": "unique_prefix_complete_batches",
+            "unique_rows": 4690500,
+            "workers": 12
+          }
+        ],
+        "stderr": "native grid: warmup complete; measuring calibration\ngrid: B=12000 round 1/1: 6096000 VINs in 10.017498s = 608535 VIN/s\ngrid: B=1500 round 1/1: 4690500 VINs in 10.001711s = 468970 VIN/s\n"
+      },
+      {
+        "variant": "droplen",
+        "binary_sha256": "a7accdeb19d9d2a58f09ac890e600656b2fd9b93bd4eb40fc3c052bd6e6691bb",
+        "wall_seconds": 42.149205923080444,
+        "records": [
+          {
+            "median_single_core_rows_per_second": 141687.5877245416,
+            "memory_bytes": 536870912,
+            "offset_samples": [
+              151132.75773005682,
+              130584.52899792697,
+              141687.5877245416,
+              156511.17037341365,
+              141163.49600220568
+            ],
+            "record": "calibration",
+            "sample_rows": 256,
+            "workers": 12
+          },
+          {
+            "actual_rows_per_second": 441607.40130477725,
+            "average_busy_cores": 7.162330224123287,
+            "batch_size": 1500,
+            "calibration_median_single_core_rows_per_second": 141687.5877245416,
+            "completed_corpus_passes": 0,
+            "corpus_rows": 10000000,
+            "decode_seconds": 8.133726728,
+            "drop_results_seconds": 1.8380901779999999,
+            "elapsed_seconds": 10.003229083,
+            "estimated_peak_returned_output_bytes": 24637593,
+            "estimated_peak_working_bytes": 49275186,
+            "frozen_now_micros": 1788220800000000,
+            "output_estimator_sample_rows": 16,
+            "output_sample_seconds": 0.030994146,
+            "process_system_cpu_seconds": 10.450156999999997,
+            "process_user_cpu_seconds": 61.19627299999999,
+            "record": "cell",
+            "result_owner": "BatchResults",
+            "round": 1,
+            "rows": 4417500,
+            "timing_policy": "unique_prefix_complete_batches",
+            "unique_rows": 4417500,
+            "workers": 12
+          },
+          {
+            "actual_rows_per_second": 608205.8477480726,
+            "average_busy_cores": 7.853321122822725,
+            "batch_size": 12000,
+            "calibration_median_single_core_rows_per_second": 141687.5877245416,
+            "completed_corpus_passes": 0,
+            "corpus_rows": 10000000,
+            "decode_seconds": 8.416072049,
+            "drop_results_seconds": 1.59949695,
+            "elapsed_seconds": 10.022922375,
+            "estimated_peak_returned_output_bytes": 198164250,
+            "estimated_peak_working_bytes": 396328500,
+            "frozen_now_micros": 1788220800000000,
+            "output_estimator_sample_rows": 16,
+            "output_sample_seconds": 0.007248254,
+            "process_system_cpu_seconds": 4.085138000000001,
+            "process_user_cpu_seconds": 74.62809000000001,
+            "record": "cell",
+            "result_owner": "BatchResults",
+            "round": 1,
+            "rows": 6096000,
+            "timing_policy": "unique_prefix_complete_batches",
+            "unique_rows": 6096000,
+            "workers": 12
+          }
+        ],
+        "stderr": "native grid: warmup complete; measuring calibration\ngrid: B=1500 round 1/1: 4417500 VINs in 10.003229s = 441607 VIN/s\ngrid: B=12000 round 1/1: 6096000 VINs in 10.022922s = 608206 VIN/s\n"
+      },
+      {
+        "variant": "maxlen",
+        "binary_sha256": "ea20ee917b7bb37a7953c0b39e922da0d63423345d2a9a4c0473f0927f29615e",
+        "wall_seconds": 37.13347291946411,
+        "records": [
+          {
+            "median_single_core_rows_per_second": 155092.7678909504,
+            "memory_bytes": 536870912,
+            "offset_samples": [
+              142393.56915043324,
+              144073.16215265566,
+              157615.2808014737,
+              155092.7678909504,
+              155923.19320954493
+            ],
+            "record": "calibration",
+            "sample_rows": 256,
+            "workers": 12
+          },
+          {
+            "actual_rows_per_second": 579534.6670865614,
+            "average_busy_cores": 7.75337563560312,
+            "batch_size": 12000,
+            "calibration_median_single_core_rows_per_second": 155092.7678909504,
+            "completed_corpus_passes": 0,
+            "corpus_rows": 10000000,
+            "decode_seconds": 8.362838924,
+            "drop_results_seconds": 1.6311768789999999,
+            "elapsed_seconds": 10.001127334,
+            "estimated_peak_returned_output_bytes": 198164250,
+            "estimated_peak_working_bytes": 396328500,
+            "frozen_now_micros": 1788220800000000,
+            "output_estimator_sample_rows": 16,
+            "output_sample_seconds": 0.007006962,
+            "process_system_cpu_seconds": 4.447102999999999,
+            "process_user_cpu_seconds": 73.09539399999998,
+            "record": "cell",
+            "result_owner": "BatchResults",
+            "round": 1,
+            "rows": 5796000,
+            "timing_policy": "unique_prefix_complete_batches",
+            "unique_rows": 5796000,
+            "workers": 12
+          },
+          {
+            "actual_rows_per_second": 446494.3388994769,
+            "average_busy_cores": 7.309043636347682,
+            "batch_size": 1500,
+            "calibration_median_single_core_rows_per_second": 155092.7678909504,
+            "completed_corpus_passes": 0,
+            "corpus_rows": 10000000,
+            "decode_seconds": 7.87835468,
+            "drop_results_seconds": 2.091371165,
+            "elapsed_seconds": 10.001246625,
+            "estimated_peak_returned_output_bytes": 24637593,
+            "estimated_peak_working_bytes": 49275186,
+            "frozen_now_micros": 1788220800000000,
+            "output_estimator_sample_rows": 16,
+            "output_sample_seconds": 0.031100525,
+            "process_system_cpu_seconds": 11.39634,
+            "process_user_cpu_seconds": 61.70320799999999,
+            "record": "cell",
+            "result_owner": "BatchResults",
+            "round": 1,
+            "rows": 4465500,
+            "timing_policy": "unique_prefix_complete_batches",
+            "unique_rows": 4465500,
+            "workers": 12
+          }
+        ],
+        "stderr": "native grid: warmup complete; measuring calibration\ngrid: B=12000 round 1/1: 5796000 VINs in 10.001127s = 579535 VIN/s\ngrid: B=1500 round 1/1: 4465500 VINs in 10.001247s = 446494 VIN/s\n"
+      },
+      {
+        "variant": "current",
+        "binary_sha256": "7d22f17719f5ed57903df4379d61ef975eac4039a06576900d7994ff0fef6acb",
+        "wall_seconds": 43.54131197929382,
+        "records": [
+          {
+            "median_single_core_rows_per_second": 154671.09734914283,
+            "memory_bytes": 536870912,
+            "offset_samples": [
+              152373.4244081989,
+              154671.09734914283,
+              152839.653292799,
+              161340.33483161364,
+              156280.23732619165
+            ],
+            "record": "calibration",
+            "sample_rows": 256,
+            "workers": 12
+          },
+          {
+            "actual_rows_per_second": 444249.87195507326,
+            "average_busy_cores": 7.182081791845813,
+            "batch_size": 1500,
+            "calibration_median_single_core_rows_per_second": 154671.09734914283,
+            "completed_corpus_passes": 0,
+            "corpus_rows": 10000000,
+            "decode_seconds": 7.862016811,
+            "drop_results_seconds": 2.10924616,
+            "elapsed_seconds": 10.001128375,
+            "estimated_peak_returned_output_bytes": 24637593,
+            "estimated_peak_working_bytes": 49275186,
+            "frozen_now_micros": 1788220800000000,
+            "output_estimator_sample_rows": 16,
+            "output_sample_seconds": 0.0294534,
+            "process_system_cpu_seconds": 11.235252000000003,
+            "process_user_cpu_seconds": 60.59367,
+            "record": "cell",
+            "result_owner": "BatchResults",
+            "round": 1,
+            "rows": 4443000,
+            "timing_policy": "unique_prefix_complete_batches",
+            "unique_rows": 4443000,
+            "workers": 12
+          },
+          {
+            "actual_rows_per_second": 605952.5658092094,
+            "average_busy_cores": 7.7085725750307175,
+            "batch_size": 12000,
+            "calibration_median_single_core_rows_per_second": 154671.09734914283,
+            "completed_corpus_passes": 0,
+            "corpus_rows": 10000000,
+            "decode_seconds": 8.338783539,
+            "drop_results_seconds": 1.674489712,
+            "elapsed_seconds": 10.020586334,
+            "estimated_peak_returned_output_bytes": 198164250,
+            "estimated_peak_working_bytes": 396328500,
+            "frozen_now_micros": 1788220800000000,
+            "output_estimator_sample_rows": 16,
+            "output_sample_seconds": 0.007223702,
+            "process_system_cpu_seconds": 4.2377600000000015,
+            "process_user_cpu_seconds": 73.00665699999999,
+            "record": "cell",
+            "result_owner": "BatchResults",
+            "round": 1,
+            "rows": 6072000,
+            "timing_policy": "unique_prefix_complete_batches",
+            "unique_rows": 6072000,
+            "workers": 12
+          }
+        ],
+        "stderr": "native grid: warmup complete; measuring calibration\ngrid: B=1500 round 1/1: 4443000 VINs in 10.001128s = 444250 VIN/s\ngrid: B=12000 round 1/1: 6072000 VINs in 10.020586s = 605953 VIN/s\n"
+      }
+    ],
+    "allocation64": {
+      "allocated_bytes": 122055552,
+      "allocations": 123459,
+      "frees": 123459,
+      "kind": "ultravin_allocation_probe",
+      "now_micros": 1788220800000000,
+      "realloc_old_size_histogram": [
+        {
+          "count": 14,
+          "old_size_power2_ceiling": 1
+        },
+        {
+          "count": 81,
+          "old_size_power2_ceiling": 2
+        },
+        {
+          "count": 2409,
+          "old_size_power2_ceiling": 4
+        },
+        {
+          "count": 6803,
+          "old_size_power2_ceiling": 8
+        },
+        {
+          "count": 3919,
+          "old_size_power2_ceiling": 16
+        },
+        {
+          "count": 5617,
+          "old_size_power2_ceiling": 32
+        },
+        {
+          "count": 6706,
+          "old_size_power2_ceiling": 64
+        },
+        {
+          "count": 28,
+          "old_size_power2_ceiling": 128
+        },
+        {
+          "count": 48,
+          "old_size_power2_ceiling": 256
+        },
+        {
+          "count": 6110,
+          "old_size_power2_ceiling": 512
+        },
+        {
+          "count": 58,
+          "old_size_power2_ceiling": 1024
+        },
+        {
+          "count": 1,
+          "old_size_power2_ceiling": 2048
+        },
+        {
+          "count": 2448,
+          "old_size_power2_ceiling": 8192
+        }
+      ],
+      "reallocations": 34242,
+      "rows": 3000
+    },
+    "allocation96": {
+      "allocated_bytes": 95460224,
+      "allocations": 123459,
+      "frees": 123459,
+      "kind": "ultravin_allocation_probe",
+      "now_micros": 1788220800000000,
+      "realloc_old_size_histogram": [
+        {
+          "count": 14,
+          "old_size_power2_ceiling": 1
+        },
+        {
+          "count": 81,
+          "old_size_power2_ceiling": 2
+        },
+        {
+          "count": 2409,
+          "old_size_power2_ceiling": 4
+        },
+        {
+          "count": 6803,
+          "old_size_power2_ceiling": 8
+        },
+        {
+          "count": 3919,
+          "old_size_power2_ceiling": 16
+        },
+        {
+          "count": 5617,
+          "old_size_power2_ceiling": 32
+        },
+        {
+          "count": 6706,
+          "old_size_power2_ceiling": 64
+        },
+        {
+          "count": 28,
+          "old_size_power2_ceiling": 128
+        },
+        {
+          "count": 48,
+          "old_size_power2_ceiling": 256
+        },
+        {
+          "count": 6110,
+          "old_size_power2_ceiling": 512
+        },
+        {
+          "count": 58,
+          "old_size_power2_ceiling": 1024
+        },
+        {
+          "count": 1,
+          "old_size_power2_ceiling": 2048
+        }
+      ],
+      "reallocations": 31794,
+      "rows": 3000
+    },
+    "allocation-buffers": {
+      "allocated_bytes": 94964780,
+      "allocations": 116937,
+      "frees": 116937,
+      "kind": "ultravin_allocation_probe",
+      "now_micros": 1788220800000000,
+      "realloc_old_size_histogram": [
+        {
+          "count": 14,
+          "old_size_power2_ceiling": 1
+        },
+        {
+          "count": 81,
+          "old_size_power2_ceiling": 2
+        },
+        {
+          "count": 2409,
+          "old_size_power2_ceiling": 4
+        },
+        {
+          "count": 6002,
+          "old_size_power2_ceiling": 8
+        },
+        {
+          "count": 3919,
+          "old_size_power2_ceiling": 16
+        },
+        {
+          "count": 2356,
+          "old_size_power2_ceiling": 32
+        },
+        {
+          "count": 3445,
+          "old_size_power2_ceiling": 64
+        },
+        {
+          "count": 28,
+          "old_size_power2_ceiling": 128
+        },
+        {
+          "count": 48,
+          "old_size_power2_ceiling": 256
+        },
+        {
+          "count": 6110,
+          "old_size_power2_ceiling": 512
+        },
+        {
+          "count": 58,
+          "old_size_power2_ceiling": 1024
+        },
+        {
+          "count": 1,
+          "old_size_power2_ceiling": 2048
+        }
+      ],
+      "reallocations": 24471,
+      "rows": 3000
+    },
+    "initial-screen": {
+      "binary": "target/bench/multicore-stack-multicore_probe",
+      "sha256": "c610c276e555acf0c1e948c64dff048f50ac77e6384a03611a047fe97ece3a59",
+      "corpus": "target/bench/multicore-corpus.txt",
+      "samples": [
+        {
+          "actual_rows_per_second": 408917.4258729825,
+          "benchmark": "multicore_probe",
+          "corpus_rows": 10000000,
+          "elapsed_seconds": 24.454815,
+          "frozen_now_micros": 1788220800000000,
+          "live_row_budget": 1500,
+          "local_rows": null,
+          "maximum_active_streaming_rows": null,
+          "mode": "managed",
+          "phase_seconds": {
+            "decode_and_local_sort": 19.616696348,
+            "drop_results": 4.837138975,
+            "whole_pass_wall": 24.454814459
+          },
+          "phase_time_basis": "wall time accumulated across serial API calls",
+          "rows": 10000000,
+          "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+          "whole_passes": 1,
+          "workers": 12
+        },
+        {
+          "actual_rows_per_second": 530438.0246223784,
+          "benchmark": "multicore_probe",
+          "corpus_rows": 10000000,
+          "elapsed_seconds": 18.852343791,
+          "frozen_now_micros": 1788220800000000,
+          "live_row_budget": 12000,
+          "local_rows": null,
+          "maximum_active_streaming_rows": null,
+          "mode": "managed",
+          "phase_seconds": {
+            "decode_and_local_sort": 16.245248064,
+            "drop_results": 2.606962092,
+            "whole_pass_wall": 18.852343125
+          },
+          "phase_time_basis": "wall time accumulated across serial API calls",
+          "rows": 10000000,
+          "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+          "whole_passes": 1,
+          "workers": 12
+        },
+        {
+          "actual_rows_per_second": 542168.2419342255,
+          "benchmark": "multicore_probe",
+          "corpus_rows": 10000000,
+          "elapsed_seconds": 18.444459167,
+          "frozen_now_micros": 1788220800000000,
+          "live_row_budget": 12000,
+          "local_rows": 1000,
+          "maximum_active_streaming_rows": 12000,
+          "mode": "streaming",
+          "phase_seconds": {
+            "decode_and_local_sort": 204.083093752,
+            "drop_results": 16.939016748,
+            "whole_pass_wall": 18.444458666
+          },
+          "phase_time_basis": "worker time summed across concurrently executing chunks",
+          "rows": 10000000,
+          "semantics": "independent streaming chunks; full results consumed and dropped per worker; no global batch return",
+          "whole_passes": 1,
+          "workers": 12
+        },
+        {
+          "actual_rows_per_second": 547040.7946837379,
+          "benchmark": "multicore_probe",
+          "corpus_rows": 10000000,
+          "elapsed_seconds": 18.280172333,
+          "frozen_now_micros": 1788220800000000,
+          "live_row_budget": 12000,
+          "local_rows": 1500,
+          "maximum_active_streaming_rows": 12000,
+          "mode": "streaming",
+          "phase_seconds": {
+            "decode_and_local_sort": 134.317517903,
+            "drop_results": 11.862435759,
+            "whole_pass_wall": 18.280171917
+          },
+          "phase_time_basis": "worker time summed across concurrently executing chunks",
+          "rows": 10000000,
+          "semantics": "independent streaming chunks; full results consumed and dropped per worker; no global batch return",
+          "whole_passes": 1,
+          "workers": 8
+        },
+        {
+          "actual_rows_per_second": 477953.63956509304,
+          "benchmark": "multicore_probe",
+          "corpus_rows": 10000000,
+          "elapsed_seconds": 20.922531334,
+          "frozen_now_micros": 1788220800000000,
+          "live_row_budget": 12000,
+          "local_rows": null,
+          "maximum_active_streaming_rows": null,
+          "mode": "managed",
+          "phase_seconds": {
+            "decode_and_local_sort": 18.229471763,
+            "drop_results": 2.692954282,
+            "whole_pass_wall": 20.922530667
+          },
+          "phase_time_basis": "wall time accumulated across serial API calls",
+          "rows": 10000000,
+          "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+          "whole_passes": 1,
+          "workers": 8
+        }
+      ]
+    },
+    "allocation-year": {
+      "allocated_bytes": 94898800,
+      "allocations": 110339,
+      "frees": 110339,
+      "kind": "ultravin_allocation_probe",
+      "now_micros": 1788220800000000,
+      "realloc_old_size_histogram": [
+        {
+          "count": 14,
+          "old_size_power2_ceiling": 1
+        },
+        {
+          "count": 81,
+          "old_size_power2_ceiling": 2
+        },
+        {
+          "count": 2409,
+          "old_size_power2_ceiling": 4
+        },
+        {
+          "count": 6002,
+          "old_size_power2_ceiling": 8
+        },
+        {
+          "count": 3919,
+          "old_size_power2_ceiling": 16
+        },
+        {
+          "count": 2356,
+          "old_size_power2_ceiling": 32
+        },
+        {
+          "count": 3445,
+          "old_size_power2_ceiling": 64
+        },
+        {
+          "count": 28,
+          "old_size_power2_ceiling": 128
+        },
+        {
+          "count": 48,
+          "old_size_power2_ceiling": 256
+        },
+        {
+          "count": 6110,
+          "old_size_power2_ceiling": 512
+        },
+        {
+          "count": 58,
+          "old_size_power2_ceiling": 1024
+        },
+        {
+          "count": 1,
+          "old_size_power2_ceiling": 2048
+        }
+      ],
+      "reallocations": 24471,
+      "rows": 3000
+    },
+    "year-screen": [
+      {
+        "variant": "current",
+        "binary_sha256": "327b1964e6b0d56c2654f8ea0996ea6839e76e9ecbf3fbee5e1798df07168ebe",
+        "wall_seconds": 33.16541123390198,
+        "record": {
+          "actual_rows_per_second": 684767.0709184642,
+          "benchmark": "multicore_probe",
+          "corpus_rows": 10000000,
+          "elapsed_seconds": 14.603505958,
+          "frozen_now_micros": 1788220800000000,
+          "live_row_budget": 12000,
+          "local_rows": null,
+          "maximum_active_streaming_rows": null,
+          "mode": "managed",
+          "phase_seconds": {
+            "decode_and_local_sort": 12.370761018,
+            "drop_results": 2.23259415,
+            "whole_pass_wall": 14.6035055
+          },
+          "phase_time_basis": "wall time accumulated across serial API calls",
+          "rows": 10000000,
+          "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+          "whole_passes": 1,
+          "workers": 12
+        },
+        "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 14.603506s = 684767 VIN/s (12 core(s))\n"
+      },
+      {
+        "variant": "year",
+        "binary_sha256": "80feee2825a75a7c97dc074a39432a951f9c1e4df9d57f4d5afbe95644a5a482",
+        "wall_seconds": 31.941164016723633,
+        "record": {
+          "actual_rows_per_second": 696542.9251194763,
+          "benchmark": "multicore_probe",
+          "corpus_rows": 10000000,
+          "elapsed_seconds": 14.356617,
+          "frozen_now_micros": 1788220800000000,
+          "live_row_budget": 12000,
+          "local_rows": null,
+          "maximum_active_streaming_rows": null,
+          "mode": "managed",
+          "phase_seconds": {
+            "decode_and_local_sort": 12.235878834,
+            "drop_results": 2.120652682,
+            "whole_pass_wall": 14.356616791
+          },
+          "phase_time_basis": "wall time accumulated across serial API calls",
+          "rows": 10000000,
+          "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+          "whole_passes": 1,
+          "workers": 12
+        },
+        "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 14.356617s = 696543 VIN/s (12 core(s))\n"
+      },
+      {
+        "variant": "year",
+        "binary_sha256": "80feee2825a75a7c97dc074a39432a951f9c1e4df9d57f4d5afbe95644a5a482",
+        "wall_seconds": 29.064540147781372,
+        "record": {
+          "actual_rows_per_second": 702494.807308367,
+          "benchmark": "multicore_probe",
+          "corpus_rows": 10000000,
+          "elapsed_seconds": 14.234980666,
+          "frozen_now_micros": 1788220800000000,
+          "live_row_budget": 12000,
+          "local_rows": null,
+          "maximum_active_streaming_rows": null,
+          "mode": "managed",
+          "phase_seconds": {
+            "decode_and_local_sort": 12.193816666,
+            "drop_results": 2.041083964,
+            "whole_pass_wall": 14.234979792
+          },
+          "phase_time_basis": "wall time accumulated across serial API calls",
+          "rows": 10000000,
+          "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+          "whole_passes": 1,
+          "workers": 12
+        },
+        "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 14.234981s = 702495 VIN/s (12 core(s))\n"
+      },
+      {
+        "variant": "current",
+        "binary_sha256": "327b1964e6b0d56c2654f8ea0996ea6839e76e9ecbf3fbee5e1798df07168ebe",
+        "wall_seconds": 29.71462917327881,
+        "record": {
+          "actual_rows_per_second": 694433.7546495075,
+          "benchmark": "multicore_probe",
+          "corpus_rows": 10000000,
+          "elapsed_seconds": 14.400221667,
+          "frozen_now_micros": 1788220800000000,
+          "live_row_budget": 12000,
+          "local_rows": null,
+          "maximum_active_streaming_rows": null,
+          "mode": "managed",
+          "phase_seconds": {
+            "decode_and_local_sort": 12.292609821,
+            "drop_results": 2.107491301,
+            "whole_pass_wall": 14.400221291
+          },
+          "phase_time_basis": "wall time accumulated across serial API calls",
+          "rows": 10000000,
+          "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+          "whole_passes": 1,
+          "workers": 12
+        },
+        "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 14.400222s = 694434 VIN/s (12 core(s))\n"
+      }
+    ]
+  }
+}

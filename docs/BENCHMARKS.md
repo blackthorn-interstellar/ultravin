@@ -1,5 +1,31 @@
 # ultravin benchmarks
 
+The README uses the [ten-million-unique-VIN multicore benchmark](MULTICORE_OPTIMIZATION_2026_09_14.md):
+**400,843 VIN/s with automatic four-worker batching** and **105,372 VIN/s with
+automatic one-worker batching**, measured September 14 on an Apple M2 Max.
+Both are medians of two fresh-process trials using complete unique passes;
+the fastest four-worker pass takes 24.74 seconds. Eight workers reach **656,900
+VIN/s**, twelve **630,092 VIN/s**. The historical sessions below retain their
+original inputs and hardware.
+
+The [September 13 consolidated report](PERFORMANCE_2026_09_13.md) measures the
+then-current Rust, Python dictionary, direct JSON, and Parquet output paths together,
+including startup and peak memory. Reproduce it with
+`uv run --frozen python -m scripts.bench.end_to_end`.
+The [batch-scaling report](PERFORMANCE_SCALING_2026_09_13.md) sweeps 100 through
+50,000 rows and 1 through 12 workers, including the CLI JSONL path. It supports
+the former fixed 1,000-row JSONL default and recommends 1,000 rows with four workers to
+reduce process memory; direct JSON and Parquet can use 10,000
+rows when throughput matters more than memory. Reproduce the sweep with
+`uv run --frozen python -m scripts.bench.scaling`.
+The [adaptive sizing follow-up](ADAPTIVE_BATCHING_2026_09_13.md) measures the
+automatic 64 MiB Parquet and 8 MiB JSONL working-buffer targets over single
+200,000-row jobs, including the chosen batch sizes and exact child RSS.
+The [shipped predictor](BATCH_PREDICTOR.md) adds worker-count and single-core
+calibration, batch-size and memory heatmaps, and a separate validation of the
+current automatic defaults at 4, 8, and 12 workers.
+The comparison tables below preserve their dated measurement sessions.
+
 ## Throughput (random corpus)
 
 Measured September 9, 2026: the Rust engine decodes **84,822 VIN/s on one core** and **195,203 VIN/s in

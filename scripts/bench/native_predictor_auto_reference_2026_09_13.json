@@ -1,0 +1,178 @@
+{
+  "schema_version": 1,
+  "measured_at_utc": "2026-09-14T05:29:06+00:00",
+  "configuration": {
+    "workers": 1,
+    "rounds": 3,
+    "seconds": 3.0,
+    "now": "2026-09-01T00:00:00+00:00",
+    "calibration_overhead_included": true
+  },
+  "inputs": {
+    "corpus_rows": 5000,
+    "corpus_sha256": "b45ad4472c202ee176f86e8bc3c39609c76b6258df963ea04e08439aa3a1eb09"
+  },
+  "executables": {
+    "binary": "/Volumes/fast-4tb/projects/ultravin/target/bench/native-predictor-final-throughput",
+    "binary_sha256": "687096ee8a05069311a2d841eea0d23cb0ebec32a3c2c0a1e27b4606f5735729",
+    "source": "crates/ultravin/examples/throughput.rs",
+    "source_sha256": "0c37bed66bc3cc225238314f7c3b462ad42205e025458439004ea6f80b4ec97e",
+    "runner": "scripts/bench/native_predictor.py",
+    "runner_sha256": "8b9fab42fd26ffa76e669b00159dc5d74a0f2adfa102d9cecc4b17d109d12baf"
+  },
+  "samples": [
+    {
+      "mode": "auto",
+      "workers": 1,
+      "reported_workers": 1,
+      "trial": 1,
+      "rows": 345000,
+      "seconds": 3.0,
+      "rows_per_second": 113486.0,
+      "process_wall_seconds": 6.784075541014317,
+      "peak_rss_bytes": 157532160,
+      "metadata": {
+        "actual_rows_per_second": 113485.75327665597,
+        "batch_size": "auto",
+        "benchmark": "batch",
+        "elapsed_seconds": 3.040029167,
+        "format": "full",
+        "memory_bytes": 536870912,
+        "predictor": {
+          "batch_size": 256,
+          "estimated_peak_rows_per_second": 97737.67909989793,
+          "estimated_peak_rss_bytes": 146313954,
+          "estimated_rows_per_second": 97737.67909989793,
+          "estimated_working_bytes": 4900832,
+          "memory_limited": false,
+          "model_version": "ultravin-batch-v1",
+          "single_core_rows_per_second": 122490.44120004267,
+          "target_fraction": 0.99,
+          "workers": 1
+        },
+        "rows": 345000,
+        "selected_size_batches": {
+          "1024": 6,
+          "136": 58,
+          "256": 1024,
+          "392": 10,
+          "512": 125,
+          "904": 1
+        },
+        "selected_size_rows": {
+          "1024": 6144,
+          "136": 7888,
+          "256": 262144,
+          "392": 3920,
+          "512": 64000,
+          "904": 904
+        },
+        "workers": 1
+      }
+    },
+    {
+      "mode": "auto",
+      "workers": 1,
+      "reported_workers": 1,
+      "trial": 2,
+      "rows": 335000,
+      "seconds": 3.0,
+      "rows_per_second": 110513.0,
+      "process_wall_seconds": 3.51601462502731,
+      "peak_rss_bytes": 157433856,
+      "metadata": {
+        "actual_rows_per_second": 110512.6657824004,
+        "batch_size": "auto",
+        "benchmark": "batch",
+        "elapsed_seconds": 3.03132675,
+        "format": "full",
+        "memory_bytes": 536870912,
+        "predictor": {
+          "batch_size": 256,
+          "estimated_peak_rows_per_second": 100414.2765510353,
+          "estimated_peak_rss_bytes": 146313954,
+          "estimated_rows_per_second": 100414.2765510353,
+          "estimated_working_bytes": 4900832,
+          "memory_limited": false,
+          "model_version": "ultravin-batch-v1",
+          "single_core_rows_per_second": 125844.90598500676,
+          "target_fraction": 0.99,
+          "workers": 1
+        },
+        "rows": 335000,
+        "selected_size_batches": {
+          "1024": 15,
+          "136": 51,
+          "256": 885,
+          "392": 13,
+          "512": 154,
+          "648": 2,
+          "904": 1
+        },
+        "selected_size_rows": {
+          "1024": 15360,
+          "136": 6936,
+          "256": 226560,
+          "392": 5096,
+          "512": 78848,
+          "648": 1296,
+          "904": 904
+        },
+        "workers": 1
+      }
+    },
+    {
+      "mode": "auto",
+      "workers": 1,
+      "reported_workers": 1,
+      "trial": 3,
+      "rows": 340000,
+      "seconds": 3.0,
+      "rows_per_second": 112070.0,
+      "process_wall_seconds": 3.5212232079938985,
+      "peak_rss_bytes": 157696000,
+      "metadata": {
+        "actual_rows_per_second": 112069.82388286837,
+        "batch_size": "auto",
+        "benchmark": "batch",
+        "elapsed_seconds": 3.033822917,
+        "format": "full",
+        "memory_bytes": 536870912,
+        "predictor": {
+          "batch_size": 256,
+          "estimated_peak_rows_per_second": 100968.49269429424,
+          "estimated_peak_rss_bytes": 146313954,
+          "estimated_rows_per_second": 100968.49269429424,
+          "estimated_working_bytes": 4900832,
+          "memory_limited": false,
+          "model_version": "ultravin-batch-v1",
+          "single_core_rows_per_second": 126539.4813067574,
+          "target_fraction": 0.99,
+          "workers": 1
+        },
+        "rows": 340000,
+        "selected_size_batches": {
+          "1024": 12,
+          "136": 53,
+          "256": 918,
+          "392": 13,
+          "512": 154,
+          "648": 1,
+          "904": 1
+        },
+        "selected_size_rows": {
+          "1024": 12288,
+          "136": 7208,
+          "256": 235008,
+          "392": 5096,
+          "512": 78848,
+          "648": 648,
+          "904": 904
+        },
+        "workers": 1
+      }
+    }
+  ],
+  "median_single_core_rows_per_second": 125844.90598500676,
+  "median_measured_bytes_per_row": 9571.9375
+}

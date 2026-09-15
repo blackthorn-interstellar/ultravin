@@ -1,0 +1,152 @@
+--- a/crates/ultravin/src/lib.rs
++++ b/crates/ultravin/src/lib.rs
+@@ -662,23 +662,46 @@
+ /// A decode's cost is dominated by walking that WMI's pattern keys, which are
+ /// scattered through the 80 MB archive — decoding a WMI-sorted corpus measured
+ /// ~11% faster than the same VINs shuffled, on identical work. Sorting 3-byte
+-/// prefixes costs microseconds against that. Output order is restored by
+-/// [`batch`]; only the visiting order changes, and a decode depends on nothing
+-/// but its own VIN, so results are unaffected.
++/// prefixes costs microseconds against that. Output order is restored before
++/// return; only the visiting order changes, and a decode depends on nothing but
++/// its own VIN, so results are unaffected.
+ fn locality_order(inputs: &[String]) -> Vec<u32> {
+     use rayon::prelude::*;
+ 
+     let mut order: Vec<u32> = (0..inputs.len() as u32).collect();
+     // The WMI is the first three characters; the next five pick the schema's
+     // pattern keys, so sorting on the descriptor prefix clusters both.
+-    order.par_sort_unstable_by_key(|&i| {
+-        let b = inputs[i as usize].as_bytes();
+-        let mut k = [0u8; 8];
+-        let n = b.len().min(8);
+-        k[..n].copy_from_slice(&b[..n]);
+-        u64::from_be_bytes(k)
+-    });
++    order.par_sort_unstable_by_key(|&i| locality_key(&inputs[i as usize]));
+     order
++}
++
++fn locality_key(input: &str) -> u64 {
++    let bytes = input.as_bytes();
++    let mut key = [0u8; 8];
++    let len = bytes.len().min(8);
++    key[..len].copy_from_slice(&bytes[..len]);
++    u64::from_be_bytes(key)
++}
++
++/// Run work in locality order while writing each value directly to its final
++/// input-order slot. The sorted work list contains disjoint safe references and
++/// never owns a result. On panic, initialized `Option`s drop normally and empty
++/// slots do nothing; successful extraction performs only shallow moves.
++fn collect_in_input_order<T: Send>(
++    inputs: &[String],
++    decode: impl Fn(usize) -> T + Sync,
++) -> Vec<T> {
++    use rayon::prelude::*;
++
++    let mut slots: Vec<Option<T>> = (0..inputs.len()).map(|_| None).collect();
++    let mut work: Vec<_> = slots.iter_mut().enumerate().collect();
++    work.par_sort_unstable_by_key(|(index, _)| locality_key(&inputs[*index]));
++    work.into_par_iter()
++        .for_each(|(index, slot)| *slot = Some(decode(index)));
++    slots
++        .into_iter()
++        .map(|slot| slot.expect("every batch output slot was initialized"))
++        .collect()
+ }
+ 
+ /// Shared body of the batch paths: decode every input in parallel over the shared
+@@ -699,30 +722,17 @@
+     now_micros: i64,
+     shape: impl Fn(RawResult<'a>) -> T + Sync,
+ ) -> Vec<T> {
+-    use rayon::prelude::*;
+     let current_year = current_year_at(now_micros);
+     install_batch_work(|| {
+-        let mut order = locality_order(inputs);
+-        let mut decoded: Vec<T> = Vec::new();
+-        order
+-            .par_iter()
+-            .map(|&i| {
+-                shape(decode_items(
+-                    db,
+-                    &inputs[i as usize],
+-                    now_micros,
+-                    current_year,
+-                    year_at(years, i as usize),
+-                ))
+-            })
+-            .collect_into_vec(&mut decoded);
+-        // Back to input order in place. `order[position]` is the destination of
+-        // the result at that position, so swapping the permutation and result
+-        // vectors together fixes at least one position per iteration. This
+-        // avoids retaining a second `Vec<Option<T>>` and allocating a third
+-        // result vector while the decoded values are live.
+-        restore_input_order(&mut order, &mut decoded);
+-        decoded
++        collect_in_input_order(inputs, |i| {
++            shape(decode_items(
++                db,
++                &inputs[i],
++                now_micros,
++                current_year,
++                year_at(years, i),
++            ))
++        })
+     })
+ }
+ 
+@@ -2206,6 +2216,52 @@
+     }
+ 
+     #[test]
++    fn direct_output_slots_preserve_order_and_drop_initialized_values_on_panic() {
++        use std::sync::atomic::{AtomicUsize, Ordering};
++        use std::sync::Arc;
++
++        let inputs: Vec<String> = ["ZZZ", "AAA", "MMM", "BBB"]
++            .into_iter()
++            .cycle()
++            .take(64)
++            .map(str::to_owned)
++            .collect();
++        let output = collect_in_input_order(&inputs, |index| (index, inputs[index].clone()));
++        assert!(output
++            .iter()
++            .enumerate()
++            .all(|(index, value)| value.0 == index && value.1 == inputs[index]));
++
++        struct Tracked(Arc<AtomicUsize>);
++        impl Drop for Tracked {
++            fn drop(&mut self) {
++                self.0.fetch_add(1, Ordering::Relaxed);
++            }
++        }
++
++        let created = Arc::new(AtomicUsize::new(0));
++        let dropped = Arc::new(AtomicUsize::new(0));
++        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe({
++            let created = Arc::clone(&created);
++            let dropped = Arc::clone(&dropped);
++            move || {
++                collect_in_input_order(&inputs, |index| {
++                    if index == 17 {
++                        panic!("decode failed");
++                    }
++                    created.fetch_add(1, Ordering::Relaxed);
++                    Tracked(Arc::clone(&dropped))
++                });
++            }
++        }));
++        assert!(result.is_err());
++        assert_eq!(
++            dropped.load(Ordering::Relaxed),
++            created.load(Ordering::Relaxed)
++        );
++    }
++
++    #[test]
+     fn clock_year_tracks_calendar_boundaries() {
+         for (micros, year) in [
+             (1_767_225_600_000_000, 2026), // Jan 1

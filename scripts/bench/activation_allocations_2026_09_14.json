@@ -1,0 +1,171 @@
+{
+  "corpus_sha256": "de80fb8727de3d89a7885929645953eed7b51a67c1dc988d309bbaa0ab4ec5f3",
+  "rows": 1000000,
+  "baseline": {
+    "command": [
+      "target/release/examples/allocation_probe",
+      "target/bench/multicore-corpus.txt",
+      "1000000"
+    ],
+    "binary_sha256": "29d174b66bdb3a2c325c75df7fa40bf0ee02803df7486a5bd71c4c6735230e01",
+    "corpus_sha256": "de80fb8727de3d89a7885929645953eed7b51a67c1dc988d309bbaa0ab4ec5f3",
+    "scope": "One million unique VINs, warmed sequential full results; TLS allocator counts exclude batch containers and pool bookkeeping.",
+    "raw": {
+      "allocated_bytes": 31744988541,
+      "allocations": 38170487,
+      "frees": 38173171,
+      "kind": "ultravin_allocation_probe",
+      "now_micros": 1788220800000000,
+      "realloc_old_size_histogram": [
+        {
+          "count": 4134,
+          "old_size_power2_ceiling": 1
+        },
+        {
+          "count": 31557,
+          "old_size_power2_ceiling": 2
+        },
+        {
+          "count": 808582,
+          "old_size_power2_ceiling": 4
+        },
+        {
+          "count": 2003515,
+          "old_size_power2_ceiling": 8
+        },
+        {
+          "count": 1374183,
+          "old_size_power2_ceiling": 16
+        },
+        {
+          "count": 840187,
+          "old_size_power2_ceiling": 32
+        },
+        {
+          "count": 1180696,
+          "old_size_power2_ceiling": 64
+        },
+        {
+          "count": 44813,
+          "old_size_power2_ceiling": 128
+        },
+        {
+          "count": 35338,
+          "old_size_power2_ceiling": 256
+        },
+        {
+          "count": 2040837,
+          "old_size_power2_ceiling": 512
+        },
+        {
+          "count": 19005,
+          "old_size_power2_ceiling": 1024
+        },
+        {
+          "count": 215,
+          "old_size_power2_ceiling": 2048
+        },
+        {
+          "count": 5,
+          "old_size_power2_ceiling": 4096
+        },
+        {
+          "count": 30,
+          "old_size_power2_ceiling": 16384
+        }
+      ],
+      "reallocations": 8383097,
+      "rows": 1000000
+    },
+    "per_vin": {
+      "allocations": 38.170487,
+      "reallocations": 8.383097,
+      "frees": 38.173171,
+      "allocated_bytes": 31744.988541
+    }
+  },
+  "candidate": {
+    "raw": {
+      "allocated_bytes": 31722823473,
+      "allocations": 36776948,
+      "frees": 36779632,
+      "kind": "ultravin_allocation_probe",
+      "now_micros": 1788220800000000,
+      "realloc_old_size_histogram": [
+        {
+          "count": 4134,
+          "old_size_power2_ceiling": 1
+        },
+        {
+          "count": 31557,
+          "old_size_power2_ceiling": 2
+        },
+        {
+          "count": 808582,
+          "old_size_power2_ceiling": 4
+        },
+        {
+          "count": 1921545,
+          "old_size_power2_ceiling": 8
+        },
+        {
+          "count": 1374183,
+          "old_size_power2_ceiling": 16
+        },
+        {
+          "count": 840187,
+          "old_size_power2_ceiling": 32
+        },
+        {
+          "count": 1180696,
+          "old_size_power2_ceiling": 64
+        },
+        {
+          "count": 44813,
+          "old_size_power2_ceiling": 128
+        },
+        {
+          "count": 35338,
+          "old_size_power2_ceiling": 256
+        },
+        {
+          "count": 2040837,
+          "old_size_power2_ceiling": 512
+        },
+        {
+          "count": 19005,
+          "old_size_power2_ceiling": 1024
+        },
+        {
+          "count": 215,
+          "old_size_power2_ceiling": 2048
+        },
+        {
+          "count": 5,
+          "old_size_power2_ceiling": 4096
+        },
+        {
+          "count": 30,
+          "old_size_power2_ceiling": 16384
+        }
+      ],
+      "reallocations": 8301127,
+      "rows": 1000000
+    },
+    "binary_sha256": "a359046740d2b0db04bd6b0a7192d974af13f6d08ec504a2d6b091e3edc207cf"
+  },
+  "per_vin": {
+    "allocations": {
+      "before": 38.170487,
+      "after": 36.776948
+    },
+    "reallocations": {
+      "before": 8.383097,
+      "after": 8.301127
+    },
+    "allocated_bytes": {
+      "before": 31744.988541,
+      "after": 31722.823473
+    }
+  }
+}

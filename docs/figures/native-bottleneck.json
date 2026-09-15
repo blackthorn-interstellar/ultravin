@@ -1,0 +1,96 @@
+{
+  "kind": "derived visualization of saved benchmark artifacts",
+  "date": "2026-09-14",
+  "phase_scope": "post-placement fixed B=12000; decode/result includes sorting, construction, restoration, and waits; cleanup is synchronous; both phases use the decoder pool",
+  "pipeline_scope": "pre-placement engine; n=2 whole-corpus trials; bounded pipeline and sequential controls; 24000 maximum live-row budget",
+  "fixed_batch_scope": "pre-placement B=16384; n=2 unique-prefix cells; process CPU time is not homogeneous core capacity",
+  "sources": {
+    "scripts/bench/direct_placement_2026_09_14.json": "f5af18330405e23d7a92d4cf7dc81098f0b7342b8e0b007e87fd57a216322e9e",
+    "scripts/bench/bounded_pipeline_2026_09_14.json": "a32a0ffe0721065985357810f4084171b4fcaf8334bfd4d13f79ee98a5d150f7",
+    "scripts/bench/native_selection_8w_2026_09_14.json": "d18eab7809c6ffd2888477db98c80949a17103d761e6c8eba57b1419917b46cb",
+    "scripts/bench/native_selection_12w_2026_09_14.json": "ac8f290d0fc37db71bebfa1746e779ecd9be7a71619f35f1829a50f645267318"
+  },
+  "phases": {
+    "8": {
+      "decode_result_percent": 85.62756452450833,
+      "cleanup_percent": 14.37243547549166,
+      "median_rows_per_second": 634813.6229578586,
+      "placement_gain_percent": 2.43173869274651
+    },
+    "12": {
+      "decode_result_percent": 84.1275062042591,
+      "cleanup_percent": 15.872493795740887,
+      "median_rows_per_second": 623404.4443953328,
+      "placement_gain_percent": 0.971700383536378
+    }
+  },
+  "pipeline": {
+    "8": {
+      "sequential_budget": {
+        "median_rows_per_second": 616697.4521393974,
+        "range_rows_per_second": [
+          599941.6286792377,
+          633453.2755995572
+        ],
+        "median_peak_rss_bytes": 1498390528.0
+      },
+      "sequential_batch": {
+        "median_rows_per_second": 584997.9168367744,
+        "range_rows_per_second": [
+          568799.0176329046,
+          601196.8160406444
+        ],
+        "median_peak_rss_bytes": 1203511296.0
+      },
+      "pipeline": {
+        "median_rows_per_second": 632518.003818908,
+        "range_rows_per_second": [
+          621151.4089557999,
+          643884.5986820161
+        ],
+        "median_peak_rss_bytes": 1418911744.0
+      }
+    },
+    "12": {
+      "sequential_budget": {
+        "median_rows_per_second": 635341.3167677885,
+        "range_rows_per_second": [
+          628126.9221682933,
+          642555.7113672836
+        ],
+        "median_peak_rss_bytes": 1731420160.0
+      },
+      "sequential_batch": {
+        "median_rows_per_second": 592222.6188394106,
+        "range_rows_per_second": [
+          573552.474489362,
+          610892.7631894592
+        ],
+        "median_peak_rss_bytes": 1373888512.0
+      },
+      "pipeline": {
+        "median_rows_per_second": 597298.4724878396,
+        "range_rows_per_second": [
+          568953.689236648,
+          625643.2557390314
+        ],
+        "median_peak_rss_bytes": 1390985216.0
+      }
+    }
+  },
+  "fixed_batch": {
+    "8": {
+      "median_rows_per_second": 658690.543923506,
+      "median_process_cpu_microseconds_per_vin": 10.75180938433224
+    },
+    "12": {
+      "median_rows_per_second": 660347.7972643992,
+      "median_process_cpu_microseconds_per_vin": 12.568353942221801
+    }
+  },
+  "unresolved": [
+    "cache and memory-system contention",
+    "allocator and full-result ownership pressure",
+    "heterogeneous-core and operating-system scheduling"
+  ]
+}

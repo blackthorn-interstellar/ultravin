@@ -1,0 +1,209 @@
+{
+  "schema_version": 1,
+  "source": "scripts/bench/native_predictor_2026_09_13.json",
+  "scope": "native Rust full results over the exact committed 5,000-row corpus",
+  "calibration_reference": {
+    "source": "scripts/bench/native_predictor_auto_reference_2026_09_13.json",
+    "single_core_rows_per_second": 125844.90598500676,
+    "measured_bytes_per_row": 9571.9375
+  },
+  "throughput": {
+    "formula": "us_per_row = a + b/C + h0/B + h1*(C-1)/B + d0*B + d1*(C-1)*B",
+    "coefficients": {
+      "a": 1.323291035836964,
+      "b": 8.669023216126883,
+      "h0": 0.0,
+      "h1": 94.67501236299766,
+      "d0": 0.00013180712580180103,
+      "d1": 1.8428975878545342e-05
+    },
+    "fit": {
+      "mape_percent": 5.116721979421114,
+      "rmse": 15350.012178497804,
+      "r_squared": 0.946615392606311
+    },
+    "predictions": [
+      {
+        "batch_size": 256,
+        "workers": 1,
+        "actual_rows_per_second": 102763.0,
+        "predicted_rows_per_second": 99740.10843454278
+      },
+      {
+        "batch_size": 256,
+        "workers": 2,
+        "actual_rows_per_second": 180941.0,
+        "predicted_rows_per_second": 164850.90665728878
+      },
+      {
+        "batch_size": 256,
+        "workers": 4,
+        "actual_rows_per_second": 238184.0,
+        "predicted_rows_per_second": 215150.20076235934
+      },
+      {
+        "batch_size": 256,
+        "workers": 8,
+        "actual_rows_per_second": 216178.0,
+        "predicted_rows_per_second": 197532.5749317358
+      },
+      {
+        "batch_size": 256,
+        "workers": 12,
+        "actual_rows_per_second": 154332.0,
+        "predicted_rows_per_second": 161305.5374670482
+      },
+      {
+        "batch_size": 512,
+        "workers": 1,
+        "actual_rows_per_second": 90960.0,
+        "predicted_rows_per_second": 99405.55971943433
+      },
+      {
+        "batch_size": 512,
+        "workers": 2,
+        "actual_rows_per_second": 168083.0,
+        "predicted_rows_per_second": 168929.31544871617
+      },
+      {
+        "batch_size": 512,
+        "workers": 4,
+        "actual_rows_per_second": 236208.0,
+        "predicted_rows_per_second": 241483.16667112542
+      },
+      {
+        "batch_size": 512,
+        "workers": 8,
+        "actual_rows_per_second": 273523.0,
+        "predicted_rows_per_second": 260767.1696280603
+      },
+      {
+        "batch_size": 512,
+        "workers": 12,
+        "actual_rows_per_second": 233953.0,
+        "predicted_rows_per_second": 235237.64143567617
+      },
+      {
+        "batch_size": 1000,
+        "workers": 1,
+        "actual_rows_per_second": 101981.0,
+        "predicted_rows_per_second": 98774.00346030777
+      },
+      {
+        "batch_size": 1000,
+        "workers": 2,
+        "actual_rows_per_second": 178634.0,
+        "predicted_rows_per_second": 169413.6021171992
+      },
+      {
+        "batch_size": 1000,
+        "workers": 4,
+        "actual_rows_per_second": 241274.0,
+        "predicted_rows_per_second": 252419.06247765457
+      },
+      {
+        "batch_size": 1000,
+        "workers": 8,
+        "actual_rows_per_second": 303894.0,
+        "predicted_rows_per_second": 300259.3657204725
+      },
+      {
+        "batch_size": 1000,
+        "workers": 12,
+        "actual_rows_per_second": 252344.0,
+        "predicted_rows_per_second": 292255.7515402376
+      },
+      {
+        "batch_size": 2000,
+        "workers": 1,
+        "actual_rows_per_second": 96733.0,
+        "predicted_rows_per_second": 97504.57987808295
+      },
+      {
+        "batch_size": 2000,
+        "workers": 2,
+        "actual_rows_per_second": 169917.0,
+        "predicted_rows_per_second": 166510.91365009098
+      },
+      {
+        "batch_size": 2000,
+        "workers": 4,
+        "actual_rows_per_second": 233593.0,
+        "predicted_rows_per_second": 249578.99360101236
+      },
+      {
+        "batch_size": 2000,
+        "workers": 8,
+        "actual_rows_per_second": 294931.0,
+        "predicted_rows_per_second": 306757.7447359737
+      },
+      {
+        "batch_size": 2000,
+        "workers": 12,
+        "actual_rows_per_second": 269004.0,
+        "predicted_rows_per_second": 309073.73165037954
+      },
+      {
+        "batch_size": 5000,
+        "workers": 1,
+        "actual_rows_per_second": 93301.0,
+        "predicted_rows_per_second": 93884.81377241774
+      },
+      {
+        "batch_size": 5000,
+        "workers": 2,
+        "actual_rows_per_second": 158474.0,
+        "predicted_rows_per_second": 155571.36477495247
+      },
+      {
+        "batch_size": 5000,
+        "workers": 4,
+        "actual_rows_per_second": 216180.0,
+        "predicted_rows_per_second": 223073.76346058978
+      },
+      {
+        "batch_size": 5000,
+        "workers": 8,
+        "actual_rows_per_second": 277987.0,
+        "predicted_rows_per_second": 260178.5937731668
+      },
+      {
+        "batch_size": 5000,
+        "workers": 12,
+        "actual_rows_per_second": 269476.0,
+        "predicted_rows_per_second": 254671.69978037415
+      }
+    ]
+  },
+  "memory": {
+    "power": {
+      "formula": "rss_mib = base + worker*(C-1) + row_power*B^p + worker_row_power*(C-1)*B^p",
+      "batch_exponent_p": 0.92,
+      "coefficients": {
+        "base": 135.5385137516956,
+        "worker": 6.01216786108954,
+        "row_power": 0.024332737379711533,
+        "worker_row_power": 0.002659007456529011
+      },
+      "fit": {
+        "mape_percent": 1.0824986227902436,
+        "rmse": 2.712938539828461,
+        "r_squared": 0.9967291366823043
+      }
+    },
+    "affine": {
+      "formula": "rss_mib = base + worker*(C-1) + row*B + worker_row*(C-1)*B",
+      "coefficients": {
+        "base": 137.09736738387264,
+        "worker": 6.183375742833395,
+        "row_power": 0.012068221908213267,
+        "worker_row_power": 0.001318287498110077
+      },
+      "fit": {
+        "mape_percent": 1.1579911096713618,
+        "rmse": 2.833697433264357,
+        "r_squared": 0.9964314692819114
+      }
+    }
+  }
+}

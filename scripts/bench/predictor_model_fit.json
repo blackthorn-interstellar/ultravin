@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "source": "scripts/bench/scaling_2026_09_13_screen.json",
+  "scope": "In-sample fit to one M2 Max fixed-size screening run; not cross-hardware validation.",
+  "observations_per_format": 16,
+  "measured_batch_sizes": [
+    100,
+    1000,
+    10000,
+    50000
+  ],
+  "measured_workers": [
+    1,
+    2,
+    4,
+    12
+  ],
+  "formats": {
+    "parquet": {
+      "throughput": {
+        "formula": "microseconds_per_row = a + b/C + h0/B + h1*(C-1)/B + d0*B + d1*(C-1)*B",
+        "coefficient_units": "B is rows, C is workers; time is microseconds per row",
+        "coefficients": {
+          "a": 3.2420272788286737,
+          "b": 7.137013037994201,
+          "h0": 848.4612027194423,
+          "h1": 46.97624194262245,
+          "d0": 0.0,
+          "d1": 0.0
+        },
+        "fitted_single_worker_asymptotic_rows_per_second": 96348.02153905784,
+        "fit": {
+          "mape_percent": 9.11195366059783,
+          "rmse": 21023.355113134465,
+          "r_squared": 0.9230962520277519
+        },
+        "leave_one_batch_size_out": {
+          "mape_percent": 13.655455238863254,
+          "rmse": 29073.722524573153,
+          "r_squared": 0.8529230089965605
+        },
+        "repeated_run_validation": {
+          "observations": 2,
+          "mape_percent": 16.140848101074496,
+          "rmse": 49403.36308035839,
+          "r_squared": 0.004510715151882394
+        }
+      },
+      "memory": {
+        "formula": "rss_mib = base + worker*(C-1) + row_power*B^p + worker_row_power*(C-1)*B^p",
+        "batch_exponent_p": 1.29,
+        "coefficients": {
+          "base": 214.58273823325658,
+          "worker": 3.547346274777661,
+          "row_power": 0.00020677144828065323,
+          "worker_row_power": 6.9836837447130485e-06
+        },
+        "fit": {
+          "mape_percent": 8.631348739886006,
+          "rmse": 25.01582750088453,
+          "r_squared": 0.9553092681845522
+        },
+        "affine_comparison": {
+          "formula": "rss_mib = base + worker*(C-1) + row*B + worker_row*(C-1)*B",
+          "coefficients": {
+            "base": 208.58200404811345,
+            "worker": 3.172851290860285,
+            "row_power": 0.004808882070538252,
+            "worker_row_power": 0.00017366798116641392
+          },
+          "fit": {
+            "mape_percent": 9.515447789496733,
+            "rmse": 26.526000659247497,
+            "r_squared": 0.949750554760193
+          }
+        }
+      }
+    },
+    "jsonl": {
+      "throughput": {
+        "formula": "microseconds_per_row = a + b/C + h0/B + h1*(C-1)/B + d0*B + d1*(C-1)*B",
+        "coefficient_units": "B is rows, C is workers; time is microseconds per row",
+        "coefficients": {
+          "a": 3.082958241307999,
+          "b": 9.005515695803847,
+          "h0": 73.43126429941779,
+          "h1": 32.93781261691194,
+          "d0": 0.0,
+          "d1": 2.923331329866718e-07
+        },
+        "fitted_single_worker_asymptotic_rows_per_second": 82723.42772150759,
+        "fit": {
+          "mape_percent": 6.404726370515636,
+          "rmse": 12651.07950796182,
+          "r_squared": 0.9439315350151807
+        },
+        "leave_one_batch_size_out": {
+          "mape_percent": 23.99110824119626,
+          "rmse": 47954.887434769174,
+          "r_squared": 0.1943818391008908
+        },
+        "repeated_run_validation": {
+          "observations": 3,
+          "mape_percent": 3.4904522428873315,
+          "rmse": 8554.117598236635,
+          "r_squared": 0.9373368778498536
+        }
+      },
+      "memory": {
+        "formula": "rss_mib = base + worker*(C-1) + row_power*B^p + worker_row_power*(C-1)*B^p",
+        "batch_exponent_p": 0.38,
+        "coefficients": {
+          "base": 2.3292943594378244,
+          "worker": 0.0,
+          "row_power": 23.09847102000497,
+          "worker_row_power": 0.9729271367563225
+        },
+        "fit": {
+          "mape_percent": 16.060735125656432,
+          "rmse": 106.42969960823622,
+          "r_squared": 0.9683566924567654
+        },
+        "affine_comparison": {
+          "formula": "rss_mib = base + worker*(C-1) + row*B + worker_row*(C-1)*B",
+          "coefficients": {
+            "base": 348.8406557577097,
+            "worker": 3.963003669530295,
+            "row_power": 0.021173989544459662,
+            "worker_row_power": 0.0013188788794750528
+          },
+          "fit": {
+            "mape_percent": 45.93641917370271,
+            "rmse": 221.6026040188695,
+            "r_squared": 0.8628152240657999
+          }
+        }
+      }
+    }
+  }
+}

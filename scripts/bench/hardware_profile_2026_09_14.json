@@ -1,0 +1,5278 @@
+{
+  "captured_at": "2026-09-15T00:48:45.667615+00:00",
+  "binary_sha256": "53b3b4cf829f142dee5f3f8bc67d14c7ef970224fe39b125c7148fab2b5895de",
+  "corpus_sha256": "de80fb8727de3d89a7885929645953eed7b51a67c1dc988d309bbaa0ab4ec5f3",
+  "method": "Ten 1-second process counter intervals after full corpus warmup; throughput is whole timed pass, not exactly the counter window.",
+  "runs": [
+    {
+      "label": "0-8w-12000",
+      "workers": 8,
+      "batch": 12000,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-placement-multicore_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "8",
+        "12000",
+        "managed"
+      ],
+      "pid": 75094,
+      "power_command": [
+        "sudo",
+        "-n",
+        "/usr/bin/powermetrics",
+        "--samplers",
+        "tasks,cpu_power,thermal",
+        "--show-process-ipc",
+        "--show-process-amp",
+        "--show-process-wait-times",
+        "-i",
+        "1000",
+        "-n",
+        "10",
+        "-f",
+        "plist",
+        "-o",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/hardware-0-8w-12000.plist"
+      ],
+      "power_stderr": "Second underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\n",
+      "samples": [
+        {
+          "timestamp": "2026-09-15T00:49:32",
+          "elapsed_ns": 1015909416,
+          "task": {
+            "pid": 75094,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10230413566468,
+            "interval_ns": 1016065791,
+            "cputime_ns": 1598277250,
+            "cputime_ms_per_s": 1573.01,
+            "cputime_sample_ms_per_s": 1573.25,
+            "cputime_userland_ratio": 0.95823,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 1598277250,
+            "qos_default_ms_per_s": 1573.01,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1340201875,
+            "ptime_ms_per_s": 1319.01,
+            "ptime_ratio": 0.838529,
+            "epswitches": 667,
+            "epswitches_per_s": 656.454,
+            "cpu_instructions": 10529300000.0,
+            "cpu_cycles": 4920930000.0,
+            "pcpu_instructions": 9792350000.0,
+            "pcpu_cycles": 4305250000.0
+          },
+          "all_tasks_cpu_ns": 27994010500,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 10475434878,
+          "host_active_cores": 12.0
+        },
+        {
+          "timestamp": "2026-09-15T00:49:33",
+          "elapsed_ns": 1016653250,
+          "task": {
+            "pid": 75094,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10230413571887,
+            "interval_ns": 1016428250,
+            "cputime_ns": 1850347958,
+            "cputime_ms_per_s": 1820.44,
+            "cputime_sample_ms_per_s": 1820.04,
+            "cputime_userland_ratio": 0.958871,
+            "intr_wakeups": 2,
+            "intr_wakeups_per_s": 1.96767,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 2,
+                "wakeups_per_s": 1.96767
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 1850347958,
+            "qos_default_ms_per_s": 1820.44,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1401505958,
+            "ptime_ms_per_s": 1378.85,
+            "ptime_ratio": 0.757428,
+            "epswitches": 817,
+            "epswitches_per_s": 803.795,
+            "cpu_instructions": 11743300000.0,
+            "cpu_cycles": 5570970000.0,
+            "pcpu_instructions": 10337600000.0,
+            "pcpu_cycles": 4500590000.0
+          },
+          "all_tasks_cpu_ns": 26621392291,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 9300124049,
+          "host_active_cores": 12.0
+        },
+        {
+          "timestamp": "2026-09-15T00:49:34",
+          "elapsed_ns": 1014490416,
+          "task": {
+            "pid": 75094,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10230413571514,
+            "interval_ns": 1014506375,
+            "cputime_ns": 1345844583,
+            "cputime_ms_per_s": 1326.6,
+            "cputime_sample_ms_per_s": 1326.62,
+            "cputime_userland_ratio": 0.957423,
+            "intr_wakeups": 2,
+            "intr_wakeups_per_s": 1.9714,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 2,
+                "wakeups_per_s": 1.9714
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 1345844583,
+            "qos_default_ms_per_s": 1326.6,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1032617041,
+            "ptime_ms_per_s": 1017.85,
+            "ptime_ratio": 0.767263,
+            "epswitches": 745,
+            "epswitches_per_s": 734.347,
+            "cpu_instructions": 8446340000.0,
+            "cpu_cycles": 4070680000.0,
+            "pcpu_instructions": 7561470000.0,
+            "pcpu_cycles": 3322270000.0
+          },
+          "all_tasks_cpu_ns": 12479863958,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 10655435456,
+          "host_active_cores": 12.0
+        },
+        {
+          "timestamp": "2026-09-15T00:49:35",
+          "elapsed_ns": 1015129791,
+          "task": {
+            "pid": 75094,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10230413571954,
+            "interval_ns": 1015111750,
+            "cputime_ns": 1454737375,
+            "cputime_ms_per_s": 1433.08,
+            "cputime_sample_ms_per_s": 1433.06,
+            "cputime_userland_ratio": 0.961674,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 1454752375,
+            "qos_default_ms_per_s": 1433.1,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1117588833,
+            "ptime_ms_per_s": 1100.95,
+            "ptime_ratio": 0.768241,
+            "epswitches": 652,
+            "epswitches_per_s": 642.294,
+            "cpu_instructions": 9135620000.0,
+            "cpu_cycles": 4398640000.0,
+            "pcpu_instructions": 8194020000.0,
+            "pcpu_cycles": 3593550000.0
+          },
+          "all_tasks_cpu_ns": 12876313125,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 10419048338,
+          "host_active_cores": 12.0
+        },
+        {
+          "timestamp": "2026-09-15T00:49:36",
+          "elapsed_ns": 1015196999,
+          "task": {
+            "pid": 75094,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10230413573273,
+            "interval_ns": 1015141458,
+            "cputime_ns": 1720015291,
+            "cputime_ms_per_s": 1694.36,
+            "cputime_sample_ms_per_s": 1694.27,
+            "cputime_userland_ratio": 0.958518,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 1720000291,
+            "qos_default_ms_per_s": 1694.35,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1332797291,
+            "ptime_ms_per_s": 1312.92,
+            "ptime_ratio": 0.774875,
+            "epswitches": 860,
+            "epswitches_per_s": 847.173,
+            "cpu_instructions": 11028800000.0,
+            "cpu_cycles": 5209930000.0,
+            "pcpu_instructions": 9976100000.0,
+            "pcpu_cycles": 4285320000.0
+          },
+          "all_tasks_cpu_ns": 42980629666,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 9826242718,
+          "host_active_cores": 12.0
+        },
+        {
+          "timestamp": "2026-09-15T00:49:37",
+          "elapsed_ns": 1014548416,
+          "task": {
+            "pid": 75094,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10230413570995,
+            "interval_ns": 1014642916,
+            "cputime_ns": 2024493625,
+            "cputime_ms_per_s": 1995.28,
+            "cputime_sample_ms_per_s": 1995.46,
+            "cputime_userland_ratio": 0.961114,
+            "intr_wakeups": 1,
+            "intr_wakeups_per_s": 0.985568,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 1,
+                "wakeups_per_s": 0.985568
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 2024493625,
+            "qos_default_ms_per_s": 1995.28,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1468791125,
+            "ptime_ms_per_s": 1447.59,
+            "ptime_ratio": 0.72551,
+            "epswitches": 788,
+            "epswitches_per_s": 776.628,
+            "cpu_instructions": 12738500000.0,
+            "cpu_cycles": 6052530000.0,
+            "pcpu_instructions": 11185300000.0,
+            "pcpu_cycles": 4724950000.0
+          },
+          "all_tasks_cpu_ns": 12354091291,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 9945887339,
+          "host_active_cores": 12.0
+        },
+        {
+          "timestamp": "2026-09-15T00:49:38",
+          "elapsed_ns": 1014755375,
+          "task": {
+            "pid": 75094,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10230413572138,
+            "interval_ns": 1014708375,
+            "cputime_ns": 1894547208,
+            "cputime_ms_per_s": 1867.09,
+            "cputime_sample_ms_per_s": 1867.0,
+            "cputime_userland_ratio": 0.96155,
+            "intr_wakeups": 4,
+            "intr_wakeups_per_s": 3.94202,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 4,
+                "wakeups_per_s": 3.94202
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 1894547208,
+            "qos_default_ms_per_s": 1867.09,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1277965708,
+            "ptime_ms_per_s": 1259.44,
+            "ptime_ratio": 0.674549,
+            "epswitches": 896,
+            "epswitches_per_s": 883.012,
+            "cpu_instructions": 11124800000.0,
+            "cpu_cycles": 5583750000.0,
+            "pcpu_instructions": 9330660000.0,
+            "pcpu_cycles": 4110820000.0
+          },
+          "all_tasks_cpu_ns": 26565132791,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 10022610512,
+          "host_active_cores": 12.0
+        },
+        {
+          "timestamp": "2026-09-15T00:49:39",
+          "elapsed_ns": 1014790875,
+          "task": {
+            "pid": 75094,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10230413573467,
+            "interval_ns": 1014736375,
+            "cputime_ns": 2031755208,
+            "cputime_ms_per_s": 2002.25,
+            "cputime_sample_ms_per_s": 2002.14,
+            "cputime_userland_ratio": 0.96195,
+            "intr_wakeups": 1,
+            "intr_wakeups_per_s": 0.985478,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 1,
+                "wakeups_per_s": 0.985478
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 2031755208,
+            "qos_default_ms_per_s": 2002.25,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1685839833,
+            "ptime_ms_per_s": 1661.36,
+            "ptime_ratio": 0.829746,
+            "epswitches": 894,
+            "epswitches_per_s": 881.017,
+            "cpu_instructions": 13709400000.0,
+            "cpu_cycles": 6249000000.0,
+            "pcpu_instructions": 12703500000.0,
+            "pcpu_cycles": 5422680000.0
+          },
+          "all_tasks_cpu_ns": 12305498333,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 10025791431,
+          "host_active_cores": 12.0
+        },
+        {
+          "timestamp": "2026-09-15T00:49:41",
+          "elapsed_ns": 1014584708,
+          "task": {
+            "pid": 75094,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10230413572417,
+            "interval_ns": 1014627708,
+            "cputime_ns": 1829385750,
+            "cputime_ms_per_s": 1803.01,
+            "cputime_sample_ms_per_s": 1803.09,
+            "cputime_userland_ratio": 0.959993,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 1829385750,
+            "qos_default_ms_per_s": 1803.01,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1478563041,
+            "ptime_ms_per_s": 1457.25,
+            "ptime_ratio": 0.808229,
+            "epswitches": 858,
+            "epswitches_per_s": 845.63,
+            "cpu_instructions": 11919300000.0,
+            "cpu_cycles": 5594570000.0,
+            "pcpu_instructions": 10856100000.0,
+            "pcpu_cycles": 4756430000.0
+          },
+          "all_tasks_cpu_ns": 49437543875,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264120000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 8064449742,
+          "host_active_cores": 11.99770406663
+        },
+        {
+          "timestamp": "2026-09-15T00:49:42",
+          "elapsed_ns": 1014000208,
+          "task": {
+            "pid": 75094,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10230413573637,
+            "interval_ns": 1013950625,
+            "cputime_ns": 2000113166,
+            "cputime_ms_per_s": 1972.59,
+            "cputime_sample_ms_per_s": 1972.5,
+            "cputime_userland_ratio": 0.963188,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 2000113166,
+            "qos_default_ms_per_s": 1972.59,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1524590250,
+            "ptime_ms_per_s": 1503.61,
+            "ptime_ratio": 0.762252,
+            "epswitches": 987,
+            "epswitches_per_s": 973.42,
+            "cpu_instructions": 12824500000.0,
+            "cpu_cycles": 6043490000.0,
+            "pcpu_instructions": 11518600000.0,
+            "pcpu_cycles": 4906690000.0
+          },
+          "all_tasks_cpu_ns": 12072500958,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2423910000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3265390000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3267850000.0,
+              "idle_ratio": 0.00521936
+            }
+          ],
+          "live_other_cpu_ns": 9811006001,
+          "host_active_cores": 11.859467469
+        }
+      ],
+      "native_json": {
+        "actual_rows_per_second": 311393.2459694787,
+        "benchmark": "multicore_probe",
+        "corpus_rows": 10000000,
+        "elapsed_seconds": 32.113734416,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 12000,
+        "local_rows": null,
+        "maximum_active_streaming_rows": null,
+        "mode": "managed",
+        "phase_seconds": {
+          "decode_and_local_sort": 25.140963995,
+          "drop_results": 6.972578659,
+          "whole_pass_wall": 32.113733958
+        },
+        "phase_time_basis": "wall time accumulated across serial API calls",
+        "rows": 10000000,
+        "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+        "whole_passes": 1,
+        "workers": 8
+      },
+      "native_stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 32.113734s = 311393 VIN/s (8 core(s))\n",
+      "raw_sha256": "e15ad150858e67632f6850bf9772b11d15f4ce286dfecd0deec564455c6374e8"
+    },
+    {
+      "label": "1-12w-12000",
+      "workers": 12,
+      "batch": 12000,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-placement-multicore_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "12",
+        "12000",
+        "managed"
+      ],
+      "pid": 76980,
+      "power_command": [
+        "sudo",
+        "-n",
+        "/usr/bin/powermetrics",
+        "--samplers",
+        "tasks,cpu_power,thermal",
+        "--show-process-ipc",
+        "--show-process-amp",
+        "--show-process-wait-times",
+        "-i",
+        "1000",
+        "-n",
+        "10",
+        "-f",
+        "plist",
+        "-o",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/hardware-1-12w-12000.plist"
+      ],
+      "power_stderr": "Second underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\n",
+      "samples": [
+        {
+          "timestamp": "2026-09-15T00:50:40",
+          "elapsed_ns": 1017728125,
+          "task": {
+            "pid": 76980,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10232252750279,
+            "interval_ns": 1017467833,
+            "cputime_ns": 2616715708,
+            "cputime_ms_per_s": 2571.79,
+            "cputime_sample_ms_per_s": 2571.13,
+            "cputime_userland_ratio": 0.943713,
+            "intr_wakeups": 2,
+            "intr_wakeups_per_s": 1.96566,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 2,
+                "wakeups_per_s": 1.96566
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 2616739250,
+            "qos_default_ms_per_s": 2571.82,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1915064500,
+            "ptime_ms_per_s": 1882.19,
+            "ptime_ratio": 0.731858,
+            "epswitches": 1413,
+            "epswitches_per_s": 1388.74,
+            "cpu_instructions": 16127900000.0,
+            "cpu_cycles": 7815110000.0,
+            "pcpu_instructions": 14103600000.0,
+            "pcpu_cycles": 6143430000.0
+          },
+          "all_tasks_cpu_ns": 19430169333,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264130000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 8768366966,
+          "host_active_cores": 11.9963339528
+        },
+        {
+          "timestamp": "2026-09-15T00:50:41",
+          "elapsed_ns": 1017300541,
+          "task": {
+            "pid": 76980,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10232252750774,
+            "interval_ns": 1017282041,
+            "cputime_ns": 2611313625,
+            "cputime_ms_per_s": 2566.95,
+            "cputime_sample_ms_per_s": 2566.9,
+            "cputime_userland_ratio": 0.949322,
+            "intr_wakeups": 2,
+            "intr_wakeups_per_s": 1.96602,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 2,
+                "wakeups_per_s": 1.96602
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 2611290083,
+            "qos_default_ms_per_s": 2566.93,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1903818916,
+            "ptime_ms_per_s": 1871.48,
+            "ptime_ratio": 0.729066,
+            "epswitches": 1576,
+            "epswitches_per_s": 1549.23,
+            "cpu_instructions": 16258000000.0,
+            "cpu_cycles": 7794260000.0,
+            "pcpu_instructions": 14175800000.0,
+            "pcpu_cycles": 6108500000.0
+          },
+          "all_tasks_cpu_ns": 12466648208,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 8928674127,
+          "host_active_cores": 11.9998461839
+        },
+        {
+          "timestamp": "2026-09-15T00:50:42",
+          "elapsed_ns": 1015416291,
+          "task": {
+            "pid": 76980,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10232252750987,
+            "interval_ns": 1015407500,
+            "cputime_ns": 1910288500,
+            "cputime_ms_per_s": 1881.3,
+            "cputime_sample_ms_per_s": 1881.29,
+            "cputime_userland_ratio": 0.944612,
+            "intr_wakeups": 2,
+            "intr_wakeups_per_s": 1.96965,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 2,
+                "wakeups_per_s": 1.96965
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 1910288500,
+            "qos_default_ms_per_s": 1881.3,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1411416583,
+            "ptime_ms_per_s": 1390.0,
+            "ptime_ratio": 0.73885,
+            "epswitches": 1065,
+            "epswitches_per_s": 1048.84,
+            "cpu_instructions": 11856000000.0,
+            "cpu_cycles": 5727880000.0,
+            "pcpu_instructions": 10547600000.0,
+            "pcpu_cycles": 4536940000.0
+          },
+          "all_tasks_cpu_ns": 14327039250,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 9056760261,
+          "host_active_cores": 12.0
+        },
+        {
+          "timestamp": "2026-09-15T00:50:43",
+          "elapsed_ns": 1015504875,
+          "task": {
+            "pid": 76980,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10232252754223,
+            "interval_ns": 1015370416,
+            "cputime_ns": 2408406041,
+            "cputime_ms_per_s": 2371.95,
+            "cputime_sample_ms_per_s": 2371.63,
+            "cputime_userland_ratio": 0.947945,
+            "intr_wakeups": 12,
+            "intr_wakeups_per_s": 11.8183,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 12,
+                "wakeups_per_s": 11.8183
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 2408406041,
+            "qos_default_ms_per_s": 2371.95,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1764694375,
+            "ptime_ms_per_s": 1737.98,
+            "ptime_ratio": 0.732723,
+            "epswitches": 1270,
+            "epswitches_per_s": 1250.78,
+            "cpu_instructions": 15058000000.0,
+            "cpu_cycles": 7209370000.0,
+            "pcpu_instructions": 13261900000.0,
+            "pcpu_cycles": 5672650000.0
+          },
+          "all_tasks_cpu_ns": 12535547500,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264120000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 8802306796,
+          "host_active_cores": 11.9963244435
+        },
+        {
+          "timestamp": "2026-09-15T00:50:44",
+          "elapsed_ns": 1014784291,
+          "task": {
+            "pid": 76980,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10232252752784,
+            "interval_ns": 1014843625,
+            "cputime_ns": 3208077250,
+            "cputime_ms_per_s": 3161.15,
+            "cputime_sample_ms_per_s": 3161.34,
+            "cputime_userland_ratio": 0.945756,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 3208077250,
+            "qos_default_ms_per_s": 3161.15,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 2500670791,
+            "ptime_ms_per_s": 2464.09,
+            "ptime_ratio": 0.779492,
+            "epswitches": 2058,
+            "epswitches_per_s": 2027.9,
+            "cpu_instructions": 20403800000.0,
+            "cpu_cycles": 9732470000.0,
+            "pcpu_instructions": 18394700000.0,
+            "pcpu_cycles": 8042810000.0
+          },
+          "all_tasks_cpu_ns": 12290108583,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264280000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 8406561961,
+          "host_active_cores": 11.993279017
+        },
+        {
+          "timestamp": "2026-09-15T00:50:45",
+          "elapsed_ns": 1015045541,
+          "task": {
+            "pid": 76980,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10232252752553,
+            "interval_ns": 1015056333,
+            "cputime_ns": 2029379000,
+            "cputime_ms_per_s": 1999.28,
+            "cputime_sample_ms_per_s": 1999.3,
+            "cputime_userland_ratio": 0.9447,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 2029379000,
+            "qos_default_ms_per_s": 1999.28,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1415100250,
+            "ptime_ms_per_s": 1394.11,
+            "ptime_ratio": 0.697307,
+            "epswitches": 1274,
+            "epswitches_per_s": 1255.1,
+            "cpu_instructions": 12076900000.0,
+            "cpu_cycles": 6017310000.0,
+            "pcpu_instructions": 10414400000.0,
+            "pcpu_cycles": 4550380000.0
+          },
+          "all_tasks_cpu_ns": 24445829291,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 8558697625,
+          "host_active_cores": 11.99993579767
+        },
+        {
+          "timestamp": "2026-09-15T00:50:46",
+          "elapsed_ns": 1015266583,
+          "task": {
+            "pid": 76980,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10232252750618,
+            "interval_ns": 1015345541,
+            "cputime_ns": 3756606125,
+            "cputime_ms_per_s": 3699.83,
+            "cputime_sample_ms_per_s": 3700.12,
+            "cputime_userland_ratio": 0.941261,
+            "intr_wakeups": 3,
+            "intr_wakeups_per_s": 2.95466,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 3,
+                "wakeups_per_s": 2.95466
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 3756606125,
+            "qos_default_ms_per_s": 3699.83,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 2548657583,
+            "ptime_ms_per_s": 2510.14,
+            "ptime_ratio": 0.678447,
+            "epswitches": 2359,
+            "epswitches_per_s": 2323.35,
+            "cpu_instructions": 22264400000.0,
+            "cpu_cycles": 11076700000.0,
+            "pcpu_instructions": 18955300000.0,
+            "pcpu_cycles": 8192930000.0
+          },
+          "all_tasks_cpu_ns": 26847321166,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2420800000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3265750000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3265240000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 7051355134,
+          "host_active_cores": 11.860228559
+        },
+        {
+          "timestamp": "2026-09-15T00:50:48",
+          "elapsed_ns": 1014965750,
+          "task": {
+            "pid": 76980,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10232252751731,
+            "interval_ns": 1014918875,
+            "cputime_ns": 5245883083,
+            "cputime_ms_per_s": 5168.77,
+            "cputime_sample_ms_per_s": 5168.53,
+            "cputime_userland_ratio": 0.94097,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 5245883083,
+            "qos_default_ms_per_s": 5168.77,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 3641704333,
+            "ptime_ms_per_s": 3588.17,
+            "ptime_ratio": 0.694202,
+            "epswitches": 4804,
+            "epswitches_per_s": 4733.38,
+            "cpu_instructions": 31452800000.0,
+            "cpu_cycles": 15540100000.0,
+            "pcpu_instructions": 27038000000.0,
+            "pcpu_cycles": 11709600000.0
+          },
+          "all_tasks_cpu_ns": 18268026833,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2409030000.0,
+              "idle_ratio": 0.000307525
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264580000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3271370000.0,
+              "idle_ratio": 0.012033
+            }
+          ],
+          "live_other_cpu_ns": 5369436637,
+          "host_active_cores": 11.71196002
+        },
+        {
+          "timestamp": "2026-09-15T00:50:49",
+          "elapsed_ns": 1015761750,
+          "task": {
+            "pid": 76980,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10232252750941,
+            "interval_ns": 1015796500,
+            "cputime_ns": 5035450333,
+            "cputime_ms_per_s": 4957.14,
+            "cputime_sample_ms_per_s": 4957.31,
+            "cputime_userland_ratio": 0.950712,
+            "intr_wakeups": 1,
+            "intr_wakeups_per_s": 0.984449,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 1,
+                "wakeups_per_s": 0.984449
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 5035450333,
+            "qos_default_ms_per_s": 4957.14,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 3734759500,
+            "ptime_ms_per_s": 3676.68,
+            "ptime_ratio": 0.741693,
+            "epswitches": 3645,
+            "epswitches_per_s": 3588.32,
+            "cpu_instructions": 31156900000.0,
+            "cpu_cycles": 15103300000.0,
+            "pcpu_instructions": 27466800000.0,
+            "pcpu_cycles": 11999500000.0
+          },
+          "all_tasks_cpu_ns": 16418125291,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2418320000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264470000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3266630000.0,
+              "idle_ratio": 0.0114126
+            }
+          ],
+          "live_other_cpu_ns": 6146055212,
+          "host_active_cores": 11.91301558368
+        },
+        {
+          "timestamp": "2026-09-15T00:50:50",
+          "elapsed_ns": 1015464041,
+          "task": {
+            "pid": 76980,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10232252751047,
+            "interval_ns": 1015459416,
+            "cputime_ns": 1773181875,
+            "cputime_ms_per_s": 1746.19,
+            "cputime_sample_ms_per_s": 1746.18,
+            "cputime_userland_ratio": 0.94351,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 1773181875,
+            "qos_default_ms_per_s": 1746.19,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1292591833,
+            "ptime_ms_per_s": 1272.91,
+            "ptime_ratio": 0.728967,
+            "epswitches": 1203,
+            "epswitches_per_s": 1184.69,
+            "cpu_instructions": 10844400000.0,
+            "cpu_cycles": 5301860000.0,
+            "pcpu_instructions": 9432660000.0,
+            "pcpu_cycles": 4154640000.0
+          },
+          "all_tasks_cpu_ns": 12853411416,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 8899215089,
+          "host_active_cores": 12.0
+        }
+      ],
+      "native_json": {
+        "actual_rows_per_second": 183518.61273068708,
+        "benchmark": "multicore_probe",
+        "corpus_rows": 10000000,
+        "elapsed_seconds": 54.49038575,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 12000,
+        "local_rows": null,
+        "maximum_active_streaming_rows": null,
+        "mode": "managed",
+        "phase_seconds": {
+          "decode_and_local_sort": 37.601823004,
+          "drop_results": 16.88840997,
+          "whole_pass_wall": 54.490384958
+        },
+        "phase_time_basis": "wall time accumulated across serial API calls",
+        "rows": 10000000,
+        "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+        "whole_passes": 1,
+        "workers": 12
+      },
+      "native_stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 54.490386s = 183519 VIN/s (12 core(s))\n",
+      "raw_sha256": "cd8fc1f6dcb743b392222c524fe190cee3787dc207bd04b06bc4c12e3354e625"
+    },
+    {
+      "label": "2-12w-12000",
+      "workers": 12,
+      "batch": 12000,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-placement-multicore_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "12",
+        "12000",
+        "managed"
+      ],
+      "pid": 81588,
+      "power_command": [
+        "sudo",
+        "-n",
+        "/usr/bin/powermetrics",
+        "--samplers",
+        "tasks,cpu_power,thermal",
+        "--show-process-ipc",
+        "--show-process-amp",
+        "--show-process-wait-times",
+        "-i",
+        "1000",
+        "-n",
+        "10",
+        "-f",
+        "plist",
+        "-o",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/hardware-2-12w-12000.plist"
+      ],
+      "power_stderr": "Second underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\n",
+      "samples": [
+        {
+          "timestamp": "2026-09-15T00:52:04",
+          "elapsed_ns": 1015061000,
+          "task": {
+            "pid": 81588,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10234430251325,
+            "interval_ns": 1014730041,
+            "cputime_ns": 1646434166,
+            "cputime_ms_per_s": 1622.53,
+            "cputime_sample_ms_per_s": 1622.01,
+            "cputime_userland_ratio": 0.945554,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 1646408916,
+            "qos_default_ms_per_s": 1622.51,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1120771666,
+            "ptime_ms_per_s": 1104.5,
+            "ptime_ratio": 0.680727,
+            "epswitches": 820,
+            "epswitches_per_s": 808.097,
+            "cpu_instructions": 10150400000.0,
+            "cpu_cycles": 4860690000.0,
+            "pcpu_instructions": 8638770000.0,
+            "pcpu_cycles": 3604980000.0
+          },
+          "all_tasks_cpu_ns": 12195525583,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 10401793475,
+          "host_active_cores": 12.0
+        },
+        {
+          "timestamp": "2026-09-15T00:52:05",
+          "elapsed_ns": 1014985250,
+          "task": {
+            "pid": 81588,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10234430246805,
+            "interval_ns": 1015173125,
+            "cputime_ns": 1710081708,
+            "cputime_ms_per_s": 1684.52,
+            "cputime_sample_ms_per_s": 1684.83,
+            "cputime_userland_ratio": 0.950159,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 1710081708,
+            "qos_default_ms_per_s": 1684.52,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1144632916,
+            "ptime_ms_per_s": 1127.52,
+            "ptime_ratio": 0.669344,
+            "epswitches": 660,
+            "epswitches_per_s": 650.135,
+            "cpu_instructions": 10128600000.0,
+            "cpu_cycles": 5030400000.0,
+            "pcpu_instructions": 8725730000.0,
+            "pcpu_cycles": 3680240000.0
+          },
+          "all_tasks_cpu_ns": 12215402791,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 10475855838,
+          "host_active_cores": 12.0
+        },
+        {
+          "timestamp": "2026-09-15T00:52:06",
+          "elapsed_ns": 1014900208,
+          "task": {
+            "pid": 81588,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10234430250885,
+            "interval_ns": 1014729333,
+            "cputime_ns": 1622326291,
+            "cputime_ms_per_s": 1598.78,
+            "cputime_sample_ms_per_s": 1598.51,
+            "cputime_userland_ratio": 0.949504,
+            "intr_wakeups": 8,
+            "intr_wakeups_per_s": 7.88388,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 8,
+                "wakeups_per_s": 7.88388
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 1622329083,
+            "qos_default_ms_per_s": 1598.78,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 890078916,
+            "ptime_ms_per_s": 877.159,
+            "ptime_ratio": 0.548644,
+            "epswitches": 585,
+            "epswitches_per_s": 576.508,
+            "cpu_instructions": 8812280000.0,
+            "cpu_cycles": 4612260000.0,
+            "pcpu_instructions": 6891830000.0,
+            "pcpu_cycles": 2863060000.0
+          },
+          "all_tasks_cpu_ns": 12199892250,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 10464935014,
+          "host_active_cores": 12.0
+        },
+        {
+          "timestamp": "2026-09-15T00:52:07",
+          "elapsed_ns": 1013961458,
+          "task": {
+            "pid": 81588,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10234430252669,
+            "interval_ns": 1013889166,
+            "cputime_ns": 1337118333,
+            "cputime_ms_per_s": 1318.8,
+            "cputime_sample_ms_per_s": 1318.71,
+            "cputime_userland_ratio": 0.945635,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 1337115541,
+            "qos_default_ms_per_s": 1318.8,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 846690375,
+            "ptime_ms_per_s": 835.092,
+            "ptime_ratio": 0.63322,
+            "epswitches": 614,
+            "epswitches_per_s": 605.589,
+            "cpu_instructions": 7864700000.0,
+            "cpu_cycles": 3898250000.0,
+            "pcpu_instructions": 6476700000.0,
+            "pcpu_cycles": 2725730000.0
+          },
+          "all_tasks_cpu_ns": 12623427708,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 10321019679,
+          "host_active_cores": 12.0
+        },
+        {
+          "timestamp": "2026-09-15T00:52:08",
+          "elapsed_ns": 1014119875,
+          "task": {
+            "pid": 81588,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10234430253566,
+            "interval_ns": 1014082541,
+            "cputime_ns": 1491708208,
+            "cputime_ms_per_s": 1470.99,
+            "cputime_sample_ms_per_s": 1470.94,
+            "cputime_userland_ratio": 0.953916,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 1491708208,
+            "qos_default_ms_per_s": 1470.99,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1061717749,
+            "ptime_ms_per_s": 1046.97,
+            "ptime_ratio": 0.711746,
+            "epswitches": 851,
+            "epswitches_per_s": 839.182,
+            "cpu_instructions": 9255700000.0,
+            "cpu_cycles": 4445110000.0,
+            "pcpu_instructions": 8080000000.0,
+            "pcpu_cycles": 3417320000.0
+          },
+          "all_tasks_cpu_ns": 60979277666,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 10462481725,
+          "host_active_cores": 12.0
+        },
+        {
+          "timestamp": "2026-09-15T00:52:09",
+          "elapsed_ns": 1013934791,
+          "task": {
+            "pid": 81588,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10234430253096,
+            "interval_ns": 1013953458,
+            "cputime_ns": 1494751583,
+            "cputime_ms_per_s": 1474.18,
+            "cputime_sample_ms_per_s": 1474.21,
+            "cputime_userland_ratio": 0.953621,
+            "intr_wakeups": 1,
+            "intr_wakeups_per_s": 0.986239,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 1,
+                "wakeups_per_s": 0.986239
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 1494751583,
+            "qos_default_ms_per_s": 1474.18,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1019707416,
+            "ptime_ms_per_s": 1005.67,
+            "ptime_ratio": 0.682192,
+            "epswitches": 999,
+            "epswitches_per_s": 985.252,
+            "cpu_instructions": 9255920000.0,
+            "cpu_cycles": 4418130000.0,
+            "pcpu_instructions": 7805630000.0,
+            "pcpu_cycles": 3282470000.0
+          },
+          "all_tasks_cpu_ns": 30261902458,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 10263923344,
+          "host_active_cores": 12.0
+        },
+        {
+          "timestamp": "2026-09-15T00:52:10",
+          "elapsed_ns": 1014081083,
+          "task": {
+            "pid": 81588,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10234430252313,
+            "interval_ns": 1014114041,
+            "cputime_ns": 1502192708,
+            "cputime_ms_per_s": 1481.29,
+            "cputime_sample_ms_per_s": 1481.33,
+            "cputime_userland_ratio": 0.935495,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 1502192708,
+            "qos_default_ms_per_s": 1481.29,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1013793291,
+            "ptime_ms_per_s": 999.684,
+            "ptime_ratio": 0.674876,
+            "epswitches": 1306,
+            "epswitches_per_s": 1287.82,
+            "cpu_instructions": 8500560000.0,
+            "cpu_cycles": 4430370000.0,
+            "pcpu_instructions": 6995880000.0,
+            "pcpu_cycles": 3262970000.0
+          },
+          "all_tasks_cpu_ns": 12278526875,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 10572933926,
+          "host_active_cores": 11.9998059881
+        },
+        {
+          "timestamp": "2026-09-15T00:52:11",
+          "elapsed_ns": 1013713458,
+          "task": {
+            "pid": 81588,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10234430253543,
+            "interval_ns": 1013662083,
+            "cputime_ns": 1604973291,
+            "cputime_ms_per_s": 1583.34,
+            "cputime_sample_ms_per_s": 1583.26,
+            "cputime_userland_ratio": 0.949128,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 1604973291,
+            "qos_default_ms_per_s": 1583.34,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1141070166,
+            "ptime_ms_per_s": 1125.69,
+            "ptime_ratio": 0.710959,
+            "epswitches": 861,
+            "epswitches_per_s": 849.395,
+            "cpu_instructions": 10142200000.0,
+            "cpu_cycles": 4783610000.0,
+            "pcpu_instructions": 8752280000.0,
+            "pcpu_cycles": 3674260000.0
+          },
+          "all_tasks_cpu_ns": 12261385541,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 10500847089,
+          "host_active_cores": 12.0
+        },
+        {
+          "timestamp": "2026-09-15T00:52:12",
+          "elapsed_ns": 1013813583,
+          "task": {
+            "pid": 81588,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10234430251388,
+            "interval_ns": 1013903166,
+            "cputime_ns": 1873092958,
+            "cputime_ms_per_s": 1847.41,
+            "cputime_sample_ms_per_s": 1847.57,
+            "cputime_userland_ratio": 0.949726,
+            "intr_wakeups": 1,
+            "intr_wakeups_per_s": 0.986287,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 1,
+                "wakeups_per_s": 0.986287
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 1873092958,
+            "qos_default_ms_per_s": 1847.41,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 1294168166,
+            "ptime_ms_per_s": 1276.42,
+            "ptime_ratio": 0.690926,
+            "epswitches": 1078,
+            "epswitches_per_s": 1063.22,
+            "cpu_instructions": 11295300000.0,
+            "cpu_cycles": 5550400000.0,
+            "pcpu_instructions": 9714260000.0,
+            "pcpu_cycles": 4166330000.0
+          },
+          "all_tasks_cpu_ns": 12171638916,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 10259103757,
+          "host_active_cores": 12.0
+        },
+        {
+          "timestamp": "2026-09-15T00:52:13",
+          "elapsed_ns": 1013609458,
+          "task": {
+            "pid": 81588,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10234430251131,
+            "interval_ns": 1013620458,
+            "cputime_ns": 1058985499,
+            "cputime_ms_per_s": 1044.76,
+            "cputime_sample_ms_per_s": 1044.77,
+            "cputime_userland_ratio": 0.931535,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 1058985499,
+            "qos_default_ms_per_s": 1044.76,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 755301291,
+            "ptime_ms_per_s": 745.152,
+            "ptime_ratio": 0.713231,
+            "epswitches": 1310,
+            "epswitches_per_s": 1292.4,
+            "cpu_instructions": 6337260000.0,
+            "cpu_cycles": 3158310000.0,
+            "pcpu_instructions": 5472210000.0,
+            "pcpu_cycles": 2432070000.0
+          },
+          "all_tasks_cpu_ns": 12171319583,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264070000.0,
+              "idle_ratio": 0.0
+            }
+          ],
+          "live_other_cpu_ns": 11030950060,
+          "host_active_cores": 12.0
+        }
+      ],
+      "native_json": {
+        "actual_rows_per_second": 346993.5358071421,
+        "benchmark": "multicore_probe",
+        "corpus_rows": 10000000,
+        "elapsed_seconds": 28.818980667,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 12000,
+        "local_rows": null,
+        "maximum_active_streaming_rows": null,
+        "mode": "managed",
+        "phase_seconds": {
+          "decode_and_local_sort": 21.833203529,
+          "drop_results": 6.9855645410000005,
+          "whole_pass_wall": 28.818980041
+        },
+        "phase_time_basis": "wall time accumulated across serial API calls",
+        "rows": 10000000,
+        "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+        "whole_passes": 1,
+        "workers": 12
+      },
+      "native_stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 28.818981s = 346994 VIN/s (12 core(s))\n",
+      "raw_sha256": "f82efeb7b00328d532a778ffb6fbd8d934396f366ce24101b5614289c0869947"
+    },
+    {
+      "label": "3-8w-12000",
+      "workers": 8,
+      "batch": 12000,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-placement-multicore_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "8",
+        "12000",
+        "managed"
+      ],
+      "pid": 82970,
+      "power_command": [
+        "sudo",
+        "-n",
+        "/usr/bin/powermetrics",
+        "--samplers",
+        "tasks,cpu_power,thermal",
+        "--show-process-ipc",
+        "--show-process-amp",
+        "--show-process-wait-times",
+        "-i",
+        "1000",
+        "-n",
+        "10",
+        "-f",
+        "plist",
+        "-o",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/hardware-3-8w-12000.plist"
+      ],
+      "power_stderr": "Second underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\n",
+      "samples": [
+        {
+          "timestamp": "2026-09-15T00:52:51",
+          "elapsed_ns": 1013550458,
+          "task": {
+            "pid": 82970,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10235813884290,
+            "interval_ns": 1013700708,
+            "cputime_ns": 6566900208,
+            "cputime_ms_per_s": 6478.15,
+            "cputime_sample_ms_per_s": 6479.11,
+            "cputime_userland_ratio": 0.97248,
+            "intr_wakeups": 1,
+            "intr_wakeups_per_s": 0.986484,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 1,
+                "wakeups_per_s": 0.986484
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 6566900208,
+            "qos_default_ms_per_s": 6478.15,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 5306507000,
+            "ptime_ms_per_s": 5234.79,
+            "ptime_ratio": 0.808069,
+            "epswitches": 4840,
+            "epswitches_per_s": 4774.58,
+            "cpu_instructions": 43761500000.0,
+            "cpu_cycles": 20093100000.0,
+            "pcpu_instructions": 40305600000.0,
+            "pcpu_cycles": 17081500000.0
+          },
+          "all_tasks_cpu_ns": 11858943875,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.00447897
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264590000.0,
+              "idle_ratio": 0.000212112
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3265180000.0,
+              "idle_ratio": 0.000604096
+            }
+          ],
+          "live_other_cpu_ns": 5027070878,
+          "host_active_cores": 11.70306769
+        },
+        {
+          "timestamp": "2026-09-15T00:52:52",
+          "elapsed_ns": 1016805791,
+          "task": {
+            "pid": 82970,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10235813884676,
+            "interval_ns": 1016789333,
+            "cputime_ns": 6855659458,
+            "cputime_ms_per_s": 6742.46,
+            "cputime_sample_ms_per_s": 6742.35,
+            "cputime_userland_ratio": 0.964173,
+            "intr_wakeups": 1,
+            "intr_wakeups_per_s": 0.983488,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 1,
+                "wakeups_per_s": 0.983488
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 6855659458,
+            "qos_default_ms_per_s": 6742.46,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 5458505500,
+            "ptime_ms_per_s": 5368.37,
+            "ptime_ratio": 0.796204,
+            "epswitches": 8450,
+            "epswitches_per_s": 8310.47,
+            "cpu_instructions": 43728100000.0,
+            "cpu_cycles": 20837500000.0,
+            "pcpu_instructions": 39684300000.0,
+            "pcpu_cycles": 17511800000.0
+          },
+          "all_tasks_cpu_ns": 11711969541,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3265280000.0,
+              "idle_ratio": 0.00159874
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3265800000.0,
+              "idle_ratio": 0.00326782
+            }
+          ],
+          "live_other_cpu_ns": 4641180181,
+          "host_active_cores": 11.52049305
+        },
+        {
+          "timestamp": "2026-09-15T00:52:53",
+          "elapsed_ns": 1015619958,
+          "task": {
+            "pid": 82970,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10235813888876,
+            "interval_ns": 1015446000,
+            "cputime_ns": 6807080458,
+            "cputime_ms_per_s": 6703.54,
+            "cputime_sample_ms_per_s": 6702.39,
+            "cputime_userland_ratio": 0.970506,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 6807080458,
+            "qos_default_ms_per_s": 6703.54,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 5078814958,
+            "ptime_ms_per_s": 5001.56,
+            "ptime_ratio": 0.746108,
+            "epswitches": 7017,
+            "epswitches_per_s": 6910.26,
+            "cpu_instructions": 42787300000.0,
+            "cpu_cycles": 20441500000.0,
+            "pcpu_instructions": 37632300000.0,
+            "pcpu_cycles": 16318400000.0
+          },
+          "all_tasks_cpu_ns": 12173043625,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.00175145
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264940000.0,
+              "idle_ratio": 0.000558295
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3265820000.0,
+              "idle_ratio": 0.00096842
+            }
+          ],
+          "live_other_cpu_ns": 4572652892,
+          "host_active_cores": 11.67193966
+        },
+        {
+          "timestamp": "2026-09-15T00:52:54",
+          "elapsed_ns": 1014520249,
+          "task": {
+            "pid": 82970,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10235813887094,
+            "interval_ns": 1014593750,
+            "cputime_ns": 6482630583,
+            "cputime_ms_per_s": 6389.39,
+            "cputime_sample_ms_per_s": 6389.85,
+            "cputime_userland_ratio": 0.971697,
+            "intr_wakeups": 1,
+            "intr_wakeups_per_s": 0.985616,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 1,
+                "wakeups_per_s": 0.985616
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 6482630583,
+            "qos_default_ms_per_s": 6389.39,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 5379302916,
+            "ptime_ms_per_s": 5301.93,
+            "ptime_ratio": 0.829802,
+            "epswitches": 4252,
+            "epswitches_per_s": 4190.84,
+            "cpu_instructions": 43528100000.0,
+            "cpu_cycles": 19935000000.0,
+            "pcpu_instructions": 40525000000.0,
+            "pcpu_cycles": 17300200000.0
+          },
+          "all_tasks_cpu_ns": 11844505416,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.00411787
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264640000.0,
+              "idle_ratio": 6.56585e-05
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3265900000.0,
+              "idle_ratio": 0.00167204
+            }
+          ],
+          "live_other_cpu_ns": 5189114545,
+          "host_active_cores": 11.70119213
+        },
+        {
+          "timestamp": "2026-09-15T00:52:55",
+          "elapsed_ns": 1016896250,
+          "task": {
+            "pid": 82970,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10235813889005,
+            "interval_ns": 1016816250,
+            "cputime_ns": 6077947916,
+            "cputime_ms_per_s": 5977.43,
+            "cputime_sample_ms_per_s": 5976.96,
+            "cputime_userland_ratio": 0.971102,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 6077947916,
+            "qos_default_ms_per_s": 5977.43,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 4770887916,
+            "ptime_ms_per_s": 4691.99,
+            "ptime_ratio": 0.78495,
+            "epswitches": 4058,
+            "epswitches_per_s": 3990.89,
+            "cpu_instructions": 39739500000.0,
+            "cpu_cycles": 18424700000.0,
+            "pcpu_instructions": 36053300000.0,
+            "pcpu_cycles": 15310200000.0
+          },
+          "all_tasks_cpu_ns": 11935524583,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.00119003
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264710000.0,
+              "idle_ratio": 4.01828e-06
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3266320000.0,
+              "idle_ratio": 0.000756923
+            }
+          ],
+          "live_other_cpu_ns": 4333693926,
+          "host_active_cores": 11.72261557
+        },
+        {
+          "timestamp": "2026-09-15T00:52:56",
+          "elapsed_ns": 1013076249,
+          "task": {
+            "pid": 82970,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10235813884735,
+            "interval_ns": 1013253666,
+            "cputime_ns": 6468669833,
+            "cputime_ms_per_s": 6384.06,
+            "cputime_sample_ms_per_s": 6385.18,
+            "cputime_userland_ratio": 0.971965,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 6468697125,
+            "qos_default_ms_per_s": 6384.08,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 5147649083,
+            "ptime_ms_per_s": 5080.32,
+            "ptime_ratio": 0.795782,
+            "epswitches": 5155,
+            "epswitches_per_s": 5087.57,
+            "cpu_instructions": 42711400000.0,
+            "cpu_cycles": 19735600000.0,
+            "pcpu_instructions": 38935900000.0,
+            "pcpu_cycles": 16576700000.0
+          },
+          "all_tasks_cpu_ns": 11843385375,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.00321752
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264770000.0,
+              "idle_ratio": 0.000348538
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3265340000.0,
+              "idle_ratio": 0.000451968
+            }
+          ],
+          "live_other_cpu_ns": 5313473346,
+          "host_active_cores": 11.70743525
+        },
+        {
+          "timestamp": "2026-09-15T00:52:57",
+          "elapsed_ns": 1014047041,
+          "task": {
+            "pid": 82970,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10235813885789,
+            "interval_ns": 1014004625,
+            "cputime_ns": 7005662916,
+            "cputime_ms_per_s": 6908.91,
+            "cputime_sample_ms_per_s": 6908.62,
+            "cputime_userland_ratio": 0.96529,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 7005635625,
+            "qos_default_ms_per_s": 6908.88,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 5501160750,
+            "ptime_ms_per_s": 5425.18,
+            "ptime_ratio": 0.785245,
+            "epswitches": 8886,
+            "epswitches_per_s": 8763.27,
+            "cpu_instructions": 44564100000.0,
+            "cpu_cycles": 21288900000.0,
+            "pcpu_instructions": 40128400000.0,
+            "pcpu_cycles": 17698100000.0
+          },
+          "all_tasks_cpu_ns": 11534519583,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3265400000.0,
+              "idle_ratio": 0.00124586
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3266240000.0,
+              "idle_ratio": 0.00135312
+            }
+          ],
+          "live_other_cpu_ns": 4332250433,
+          "host_active_cores": 11.4505452
+        },
+        {
+          "timestamp": "2026-09-15T00:52:58",
+          "elapsed_ns": 1014963666,
+          "task": {
+            "pid": 82970,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10235813889219,
+            "interval_ns": 1014820833,
+            "cputime_ns": 6578159375,
+            "cputime_ms_per_s": 6482.09,
+            "cputime_sample_ms_per_s": 6481.18,
+            "cputime_userland_ratio": 0.972617,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 6578159375,
+            "qos_default_ms_per_s": 6482.09,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 4923129750,
+            "ptime_ms_per_s": 4851.23,
+            "ptime_ratio": 0.748405,
+            "epswitches": 5677,
+            "epswitches_per_s": 5594.09,
+            "cpu_instructions": 41843800000.0,
+            "cpu_cycles": 19780900000.0,
+            "pcpu_instructions": 36977500000.0,
+            "pcpu_cycles": 15829800000.0
+          },
+          "all_tasks_cpu_ns": 12386419166,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.003313
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264550000.0,
+              "idle_ratio": 4.18757e-06
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3266570000.0,
+              "idle_ratio": 0.00209392
+            }
+          ],
+          "live_other_cpu_ns": 4863059431,
+          "host_active_cores": 11.686183623
+        },
+        {
+          "timestamp": "2026-09-15T00:52:59",
+          "elapsed_ns": 1014635708,
+          "task": {
+            "pid": 82970,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10235813885136,
+            "interval_ns": 1014805125,
+            "cputime_ns": 6615206166,
+            "cputime_ms_per_s": 6518.7,
+            "cputime_sample_ms_per_s": 6519.78,
+            "cputime_userland_ratio": 0.974736,
+            "intr_wakeups": 2,
+            "intr_wakeups_per_s": 1.97082,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 2,
+                "wakeups_per_s": 1.97082
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 6615206166,
+            "qos_default_ms_per_s": 6518.7,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 5317669833,
+            "ptime_ms_per_s": 5240.09,
+            "ptime_ratio": 0.803855,
+            "epswitches": 4241,
+            "epswitches_per_s": 4179.13,
+            "cpu_instructions": 43580400000.0,
+            "cpu_cycles": 20195900000.0,
+            "pcpu_instructions": 39867100000.0,
+            "pcpu_cycles": 17098600000.0
+          },
+          "all_tasks_cpu_ns": 11777007166,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2423660000.0,
+              "idle_ratio": 0.0106009
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264450000.0,
+              "idle_ratio": 0.000328048
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3265030000.0,
+              "idle_ratio": 0.000373399
+            }
+          ],
+          "live_other_cpu_ns": 5147555055,
+          "host_active_cores": 11.60752866
+        },
+        {
+          "timestamp": "2026-09-15T00:53:00",
+          "elapsed_ns": 1014846708,
+          "task": {
+            "pid": 82970,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10235813889280,
+            "interval_ns": 1014674166,
+            "cputime_ns": 6161514291,
+            "cputime_ms_per_s": 6072.41,
+            "cputime_sample_ms_per_s": 6071.37,
+            "cputime_userland_ratio": 0.969556,
+            "intr_wakeups": 12,
+            "intr_wakeups_per_s": 11.8265,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 12,
+                "wakeups_per_s": 11.8265
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 6161514291,
+            "qos_default_ms_per_s": 6072.41,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 4533714291,
+            "ptime_ms_per_s": 4468.15,
+            "ptime_ratio": 0.735812,
+            "epswitches": 4105,
+            "epswitches_per_s": 4045.63,
+            "cpu_instructions": 38858300000.0,
+            "cpu_cycles": 18467900000.0,
+            "pcpu_instructions": 34228100000.0,
+            "pcpu_cycles": 14579700000.0
+          },
+          "all_tasks_cpu_ns": 12062119375,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 3.93814e-05
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264520000.0,
+              "idle_ratio": 1.76997e-05
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3265360000.0,
+              "idle_ratio": 0.0011791
+            }
+          ],
+          "live_other_cpu_ns": 4096853256,
+          "host_active_cores": 11.79250019
+        }
+      ],
+      "native_json": {
+        "actual_rows_per_second": 563231.6229067553,
+        "benchmark": "multicore_probe",
+        "corpus_rows": 10000000,
+        "elapsed_seconds": 17.754684917,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 12000,
+        "local_rows": null,
+        "maximum_active_streaming_rows": null,
+        "mode": "managed",
+        "phase_seconds": {
+          "decode_and_local_sort": 15.167652379,
+          "drop_results": 2.586888417,
+          "whole_pass_wall": 17.754684
+        },
+        "phase_time_basis": "wall time accumulated across serial API calls",
+        "rows": 10000000,
+        "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+        "whole_passes": 1,
+        "workers": 8
+      },
+      "native_stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 17.754685s = 563232 VIN/s (8 core(s))\n",
+      "raw_sha256": "f447b4747d387cc143613c20ec694af855ec0813cc13119a758567bc3061080d"
+    },
+    {
+      "label": "4-8w-48000",
+      "workers": 8,
+      "batch": 48000,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-placement-multicore_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "8",
+        "48000",
+        "managed"
+      ],
+      "pid": 83769,
+      "power_command": [
+        "sudo",
+        "-n",
+        "/usr/bin/powermetrics",
+        "--samplers",
+        "tasks,cpu_power,thermal",
+        "--show-process-ipc",
+        "--show-process-amp",
+        "--show-process-wait-times",
+        "-i",
+        "1000",
+        "-n",
+        "10",
+        "-f",
+        "plist",
+        "-o",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/hardware-4-8w-48000.plist"
+      ],
+      "power_stderr": "Second underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\n",
+      "samples": [
+        {
+          "timestamp": "2026-09-15T00:53:26",
+          "elapsed_ns": 1015061374,
+          "task": {
+            "pid": 83769,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10236696219637,
+            "interval_ns": 1014949041,
+            "cputime_ns": 7481646375,
+            "cputime_ms_per_s": 7371.45,
+            "cputime_sample_ms_per_s": 7370.63,
+            "cputime_userland_ratio": 0.979226,
+            "intr_wakeups": 8,
+            "intr_wakeups_per_s": 7.88217,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 8,
+                "wakeups_per_s": 7.88217
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 7481646375,
+            "qos_default_ms_per_s": 7371.45,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 6011300708,
+            "ptime_ms_per_s": 5922.76,
+            "ptime_ratio": 0.803473,
+            "epswitches": 3303,
+            "epswitches_per_s": 3254.35,
+            "cpu_instructions": 53895200000.0,
+            "cpu_cycles": 22837600000.0,
+            "pcpu_instructions": 49256800000.0,
+            "pcpu_cycles": 19329400000.0
+          },
+          "all_tasks_cpu_ns": 11385735250,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2421210000.0,
+              "idle_ratio": 0.0147893
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3265650000.0,
+              "idle_ratio": 0.000897741
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3268180000.0,
+              "idle_ratio": 0.010994
+            }
+          ],
+          "live_other_cpu_ns": 2818758558,
+          "host_active_cores": 11.22525556
+        },
+        {
+          "timestamp": "2026-09-15T00:53:27",
+          "elapsed_ns": 1016040583,
+          "task": {
+            "pid": 83769,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10236696219229,
+            "interval_ns": 1016057375,
+            "cputime_ns": 6733480541,
+            "cputime_ms_per_s": 6627.07,
+            "cputime_sample_ms_per_s": 6627.18,
+            "cputime_userland_ratio": 0.975008,
+            "intr_wakeups": 23,
+            "intr_wakeups_per_s": 22.6365,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 23,
+                "wakeups_per_s": 22.6365
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 6733480541,
+            "qos_default_ms_per_s": 6627.07,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 5568319083,
+            "ptime_ms_per_s": 5480.32,
+            "ptime_ratio": 0.82696,
+            "epswitches": 1994,
+            "epswitches_per_s": 1962.49,
+            "cpu_instructions": 48112900000.0,
+            "cpu_cycles": 20667200000.0,
+            "pcpu_instructions": 44583900000.0,
+            "pcpu_cycles": 17888100000.0
+          },
+          "all_tasks_cpu_ns": 11871971541,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2410060000.0,
+              "idle_ratio": 0.00425951
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3266640000.0,
+              "idle_ratio": 5.32152e-05
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3269600000.0,
+              "idle_ratio": 0.00750335
+            }
+          ],
+          "live_other_cpu_ns": 4813207343,
+          "host_active_cores": 11.60074281
+        },
+        {
+          "timestamp": "2026-09-15T00:53:28",
+          "elapsed_ns": 1014412833,
+          "task": {
+            "pid": 83769,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10236696219005,
+            "interval_ns": 1014421458,
+            "cputime_ns": 6934018708,
+            "cputime_ms_per_s": 6835.44,
+            "cputime_sample_ms_per_s": 6835.5,
+            "cputime_userland_ratio": 0.976363,
+            "intr_wakeups": 6,
+            "intr_wakeups_per_s": 5.9147,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 6,
+                "wakeups_per_s": 5.9147
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 6934018708,
+            "qos_default_ms_per_s": 6835.44,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 5714846083,
+            "ptime_ms_per_s": 5633.6,
+            "ptime_ratio": 0.824175,
+            "epswitches": 2639,
+            "epswitches_per_s": 2601.48,
+            "cpu_instructions": 50303900000.0,
+            "cpu_cycles": 21295800000.0,
+            "pcpu_instructions": 46570200000.0,
+            "pcpu_cycles": 18384800000.0
+          },
+          "all_tasks_cpu_ns": 11788487250,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.00309411
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264910000.0,
+              "idle_ratio": 5.04704e-05
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3266070000.0,
+              "idle_ratio": 0.00377174
+            }
+          ],
+          "live_other_cpu_ns": 4706289141,
+          "host_active_cores": 11.58317009
+        },
+        {
+          "timestamp": "2026-09-15T00:53:29",
+          "elapsed_ns": 1014810333,
+          "task": {
+            "pid": 83769,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10236696220604,
+            "interval_ns": 1014744000,
+            "cputime_ns": 7050434291,
+            "cputime_ms_per_s": 6947.99,
+            "cputime_sample_ms_per_s": 6947.54,
+            "cputime_userland_ratio": 0.974399,
+            "intr_wakeups": 12,
+            "intr_wakeups_per_s": 11.8256,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 12,
+                "wakeups_per_s": 11.8256
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 7050434291,
+            "qos_default_ms_per_s": 6947.99,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 5800308125,
+            "ptime_ms_per_s": 5716.03,
+            "ptime_ratio": 0.822688,
+            "epswitches": 2520,
+            "epswitches_per_s": 2483.38,
+            "cpu_instructions": 50948000000.0,
+            "cpu_cycles": 21638100000.0,
+            "pcpu_instructions": 47143800000.0,
+            "pcpu_cycles": 18653700000.0
+          },
+          "all_tasks_cpu_ns": 11650317375,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.00703986
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3265530000.0,
+              "idle_ratio": 0.00124017
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3266480000.0,
+              "idle_ratio": 0.000387877
+            }
+          ],
+          "live_other_cpu_ns": 4546950184,
+          "host_active_cores": 11.52704317
+        },
+        {
+          "timestamp": "2026-09-15T00:53:30",
+          "elapsed_ns": 1014350083,
+          "task": {
+            "pid": 83769,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10236696216060,
+            "interval_ns": 1014539916,
+            "cputime_ns": 6983569666,
+            "cputime_ms_per_s": 6883.48,
+            "cputime_sample_ms_per_s": 6884.77,
+            "cputime_userland_ratio": 0.975483,
+            "intr_wakeups": 13,
+            "intr_wakeups_per_s": 12.8137,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 13,
+                "wakeups_per_s": 12.8137
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 6983569666,
+            "qos_default_ms_per_s": 6883.48,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 5854336541,
+            "ptime_ms_per_s": 5770.43,
+            "ptime_ratio": 0.838301,
+            "epswitches": 2588,
+            "epswitches_per_s": 2550.91,
+            "cpu_instructions": 51117700000.0,
+            "cpu_cycles": 21528400000.0,
+            "pcpu_instructions": 47613200000.0,
+            "pcpu_cycles": 18832900000.0
+          },
+          "all_tasks_cpu_ns": 11570193625,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2414550000.0,
+              "idle_ratio": 0.00831921
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3265080000.0,
+              "idle_ratio": 0.000163225
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3266260000.0,
+              "idle_ratio": 0.0197136
+            }
+          ],
+          "live_other_cpu_ns": 4524884090,
+          "host_active_cores": 11.43171984
+        },
+        {
+          "timestamp": "2026-09-15T00:53:31",
+          "elapsed_ns": 1015197958,
+          "task": {
+            "pid": 83769,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10236696215725,
+            "interval_ns": 1015210833,
+            "cputime_ns": 6562545833,
+            "cputime_ms_per_s": 6464.22,
+            "cputime_sample_ms_per_s": 6464.3,
+            "cputime_userland_ratio": 0.970054,
+            "intr_wakeups": 17,
+            "intr_wakeups_per_s": 16.7453,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 17,
+                "wakeups_per_s": 16.7453
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 6562545833,
+            "qos_default_ms_per_s": 6464.22,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 5535540875,
+            "ptime_ms_per_s": 5452.6,
+            "ptime_ratio": 0.843505,
+            "epswitches": 2525,
+            "epswitches_per_s": 2487.17,
+            "cpu_instructions": 47772600000.0,
+            "cpu_cycles": 20247100000.0,
+            "pcpu_instructions": 44692900000.0,
+            "pcpu_cycles": 17795700000.0
+          },
+          "all_tasks_cpu_ns": 11982435708,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.00819774
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264290000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3264970000.0,
+              "idle_ratio": 0.00086548
+            }
+          ],
+          "live_other_cpu_ns": 5209323301,
+          "host_active_cores": 11.77774286
+        },
+        {
+          "timestamp": "2026-09-15T00:53:32",
+          "elapsed_ns": 1015020708,
+          "task": {
+            "pid": 83769,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10236696219832,
+            "interval_ns": 1014850083,
+            "cputime_ns": 6659521750,
+            "cputime_ms_per_s": 6562.07,
+            "cputime_sample_ms_per_s": 6560.97,
+            "cputime_userland_ratio": 0.972364,
+            "intr_wakeups": 8,
+            "intr_wakeups_per_s": 7.88294,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 8,
+                "wakeups_per_s": 7.88294
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 6659521750,
+            "qos_default_ms_per_s": 6562.07,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 5664955666,
+            "ptime_ms_per_s": 5582.06,
+            "ptime_ratio": 0.850655,
+            "epswitches": 1947,
+            "epswitches_per_s": 1918.51,
+            "cpu_instructions": 48744900000.0,
+            "cpu_cycles": 20592200000.0,
+            "pcpu_instructions": 45851400000.0,
+            "pcpu_cycles": 18217200000.0
+          },
+          "all_tasks_cpu_ns": 12206596750,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 3.83894e-05
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3264620000.0,
+              "idle_ratio": 9.35272e-05
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3265120000.0,
+              "idle_ratio": 0.00282694
+            }
+          ],
+          "live_other_cpu_ns": 4922684097,
+          "host_active_cores": 11.86685795
+        },
+        {
+          "timestamp": "2026-09-15T00:53:33",
+          "elapsed_ns": 1014616541,
+          "task": {
+            "pid": 83769,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10236696219964,
+            "interval_ns": 1014611750,
+            "cputime_ns": 6776054791,
+            "cputime_ms_per_s": 6678.47,
+            "cputime_sample_ms_per_s": 6678.44,
+            "cputime_userland_ratio": 0.974561,
+            "intr_wakeups": 16,
+            "intr_wakeups_per_s": 15.7696,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 16,
+                "wakeups_per_s": 15.7696
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 6776054791,
+            "qos_default_ms_per_s": 6678.47,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 5702502541,
+            "ptime_ms_per_s": 5620.38,
+            "ptime_ratio": 0.841567,
+            "epswitches": 2775,
+            "epswitches_per_s": 2735.04,
+            "cpu_instructions": 49688000000.0,
+            "cpu_cycles": 20905600000.0,
+            "pcpu_instructions": 46478200000.0,
+            "pcpu_cycles": 18343300000.0
+          },
+          "all_tasks_cpu_ns": 12281807833,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2422850000.0,
+              "idle_ratio": 0.000196892
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3265570000.0,
+              "idle_ratio": 0.00124794
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3266230000.0,
+              "idle_ratio": 0.00159661
+            }
+          ],
+          "live_other_cpu_ns": 4313374730,
+          "host_active_cores": 11.61521449
+        },
+        {
+          "timestamp": "2026-09-15T00:53:34",
+          "elapsed_ns": 1015270375,
+          "task": {
+            "pid": 83769,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10236696219854,
+            "interval_ns": 1015274541,
+            "cputime_ns": 6499464083,
+            "cputime_ms_per_s": 6401.68,
+            "cputime_sample_ms_per_s": 6401.71,
+            "cputime_userland_ratio": 0.972983,
+            "intr_wakeups": 7,
+            "intr_wakeups_per_s": 6.89469,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 7,
+                "wakeups_per_s": 6.89469
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 6499464083,
+            "qos_default_ms_per_s": 6401.68,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 5581762125,
+            "ptime_ms_per_s": 5497.79,
+            "ptime_ratio": 0.858803,
+            "epswitches": 1651,
+            "epswitches_per_s": 1626.16,
+            "cpu_instructions": 47435100000.0,
+            "cpu_cycles": 20134200000.0,
+            "pcpu_instructions": 44981900000.0,
+            "pcpu_cycles": 17943700000.0
+          },
+          "all_tasks_cpu_ns": 12023855875,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2417640000.0,
+              "idle_ratio": 0.00122201
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3265660000.0,
+              "idle_ratio": 1.81487e-05
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3267020000.0,
+              "idle_ratio": 0.0179254
+            }
+          ],
+          "live_other_cpu_ns": 4960688642,
+          "host_active_cores": 11.67455838
+        },
+        {
+          "timestamp": "2026-09-15T00:53:35",
+          "elapsed_ns": 1013555458,
+          "task": {
+            "pid": 83769,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10236696218976,
+            "interval_ns": 1013592291,
+            "cputime_ns": 6435447916,
+            "cputime_ms_per_s": 6349.15,
+            "cputime_sample_ms_per_s": 6349.38,
+            "cputime_userland_ratio": 0.969615,
+            "intr_wakeups": 26,
+            "intr_wakeups_per_s": 25.6513,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 26,
+                "wakeups_per_s": 25.6513
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 6435447916,
+            "qos_default_ms_per_s": 6349.15,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 5439147250,
+            "ptime_ms_per_s": 5366.21,
+            "ptime_ratio": 0.845185,
+            "epswitches": 3775,
+            "epswitches_per_s": 3724.38,
+            "cpu_instructions": 47152700000.0,
+            "cpu_cycles": 19895700000.0,
+            "pcpu_instructions": 44185300000.0,
+            "pcpu_cycles": 17514100000.0
+          },
+          "all_tasks_cpu_ns": 12483617500,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.000223831
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3265110000.0,
+              "idle_ratio": 0.000118712
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3265910000.0,
+              "idle_ratio": 0.00268102
+            }
+          ],
+          "live_other_cpu_ns": 5216079089,
+          "host_active_cores": 11.77389522
+        }
+      ],
+      "native_json": {
+        "actual_rows_per_second": 628329.7763934463,
+        "benchmark": "multicore_probe",
+        "corpus_rows": 10000000,
+        "elapsed_seconds": 15.915209458,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 48000,
+        "local_rows": null,
+        "maximum_active_streaming_rows": null,
+        "mode": "managed",
+        "phase_seconds": {
+          "decode_and_local_sort": 13.636830582,
+          "drop_results": 2.278342626,
+          "whole_pass_wall": 15.915208958000001
+        },
+        "phase_time_basis": "wall time accumulated across serial API calls",
+        "rows": 10000000,
+        "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+        "whole_passes": 1,
+        "workers": 8
+      },
+      "native_stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 15.915209s = 628330 VIN/s (8 core(s))\n",
+      "raw_sha256": "b2e6c18f08637e12b15891d8da19af19adcf8da287b9d00f07c74eb1fa056590"
+    },
+    {
+      "label": "5-12w-48000",
+      "workers": 12,
+      "batch": 48000,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-placement-multicore_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "12",
+        "48000",
+        "managed"
+      ],
+      "pid": 84273,
+      "power_command": [
+        "sudo",
+        "-n",
+        "/usr/bin/powermetrics",
+        "--samplers",
+        "tasks,cpu_power,thermal",
+        "--show-process-ipc",
+        "--show-process-amp",
+        "--show-process-wait-times",
+        "-i",
+        "1000",
+        "-n",
+        "10",
+        "-f",
+        "plist",
+        "-o",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/hardware-5-12w-48000.plist"
+      ],
+      "power_stderr": "Second underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\nSecond underflow occured.\n",
+      "samples": [
+        {
+          "timestamp": "2026-09-15T00:53:56",
+          "elapsed_ns": 1014087958,
+          "task": {
+            "pid": 84273,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10237476606695,
+            "interval_ns": 1014208750,
+            "cputime_ns": 8048476083,
+            "cputime_ms_per_s": 7935.72,
+            "cputime_sample_ms_per_s": 7936.66,
+            "cputime_userland_ratio": 0.961054,
+            "intr_wakeups": 13,
+            "intr_wakeups_per_s": 12.8179,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 13,
+                "wakeups_per_s": 12.8179
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 8048492416,
+            "qos_default_ms_per_s": 7935.74,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 6531750833,
+            "ptime_ms_per_s": 6440.24,
+            "ptime_ratio": 0.811551,
+            "epswitches": 3539,
+            "epswitches_per_s": 3489.42,
+            "cpu_instructions": 56702800000.0,
+            "cpu_cycles": 24640800000.0,
+            "pcpu_instructions": 52138800000.0,
+            "pcpu_cycles": 21015800000.0
+          },
+          "all_tasks_cpu_ns": 12114345916,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3266100000.0,
+              "idle_ratio": 0.00054165
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3267720000.0,
+              "idle_ratio": 0.0124481
+            }
+          ],
+          "live_other_cpu_ns": 3720342220,
+          "host_active_cores": 11.83678121
+        },
+        {
+          "timestamp": "2026-09-15T00:53:57",
+          "elapsed_ns": 1015499083,
+          "task": {
+            "pid": 84273,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10237476606201,
+            "interval_ns": 1015520791,
+            "cputime_ns": 8895435333,
+            "cputime_ms_per_s": 8759.48,
+            "cputime_sample_ms_per_s": 8759.67,
+            "cputime_userland_ratio": 0.964637,
+            "intr_wakeups": 14,
+            "intr_wakeups_per_s": 13.786,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 14,
+                "wakeups_per_s": 13.786
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 8895419000,
+            "qos_default_ms_per_s": 8759.47,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 6542599666,
+            "ptime_ms_per_s": 6442.61,
+            "ptime_ratio": 0.735501,
+            "epswitches": 4227,
+            "epswitches_per_s": 4162.4,
+            "cpu_instructions": 59229900000.0,
+            "cpu_cycles": 26638200000.0,
+            "pcpu_instructions": 52079800000.0,
+            "pcpu_cycles": 21022400000.0
+          },
+          "all_tasks_cpu_ns": 11849657416,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2415300000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3266790000.0,
+              "idle_ratio": 0.00494451
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3271070000.0,
+              "idle_ratio": 0.0153144
+            }
+          ],
+          "live_other_cpu_ns": 2824170311,
+          "host_active_cores": 11.6468397
+        },
+        {
+          "timestamp": "2026-09-15T00:53:58",
+          "elapsed_ns": 1014806000,
+          "task": {
+            "pid": 84273,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10237476608032,
+            "interval_ns": 1014728250,
+            "cputime_ns": 8238046458,
+            "cputime_ms_per_s": 8118.48,
+            "cputime_sample_ms_per_s": 8117.85,
+            "cputime_userland_ratio": 0.962108,
+            "intr_wakeups": 23,
+            "intr_wakeups_per_s": 22.6662,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 23,
+                "wakeups_per_s": 22.6662
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 8238046458,
+            "qos_default_ms_per_s": 8118.48,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 6441249416,
+            "ptime_ms_per_s": 6347.76,
+            "ptime_ratio": 0.78189,
+            "epswitches": 3725,
+            "epswitches_per_s": 3670.93,
+            "cpu_instructions": 56619600000.0,
+            "cpu_cycles": 25005000000.0,
+            "pcpu_instructions": 51025400000.0,
+            "pcpu_cycles": 20712800000.0
+          },
+          "all_tasks_cpu_ns": 12428863666,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2421500000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3269090000.0,
+              "idle_ratio": 0.00417872
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3272810000.0,
+              "idle_ratio": 0.0233347
+            }
+          ],
+          "live_other_cpu_ns": 2877715553,
+          "host_active_cores": 11.63586741
+        },
+        {
+          "timestamp": "2026-09-15T00:53:59",
+          "elapsed_ns": 1014858916,
+          "task": {
+            "pid": 84273,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10237476608243,
+            "interval_ns": 1014850291,
+            "cputime_ns": 8154019083,
+            "cputime_ms_per_s": 8034.7,
+            "cputime_sample_ms_per_s": 8034.63,
+            "cputime_userland_ratio": 0.963828,
+            "intr_wakeups": 20,
+            "intr_wakeups_per_s": 19.7073,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 20,
+                "wakeups_per_s": 19.7073
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 8154022291,
+            "qos_default_ms_per_s": 8034.7,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 6364959791,
+            "ptime_ms_per_s": 6271.82,
+            "ptime_ratio": 0.780592,
+            "epswitches": 3581,
+            "epswitches_per_s": 3528.6,
+            "cpu_instructions": 56209900000.0,
+            "cpu_cycles": 24737300000.0,
+            "pcpu_instructions": 50647500000.0,
+            "pcpu_cycles": 20464100000.0
+          },
+          "all_tasks_cpu_ns": 12156244333,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3266350000.0,
+              "idle_ratio": 0.0007989
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3267970000.0,
+              "idle_ratio": 0.0163643
+            }
+          ],
+          "live_other_cpu_ns": 3631396470,
+          "host_active_cores": 11.82103195
+        },
+        {
+          "timestamp": "2026-09-15T00:54:00",
+          "elapsed_ns": 1014894833,
+          "task": {
+            "pid": 84273,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10237476606820,
+            "interval_ns": 1014956375,
+            "cputime_ns": 7772544875,
+            "cputime_ms_per_s": 7658.01,
+            "cputime_sample_ms_per_s": 7658.47,
+            "cputime_userland_ratio": 0.962681,
+            "intr_wakeups": 20,
+            "intr_wakeups_per_s": 19.7053,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 20,
+                "wakeups_per_s": 19.7053
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 7772541666,
+            "qos_default_ms_per_s": 7658.01,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 6085909000,
+            "ptime_ms_per_s": 5996.23,
+            "ptime_ratio": 0.783001,
+            "epswitches": 3846,
+            "epswitches_per_s": 3789.33,
+            "cpu_instructions": 53590700000.0,
+            "cpu_cycles": 23593000000.0,
+            "pcpu_instructions": 48348100000.0,
+            "pcpu_cycles": 19564900000.0
+          },
+          "all_tasks_cpu_ns": 11822899208,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2422990000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3268810000.0,
+              "idle_ratio": 0.00479091
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3272720000.0,
+              "idle_ratio": 0.0209077
+            }
+          ],
+          "live_other_cpu_ns": 3810781712,
+          "host_active_cores": 11.64500532
+        },
+        {
+          "timestamp": "2026-09-15T00:54:01",
+          "elapsed_ns": 1017889000,
+          "task": {
+            "pid": 84273,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10237476608090,
+            "interval_ns": 1017833625,
+            "cputime_ns": 7766277416,
+            "cputime_ms_per_s": 7630.2,
+            "cputime_sample_ms_per_s": 7629.79,
+            "cputime_userland_ratio": 0.963208,
+            "intr_wakeups": 0,
+            "intr_wakeups_per_s": 0.0,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 7766277416,
+            "qos_default_ms_per_s": 7630.2,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 6098316458,
+            "ptime_ms_per_s": 5991.47,
+            "ptime_ratio": 0.78523,
+            "epswitches": 4037,
+            "epswitches_per_s": 3966.27,
+            "cpu_instructions": 52997900000.0,
+            "cpu_cycles": 23524200000.0,
+            "pcpu_instructions": 47865800000.0,
+            "pcpu_cycles": 19552000000.0
+          },
+          "all_tasks_cpu_ns": 12098392083,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2421170000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3267560000.0,
+              "idle_ratio": 0.00159038
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3269100000.0,
+              "idle_ratio": 0.0119257
+            }
+          ],
+          "live_other_cpu_ns": 4039221805,
+          "host_active_cores": 11.72327864
+        },
+        {
+          "timestamp": "2026-09-15T00:54:02",
+          "elapsed_ns": 1014577666,
+          "task": {
+            "pid": 84273,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10237476604860,
+            "interval_ns": 1014711916,
+            "cputime_ns": 8372342333,
+            "cputime_ms_per_s": 8250.95,
+            "cputime_sample_ms_per_s": 8252.05,
+            "cputime_userland_ratio": 0.963033,
+            "intr_wakeups": 9,
+            "intr_wakeups_per_s": 8.86951,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 9,
+                "wakeups_per_s": 8.86951
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 8372342333,
+            "qos_default_ms_per_s": 8250.95,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 6551088000,
+            "ptime_ms_per_s": 6456.11,
+            "ptime_ratio": 0.782468,
+            "epswitches": 3866,
+            "epswitches_per_s": 3809.95,
+            "cpu_instructions": 57200300000.0,
+            "cpu_cycles": 25417500000.0,
+            "pcpu_instructions": 51726900000.0,
+            "pcpu_cycles": 21066900000.0
+          },
+          "all_tasks_cpu_ns": 12016855333,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2423570000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3267540000.0,
+              "idle_ratio": 0.00244762
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3269020000.0,
+              "idle_ratio": 0.0130797
+            }
+          ],
+          "live_other_cpu_ns": 3445677345,
+          "host_active_cores": 11.74240996
+        },
+        {
+          "timestamp": "2026-09-15T00:54:03",
+          "elapsed_ns": 1015366333,
+          "task": {
+            "pid": 84273,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10237476607954,
+            "interval_ns": 1015234125,
+            "cputime_ns": 8186842000,
+            "cputime_ms_per_s": 8063.99,
+            "cputime_sample_ms_per_s": 8062.94,
+            "cputime_userland_ratio": 0.962858,
+            "intr_wakeups": 11,
+            "intr_wakeups_per_s": 10.8349,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 11,
+                "wakeups_per_s": 10.8349
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 8186845833,
+            "qos_default_ms_per_s": 8064.0,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 6260179833,
+            "ptime_ms_per_s": 6166.24,
+            "ptime_ratio": 0.764664,
+            "epswitches": 3828,
+            "epswitches_per_s": 3770.56,
+            "cpu_instructions": 55607800000.0,
+            "cpu_cycles": 24721800000.0,
+            "pcpu_instructions": 49664400000.0,
+            "pcpu_cycles": 20121700000.0
+          },
+          "all_tasks_cpu_ns": 12074277458,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3265930000.0,
+              "idle_ratio": 0.00370433
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3268030000.0,
+              "idle_ratio": 0.00608092
+            }
+          ],
+          "live_other_cpu_ns": 3552086516,
+          "host_active_cores": 11.82467232
+        },
+        {
+          "timestamp": "2026-09-15T00:54:04",
+          "elapsed_ns": 1014770583,
+          "task": {
+            "pid": 84273,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10237476603569,
+            "interval_ns": 1014957125,
+            "cputime_ns": 9061067625,
+            "cputime_ms_per_s": 8927.54,
+            "cputime_sample_ms_per_s": 8929.18,
+            "cputime_userland_ratio": 0.964438,
+            "intr_wakeups": 17,
+            "intr_wakeups_per_s": 16.7495,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 17,
+                "wakeups_per_s": 16.7495
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 9061068708,
+            "qos_default_ms_per_s": 8927.54,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 6705333041,
+            "ptime_ms_per_s": 6606.52,
+            "ptime_ratio": 0.740016,
+            "epswitches": 4289,
+            "epswitches_per_s": 4225.79,
+            "cpu_instructions": 60973700000.0,
+            "cpu_cycles": 27182400000.0,
+            "pcpu_instructions": 53492000000.0,
+            "pcpu_cycles": 21556200000.0
+          },
+          "all_tasks_cpu_ns": 11877173125,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2424030000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3267790000.0,
+              "idle_ratio": 0.00200788
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3270670000.0,
+              "idle_ratio": 0.0176479
+            }
+          ],
+          "live_other_cpu_ns": 2807567721,
+          "host_active_cores": 11.70906506
+        },
+        {
+          "timestamp": "2026-09-15T00:54:05",
+          "elapsed_ns": 1015001458,
+          "task": {
+            "pid": 84273,
+            "name": "coordination-placement-multicore_probe",
+            "started_abstime_ns": 10237476605063,
+            "interval_ns": 1014938708,
+            "cputime_ns": 8747876500,
+            "cputime_ms_per_s": 8619.12,
+            "cputime_sample_ms_per_s": 8618.59,
+            "cputime_userland_ratio": 0.964642,
+            "intr_wakeups": 7,
+            "intr_wakeups_per_s": 6.89697,
+            "idle_wakeups": 0,
+            "idle_wakeups_per_s": 0.0,
+            "timer_wakeups": [
+              {
+                "interval_ns": 2000000,
+                "wakeups": 7,
+                "wakeups_per_s": 6.89697
+              },
+              {
+                "interval_ns": 5000000,
+                "wakeups": 0,
+                "wakeups_per_s": 0.0
+              }
+            ],
+            "diskio_bytesread": 0,
+            "diskio_bytesread_per_s": 0.0,
+            "diskio_byteswritten": 0,
+            "diskio_byteswritten_per_s": 0.0,
+            "pageins": 0,
+            "pageins_per_s": 0.0,
+            "qos_disabled_ns": 0,
+            "qos_disabled_ms_per_s": 0.0,
+            "qos_maintenance_ns": 0,
+            "qos_maintenance_ms_per_s": 0.0,
+            "qos_background_ns": 0,
+            "qos_background_ms_per_s": 0.0,
+            "qos_utility_ns": 0,
+            "qos_utility_ms_per_s": 0.0,
+            "qos_default_ns": 8747871583,
+            "qos_default_ms_per_s": 8619.11,
+            "qos_user_initiated_ns": 0,
+            "qos_user_initiated_ms_per_s": 0.0,
+            "qos_user_interactive_ns": 0,
+            "qos_user_interactive_ms_per_s": 0.0,
+            "sfi_ns": 0,
+            "sfi_ms_per_s": 0.0,
+            "ptime_ns": 6472468958,
+            "ptime_ms_per_s": 6377.2,
+            "ptime_ratio": 0.73989,
+            "epswitches": 3547,
+            "epswitches_per_s": 3494.79,
+            "cpu_instructions": 57980200000.0,
+            "cpu_cycles": 26244400000.0,
+            "pcpu_instructions": 50626500000.0,
+            "pcpu_cycles": 20810300000.0
+          },
+          "all_tasks_cpu_ns": 12390605958,
+          "thermal_pressure": "Nominal",
+          "clusters": [
+            {
+              "name": "E-Cluster",
+              "freq_hz": 2419040000.0,
+              "idle_ratio": 0.0
+            },
+            {
+              "name": "P0-Cluster",
+              "freq_hz": 3269590000.0,
+              "idle_ratio": 0.00160273
+            },
+            {
+              "name": "P1-Cluster",
+              "freq_hz": 3267200000.0,
+              "idle_ratio": 0.0388057
+            }
+          ],
+          "live_other_cpu_ns": 2709449176,
+          "host_active_cores": 11.5700713
+        }
+      ],
+      "native_json": {
+        "actual_rows_per_second": 729076.7836049607,
+        "benchmark": "multicore_probe",
+        "corpus_rows": 10000000,
+        "elapsed_seconds": 13.715976458,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 48000,
+        "local_rows": null,
+        "maximum_active_streaming_rows": null,
+        "mode": "managed",
+        "phase_seconds": {
+          "decode_and_local_sort": 11.553358505,
+          "drop_results": 2.162571828,
+          "whole_pass_wall": 13.715962
+        },
+        "phase_time_basis": "wall time accumulated across serial API calls",
+        "rows": 10000000,
+        "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+        "whole_passes": 1,
+        "workers": 12
+      },
+      "native_stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 13.715976s = 729077 VIN/s (12 core(s))\n",
+      "raw_sha256": "0edd1a317754df058b0f513f5f5a7e2cba35c1d75d26fc86720ed119f8906a6a"
+    }
+  ],
+  "status": "complete",
+  "counter_note": "ALL_TASKS includes exited-task accounting spikes exceeding physical CPU capacity; analysis uses live other tasks and hardware per-core residency instead."
+}

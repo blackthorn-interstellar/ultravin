@@ -1,0 +1,84 @@
+{
+  "immutable_binary": "/Volumes/fast-4tb/projects/ultravin/target/bench/ordered-pipeline-probe",
+  "immutable_binary_sha256": "bbf19e20ae36099754f6952359989cf2eb8a998bd240fed46f029c129cf9a97d",
+  "samples": [
+    {
+      "average_busy_cores": 9.999671027133234,
+      "batch_size": 12000,
+      "elapsed_seconds": 24.758120875,
+      "max_output_owned_bytes": 0,
+      "mode": "shared",
+      "now_micros": 1788220800000000,
+      "ordered_delivery": true,
+      "process_counters": {
+        "cycles": 751789395390,
+        "instructions": 1542527688104
+      },
+      "process_system_cpu_seconds": 9.777307999999998,
+      "process_user_cpu_seconds": 237.79575599999998,
+      "rows": 20000000,
+      "rows_per_second": 807815.7506774027,
+      "workers": 12,
+      "peak_rss_bytes": 2013757440,
+      "process_wall_seconds": 50.37780883297091,
+      "instructions_per_vin": 77126.3844052,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/ordered-pipeline-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "shared",
+        "12",
+        "12000",
+        "false"
+      ],
+      "raw": {
+        "stdout": "{\"average_busy_cores\":9.999671027133234,\"batch_size\":12000,\"elapsed_seconds\":24.758120875,\"max_output_owned_bytes\":0,\"mode\":\"shared\",\"now_micros\":1788220800000000,\"ordered_delivery\":true,\"process_counters\":{\"cycles\":751789395390,\"instructions\":1542527688104},\"process_system_cpu_seconds\":9.777307999999998,\"process_user_cpu_seconds\":237.79575599999998,\"rows\":20000000,\"rows_per_second\":807815.7506774027,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "active_threads_including_consumer": 14,
+      "aggregate_cleanup_worker_seconds": 22.5246789,
+      "aggregate_worker_admission_and_publish_seconds": 37.394558371,
+      "aggregate_worker_decode_seconds": 240.765355017,
+      "average_busy_cores": 10.377154407864307,
+      "batch_size": 200,
+      "cleanup_workers": 1,
+      "consumer_delivery_seconds": 0.001839761,
+      "credits_released_after_destruction": true,
+      "elapsed_seconds": 23.192974542,
+      "full_output_materialized": true,
+      "live_result_row_budget": 12000,
+      "max_live_result_batches": 60,
+      "mode": "ordered",
+      "now_micros": 1788220800000000,
+      "ordered_delivery": true,
+      "owned_byte_diagnostic_enabled": false,
+      "peak_completed_result_owned_bytes": null,
+      "peak_live_result_batches": 60,
+      "process_counters": {
+        "cycles": 734229499552,
+        "instructions": 1512677095161
+      },
+      "process_system_cpu_seconds": 3.189847,
+      "process_user_cpu_seconds": 237.48723099999998,
+      "rows": 20000000,
+      "rows_per_second": 862330.0975811505,
+      "workers": 12,
+      "peak_rss_bytes": 2031599616,
+      "process_wall_seconds": 47.195698708004784,
+      "instructions_per_vin": 75633.85475805,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/ordered-pipeline-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "ordered",
+        "12",
+        "200",
+        "false"
+      ],
+      "raw": {
+        "stdout": "{\"active_threads_including_consumer\":14,\"aggregate_cleanup_worker_seconds\":22.5246789,\"aggregate_worker_admission_and_publish_seconds\":37.394558371,\"aggregate_worker_decode_seconds\":240.765355017,\"average_busy_cores\":10.377154407864307,\"batch_size\":200,\"cleanup_workers\":1,\"consumer_delivery_seconds\":0.001839761,\"credits_released_after_destruction\":true,\"elapsed_seconds\":23.192974542,\"full_output_materialized\":true,\"live_result_row_budget\":12000,\"max_live_result_batches\":60,\"mode\":\"ordered\",\"now_micros\":1788220800000000,\"ordered_delivery\":true,\"owned_byte_diagnostic_enabled\":false,\"peak_completed_result_owned_bytes\":null,\"peak_live_result_batches\":60,\"process_counters\":{\"cycles\":734229499552,\"instructions\":1512677095161},\"process_system_cpu_seconds\":3.189847,\"process_user_cpu_seconds\":237.48723099999998,\"rows\":20000000,\"rows_per_second\":862330.0975811505,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    }
+  ]
+}

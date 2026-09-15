@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "source": "scripts/bench/native_managed_grid_2026_09_14.json",
+  "estimator": "16 evenly spaced rows per complete batch; maximum estimated batch output bytes divided by batch rows",
+  "sample_draws": 2590176,
+  "distinct_input_indices_sampled": 321240,
+  "corpus_rows": 10000000,
+  "observed_peak_bytes_per_row_range": [
+    15799.875,
+    16513.6875
+  ],
+  "rounding_rule": "ceil(maximum observed peak bytes per row / 256) * 256",
+  "default_bytes_per_row": 16640,
+  "memory_quantity": "returned output buffers, excluding borrowed Db strings and resident input corpus",
+  "working_estimate": "2 * bytes_per_row * batch_size",
+  "source_sha256": "838c9fae9dad86f2bfda68fbe4024713c9071526d5355b51a0bd70ab06f5047f",
+  "sampling_index": "batch_start + sample_index * (batch_size - 1) // 15, sample_index=0..15"
+}

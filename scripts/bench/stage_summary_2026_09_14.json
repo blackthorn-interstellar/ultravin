@@ -1,0 +1,3098 @@
+[
+  {
+    "label": "stage-0-8w-12000-every0",
+    "workers": 8,
+    "batch": 12000,
+    "trace_every": 0,
+    "vins_per_second": 643248.0217067904,
+    "process_cpu_seconds": 110.129126,
+    "cpu_microseconds_per_vin": 11.0129126,
+    "average_busy_cores": 7.084034243179786,
+    "sampled_batches": 0,
+    "batches": []
+  },
+  {
+    "label": "stage-1-8w-12000-every64",
+    "workers": 8,
+    "batch": 12000,
+    "trace_every": 64,
+    "vins_per_second": 646909.1100238202,
+    "process_cpu_seconds": 109.873517,
+    "cpu_microseconds_per_vin": 10.9873517,
+    "average_busy_cores": 7.107817909765708,
+    "sampled_batches": 14,
+    "batches": [
+      {
+        "batch_id": 0,
+        "stage_ms": {
+          "decode_total": 15.713166,
+          "decode_slot_setup": 0.07525,
+          "decode_worklist_setup": 0.004459,
+          "decode_locality_sort": 0.53675,
+          "decode_parallel": 15.036625,
+          "decode_extract": 0.05875,
+          "cleanup_total": 2.571208,
+          "cleanup_parallel": 2.570917
+        },
+        "decode": {
+          "worker_rows": [
+            1064,
+            1644,
+            1583,
+            1884,
+            1061,
+            1602,
+            1351,
+            1811
+          ],
+          "worker_span_ms": [
+            14.743293,
+            14.739624,
+            14.252457,
+            14.617148,
+            14.719292,
+            14.69667,
+            14.73521,
+            14.714499
+          ],
+          "span_occupancy_percent": 97.44390197268336,
+          "leading_gap_percent": 0.5204317790727641,
+          "completion_tail_gap_percent": 1.8454939190144064,
+          "internal_gap_percent": 0.19017232922946473,
+          "median_worker_finish_to_phase_end_ms": 0.277729,
+          "median_worker_finish_to_phase_end_percent": 1.847016867149377,
+          "rows_coefficient_of_variation": 0.19539475712288473
+        },
+        "cleanup": {
+          "worker_rows": [
+            1130,
+            1327,
+            816,
+            1870,
+            1772,
+            1908,
+            1817,
+            1360
+          ],
+          "worker_span_ms": [
+            2.131625,
+            2.294288,
+            2.322457,
+            2.320422,
+            2.314296,
+            2.335341,
+            2.306837,
+            2.104293
+          ],
+          "span_occupancy_percent": 88.14733711745653,
+          "leading_gap_percent": 2.724193352021866,
+          "completion_tail_gap_percent": 8.351431609810819,
+          "internal_gap_percent": 0.7770379207107814,
+          "median_worker_finish_to_phase_end_ms": 0.2147915,
+          "median_worker_finish_to_phase_end_percent": 8.354664891943225,
+          "rows_coefficient_of_variation": 0.2507900848651451
+        }
+      },
+      {
+        "batch_id": 64,
+        "stage_ms": {
+          "decode_slot_setup": 0.03375,
+          "decode_total": 14.862791,
+          "decode_worklist_setup": 0.0095,
+          "decode_locality_sort": 0.482084,
+          "decode_parallel": 14.294541,
+          "decode_extract": 0.041375,
+          "cleanup_total": 2.328666,
+          "cleanup_parallel": 2.328584
+        },
+        "decode": {
+          "worker_rows": [
+            1657,
+            1653,
+            1350,
+            1623,
+            842,
+            1701,
+            1671,
+            1503
+          ],
+          "worker_span_ms": [
+            14.102925,
+            14.103414,
+            13.663461,
+            14.111338,
+            14.102831,
+            14.103873,
+            14.098625,
+            12.951998
+          ],
+          "span_occupancy_percent": 97.2735544639034,
+          "leading_gap_percent": 1.4984942503575316,
+          "completion_tail_gap_percent": 1.075947454346383,
+          "internal_gap_percent": 0.15200383139269738,
+          "median_worker_finish_to_phase_end_ms": 0.1611245,
+          "median_worker_finish_to_phase_end_percent": 1.1271750523504043,
+          "rows_coefficient_of_variation": 0.18078563118910873
+        },
+        "cleanup": {
+          "worker_rows": [
+            1670,
+            842,
+            625,
+            1779,
+            1750,
+            1810,
+            1712,
+            1812
+          ],
+          "worker_span_ms": [
+            2.237711,
+            1.045791,
+            2.116372,
+            2.234066,
+            2.247247,
+            2.262749,
+            2.187373,
+            2.239954
+          ],
+          "span_occupancy_percent": 88.95568615948577,
+          "leading_gap_percent": 8.03423346548804,
+          "completion_tail_gap_percent": 1.0315818540366162,
+          "internal_gap_percent": 1.97849852098958,
+          "median_worker_finish_to_phase_end_ms": 0.0237295,
+          "median_worker_finish_to_phase_end_percent": 1.0190527805739453,
+          "rows_coefficient_of_variation": 0.2987211631828809
+        }
+      },
+      {
+        "batch_id": 128,
+        "stage_ms": {
+          "decode_total": 19.921459,
+          "decode_slot_setup": 0.050542,
+          "decode_worklist_setup": 0.035959,
+          "decode_locality_sort": 0.8005,
+          "decode_parallel": 18.977792,
+          "decode_extract": 0.055792,
+          "cleanup_total": 2.924583,
+          "cleanup_parallel": 2.924417
+        },
+        "decode": {
+          "worker_rows": [
+            1166,
+            982,
+            2013,
+            1821,
+            768,
+            1930,
+            1548,
+            1772
+          ],
+          "worker_span_ms": [
+            11.825541,
+            11.462587,
+            18.030081,
+            18.058916,
+            17.994746,
+            16.214417,
+            18.055874,
+            15.744831
+          ],
+          "span_occupancy_percent": 83.90530428935041,
+          "leading_gap_percent": 11.484615149117452,
+          "completion_tail_gap_percent": 4.458638417999312,
+          "internal_gap_percent": 0.15144214353281985,
+          "median_worker_finish_to_phase_end_ms": 0.8962085,
+          "median_worker_finish_to_phase_end_percent": 4.722406589765553,
+          "rows_coefficient_of_variation": 0.2927932528062914
+        },
+        "cleanup": {
+          "worker_rows": [
+            1715,
+            1980,
+            750,
+            1546,
+            1890,
+            2053,
+            2066,
+            0
+          ],
+          "worker_span_ms": [
+            2.491249,
+            2.641214,
+            2.759542,
+            2.876875,
+            2.503586,
+            2.642868,
+            2.636748,
+            0.0
+          ],
+          "span_occupancy_percent": 79.29820712983135,
+          "leading_gap_percent": 13.805469603001214,
+          "completion_tail_gap_percent": 6.432906114278504,
+          "internal_gap_percent": 0.4634171528889348,
+          "median_worker_finish_to_phase_end_ms": 0.2613545,
+          "median_worker_finish_to_phase_end_percent": 8.936977866015688,
+          "rows_coefficient_of_variation": 0.4636513297247788
+        }
+      },
+      {
+        "batch_id": 192,
+        "stage_ms": {
+          "decode_total": 15.608791,
+          "decode_slot_setup": 0.045334,
+          "decode_worklist_setup": 0.00425,
+          "decode_locality_sort": 0.347,
+          "decode_parallel": 15.154667,
+          "decode_extract": 0.056208,
+          "cleanup_total": 2.8,
+          "cleanup_parallel": 2.7995
+        },
+        "decode": {
+          "worker_rows": [
+            1750,
+            1437,
+            1034,
+            1681,
+            1734,
+            1020,
+            1751,
+            1593
+          ],
+          "worker_span_ms": [
+            14.824673,
+            14.827964,
+            14.835795,
+            14.813669,
+            14.852709,
+            14.600091,
+            14.84371,
+            14.830293
+          ],
+          "span_occupancy_percent": 97.68352547766308,
+          "leading_gap_percent": 0.27790036561014503,
+          "completion_tail_gap_percent": 1.8251728988832285,
+          "internal_gap_percent": 0.21340125784354086,
+          "median_worker_finish_to_phase_end_ms": 0.276229,
+          "median_worker_finish_to_phase_end_percent": 1.822732231595719,
+          "rows_coefficient_of_variation": 0.1933896469709678
+        },
+        "cleanup": {
+          "worker_rows": [
+            750,
+            655,
+            1768,
+            1775,
+            1754,
+            1734,
+            1782,
+            1782
+          ],
+          "worker_span_ms": [
+            2.546375,
+            2.378461,
+            2.391792,
+            2.396213,
+            2.392795,
+            2.389794,
+            2.400081,
+            2.400502
+          ],
+          "span_occupancy_percent": 86.15830058939096,
+          "leading_gap_percent": 1.1709814252545097,
+          "completion_tail_gap_percent": 12.068918556885158,
+          "internal_gap_percent": 0.6017994284693695,
+          "median_worker_finish_to_phase_end_ms": 0.356187,
+          "median_worker_finish_to_phase_end_percent": 12.723236292195034,
+          "rows_coefficient_of_variation": 0.3075254280362664
+        }
+      },
+      {
+        "batch_id": 256,
+        "stage_ms": {
+          "decode_total": 14.463583,
+          "decode_slot_setup": 0.045416,
+          "decode_worklist_setup": 0.004083,
+          "decode_locality_sort": 0.358834,
+          "decode_parallel": 14.013584,
+          "decode_extract": 0.04075,
+          "cleanup_total": 2.16275,
+          "cleanup_parallel": 2.162583
+        },
+        "decode": {
+          "worker_rows": [
+            1618,
+            1572,
+            1597,
+            1406,
+            1595,
+            962,
+            1614,
+            1636
+          ],
+          "worker_span_ms": [
+            13.926295,
+            13.911246,
+            13.929964,
+            13.916418,
+            13.916328,
+            13.806006,
+            13.92717,
+            13.920296
+          ],
+          "span_occupancy_percent": 99.2373926256124,
+          "leading_gap_percent": 0.3534186900367529,
+          "completion_tail_gap_percent": 0.20605185654148148,
+          "internal_gap_percent": 0.20313682780935982,
+          "median_worker_finish_to_phase_end_ms": 0.0286045,
+          "median_worker_finish_to_phase_end_percent": 0.2041198026143776,
+          "rows_coefficient_of_variation": 0.14285073795165826
+        },
+        "cleanup": {
+          "worker_rows": [
+            1637,
+            1643,
+            1602,
+            1607,
+            1636,
+            594,
+            1632,
+            1649
+          ],
+          "worker_span_ms": [
+            2.120331,
+            2.110957,
+            2.100542,
+            2.09863,
+            2.088124,
+            2.077042,
+            2.107962,
+            2.103292
+          ],
+          "span_occupancy_percent": 97.1458667713563,
+          "leading_gap_percent": 1.1189223719968204,
+          "completion_tail_gap_percent": 0.9676969623824843,
+          "internal_gap_percent": 0.7675138942644051,
+          "median_worker_finish_to_phase_end_ms": 0.021146,
+          "median_worker_finish_to_phase_end_percent": 0.9778121810816047,
+          "rows_coefficient_of_variation": 0.22852522350449148
+        }
+      },
+      {
+        "batch_id": 320,
+        "stage_ms": {
+          "decode_slot_setup": 0.045042,
+          "decode_total": 14.682417,
+          "decode_worklist_setup": 0.018584,
+          "decode_locality_sort": 0.325791,
+          "decode_parallel": 14.215584,
+          "decode_extract": 0.076333,
+          "cleanup_total": 2.42725,
+          "cleanup_parallel": 2.426917
+        },
+        "decode": {
+          "worker_rows": [
+            1514,
+            937,
+            1433,
+            1705,
+            1585,
+            1616,
+            1602,
+            1608
+          ],
+          "worker_span_ms": [
+            14.112205,
+            14.188042,
+            14.09188,
+            14.094873,
+            14.078129,
+            14.15062,
+            14.09796,
+            14.116876
+          ],
+          "span_occupancy_percent": 99.30174606263098,
+          "leading_gap_percent": 0.027187592152387127,
+          "completion_tail_gap_percent": 0.4982076360703859,
+          "internal_gap_percent": 0.17285870914624402,
+          "median_worker_finish_to_phase_end_ms": 0.081271,
+          "median_worker_finish_to_phase_end_percent": 0.5717035613872775,
+          "rows_coefficient_of_variation": 0.15026421175161214
+        },
+        "cleanup": {
+          "worker_rows": [
+            1643,
+            562,
+            1622,
+            1631,
+            1604,
+            1666,
+            1639,
+            1633
+          ],
+          "worker_span_ms": [
+            2.113201,
+            2.116875,
+            2.125282,
+            2.134296,
+            2.124206,
+            2.128288,
+            2.119914,
+            2.131158
+          ],
+          "span_occupancy_percent": 87.5247278749129,
+          "leading_gap_percent": 1.269408883781357,
+          "completion_tail_gap_percent": 10.146618116729991,
+          "internal_gap_percent": 1.0592451245757477,
+          "median_worker_finish_to_phase_end_ms": 0.247125,
+          "median_worker_finish_to_phase_end_percent": 10.1826720897336,
+          "rows_coefficient_of_variation": 0.23661032193132328
+        }
+      },
+      {
+        "batch_id": 384,
+        "stage_ms": {
+          "decode_slot_setup": 0.045792,
+          "decode_total": 21.01225,
+          "decode_worklist_setup": 0.003833,
+          "decode_locality_sort": 5.268,
+          "decode_parallel": 15.605042,
+          "decode_extract": 0.087875,
+          "cleanup_total": 2.676875,
+          "cleanup_parallel": 2.676459
+        },
+        "decode": {
+          "worker_rows": [
+            1522,
+            304,
+            1756,
+            1692,
+            1616,
+            1702,
+            1644,
+            1764
+          ],
+          "worker_span_ms": [
+            15.278037,
+            15.11096,
+            15.078117,
+            15.055123,
+            15.2903,
+            14.989381,
+            15.023794,
+            15.245252
+          ],
+          "span_occupancy_percent": 96.98064574257474,
+          "leading_gap_percent": 1.1893856165206091,
+          "completion_tail_gap_percent": 1.695335071831271,
+          "internal_gap_percent": 0.13463356907338025,
+          "median_worker_finish_to_phase_end_ms": 0.2938755,
+          "median_worker_finish_to_phase_end_percent": 1.8832086450007632,
+          "rows_coefficient_of_variation": 0.30532241610759236
+        },
+        "cleanup": {
+          "worker_rows": [
+            1813,
+            1747,
+            1755,
+            1781,
+            1772,
+            1733,
+            730,
+            669
+          ],
+          "worker_span_ms": [
+            2.437162,
+            2.411218,
+            2.380378,
+            2.413503,
+            2.399751,
+            2.415043,
+            2.370505,
+            2.406166
+          ],
+          "span_occupancy_percent": 89.82823013541399,
+          "leading_gap_percent": 1.408320658003728,
+          "completion_tail_gap_percent": 7.83880399438213,
+          "internal_gap_percent": 0.9246452122001495,
+          "median_worker_finish_to_phase_end_ms": 0.210396,
+          "median_worker_finish_to_phase_end_percent": 7.860983486016412,
+          "rows_coefficient_of_variation": 0.3086438076488819
+        }
+      },
+      {
+        "batch_id": 448,
+        "stage_ms": {
+          "decode_total": 15.669875,
+          "decode_slot_setup": 0.046166,
+          "decode_worklist_setup": 0.003208,
+          "decode_locality_sort": 0.5435,
+          "decode_parallel": 15.030583,
+          "decode_extract": 0.045,
+          "cleanup_total": 2.196834,
+          "cleanup_parallel": 2.196625
+        },
+        "decode": {
+          "worker_rows": [
+            1354,
+            1778,
+            1645,
+            1730,
+            1480,
+            505,
+            1820,
+            1688
+          ],
+          "worker_span_ms": [
+            14.961124,
+            14.871505,
+            14.880286,
+            14.887289,
+            14.878377,
+            4.868155,
+            14.886209,
+            14.873531
+          ],
+          "span_occupancy_percent": 90.73706256104637,
+          "leading_gap_percent": 8.344893375060702,
+          "completion_tail_gap_percent": 0.7436230184817182,
+          "internal_gap_percent": 0.1744210454112126,
+          "median_worker_finish_to_phase_end_ms": 0.119333,
+          "median_worker_finish_to_phase_end_percent": 0.7939346065285691,
+          "rows_coefficient_of_variation": 0.26881364879369085
+        },
+        "cleanup": {
+          "worker_rows": [
+            1732,
+            1709,
+            1734,
+            1695,
+            1737,
+            1679,
+            1714,
+            0
+          ],
+          "worker_span_ms": [
+            2.136291,
+            2.114497,
+            2.108746,
+            2.091633,
+            2.120785,
+            2.115916,
+            2.116826,
+            0.0
+          ],
+          "span_occupancy_percent": 84.24682182894213,
+          "leading_gap_percent": 13.249018380470039,
+          "completion_tail_gap_percent": 1.5886189040004552,
+          "internal_gap_percent": 0.9155408865873783,
+          "median_worker_finish_to_phase_end_ms": 0.039667,
+          "median_worker_finish_to_phase_end_percent": 1.8058157400557673,
+          "rows_coefficient_of_variation": 0.37817485667640865
+        }
+      },
+      {
+        "batch_id": 512,
+        "stage_ms": {
+          "decode_total": 16.437125,
+          "decode_slot_setup": 0.04475,
+          "decode_worklist_setup": 0.008791,
+          "decode_locality_sort": 0.538667,
+          "decode_parallel": 15.746625,
+          "decode_extract": 0.096416,
+          "cleanup_total": 2.324875,
+          "cleanup_parallel": 2.32475
+        },
+        "decode": {
+          "worker_rows": [
+            960,
+            1673,
+            1895,
+            1469,
+            1856,
+            1956,
+            691,
+            1500
+          ],
+          "worker_span_ms": [
+            11.138291,
+            15.609585,
+            15.597873,
+            15.59704,
+            15.621795,
+            15.569209,
+            15.583705,
+            15.635709
+          ],
+          "span_occupancy_percent": 95.53889087344113,
+          "leading_gap_percent": 3.7159756455748454,
+          "completion_tail_gap_percent": 0.4953767870892969,
+          "internal_gap_percent": 0.24975669389472346,
+          "median_worker_finish_to_phase_end_ms": 0.081208,
+          "median_worker_finish_to_phase_end_percent": 0.5157168599620554,
+          "rows_coefficient_of_variation": 0.2855470383511465
+        },
+        "cleanup": {
+          "worker_rows": [
+            1580,
+            670,
+            1867,
+            1777,
+            1853,
+            825,
+            1584,
+            1844
+          ],
+          "worker_span_ms": [
+            2.202129,
+            2.184749,
+            2.194417,
+            2.181297,
+            2.186173,
+            2.150545,
+            2.181248,
+            2.189584
+          ],
+          "span_occupancy_percent": 93.93559522529304,
+          "leading_gap_percent": 1.6872459404237015,
+          "completion_tail_gap_percent": 3.258398752554038,
+          "internal_gap_percent": 1.1187600817292183,
+          "median_worker_finish_to_phase_end_ms": 0.0761245,
+          "median_worker_finish_to_phase_end_percent": 3.2745241423809013,
+          "rows_coefficient_of_variation": 0.2992902715870776
+        }
+      },
+      {
+        "batch_id": 576,
+        "stage_ms": {
+          "decode_total": 16.492084,
+          "decode_slot_setup": 0.1455,
+          "decode_worklist_setup": 0.003875,
+          "decode_locality_sort": 0.404,
+          "decode_parallel": 15.832917,
+          "decode_extract": 0.1045,
+          "cleanup_total": 2.387792,
+          "cleanup_parallel": 2.387542
+        },
+        "decode": {
+          "worker_rows": [
+            1492,
+            1877,
+            1462,
+            1144,
+            1806,
+            1783,
+            565,
+            1871
+          ],
+          "worker_span_ms": [
+            15.748706,
+            15.762995,
+            15.759335,
+            15.751961,
+            15.749665,
+            15.77092,
+            5.770328,
+            15.764542
+          ],
+          "span_occupancy_percent": 91.64329289416473,
+          "leading_gap_percent": 7.99119960017475,
+          "completion_tail_gap_percent": 0.20164951284719043,
+          "internal_gap_percent": 0.16385799281332683,
+          "median_worker_finish_to_phase_end_ms": 0.0334375,
+          "median_worker_finish_to_phase_end_percent": 0.21118976370557618,
+          "rows_coefficient_of_variation": 0.28440620402672107
+        },
+        "cleanup": {
+          "worker_rows": [
+            1605,
+            1657,
+            1649,
+            1619,
+            656,
+            1631,
+            1569,
+            1614
+          ],
+          "worker_span_ms": [
+            2.287128,
+            2.310958,
+            2.31633,
+            2.303003,
+            2.313082,
+            2.308576,
+            2.282005,
+            2.290453
+          ],
+          "span_occupancy_percent": 96.39377548122714,
+          "leading_gap_percent": 1.19196856013423,
+          "completion_tail_gap_percent": 1.3586148432153236,
+          "internal_gap_percent": 1.0556411154233099,
+          "median_worker_finish_to_phase_end_ms": 0.0363125,
+          "median_worker_finish_to_phase_end_percent": 1.5209156530021253,
+          "rows_coefficient_of_variation": 0.21334505176148594
+        }
+      },
+      {
+        "batch_id": 640,
+        "stage_ms": {
+          "decode_slot_setup": 0.114542,
+          "decode_total": 15.573583,
+          "decode_worklist_setup": 0.006875,
+          "decode_locality_sort": 0.344459,
+          "decode_parallel": 15.061917,
+          "decode_extract": 0.044333,
+          "cleanup_total": 3.077542,
+          "cleanup_parallel": 3.077125
+        },
+        "decode": {
+          "worker_rows": [
+            1618,
+            1500,
+            1676,
+            1645,
+            927,
+            1467,
+            1606,
+            1561
+          ],
+          "worker_span_ms": [
+            14.166085,
+            15.059291,
+            14.17775,
+            14.161755,
+            14.182334,
+            14.189042,
+            14.168833,
+            14.194289
+          ],
+          "span_occupancy_percent": 94.85792794502851,
+          "leading_gap_percent": 0.021266383289723346,
+          "completion_tail_gap_percent": 4.932178453778493,
+          "internal_gap_percent": 0.1886272179032722,
+          "median_worker_finish_to_phase_end_ms": 0.847021,
+          "median_worker_finish_to_phase_end_percent": 5.6235935970169,
+          "rows_coefficient_of_variation": 0.15097829130191018
+        },
+        "cleanup": {
+          "worker_rows": [
+            1727,
+            1568,
+            696,
+            1037,
+            1698,
+            1781,
+            1747,
+            1746
+          ],
+          "worker_span_ms": [
+            2.191202,
+            2.355629,
+            2.342205,
+            2.342787,
+            2.206662,
+            2.229203,
+            2.202079,
+            2.205874
+          ],
+          "span_occupancy_percent": 73.42747288459195,
+          "leading_gap_percent": 3.543965552260633,
+          "completion_tail_gap_percent": 22.304878742332534,
+          "internal_gap_percent": 0.723682820814884,
+          "median_worker_finish_to_phase_end_ms": 0.687479,
+          "median_worker_finish_to_phase_end_percent": 22.341601332412562,
+          "rows_coefficient_of_variation": 0.25348986392183637
+        }
+      },
+      {
+        "batch_id": 704,
+        "stage_ms": {
+          "decode_total": 14.54825,
+          "decode_slot_setup": 0.045541,
+          "decode_worklist_setup": 0.004208,
+          "decode_locality_sort": 0.50375,
+          "decode_parallel": 13.954167,
+          "decode_extract": 0.039666,
+          "cleanup_total": 2.064708,
+          "cleanup_parallel": 2.064458
+        },
+        "decode": {
+          "worker_rows": [
+            1271,
+            1525,
+            1554,
+            1648,
+            1547,
+            1574,
+            1427,
+            1454
+          ],
+          "worker_span_ms": [
+            13.902705,
+            13.901711,
+            13.903124,
+            13.893119,
+            13.891746,
+            13.89979,
+            13.891995,
+            13.893037
+          ],
+          "span_occupancy_percent": 99.59142222534673,
+          "leading_gap_percent": 0.03530934522999474,
+          "completion_tail_gap_percent": 0.21230486205303406,
+          "internal_gap_percent": 0.1609635673702343,
+          "median_worker_finish_to_phase_end_ms": 0.029188,
+          "median_worker_finish_to_phase_end_percent": 0.20917049365970752,
+          "rows_coefficient_of_variation": 0.07188571176218231
+        },
+        "cleanup": {
+          "worker_rows": [
+            1605,
+            1604,
+            1585,
+            1599,
+            1604,
+            1605,
+            1590,
+            808
+          ],
+          "worker_span_ms": [
+            2.014128,
+            2.009664,
+            2.008291,
+            2.016378,
+            2.012791,
+            2.021498,
+            2.010212,
+            1.061458
+          ],
+          "span_occupancy_percent": 91.75786090102099,
+          "leading_gap_percent": 5.87044517253439,
+          "completion_tail_gap_percent": 1.7069552880223284,
+          "internal_gap_percent": 0.6647386384222881,
+          "median_worker_finish_to_phase_end_ms": 0.0351665,
+          "median_worker_finish_to_phase_end_percent": 1.703425305818767,
+          "rows_coefficient_of_variation": 0.17443113891224304
+        }
+      },
+      {
+        "batch_id": 768,
+        "stage_ms": {
+          "decode_slot_setup": 0.0445,
+          "decode_total": 14.307166,
+          "decode_worklist_setup": 0.003625,
+          "decode_locality_sort": 0.420916,
+          "decode_parallel": 13.793166,
+          "decode_extract": 0.044167,
+          "cleanup_total": 2.073875,
+          "cleanup_parallel": 2.073709
+        },
+        "decode": {
+          "worker_rows": [
+            1401,
+            1664,
+            1667,
+            1599,
+            931,
+            1509,
+            1672,
+            1557
+          ],
+          "worker_span_ms": [
+            13.501873,
+            13.549962,
+            13.535792,
+            13.513579,
+            13.508666,
+            13.528243,
+            13.537874,
+            13.519664
+          ],
+          "span_occupancy_percent": 98.0518658660383,
+          "leading_gap_percent": 0.22973152066755378,
+          "completion_tail_gap_percent": 1.4737796601592412,
+          "internal_gap_percent": 0.24462295313490753,
+          "median_worker_finish_to_phase_end_ms": 0.206458,
+          "median_worker_finish_to_phase_end_percent": 1.4968137119498164,
+          "rows_coefficient_of_variation": 0.1547510545647069
+        },
+        "cleanup": {
+          "worker_rows": [
+            1623,
+            1598,
+            614,
+            1612,
+            1637,
+            1612,
+            1654,
+            1650
+          ],
+          "worker_span_ms": [
+            2.033125,
+            2.021465,
+            2.004995,
+            2.019665,
+            2.01671,
+            2.010622,
+            2.014961,
+            2.016583
+          ],
+          "span_occupancy_percent": 97.27814992363923,
+          "leading_gap_percent": 0.7175789852867495,
+          "completion_tail_gap_percent": 1.0865314275050164,
+          "internal_gap_percent": 0.9177396635689964,
+          "median_worker_finish_to_phase_end_ms": 0.022813,
+          "median_worker_finish_to_phase_end_percent": 1.1001061383250976,
+          "rows_coefficient_of_variation": 0.22358219964925655
+        }
+      },
+      {
+        "batch_id": 832,
+        "stage_ms": {
+          "decode_total": 13.46225,
+          "decode_slot_setup": 0.067875,
+          "decode_worklist_setup": 0.003458,
+          "decode_locality_sort": 0.480667,
+          "decode_parallel": 12.870375,
+          "decode_extract": 0.039292,
+          "cleanup_total": 1.949542,
+          "cleanup_parallel": 1.949209
+        },
+        "decode": {
+          "worker_rows": [
+            1504,
+            1489,
+            1515,
+            1472,
+            1522,
+            1504,
+            1531,
+            1463
+          ],
+          "worker_span_ms": [
+            12.778667,
+            12.782296,
+            12.778711,
+            12.774915,
+            12.769539,
+            12.767456,
+            12.763587,
+            12.772914
+          ],
+          "span_occupancy_percent": 99.24738498295504,
+          "leading_gap_percent": 0.04730340025057545,
+          "completion_tail_gap_percent": 0.4973893534570671,
+          "internal_gap_percent": 0.20792226333731534,
+          "median_worker_finish_to_phase_end_ms": 0.0659795,
+          "median_worker_finish_to_phase_end_percent": 0.5126462904150034,
+          "rows_coefficient_of_variation": 0.014862331206405304
+        },
+        "cleanup": {
+          "worker_rows": [
+            1508,
+            1509,
+            1509,
+            1505,
+            1496,
+            1494,
+            1497,
+            1482
+          ],
+          "worker_span_ms": [
+            1.911793,
+            1.895211,
+            1.909086,
+            1.905915,
+            1.905333,
+            1.895745,
+            1.897662,
+            1.897127
+          ],
+          "span_occupancy_percent": 97.59004806565125,
+          "leading_gap_percent": 1.2558684061072978,
+          "completion_tail_gap_percent": 0.3802503990080079,
+          "internal_gap_percent": 0.773833129233448,
+          "median_worker_finish_to_phase_end_ms": 0.0073545,
+          "median_worker_finish_to_phase_end_percent": 0.3773068973106527,
+          "rows_coefficient_of_variation": 0.005944184833375669
+        }
+      }
+    ],
+    "mean_stage_ms": {
+      "decode_total": 15.911056428571428,
+      "decode_slot_setup": 0.060714285714285714,
+      "decode_worklist_setup": 0.008193428571428572,
+      "decode_locality_sort": 0.8110655714285714,
+      "decode_parallel": 14.970541785714286,
+      "decode_extract": 0.059318357142857145,
+      "cleanup_total": 2.4261785714285713,
+      "cleanup_parallel": 2.4259139285714286
+    },
+    "median_phase_metrics": {
+      "decode": {
+        "span_occupancy_percent": 97.35872821829338,
+        "leading_gap_percent": 0.4369252345547585,
+        "completion_tail_gap_percent": 0.9097852364140506,
+        "internal_gap_percent": 0.1815241316572424,
+        "median_worker_finish_to_phase_end_ms": 0.14022875,
+        "median_worker_finish_to_phase_end_percent": 0.9605548294394867,
+        "rows_coefficient_of_variation": 0.18708763908003828
+      },
+      "cleanup": {
+        "span_occupancy_percent": 89.39195814744988,
+        "leading_gap_percent": 1.5477832992137146,
+        "completion_tail_gap_percent": 2.4826770202881834,
+        "internal_gap_percent": 0.8462894036490798,
+        "median_worker_finish_to_phase_end_ms": 0.057895749999999996,
+        "median_worker_finish_to_phase_end_percent": 2.540169941218334,
+        "rows_coefficient_of_variation": 0.25213997439349073
+      }
+    },
+    "time_weighted_phase_metrics": {
+      "decode": {
+        "span_occupancy_percent": 95.4807453170473,
+        "leading_gap_percent": 2.816802161731097,
+        "completion_tail_gap_percent": 1.5171765183515045,
+        "internal_gap_percent": 0.18527600287011275
+      },
+      "cleanup": {
+        "span_occupancy_percent": 88.64669890979232,
+        "leading_gap_percent": 4.165291387237123,
+        "completion_tail_gap_percent": 6.290172819993172,
+        "internal_gap_percent": 0.8978368829773875
+      }
+    }
+  },
+  {
+    "label": "stage-2-12w-12000-every64",
+    "workers": 12,
+    "batch": 12000,
+    "trace_every": 64,
+    "vins_per_second": 662774.5635597801,
+    "process_cpu_seconds": 125.921232,
+    "cpu_microseconds_per_vin": 12.5921232,
+    "average_busy_cores": 8.345738958170982,
+    "sampled_batches": 14,
+    "batches": [
+      {
+        "batch_id": 0,
+        "stage_ms": {
+          "decode_total": 15.531208,
+          "decode_slot_setup": 0.231333,
+          "decode_worklist_setup": 0.015625,
+          "decode_locality_sort": 0.788041,
+          "decode_parallel": 14.453833,
+          "decode_extract": 0.040958,
+          "cleanup_total": 2.052583,
+          "cleanup_parallel": 2.052334
+        },
+        "decode": {
+          "worker_rows": [
+            923,
+            1637,
+            360,
+            1599,
+            985,
+            315,
+            459,
+            1820,
+            395,
+            1593,
+            1635,
+            279
+          ],
+          "worker_span_ms": [
+            11.960584,
+            14.260755,
+            11.983042,
+            14.361668,
+            11.963667,
+            12.055331,
+            4.280252,
+            14.297414,
+            4.274708,
+            14.276372,
+            14.317669,
+            11.269457
+          ],
+          "span_occupancy_percent": 80.31371274779961,
+          "leading_gap_percent": 18.685329005807663,
+          "completion_tail_gap_percent": 0.7907602548518906,
+          "internal_gap_percent": 0.2101979915408367,
+          "median_worker_finish_to_phase_end_ms": 0.121271,
+          "median_worker_finish_to_phase_end_percent": 0.8390231158752146,
+          "rows_coefficient_of_variation": 0.5954948922255058
+        },
+        "cleanup": {
+          "worker_rows": [
+            479,
+            1337,
+            1304,
+            521,
+            1295,
+            1267,
+            1295,
+            1500,
+            472,
+            1342,
+            34,
+            1154
+          ],
+          "worker_span_ms": [
+            1.688784,
+            1.772999,
+            1.780419,
+            1.780922,
+            1.765165,
+            1.76067,
+            1.760579,
+            1.897292,
+            1.753127,
+            1.759703,
+            1.816875,
+            1.616028
+          ],
+          "span_occupancy_percent": 85.8882415500271,
+          "leading_gap_percent": 0.993299985934713,
+          "completion_tail_gap_percent": 11.47899172356936,
+          "internal_gap_percent": 1.639466740468819,
+          "median_worker_finish_to_phase_end_ms": 0.2432505,
+          "median_worker_finish_to_phase_end_percent": 11.85238367634118,
+          "rows_coefficient_of_variation": 0.46141322766763704
+        }
+      },
+      {
+        "batch_id": 64,
+        "stage_ms": {
+          "decode_total": 18.254709,
+          "decode_slot_setup": 0.055417,
+          "decode_worklist_setup": 0.0045,
+          "decode_locality_sort": 0.5125,
+          "decode_parallel": 17.638208,
+          "decode_extract": 0.043083,
+          "cleanup_total": 2.563125,
+          "cleanup_parallel": 2.5625
+        },
+        "decode": {
+          "worker_rows": [
+            1932,
+            94,
+            69,
+            1553,
+            222,
+            468,
+            1194,
+            1899,
+            1695,
+            928,
+            23,
+            1923
+          ],
+          "worker_span_ms": [
+            17.185957,
+            4.626878,
+            4.813624,
+            17.200673,
+            17.191374,
+            17.604084,
+            17.379078,
+            17.113035,
+            17.216006,
+            17.19233,
+            3.319375,
+            17.207207
+          ],
+          "span_occupancy_percent": 79.39658656555889,
+          "leading_gap_percent": 18.65457836381867,
+          "completion_tail_gap_percent": 1.8207178416310772,
+          "internal_gap_percent": 0.1281172289913654,
+          "median_worker_finish_to_phase_end_ms": 0.393041,
+          "median_worker_finish_to_phase_end_percent": 2.228349954825343,
+          "rows_coefficient_of_variation": 0.7577841601230085
+        },
+        "cleanup": {
+          "worker_rows": [
+            585,
+            0,
+            1500,
+            1582,
+            1542,
+            1531,
+            140,
+            1578,
+            0,
+            1529,
+            562,
+            1451
+          ],
+          "worker_span_ms": [
+            2.083295,
+            0.0,
+            2.082671,
+            2.067088,
+            2.089377,
+            2.092079,
+            2.219834,
+            2.088094,
+            0.0,
+            2.09392,
+            2.110418,
+            1.89391
+          ],
+          "span_occupancy_percent": 67.70954796747968,
+          "leading_gap_percent": 17.518419512195123,
+          "completion_tail_gap_percent": 14.179417886178863,
+          "internal_gap_percent": 0.5926146341463414,
+          "median_worker_finish_to_phase_end_ms": 0.448521,
+          "median_worker_finish_to_phase_end_percent": 17.503258536585367,
+          "rows_coefficient_of_variation": 0.6509892472230244
+        }
+      },
+      {
+        "batch_id": 128,
+        "stage_ms": {
+          "decode_total": 16.836083,
+          "decode_slot_setup": 0.385666,
+          "decode_worklist_setup": 0.005125,
+          "decode_locality_sort": 0.679209,
+          "decode_parallel": 15.6795,
+          "decode_extract": 0.084875,
+          "cleanup_total": 3.166667,
+          "cleanup_parallel": 3.166584
+        },
+        "decode": {
+          "worker_rows": [
+            502,
+            1376,
+            604,
+            698,
+            581,
+            720,
+            1292,
+            1673,
+            1218,
+            601,
+            1569,
+            1166
+          ],
+          "worker_span_ms": [
+            14.786957,
+            15.294501,
+            12.399215,
+            14.815498,
+            14.895288,
+            14.839461,
+            12.62308,
+            15.136624,
+            15.252584,
+            15.251462,
+            14.765623,
+            14.873878
+          ],
+          "span_occupancy_percent": 92.97393146039946,
+          "leading_gap_percent": 4.065749332993186,
+          "completion_tail_gap_percent": 2.7963375745400043,
+          "internal_gap_percent": 0.1639816320673491,
+          "median_worker_finish_to_phase_end_ms": 0.468146,
+          "median_worker_finish_to_phase_end_percent": 2.985720207914793,
+          "rows_coefficient_of_variation": 0.4069803435056784
+        },
+        "cleanup": {
+          "worker_rows": [
+            67,
+            0,
+            0,
+            2315,
+            0,
+            1787,
+            1077,
+            705,
+            1920,
+            468,
+            1910,
+            1751
+          ],
+          "worker_span_ms": [
+            0.215666,
+            0.0,
+            0.0,
+            2.644459,
+            0.0,
+            2.349755,
+            2.642868,
+            1.809087,
+            2.320838,
+            1.46679,
+            2.762837,
+            2.005877
+          ],
+          "span_occupancy_percent": 47.94382263873836,
+          "leading_gap_percent": 40.46773536824961,
+          "completion_tail_gap_percent": 11.123982499753678,
+          "internal_gap_percent": 0.46445949325835034,
+          "median_worker_finish_to_phase_end_ms": 0.481667,
+          "median_worker_finish_to_phase_end_percent": 15.210933927538319,
+          "rows_coefficient_of_variation": 0.8579802833787421
+        }
+      },
+      {
+        "batch_id": 192,
+        "stage_ms": {
+          "decode_slot_setup": 0.046,
+          "decode_total": 13.181,
+          "decode_worklist_setup": 0.0035,
+          "decode_locality_sort": 0.340834,
+          "decode_parallel": 12.745875,
+          "decode_extract": 0.044209,
+          "cleanup_total": 2.254875,
+          "cleanup_parallel": 2.254125
+        },
+        "decode": {
+          "worker_rows": [
+            538,
+            1441,
+            1571,
+            78,
+            1509,
+            574,
+            1227,
+            1471,
+            932,
+            303,
+            1517,
+            839
+          ],
+          "worker_span_ms": [
+            12.645207,
+            12.588333,
+            12.603886,
+            2.624794,
+            12.585665,
+            12.560827,
+            12.617751,
+            12.643919,
+            12.58775,
+            10.600669,
+            12.590715,
+            12.612629
+          ],
+          "span_occupancy_percent": 91.05046730805064,
+          "leading_gap_percent": 8.161220133311105,
+          "completion_tail_gap_percent": 0.5511011732553996,
+          "internal_gap_percent": 0.23721138538285264,
+          "median_worker_finish_to_phase_end_ms": 0.076541,
+          "median_worker_finish_to_phase_end_percent": 0.6005158531681819,
+          "rows_coefficient_of_variation": 0.5067560228222914
+        },
+        "cleanup": {
+          "worker_rows": [
+            1503,
+            1501,
+            1489,
+            1469,
+            1456,
+            410,
+            303,
+            1542,
+            116,
+            1440,
+            468,
+            303
+          ],
+          "worker_span_ms": [
+            1.974626,
+            1.964711,
+            1.973331,
+            1.97033,
+            1.964215,
+            1.958791,
+            2.014001,
+            1.971833,
+            2.000541,
+            1.967499,
+            2.060084,
+            1.482458
+          ],
+          "span_occupancy_percent": 86.14732250134014,
+          "leading_gap_percent": 1.9957078689070038,
+          "completion_tail_gap_percent": 10.929972827593856,
+          "internal_gap_percent": 0.9269968021590048,
+          "median_worker_finish_to_phase_end_ms": 0.2558755,
+          "median_worker_finish_to_phase_end_percent": 11.351433483058836,
+          "rows_coefficient_of_variation": 0.5804157992336184
+        }
+      },
+      {
+        "batch_id": 256,
+        "stage_ms": {
+          "decode_slot_setup": 0.118708,
+          "decode_total": 17.471166,
+          "decode_worklist_setup": 0.003958,
+          "decode_locality_sort": 0.409333,
+          "decode_parallel": 16.893125,
+          "decode_extract": 0.044959,
+          "cleanup_total": 2.456208,
+          "cleanup_parallel": 2.456
+        },
+        "decode": {
+          "worker_rows": [
+            1453,
+            434,
+            1334,
+            345,
+            310,
+            1461,
+            1128,
+            1485,
+            750,
+            322,
+            1511,
+            1467
+          ],
+          "worker_span_ms": [
+            13.103957,
+            13.092919,
+            11.141713,
+            12.8235,
+            13.186956,
+            13.077577,
+            13.273295,
+            13.106292,
+            6.815833,
+            13.065753,
+            13.086742,
+            13.116242
+          ],
+          "span_occupancy_percent": 73.4474226448136,
+          "leading_gap_percent": 6.562789103062143,
+          "completion_tail_gap_percent": 19.8215684388373,
+          "internal_gap_percent": 0.1682198132869634,
+          "median_worker_finish_to_phase_end_ms": 3.670958,
+          "median_worker_finish_to_phase_end_percent": 21.730485034592476,
+          "rows_coefficient_of_variation": 0.5006470812858096
+        },
+        "cleanup": {
+          "worker_rows": [
+            1594,
+            618,
+            1505,
+            1365,
+            1504,
+            81,
+            240,
+            1378,
+            0,
+            610,
+            1564,
+            1541
+          ],
+          "worker_span_ms": [
+            2.313328,
+            2.250711,
+            2.18812,
+            2.051621,
+            2.257495,
+            2.319001,
+            2.309376,
+            2.043917,
+            0.0,
+            2.242581,
+            2.259712,
+            2.252462
+          ],
+          "span_occupancy_percent": 83.09013300760043,
+          "leading_gap_percent": 12.154899565689467,
+          "completion_tail_gap_percent": 3.955873371335505,
+          "internal_gap_percent": 0.7990940553745929,
+          "median_worker_finish_to_phase_end_ms": 0.1144165,
+          "median_worker_finish_to_phase_end_percent": 4.658652280130293,
+          "rows_coefficient_of_variation": 0.6102559572288773
+        }
+      },
+      {
+        "batch_id": 320,
+        "stage_ms": {
+          "decode_total": 13.185375,
+          "decode_slot_setup": 0.088166,
+          "decode_worklist_setup": 0.023875,
+          "decode_locality_sort": 0.540709,
+          "decode_parallel": 12.443792,
+          "decode_extract": 0.087208,
+          "cleanup_total": 2.395209,
+          "cleanup_parallel": 2.395167
+        },
+        "decode": {
+          "worker_rows": [
+            1416,
+            222,
+            1481,
+            1170,
+            1132,
+            743,
+            644,
+            536,
+            514,
+            1127,
+            1512,
+            1503
+          ],
+          "worker_span_ms": [
+            12.145162,
+            12.177709,
+            12.143542,
+            12.350084,
+            10.275506,
+            12.172666,
+            12.16813,
+            12.126078,
+            12.256498,
+            10.061203,
+            12.168082,
+            12.152541
+          ],
+          "span_occupancy_percent": 95.22633253593439,
+          "leading_gap_percent": 2.912738201774293,
+          "completion_tail_gap_percent": 1.582560203513527,
+          "internal_gap_percent": 0.27836905877779594,
+          "median_worker_finish_to_phase_end_ms": 0.2216875,
+          "median_worker_finish_to_phase_end_percent": 1.7815108127811843,
+          "rows_coefficient_of_variation": 0.4312369804797976
+        },
+        "cleanup": {
+          "worker_rows": [
+            391,
+            1365,
+            1401,
+            544,
+            1177,
+            1170,
+            1382,
+            550,
+            511,
+            1361,
+            750,
+            1398
+          ],
+          "worker_span_ms": [
+            0.496125,
+            2.078538,
+            2.08155,
+            2.032715,
+            2.098119,
+            1.822915,
+            2.085542,
+            2.079086,
+            1.934749,
+            2.059213,
+            2.304958,
+            2.079419
+          ],
+          "span_occupancy_percent": 80.55433086711699,
+          "leading_gap_percent": 8.94089013417436,
+          "completion_tail_gap_percent": 7.776955984001672,
+          "internal_gap_percent": 2.7278230147069773,
+          "median_worker_finish_to_phase_end_ms": 0.206271,
+          "median_worker_finish_to_phase_end_percent": 8.611967349249552,
+          "rows_coefficient_of_variation": 0.3949516848088299
+        }
+      },
+      {
+        "batch_id": 384,
+        "stage_ms": {
+          "decode_total": 18.689625,
+          "decode_slot_setup": 0.145125,
+          "decode_worklist_setup": 0.020542,
+          "decode_locality_sort": 0.523,
+          "decode_parallel": 17.956292,
+          "decode_extract": 0.043542,
+          "cleanup_total": 2.756209,
+          "cleanup_parallel": 2.755167
+        },
+        "decode": {
+          "worker_rows": [
+            1583,
+            1377,
+            1011,
+            1054,
+            110,
+            1419,
+            281,
+            750,
+            1301,
+            1580,
+            11,
+            1523
+          ],
+          "worker_span_ms": [
+            13.724005,
+            13.645793,
+            13.730375,
+            13.404628,
+            13.660335,
+            13.736078,
+            13.913084,
+            17.954959,
+            13.737165,
+            13.733167,
+            1.988084,
+            13.692954
+          ],
+          "span_occupancy_percent": 72.82527437550395,
+          "leading_gap_percent": 5.8371683864352395,
+          "completion_tail_gap_percent": 21.205719050087474,
+          "internal_gap_percent": 0.1318381879733299,
+          "median_worker_finish_to_phase_end_ms": 4.181063,
+          "median_worker_finish_to_phase_end_percent": 23.28466812635927,
+          "rows_coefficient_of_variation": 0.5560896210743972
+        },
+        "cleanup": {
+          "worker_rows": [
+            1646,
+            1470,
+            1663,
+            996,
+            302,
+            433,
+            1114,
+            750,
+            358,
+            1225,
+            617,
+            1426
+          ],
+          "worker_span_ms": [
+            2.28975,
+            2.296119,
+            2.294838,
+            1.6795,
+            0.539082,
+            1.666416,
+            1.650673,
+            2.658541,
+            1.558209,
+            1.735371,
+            2.249371,
+            1.965831
+          ],
+          "span_occupancy_percent": 68.30711471694214,
+          "leading_gap_percent": 18.093782215984245,
+          "completion_tail_gap_percent": 12.315762831557336,
+          "internal_gap_percent": 1.2833402355162742,
+          "median_worker_finish_to_phase_end_ms": 0.362896,
+          "median_worker_finish_to_phase_end_percent": 13.17147018674367,
+          "rows_coefficient_of_variation": 0.4789697276446602
+        }
+      },
+      {
+        "batch_id": 448,
+        "stage_ms": {
+          "decode_total": 14.897542,
+          "decode_slot_setup": 0.191375,
+          "decode_worklist_setup": 0.019125,
+          "decode_locality_sort": 0.583042,
+          "decode_parallel": 14.014167,
+          "decode_extract": 0.0885,
+          "cleanup_total": 2.256334,
+          "cleanup_parallel": 2.25575
+        },
+        "decode": {
+          "worker_rows": [
+            206,
+            1510,
+            1229,
+            410,
+            122,
+            1054,
+            1135,
+            578,
+            1331,
+            1461,
+            1546,
+            1418
+          ],
+          "worker_span_ms": [
+            3.741125,
+            13.747419,
+            12.328826,
+            13.922583,
+            3.757166,
+            12.337673,
+            12.556787,
+            12.468835,
+            12.582376,
+            12.593254,
+            13.742704,
+            12.503455
+          ],
+          "span_occupancy_percent": 81.03835390287557,
+          "leading_gap_percent": 17.236355063653324,
+          "completion_tail_gap_percent": 1.5293559724241905,
+          "internal_gap_percent": 0.19593506104691535,
+          "median_worker_finish_to_phase_end_ms": 0.2329165,
+          "median_worker_finish_to_phase_end_percent": 1.6620074528867823,
+          "rows_coefficient_of_variation": 0.5046540068865665
+        },
+        "cleanup": {
+          "worker_rows": [
+            562,
+            1427,
+            1479,
+            489,
+            463,
+            1463,
+            1462,
+            0,
+            281,
+            1450,
+            1430,
+            1494
+          ],
+          "worker_span_ms": [
+            2.109543,
+            1.90738,
+            1.913959,
+            1.923917,
+            1.86362,
+            1.914124,
+            1.921919,
+            0.0,
+            1.915123,
+            1.887622,
+            1.909786,
+            1.9355
+          ],
+          "span_occupancy_percent": 78.32758136613839,
+          "leading_gap_percent": 9.223805829546714,
+          "completion_tail_gap_percent": 11.6897299493886,
+          "internal_gap_percent": 0.7588828549262995,
+          "median_worker_finish_to_phase_end_ms": 0.309167,
+          "median_worker_finish_to_phase_end_percent": 13.705729801618087,
+          "rows_coefficient_of_variation": 0.5574730187790856
+        }
+      },
+      {
+        "batch_id": 512,
+        "stage_ms": {
+          "decode_total": 14.53575,
+          "decode_slot_setup": 0.062042,
+          "decode_worklist_setup": 0.003583,
+          "decode_locality_sort": 0.437625,
+          "decode_parallel": 13.9885,
+          "decode_extract": 0.042584,
+          "cleanup_parallel": 2.169916,
+          "cleanup_total": 2.170125
+        },
+        "decode": {
+          "worker_rows": [
+            1087,
+            1561,
+            410,
+            1337,
+            483,
+            636,
+            1319,
+            545,
+            652,
+            1588,
+            1078,
+            1304
+          ],
+          "worker_span_ms": [
+            13.004711,
+            13.379005,
+            13.570878,
+            11.433839,
+            13.676374,
+            13.415872,
+            13.390125,
+            13.40637,
+            13.416461,
+            13.389336,
+            13.878499,
+            11.400547
+          ],
+          "span_occupancy_percent": 93.74487197817254,
+          "leading_gap_percent": 2.8859992136397756,
+          "completion_tail_gap_percent": 3.1742121504569227,
+          "internal_gap_percent": 0.19491665773075503,
+          "median_worker_finish_to_phase_end_ms": 0.5200215,
+          "median_worker_finish_to_phase_end_percent": 3.717492940629803,
+          "rows_coefficient_of_variation": 0.41411330977563776
+        },
+        "cleanup": {
+          "worker_rows": [
+            567,
+            0,
+            1461,
+            1509,
+            328,
+            280,
+            533,
+            1514,
+            1541,
+            1238,
+            1511,
+            1518
+          ],
+          "worker_span_ms": [
+            1.998827,
+            0.0,
+            2.017294,
+            1.987828,
+            2.119875,
+            1.035999,
+            1.987373,
+            2.001249,
+            2.005504,
+            1.632542,
+            1.994708,
+            1.988873
+          ],
+          "span_occupancy_percent": 79.76526894743084,
+          "leading_gap_percent": 13.579938117420214,
+          "completion_tail_gap_percent": 5.575112124155958,
+          "internal_gap_percent": 1.0796808109929907,
+          "median_worker_finish_to_phase_end_ms": 0.144583,
+          "median_worker_finish_to_phase_end_percent": 6.663068985158873,
+          "rows_coefficient_of_variation": 0.5766375233483625
+        }
+      },
+      {
+        "batch_id": 576,
+        "stage_ms": {
+          "decode_slot_setup": 0.045958,
+          "decode_total": 13.747917,
+          "decode_worklist_setup": 0.0035,
+          "decode_locality_sort": 0.405375,
+          "decode_parallel": 13.211167,
+          "decode_extract": 0.080291,
+          "cleanup_total": 2.244333,
+          "cleanup_parallel": 2.244042
+        },
+        "decode": {
+          "worker_rows": [
+            609,
+            401,
+            1453,
+            336,
+            1504,
+            1337,
+            1266,
+            526,
+            1256,
+            1073,
+            799,
+            1440
+          ],
+          "worker_span_ms": [
+            12.811168,
+            10.810916,
+            12.742659,
+            6.071332,
+            12.724409,
+            12.729335,
+            12.691796,
+            12.37484,
+            12.736581,
+            12.974784,
+            12.684094,
+            12.723481
+          ],
+          "span_occupancy_percent": 90.87980582386602,
+          "leading_gap_percent": 6.321750379811261,
+          "completion_tail_gap_percent": 2.542516998435238,
+          "internal_gap_percent": 0.255926797887474,
+          "median_worker_finish_to_phase_end_ms": 0.3635835,
+          "median_worker_finish_to_phase_end_percent": 2.752092226220439,
+          "rows_coefficient_of_variation": 0.4208790404221463
+        },
+        "cleanup": {
+          "worker_rows": [
+            549,
+            379,
+            1485,
+            1430,
+            1504,
+            1489,
+            239,
+            1453,
+            1453,
+            12,
+            1461,
+            546
+          ],
+          "worker_span_ms": [
+            2.086294,
+            1.5205,
+            2.123868,
+            2.085544,
+            2.092128,
+            2.081126,
+            1.858458,
+            2.083701,
+            2.078382,
+            0.036793,
+            2.092168,
+            2.05696
+          ],
+          "span_occupancy_percent": 82.42538092721378,
+          "leading_gap_percent": 13.005271291713791,
+          "completion_tail_gap_percent": 3.020665388615721,
+          "internal_gap_percent": 1.5486823924567068,
+          "median_worker_finish_to_phase_end_ms": 0.0634585,
+          "median_worker_finish_to_phase_end_percent": 2.8278659668580177,
+          "rows_coefficient_of_variation": 0.5691092455173552
+        }
+      },
+      {
+        "batch_id": 640,
+        "stage_ms": {
+          "decode_slot_setup": 0.179375,
+          "decode_total": 14.363708,
+          "decode_worklist_setup": 0.019333,
+          "decode_locality_sort": 0.442667,
+          "decode_parallel": 13.670667,
+          "decode_extract": 0.05075,
+          "cleanup_parallel": 2.92325,
+          "cleanup_total": 2.923792
+        },
+        "decode": {
+          "worker_rows": [
+            281,
+            20,
+            1403,
+            1406,
+            165,
+            1481,
+            1362,
+            1552,
+            1357,
+            158,
+            1450,
+            1365
+          ],
+          "worker_span_ms": [
+            13.274543,
+            3.336623,
+            12.975958,
+            13.365749,
+            3.162999,
+            13.170043,
+            12.82629,
+            12.894457,
+            13.155416,
+            3.164128,
+            12.808586,
+            13.157873
+          ],
+          "span_occupancy_percent": 77.59476610273174,
+          "leading_gap_percent": 19.38555985112748,
+          "completion_tail_gap_percent": 2.892169904121479,
+          "internal_gap_percent": 0.12750414201930796,
+          "median_worker_finish_to_phase_end_ms": 0.4750835,
+          "median_worker_finish_to_phase_end_percent": 3.4752035142103894,
+          "rows_coefficient_of_variation": 0.6014619688725131
+        },
+        "cleanup": {
+          "worker_rows": [
+            1885,
+            0,
+            0,
+            1746,
+            0,
+            639,
+            1312,
+            1887,
+            1500,
+            1639,
+            550,
+            842
+          ],
+          "worker_span_ms": [
+            2.594172,
+            0.0,
+            0.0,
+            2.662794,
+            0.0,
+            2.607241,
+            2.683792,
+            2.593004,
+            2.786875,
+            2.267173,
+            2.122544,
+            2.358085
+          ],
+          "span_occupancy_percent": 64.64175147524159,
+          "leading_gap_percent": 28.04384104449956,
+          "completion_tail_gap_percent": 6.880777673251803,
+          "internal_gap_percent": 0.43362980700704123,
+          "median_worker_finish_to_phase_end_ms": 0.266979,
+          "median_worker_finish_to_phase_end_percent": 9.132951338407594,
+          "rows_coefficient_of_variation": 0.7211079438382764
+        }
+      },
+      {
+        "batch_id": 704,
+        "stage_ms": {
+          "decode_slot_setup": 0.053084,
+          "decode_total": 24.705375,
+          "decode_worklist_setup": 0.519084,
+          "decode_locality_sort": 0.370833,
+          "decode_parallel": 23.715333,
+          "decode_extract": 0.045959,
+          "cleanup_total": 5.194167,
+          "cleanup_parallel": 5.193625
+        },
+        "decode": {
+          "worker_rows": [
+            1394,
+            864,
+            697,
+            702,
+            1265,
+            1448,
+            1319,
+            748,
+            843,
+            1500,
+            412,
+            808
+          ],
+          "worker_span_ms": [
+            18.833372,
+            17.775335,
+            8.235503,
+            18.97471,
+            18.85387,
+            18.794086,
+            17.52905,
+            8.417204,
+            17.493501,
+            23.712208,
+            18.857333,
+            18.115209
+          ],
+          "span_occupancy_percent": 72.24277678636574,
+          "leading_gap_percent": 9.382877243736504,
+          "completion_tail_gap_percent": 18.251946957691885,
+          "internal_gap_percent": 0.1223990122058726,
+          "median_worker_finish_to_phase_end_ms": 4.810416,
+          "median_worker_finish_to_phase_end_percent": 20.28399095218271,
+          "rows_coefficient_of_variation": 0.34734660883139
+        },
+        "cleanup": {
+          "worker_rows": [
+            1374,
+            1211,
+            2082,
+            2090,
+            328,
+            69,
+            1366,
+            305,
+            281,
+            1555,
+            306,
+            1033
+          ],
+          "worker_span_ms": [
+            1.739791,
+            1.579246,
+            3.566622,
+            2.509925,
+            1.868416,
+            2.196251,
+            1.681834,
+            1.000503,
+            1.268416,
+            1.909462,
+            1.001791,
+            1.586382
+          ],
+          "span_occupancy_percent": 35.15309473954447,
+          "leading_gap_percent": 25.112577117780614,
+          "completion_tail_gap_percent": 39.23025985382721,
+          "internal_gap_percent": 0.5040682888477059,
+          "median_worker_finish_to_phase_end_ms": 1.519,
+          "median_worker_finish_to_phase_end_percent": 29.247394642470336,
+          "rows_coefficient_of_variation": 0.6943977006490348
+        }
+      },
+      {
+        "batch_id": 768,
+        "stage_ms": {
+          "decode_total": 14.58575,
+          "decode_slot_setup": 0.497625,
+          "decode_worklist_setup": 0.024458,
+          "decode_locality_sort": 0.411208,
+          "decode_parallel": 13.604417,
+          "decode_extract": 0.047375,
+          "cleanup_total": 2.327666,
+          "cleanup_parallel": 2.327542
+        },
+        "decode": {
+          "worker_rows": [
+            1022,
+            843,
+            1075,
+            359,
+            1575,
+            903,
+            644,
+            1540,
+            1527,
+            278,
+            970,
+            1264
+          ],
+          "worker_span_ms": [
+            13.217209,
+            13.495793,
+            13.023466,
+            13.163295,
+            13.214328,
+            13.277212,
+            13.198961,
+            13.205163,
+            13.196697,
+            6.547667,
+            13.200753,
+            13.206959
+          ],
+          "span_occupancy_percent": 93.07485882464987,
+          "leading_gap_percent": 4.669288658235042,
+          "completion_tail_gap_percent": 2.0159916934821,
+          "internal_gap_percent": 0.23986082363299116,
+          "median_worker_finish_to_phase_end_ms": 0.2969585,
+          "median_worker_finish_to_phase_end_percent": 2.1828094507835214,
+          "rows_coefficient_of_variation": 0.4152928685478077
+        },
+        "cleanup": {
+          "worker_rows": [
+            750,
+            1521,
+            1529,
+            568,
+            1359,
+            1166,
+            554,
+            1387,
+            0,
+            93,
+            1539,
+            1534
+          ],
+          "worker_span_ms": [
+            2.251375,
+            1.979709,
+            1.977797,
+            1.96842,
+            1.912251,
+            1.869373,
+            1.903628,
+            1.987293,
+            0.0,
+            2.030958,
+            1.985422,
+            1.986294
+          ],
+          "span_occupancy_percent": 78.23890324356482,
+          "leading_gap_percent": 11.989722777648408,
+          "completion_tail_gap_percent": 9.023156187944192,
+          "internal_gap_percent": 0.7482177908425856,
+          "median_worker_finish_to_phase_end_ms": 0.2531875,
+          "median_worker_finish_to_phase_end_percent": 10.877891784552116,
+          "rows_coefficient_of_variation": 0.5555668276634234
+        }
+      },
+      {
+        "batch_id": 832,
+        "stage_ms": {
+          "decode_total": 14.115917,
+          "decode_slot_setup": 0.043167,
+          "decode_worklist_setup": 0.020083,
+          "decode_locality_sort": 0.432625,
+          "decode_parallel": 13.577959,
+          "decode_extract": 0.041291,
+          "cleanup_total": 2.35725,
+          "cleanup_parallel": 2.357125
+        },
+        "decode": {
+          "worker_rows": [
+            1448,
+            1579,
+            1600,
+            1600,
+            562,
+            48,
+            1045,
+            574,
+            1338,
+            708,
+            1218,
+            280
+          ],
+          "worker_span_ms": [
+            13.072333,
+            13.026628,
+            13.063287,
+            13.005465,
+            12.876748,
+            3.056249,
+            13.036835,
+            13.016794,
+            13.070291,
+            6.325579,
+            13.041415,
+            3.039917
+          ],
+          "span_occupancy_percent": 79.56003119958358,
+          "leading_gap_percent": 17.05158583358024,
+          "completion_tail_gap_percent": 3.189940648173509,
+          "internal_gap_percent": 0.1984423186626699,
+          "median_worker_finish_to_phase_end_ms": 0.476563,
+          "median_worker_finish_to_phase_end_percent": 3.5098279498413567,
+          "rows_coefficient_of_variation": 0.5246448004761571
+        },
+        "cleanup": {
+          "worker_rows": [
+            619,
+            1594,
+            1617,
+            1615,
+            532,
+            1524,
+            109,
+            568,
+            572,
+            1554,
+            1593,
+            103
+          ],
+          "worker_span_ms": [
+            2.102122,
+            2.117216,
+            2.076168,
+            2.116209,
+            1.969787,
+            2.092963,
+            0.135916,
+            1.946087,
+            1.942916,
+            2.107792,
+            2.135286,
+            0.133249
+          ],
+          "span_occupancy_percent": 73.80357780488237,
+          "leading_gap_percent": 18.553838539180852,
+          "completion_tail_gap_percent": 5.586922628201728,
+          "internal_gap_percent": 2.0556610277350584,
+          "median_worker_finish_to_phase_end_ms": 0.104125,
+          "median_worker_finish_to_phase_end_percent": 4.41745770801294,
+          "rows_coefficient_of_variation": 0.6039711637708101
+        }
+      }
+    ],
+    "mean_stage_ms": {
+      "decode_total": 16.007223214285712,
+      "decode_slot_setup": 0.15307435714285714,
+      "decode_worklist_setup": 0.04902078571428571,
+      "decode_locality_sort": 0.4912143571428571,
+      "decode_parallel": 15.256631071428572,
+      "decode_extract": 0.056113142857142854,
+      "cleanup_total": 2.6513245,
+      "cleanup_parallel": 2.650937642857143
+    },
+    "median_phase_metrics": {
+      "decode": {
+        "span_occupancy_percent": 80.67603332533758,
+        "leading_gap_percent": 7.362004618186624,
+        "completion_tail_gap_percent": 2.669427286487621,
+        "internal_gap_percent": 0.1954258593888352,
+        "median_worker_finish_to_phase_end_ms": 0.43059349999999996,
+        "median_worker_finish_to_phase_end_percent": 2.8689062170676163,
+        "rows_coefficient_of_variation": 0.502650544086188
+      },
+      "cleanup": {
+        "span_occupancy_percent": 78.2832423048516,
+        "leading_gap_percent": 13.292604704567003,
+        "completion_tail_gap_percent": 9.976564507769023,
+        "internal_gap_percent": 0.8630454287667988,
+        "median_worker_finish_to_phase_end_ms": 0.2545315,
+        "median_worker_finish_to_phase_end_percent": 11.114662633805477,
+        "rows_coefficient_of_variation": 0.5785266612909905
+      }
+    },
+    "time_weighted_phase_metrics": {
+      "decode": {
+        "span_occupancy_percent": 82.7797027929331,
+        "leading_gap_percent": 10.144657357069116,
+        "completion_tail_gap_percent": 6.892943880818849,
+        "internal_gap_percent": 0.1826959691789287
+      },
+      "cleanup": {
+        "span_occupancy_percent": 68.52917500053283,
+        "leading_gap_percent": 17.357589090602183,
+        "completion_tail_gap_percent": 13.076457421655686,
+        "internal_gap_percent": 1.036778487209301
+      }
+    }
+  },
+  {
+    "label": "stage-3-12w-12000-every0",
+    "workers": 12,
+    "batch": 12000,
+    "trace_every": 0,
+    "vins_per_second": 479623.62398662773,
+    "process_cpu_seconds": 125.70129299999998,
+    "cpu_microseconds_per_vin": 12.570129299999998,
+    "average_busy_cores": 6.028930968846491,
+    "sampled_batches": 0,
+    "batches": []
+  },
+  {
+    "label": "stage-4-12w-48000-every64",
+    "workers": 12,
+    "batch": 48000,
+    "trace_every": 64,
+    "vins_per_second": 648957.9911656358,
+    "process_cpu_seconds": 114.12048600000001,
+    "cpu_microseconds_per_vin": 11.412048600000002,
+    "average_busy_cores": 7.405940134540606,
+    "sampled_batches": 4,
+    "batches": [
+      {
+        "batch_id": 0,
+        "stage_ms": {
+          "decode_slot_setup": 0.73525,
+          "decode_total": 65.929958,
+          "decode_worklist_setup": 0.016667,
+          "decode_locality_sort": 1.475291,
+          "decode_parallel": 63.498709,
+          "decode_extract": 0.202792,
+          "cleanup_total": 11.3435,
+          "cleanup_parallel": 11.343375
+        },
+        "decode": {
+          "worker_rows": [
+            7088,
+            3867,
+            3116,
+            2460,
+            4757,
+            3218,
+            2450,
+            6597,
+            6332,
+            3240,
+            2625,
+            2250
+          ],
+          "worker_span_ms": [
+            63.022501,
+            62.937917,
+            63.196624,
+            62.1765,
+            61.896093,
+            62.983749,
+            62.493041,
+            62.419661,
+            62.34851,
+            63.043166,
+            62.847459,
+            62.431251
+          ],
+          "span_occupancy_percent": 98.66296021860853,
+          "leading_gap_percent": 0.6847366245928979,
+          "completion_tail_gap_percent": 0.6031787984854936,
+          "internal_gap_percent": 0.049124358313069535,
+          "median_worker_finish_to_phase_end_ms": 0.4349585,
+          "median_worker_finish_to_phase_end_percent": 0.6849879420383177,
+          "rows_coefficient_of_variation": 0.42085552746756216
+        },
+        "cleanup": {
+          "worker_rows": [
+            8180,
+            4778,
+            6135,
+            1753,
+            408,
+            5936,
+            6622,
+            30,
+            314,
+            7118,
+            2952,
+            3774
+          ],
+          "worker_span_ms": [
+            11.186627,
+            11.114872,
+            10.590048,
+            10.757,
+            10.893577,
+            11.094088,
+            10.550703,
+            11.068583,
+            1.033832,
+            10.748756,
+            11.11109,
+            11.056875
+          ],
+          "span_occupancy_percent": 89.04320142814639,
+          "leading_gap_percent": 9.476192785069111,
+          "completion_tail_gap_percent": 1.1091576948365602,
+          "internal_gap_percent": 0.3714480919479432,
+          "median_worker_finish_to_phase_end_ms": 0.1365205,
+          "median_worker_finish_to_phase_end_percent": 1.2035262873703814,
+          "rows_coefficient_of_variation": 0.6900677880348665
+        }
+      },
+      {
+        "batch_id": 64,
+        "stage_ms": {
+          "decode_total": 62.672583,
+          "decode_slot_setup": 0.917625,
+          "decode_worklist_setup": 0.0835,
+          "decode_locality_sort": 1.596792,
+          "decode_parallel": 59.8525,
+          "decode_extract": 0.220959,
+          "cleanup_total": 11.018459,
+          "cleanup_parallel": 11.018292
+        },
+        "decode": {
+          "worker_rows": [
+            3000,
+            4558,
+            3950,
+            6143,
+            1788,
+            4464,
+            4359,
+            3641,
+            6516,
+            2505,
+            1363,
+            5713
+          ],
+          "worker_span_ms": [
+            59.850208,
+            54.081454,
+            54.073337,
+            52.11124,
+            50.836202,
+            51.441455,
+            51.393708,
+            54.066955,
+            52.116329,
+            50.840126,
+            52.16442,
+            53.841206
+          ],
+          "span_occupancy_percent": 88.66472299959624,
+          "leading_gap_percent": 2.4347938682594714,
+          "completion_tail_gap_percent": 8.705805104214527,
+          "internal_gap_percent": 0.1946780279297718,
+          "median_worker_finish_to_phase_end_ms": 5.738583,
+          "median_worker_finish_to_phase_end_percent": 9.587875193183242,
+          "rows_coefficient_of_variation": 0.39347367288041013
+        },
+        "cleanup": {
+          "worker_rows": [
+            3000,
+            1500,
+            3623,
+            375,
+            1687,
+            7086,
+            4267,
+            2442,
+            7238,
+            5149,
+            4436,
+            7197
+          ],
+          "worker_span_ms": [
+            10.895083,
+            8.010417,
+            7.41408,
+            9.384001,
+            8.782831,
+            9.064334,
+            8.964087,
+            9.0995,
+            9.096344,
+            8.638626,
+            7.318583,
+            9.084213
+          ],
+          "span_occupancy_percent": 79.98222334883361,
+          "leading_gap_percent": 5.588689093857136,
+          "completion_tail_gap_percent": 14.151877320610732,
+          "internal_gap_percent": 0.2772102366985131,
+          "median_worker_finish_to_phase_end_ms": 1.7793335,
+          "median_worker_finish_to_phase_end_percent": 16.148904930092613,
+          "rows_coefficient_of_variation": 0.5595781614305547
+        }
+      },
+      {
+        "batch_id": 128,
+        "stage_ms": {
+          "decode_total": 70.343667,
+          "decode_slot_setup": 0.328041,
+          "decode_worklist_setup": 0.041708,
+          "decode_locality_sort": 3.730875,
+          "decode_parallel": 66.041709,
+          "decode_extract": 0.199666,
+          "cleanup_total": 12.097042,
+          "cleanup_parallel": 12.096833
+        },
+        "decode": {
+          "worker_rows": [
+            3046,
+            5343,
+            2045,
+            3000,
+            6777,
+            6469,
+            3000,
+            4671,
+            1215,
+            1827,
+            2900,
+            7707
+          ],
+          "worker_span_ms": [
+            62.08221,
+            52.424964,
+            62.198419,
+            66.006833,
+            52.073792,
+            62.445415,
+            62.109083,
+            62.06262,
+            50.614871,
+            62.112002,
+            62.138664,
+            62.062415
+          ],
+          "span_occupancy_percent": 90.6411138855699,
+          "leading_gap_percent": 4.253998787342102,
+          "completion_tail_gap_percent": 5.063546407215679,
+          "internal_gap_percent": 0.041340919872318874,
+          "median_worker_finish_to_phase_end_ms": 3.599834,
+          "median_worker_finish_to_phase_end_percent": 5.45084925043354,
+          "rows_coefficient_of_variation": 0.51145077557213
+        },
+        "cleanup": {
+          "worker_rows": [
+            8668,
+            1495,
+            2294,
+            3613,
+            1796,
+            562,
+            3628,
+            6287,
+            2472,
+            5729,
+            7796,
+            3660
+          ],
+          "worker_span_ms": [
+            10.747781,
+            2.196584,
+            5.663666,
+            5.2191,
+            2.185161,
+            2.5135,
+            9.904164,
+            7.615078,
+            7.458542,
+            7.072161,
+            10.032873,
+            10.372455
+          ],
+          "span_occupancy_percent": 55.786684691219044,
+          "leading_gap_percent": 28.833789251561406,
+          "completion_tail_gap_percent": 12.938934788413905,
+          "internal_gap_percent": 2.4405912688056453,
+          "median_worker_finish_to_phase_end_ms": 1.100583,
+          "median_worker_finish_to_phase_end_percent": 9.098108571061534,
+          "rows_coefficient_of_variation": 0.6166994979999038
+        }
+      },
+      {
+        "batch_id": 192,
+        "stage_ms": {
+          "decode_total": 61.96125,
+          "decode_slot_setup": 0.640667,
+          "decode_worklist_setup": 0.067834,
+          "decode_locality_sort": 2.045042,
+          "decode_parallel": 58.397291,
+          "decode_extract": 0.808708,
+          "cleanup_total": 15.030917,
+          "cleanup_parallel": 15.0305
+        },
+        "decode": {
+          "worker_rows": [
+            6491,
+            5812,
+            4618,
+            2836,
+            3187,
+            1511,
+            2756,
+            3037,
+            6698,
+            4124,
+            3509,
+            3421
+          ],
+          "worker_span_ms": [
+            56.992078,
+            57.37755,
+            56.973916,
+            56.971961,
+            48.100706,
+            57.031417,
+            56.951127,
+            56.984416,
+            56.943502,
+            47.323961,
+            47.108043,
+            56.788872
+          ],
+          "span_occupancy_percent": 93.54708323142364,
+          "leading_gap_percent": 4.380066049068383,
+          "completion_tail_gap_percent": 1.9896513692732767,
+          "internal_gap_percent": 0.08319935023469953,
+          "median_worker_finish_to_phase_end_ms": 1.3510625,
+          "median_worker_finish_to_phase_end_percent": 2.3135705044948063,
+          "rows_coefficient_of_variation": 0.3847830963672911
+        },
+        "cleanup": {
+          "worker_rows": [
+            768,
+            703,
+            7687,
+            6858,
+            559,
+            7876,
+            3000,
+            6402,
+            937,
+            395,
+            7345,
+            5470
+          ],
+          "worker_span_ms": [
+            2.363373,
+            11.558999,
+            12.391495,
+            12.348706,
+            2.437917,
+            12.335206,
+            15.019791,
+            11.439167,
+            12.404749,
+            1.282252,
+            11.478121,
+            11.307169
+          ],
+          "span_occupancy_percent": 64.51711797123626,
+          "leading_gap_percent": 19.260238071476884,
+          "completion_tail_gap_percent": 15.991349256511759,
+          "internal_gap_percent": 0.23129470077509065,
+          "median_worker_finish_to_phase_end_ms": 2.632,
+          "median_worker_finish_to_phase_end_percent": 17.511060842952663,
+          "rows_coefficient_of_variation": 0.7652598482977313
+        }
+      }
+    ],
+    "mean_stage_ms": {
+      "decode_slot_setup": 0.65539575,
+      "decode_total": 65.2268645,
+      "decode_worklist_setup": 0.05242725,
+      "decode_locality_sort": 2.212,
+      "decode_parallel": 61.94755225,
+      "decode_extract": 0.35803125,
+      "cleanup_total": 12.3724795,
+      "cleanup_parallel": 12.372250000000001
+    },
+    "median_phase_metrics": {
+      "decode": {
+        "span_occupancy_percent": 92.09409855849677,
+        "leading_gap_percent": 3.3443963278007867,
+        "completion_tail_gap_percent": 3.526598888244478,
+        "internal_gap_percent": 0.06616185427388453,
+        "median_worker_finish_to_phase_end_ms": 2.47544825,
+        "median_worker_finish_to_phase_end_percent": 3.8822098774641733,
+        "rows_coefficient_of_variation": 0.40716460017398615
+      },
+      "cleanup": {
+        "span_occupancy_percent": 72.24967066003494,
+        "leading_gap_percent": 14.368215428272997,
+        "completion_tail_gap_percent": 13.545406054512318,
+        "internal_gap_percent": 0.3243291643232281,
+        "median_worker_finish_to_phase_end_ms": 1.43995825,
+        "median_worker_finish_to_phase_end_percent": 12.623506750577073,
+        "rows_coefficient_of_variation": 0.6533836430173852
+      }
+    },
+    "time_weighted_phase_metrics": {
+      "decode": {
+        "span_occupancy_percent": 92.90426096564076,
+        "leading_gap_percent": 2.929630417049018,
+        "completion_tail_gap_percent": 4.075870420422193,
+        "internal_gap_percent": 0.0902381968880242
+      },
+      "cleanup": {
+        "span_occupancy_percent": 71.44789077707503,
+        "leading_gap_percent": 16.31389517535883,
+        "completion_tail_gap_percent": 11.42454316447426,
+        "internal_gap_percent": 0.8136708830918654
+      }
+    }
+  },
+  {
+    "label": "stage-5-8w-48000-every64",
+    "workers": 8,
+    "batch": 48000,
+    "trace_every": 64,
+    "vins_per_second": 709649.3470001863,
+    "process_cpu_seconds": 101.71193,
+    "cpu_microseconds_per_vin": 10.171193,
+    "average_busy_cores": 7.217980470662866,
+    "sampled_batches": 4,
+    "batches": [
+      {
+        "batch_id": 0,
+        "stage_ms": {
+          "decode_total": 63.876959,
+          "decode_slot_setup": 0.837292,
+          "decode_worklist_setup": 0.016167,
+          "decode_locality_sort": 2.4855,
+          "decode_parallel": 60.304083,
+          "decode_extract": 0.232334,
+          "cleanup_total": 9.324792,
+          "cleanup_parallel": 9.324625
+        },
+        "decode": {
+          "worker_rows": [
+            6136,
+            5729,
+            5400,
+            7533,
+            5724,
+            5276,
+            6554,
+            5648
+          ],
+          "worker_span_ms": [
+            59.784747,
+            59.184668,
+            59.763948,
+            59.764335,
+            59.678453,
+            59.262836,
+            59.734413,
+            59.725867
+          ],
+          "span_occupancy_percent": 98.85302190068954,
+          "leading_gap_percent": 0.3253728690311069,
+          "completion_tail_gap_percent": 0.7390581662604836,
+          "internal_gap_percent": 0.08254706401886586,
+          "median_worker_finish_to_phase_end_ms": 0.4450625,
+          "median_worker_finish_to_phase_end_percent": 0.7380304580703101,
+          "rows_coefficient_of_variation": 0.11536773932853922
+        },
+        "cleanup": {
+          "worker_rows": [
+            7564,
+            7502,
+            7523,
+            7573,
+            7533,
+            2799,
+            2766,
+            4740
+          ],
+          "worker_span_ms": [
+            9.247703,
+            9.217422,
+            9.205092,
+            9.218168,
+            9.230255,
+            9.210704,
+            9.193711,
+            6.994792
+          ],
+          "span_occupancy_percent": 95.87228306768368,
+          "leading_gap_percent": 3.2830274675925306,
+          "completion_tail_gap_percent": 0.4155703312465649,
+          "internal_gap_percent": 0.4291191334772176,
+          "median_worker_finish_to_phase_end_ms": 0.038792,
+          "median_worker_finish_to_phase_end_percent": 0.4160167298953041,
+          "rows_coefficient_of_variation": 0.3442927735066318
+        }
+      },
+      {
+        "batch_id": 64,
+        "stage_ms": {
+          "decode_total": 57.514625,
+          "decode_slot_setup": 0.790709,
+          "decode_worklist_setup": 0.015208,
+          "decode_locality_sort": 1.642167,
+          "decode_parallel": 54.830166,
+          "decode_extract": 0.234708,
+          "cleanup_total": 8.918208,
+          "cleanup_parallel": 8.917167
+        },
+        "decode": {
+          "worker_rows": [
+            6960,
+            6292,
+            4605,
+            2814,
+            6817,
+            6769,
+            6846,
+            6897
+          ],
+          "worker_span_ms": [
+            54.492043,
+            54.759041,
+            54.549832,
+            54.57033,
+            54.531043,
+            54.529918,
+            54.538459,
+            54.513617
+          ],
+          "span_occupancy_percent": 99.50824401115254,
+          "leading_gap_percent": 0.03447121608203776,
+          "completion_tail_gap_percent": 0.3989678783755643,
+          "internal_gap_percent": 0.05831689438985102,
+          "median_worker_finish_to_phase_end_ms": 0.246687,
+          "median_worker_finish_to_phase_end_percent": 0.449911094560611,
+          "rows_coefficient_of_variation": 0.2348363792090144
+        },
+        "cleanup": {
+          "worker_rows": [
+            6497,
+            6606,
+            6470,
+            6424,
+            6581,
+            6503,
+            6468,
+            2451
+          ],
+          "worker_span_ms": [
+            8.642368,
+            8.649419,
+            8.62858,
+            8.644751,
+            8.623869,
+            8.608579,
+            8.609635,
+            8.621459
+          ],
+          "span_occupancy_percent": 96.76371991238922,
+          "leading_gap_percent": 0.44314522762666664,
+          "completion_tail_gap_percent": 2.375217656011152,
+          "internal_gap_percent": 0.41791720397296583,
+          "median_worker_finish_to_phase_end_ms": 0.2117705,
+          "median_worker_finish_to_phase_end_percent": 2.374863003014298,
+          "rows_coefficient_of_variation": 0.22376137463328602
+        }
+      },
+      {
+        "batch_id": 128,
+        "stage_ms": {
+          "decode_total": 61.787416,
+          "decode_slot_setup": 0.687709,
+          "decode_worklist_setup": 0.094583,
+          "decode_locality_sort": 1.32475,
+          "decode_parallel": 59.486875,
+          "decode_extract": 0.192291,
+          "cleanup_total": 9.43325,
+          "cleanup_parallel": 9.432833
+        },
+        "decode": {
+          "worker_rows": [
+            5174,
+            6895,
+            6396,
+            5250,
+            6308,
+            6949,
+            5796,
+            5232
+          ],
+          "worker_span_ms": [
+            58.112212,
+            58.065866,
+            58.108207,
+            59.460251,
+            58.116537,
+            58.112292,
+            58.091039,
+            58.094746
+          ],
+          "span_occupancy_percent": 97.95462234316393,
+          "leading_gap_percent": 0.026249277676798452,
+          "completion_tail_gap_percent": 1.951603189779258,
+          "internal_gap_percent": 0.0675251893800103,
+          "median_worker_finish_to_phase_end_ms": 1.3252915,
+          "median_worker_finish_to_phase_end_percent": 2.2278721146471385,
+          "rows_coefficient_of_variation": 0.11531240778376319
+        },
+        "cleanup": {
+          "worker_rows": [
+            6046,
+            7417,
+            3770,
+            7400,
+            6755,
+            6592,
+            7372,
+            2648
+          ],
+          "worker_span_ms": [
+            8.998747,
+            8.994332,
+            8.990162,
+            8.998408,
+            8.730291,
+            8.980039,
+            8.984878,
+            8.975292
+          ],
+          "span_occupancy_percent": 94.95046318534422,
+          "leading_gap_percent": 0.7230913554814339,
+          "completion_tail_gap_percent": 3.921694309652254,
+          "internal_gap_percent": 0.4047511495221001,
+          "median_worker_finish_to_phase_end_ms": 0.3699165,
+          "median_worker_finish_to_phase_end_percent": 3.9215843214864505,
+          "rows_coefficient_of_variation": 0.2824845251415455
+        }
+      },
+      {
+        "batch_id": 192,
+        "stage_ms": {
+          "decode_total": 63.155459,
+          "decode_slot_setup": 0.597917,
+          "decode_worklist_setup": 0.013458,
+          "decode_locality_sort": 1.577042,
+          "decode_parallel": 60.756291,
+          "decode_extract": 0.208917,
+          "cleanup_total": 11.425792,
+          "cleanup_parallel": 11.42575
+        },
+        "decode": {
+          "worker_rows": [
+            6084,
+            3714,
+            7322,
+            5531,
+            6856,
+            7191,
+            7591,
+            3711
+          ],
+          "worker_span_ms": [
+            58.488118,
+            58.640749,
+            58.680486,
+            60.668957,
+            60.318875,
+            60.311,
+            60.313962,
+            60.326873
+          ],
+          "span_occupancy_percent": 98.29208879784976,
+          "leading_gap_percent": 1.1022171350124055,
+          "completion_tail_gap_percent": 0.5386868085808596,
+          "internal_gap_percent": 0.06700725855697807,
+          "median_worker_finish_to_phase_end_ms": 0.391979,
+          "median_worker_finish_to_phase_end_percent": 0.6451661112756208,
+          "rows_coefficient_of_variation": 0.24383022896178305
+        },
+        "cleanup": {
+          "worker_rows": [
+            6261,
+            6420,
+            6514,
+            6440,
+            6469,
+            3000,
+            6543,
+            6353
+          ],
+          "worker_span_ms": [
+            8.522004,
+            8.519293,
+            8.512415,
+            8.495253,
+            8.508752,
+            11.284667,
+            8.513831,
+            8.490173
+          ],
+          "span_occupancy_percent": 77.50737150734088,
+          "leading_gap_percent": 0.2393617486817058,
+          "completion_tail_gap_percent": 21.96236242697416,
+          "internal_gap_percent": 0.2909043170032602,
+          "median_worker_finish_to_phase_end_ms": 2.851875,
+          "median_worker_finish_to_phase_end_percent": 24.96006826685338,
+          "rows_coefficient_of_variation": 0.1894961887626122
+        }
+      }
+    ],
+    "mean_stage_ms": {
+      "decode_total": 61.58361475,
+      "decode_slot_setup": 0.72840675,
+      "decode_worklist_setup": 0.034854,
+      "decode_locality_sort": 1.75736475,
+      "decode_parallel": 58.844353749999996,
+      "decode_extract": 0.2170625,
+      "cleanup_total": 9.7755105,
+      "cleanup_parallel": 9.77509375
+    },
+    "median_phase_metrics": {
+      "decode": {
+        "span_occupancy_percent": 98.57255534926965,
+        "leading_gap_percent": 0.17992204255657232,
+        "completion_tail_gap_percent": 0.6388724874206716,
+        "internal_gap_percent": 0.06726622396849419,
+        "median_worker_finish_to_phase_end_ms": 0.41852075,
+        "median_worker_finish_to_phase_end_percent": 0.6915982846729655,
+        "rows_coefficient_of_variation": 0.1751020592687768
+      },
+      "cleanup": {
+        "span_occupancy_percent": 95.41137312651395,
+        "leading_gap_percent": 0.5831182915540503,
+        "completion_tail_gap_percent": 3.1484559828317034,
+        "internal_gap_percent": 0.411334176747533,
+        "median_worker_finish_to_phase_end_ms": 0.2908435,
+        "median_worker_finish_to_phase_end_percent": 3.1482236622503743,
+        "rows_coefficient_of_variation": 0.25312294988741574
+      }
+    },
+    "time_weighted_phase_metrics": {
+      "decode": {
+        "span_occupancy_percent": 98.63381114963813,
+        "leading_gap_percent": 0.382532400145528,
+        "completion_tail_gap_percent": 0.91456135458026,
+        "internal_gap_percent": 0.06909509563608728
+      },
+      "cleanup": {
+        "span_occupancy_percent": 90.48667819682036,
+        "leading_gap_percent": 1.1283852776348053,
+        "completion_tail_gap_percent": 8.004639341694295,
+        "internal_gap_percent": 0.3802971838505385
+      }
+    }
+  }
+]

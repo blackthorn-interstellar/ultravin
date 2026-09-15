@@ -1,0 +1,1322 @@
+{
+  "schema_version": 1,
+  "validation": {
+    "binary_sha256": "7d22f17719f5ed57903df4379d61ef975eac4039a06576900d7994ff0fef6acb",
+    "frozen_now_micros": 1788220800000000,
+    "corpus_rows": 10000000,
+    "fastest_rows_per_second": 638381.738419477,
+    "minimum_observed_unique_input_seconds": 10.000152959000001,
+    "corpus_sha256": "de80fb8727de3d89a7885929645953eed7b51a67c1dc988d309bbaa0ab4ec5f3",
+    "inputs": [
+      {
+        "path": "scripts/bench/native_managed_grid_2026_09_14.jsonl",
+        "sha256": "0d3283bfe2b51028414698634bb661b799e2a04d0c2d1d44e0714e474426f385"
+      }
+    ],
+    "manifest": {
+      "path": "scripts/bench/native_managed_grid_2026_09_14.json",
+      "sha256": "838c9fae9dad86f2bfda68fbe4024713c9071526d5355b51a0bd70ab06f5047f"
+    }
+  },
+  "calibration_reference": {
+    "method": "actual production calibration samples",
+    "samples": 20,
+    "median_single_core_rows_per_second": 142713.93415433913,
+    "range_single_core_rows_per_second": [
+      99232.84483122858,
+      180054.59311530317
+    ]
+  },
+  "throughput": {
+    "formula": "us_per_row = a + b/C + h0/B + h1*(C-1)/B + d0*B + d1*(C-1)*B + l0/(C*sqrt(B)) + l1*(C-1)/sqrt(B)",
+    "fit_weighting": "relative_time",
+    "calibration_normalization": "pooled_same_hardware",
+    "interpretation": "The square-root terms empirically represent scheduling or locality costs that decline more gradually with batch size than fixed dispatch overhead. This is a fitted shape, not a mechanistic claim.",
+    "coefficients": {
+      "a": 0.2236796074913867,
+      "b": 8.790112121586091,
+      "h0": 0.0,
+      "h1": 0.0,
+      "d0": 0.0,
+      "d1": 1.6813820114618133e-06,
+      "l0": 36.688627627626204,
+      "l1": 3.6109584408872104
+    },
+    "in_sample": {
+      "mape_percent": 3.8682344824763004,
+      "rmse": 18955.883627091072,
+      "r_squared": 0.9890111078623969
+    },
+    "leave_one_batch_size_out": {
+      "mape_percent": 4.835054328142421,
+      "rmse": 22984.866806473754,
+      "r_squared": 0.9838434054782021
+    },
+    "heldout_batch_size": 9000,
+    "heldout": {
+      "mape_percent": 2.986128300128393,
+      "rmse": 11912.772879731798,
+      "r_squared": 0.9964848363311141
+    },
+    "predicted_batch_grid_regret": [
+      {
+        "workers": 1,
+        "predicted_batch_size": 16384,
+        "actual_best_batch_size": 9000,
+        "grid_regret_percent": 2.7199289219071776
+      },
+      {
+        "workers": 4,
+        "predicted_batch_size": 16384,
+        "actual_best_batch_size": 16384,
+        "grid_regret_percent": 0.0
+      },
+      {
+        "workers": 8,
+        "predicted_batch_size": 12000,
+        "actual_best_batch_size": 12000,
+        "grid_regret_percent": 0.0
+      },
+      {
+        "workers": 12,
+        "predicted_batch_size": 12000,
+        "actual_best_batch_size": 12000,
+        "grid_regret_percent": 0.0
+      }
+    ],
+    "continuous_99pct_selection": [
+      {
+        "workers": 1,
+        "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+        "domain": [
+          256,
+          16384
+        ],
+        "predicted_peak_batch_size": 16384,
+        "predicted_peak_rows_per_second": 107522.00701464097,
+        "predicted_99pct_batch_size": 9294,
+        "predicted_99pct_rows_per_second": 106446.87110111884,
+        "previous_batch_rows_per_second": 106446.63909610467,
+        "nearest_measured": {
+          "batch_size": 9000,
+          "distance_rows": 294,
+          "actual_rows_per_second": 112490.2872840089,
+          "measured_best_batch_size": 9000,
+          "measured_best_rows_per_second": 112490.2872840089,
+          "regret_percent": 0.0
+        },
+        "heldout": {
+          "batch_size": 9000,
+          "actual_rows_per_second": 112490.2872840089,
+          "predicted_rows_per_second": 106377.05079614693,
+          "absolute_rate_error_percent": 5.434457174447093,
+          "measured_regret_percent": 0.0
+        }
+      },
+      {
+        "workers": 4,
+        "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+        "domain": [
+          256,
+          16384
+        ],
+        "predicted_peak_batch_size": 15784,
+        "predicted_peak_rows_per_second": 375931.8541066591,
+        "predicted_99pct_batch_size": 7815,
+        "predicted_99pct_rows_per_second": 372172.9919084304,
+        "previous_batch_rows_per_second": 372171.6849783065,
+        "nearest_measured": {
+          "batch_size": 9000,
+          "distance_rows": 1185,
+          "actual_rows_per_second": 379248.4319180499,
+          "measured_best_batch_size": 16384,
+          "measured_best_rows_per_second": 391490.44107748946,
+          "regret_percent": 3.127026326810489
+        },
+        "heldout": {
+          "batch_size": 9000,
+          "actual_rows_per_second": 379248.4319180499,
+          "predicted_rows_per_second": 373486.00344346365,
+          "absolute_rate_error_percent": 1.5194336982338297,
+          "measured_regret_percent": 3.127026326810489
+        }
+      },
+      {
+        "workers": 8,
+        "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+        "domain": [
+          256,
+          16384
+        ],
+        "predicted_peak_batch_size": 11719,
+        "predicted_peak_rows_per_second": 575960.5232014435,
+        "predicted_99pct_batch_size": 7664,
+        "predicted_99pct_rows_per_second": 570202.5374760609,
+        "previous_batch_rows_per_second": 570199.1278593246,
+        "nearest_measured": {
+          "batch_size": 9000,
+          "distance_rows": 1336,
+          "actual_rows_per_second": 584166.8557307646,
+          "measured_best_batch_size": 12000,
+          "measured_best_rows_per_second": 616202.5697976139,
+          "regret_percent": 5.198893292082696
+        },
+        "heldout": {
+          "batch_size": 9000,
+          "actual_rows_per_second": 584166.8557307646,
+          "predicted_rows_per_second": 573673.4016374755,
+          "absolute_rate_error_percent": 1.7963111036421786,
+          "measured_regret_percent": 5.198893292082696
+        }
+      },
+      {
+        "workers": 12,
+        "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+        "domain": [
+          256,
+          16384
+        ],
+        "predicted_peak_batch_size": 11018,
+        "predicted_peak_rows_per_second": 637955.5500906358,
+        "predicted_99pct_batch_size": 7921,
+        "predicted_99pct_rows_per_second": 631576.1569229778,
+        "previous_batch_rows_per_second": 631571.4309434654,
+        "nearest_measured": {
+          "batch_size": 9000,
+          "distance_rows": 1079,
+          "actual_rows_per_second": 615828.2832811737,
+          "measured_best_batch_size": 12000,
+          "measured_best_rows_per_second": 631209.7645920947,
+          "regret_percent": 2.436825628142958
+        },
+        "heldout": {
+          "batch_size": 9000,
+          "actual_rows_per_second": 615828.2832811737,
+          "predicted_rows_per_second": 635499.7552557637,
+          "absolute_rate_error_percent": 3.1943112241904714,
+          "measured_regret_percent": 2.436825628142958
+        }
+      }
+    ],
+    "continuous_99pct_status": "rejected_for_native_after_fresh_selection_validation",
+    "selected_policy_native_modeled_peak": [
+      {
+        "workers": 1,
+        "selection_policy": "native_modeled_peak",
+        "target_fraction": 1.0,
+        "evaluation": "unconstrained modeled peak inside the measured batch-size domain; production additionally applies its measured-width memory cap",
+        "batch_size": 16384,
+        "modeled_rows_per_second": 107522.00701464097,
+        "nearest_measured_batch_size": 16384,
+        "nearest_measured_regret_percent": 2.7199289219071776
+      },
+      {
+        "workers": 4,
+        "selection_policy": "native_modeled_peak",
+        "target_fraction": 1.0,
+        "evaluation": "unconstrained modeled peak inside the measured batch-size domain; production additionally applies its measured-width memory cap",
+        "batch_size": 15784,
+        "modeled_rows_per_second": 375931.8541066591,
+        "nearest_measured_batch_size": 16384,
+        "nearest_measured_regret_percent": 0.0
+      },
+      {
+        "workers": 8,
+        "selection_policy": "native_modeled_peak",
+        "target_fraction": 1.0,
+        "evaluation": "unconstrained modeled peak inside the measured batch-size domain; production additionally applies its measured-width memory cap",
+        "batch_size": 11719,
+        "modeled_rows_per_second": 575960.5232014435,
+        "nearest_measured_batch_size": 12000,
+        "nearest_measured_regret_percent": 0.0
+      },
+      {
+        "workers": 12,
+        "selection_policy": "native_modeled_peak",
+        "target_fraction": 1.0,
+        "evaluation": "unconstrained modeled peak inside the measured batch-size domain; production additionally applies its measured-width memory cap",
+        "batch_size": 11018,
+        "modeled_rows_per_second": 637955.5500906358,
+        "nearest_measured_batch_size": 12000,
+        "nearest_measured_regret_percent": 0.0
+      }
+    ],
+    "coefficient_reference": "The candidate pools calibration on this single-hardware grid. CPU-scaled terms use the pooled reference; h0 and h1 remain fixed per-batch overhead terms.",
+    "candidate_status": "evaluated_coefficients",
+    "rejected_six_term_baselines": {
+      "unweighted_per_worker": {
+        "formula": "us_per_row = a + b/C + h0/B + h1*(C-1)/B + d0*B + d1*(C-1)*B",
+        "fit_weighting": "absolute_time",
+        "calibration_normalization": "per_worker",
+        "interpretation": null,
+        "coefficients": {
+          "a": 0.13023240000543523,
+          "b": 9.795823001562315,
+          "h0": 237.3580336039446,
+          "h1": 43.56458859502719,
+          "d0": 0.0,
+          "d1": 4.1410649076737706e-06
+        },
+        "in_sample": {
+          "mape_percent": 13.610062846242183,
+          "rmse": 87933.21819835143,
+          "r_squared": 0.7635323264943292
+        },
+        "leave_one_batch_size_out": {
+          "mape_percent": 17.69900209243913,
+          "rmse": 107114.41178295569,
+          "r_squared": 0.6491175414801691
+        },
+        "heldout_batch_size": 9000,
+        "heldout": {
+          "mape_percent": 11.611057982357734,
+          "rmse": 59677.71323623077,
+          "r_squared": 0.9117846475558271
+        },
+        "predicted_batch_grid_regret": [
+          {
+            "workers": 1,
+            "predicted_batch_size": 16384,
+            "actual_best_batch_size": 9000,
+            "grid_regret_percent": 2.7199289219071776
+          },
+          {
+            "workers": 4,
+            "predicted_batch_size": 6000,
+            "actual_best_batch_size": 16384,
+            "grid_regret_percent": 5.450068471919344
+          },
+          {
+            "workers": 8,
+            "predicted_batch_size": 6000,
+            "actual_best_batch_size": 12000,
+            "grid_regret_percent": 11.07714503005608
+          },
+          {
+            "workers": 12,
+            "predicted_batch_size": 3000,
+            "actual_best_batch_size": 12000,
+            "grid_regret_percent": 19.103727070363142
+          }
+        ],
+        "continuous_99pct_selection": [
+          {
+            "workers": 1,
+            "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+            "domain": [
+              256,
+              16384
+            ],
+            "predicted_peak_batch_size": 16384,
+            "predicted_peak_rows_per_second": 100881.62371383556,
+            "predicted_99pct_batch_size": 2071,
+            "predicted_99pct_rows_per_second": 99872.8492679867,
+            "previous_batch_rows_per_second": 99872.29700495893,
+            "nearest_measured": {
+              "batch_size": 1500,
+              "distance_rows": 571,
+              "actual_rows_per_second": 98569.14983549423,
+              "measured_best_batch_size": 9000,
+              "measured_best_rows_per_second": 112490.2872840089,
+              "regret_percent": 12.375412833080768
+            },
+            "heldout": {
+              "batch_size": 9000,
+              "actual_rows_per_second": 112490.2872840089,
+              "predicted_rows_per_second": 100760.80426124024,
+              "absolute_rate_error_percent": 10.427107358304411,
+              "measured_regret_percent": 0.0
+            }
+          },
+          {
+            "workers": 4,
+            "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+            "domain": [
+              256,
+              16384
+            ],
+            "predicted_peak_batch_size": 5136,
+            "predicted_peak_rows_per_second": 328978.2638702359,
+            "predicted_99pct_batch_size": 2700,
+            "predicted_99pct_rows_per_second": 325692.1719453663,
+            "previous_batch_rows_per_second": 325688.29442600405,
+            "nearest_measured": {
+              "batch_size": 3000,
+              "distance_rows": 300,
+              "actual_rows_per_second": 350461.0414034324,
+              "measured_best_batch_size": 16384,
+              "measured_best_rows_per_second": 391490.44107748946,
+              "regret_percent": 10.480306891052793
+            },
+            "heldout": {
+              "batch_size": 9000,
+              "actual_rows_per_second": 379248.4319180499,
+              "predicted_rows_per_second": 326492.75785221386,
+              "absolute_rate_error_percent": 13.910584626289435,
+              "measured_regret_percent": 3.127026326810489
+            }
+          },
+          {
+            "workers": 8,
+            "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+            "domain": [
+              256,
+              16384
+            ],
+            "predicted_peak_batch_size": 4403,
+            "predicted_peak_rows_per_second": 643517.3973515404,
+            "predicted_99pct_batch_size": 3087,
+            "predicted_99pct_rows_per_second": 637086.394646645,
+            "previous_batch_rows_per_second": 637074.6457912906,
+            "nearest_measured": {
+              "batch_size": 3000,
+              "distance_rows": 87,
+              "actual_rows_per_second": 520596.3975197368,
+              "measured_best_batch_size": 12000,
+              "measured_best_rows_per_second": 616202.5697976139,
+              "regret_percent": 15.515380325219684
+            },
+            "heldout": {
+              "batch_size": 9000,
+              "actual_rows_per_second": 584166.8557307646,
+              "predicted_rows_per_second": 617410.0790695914,
+              "absolute_rate_error_percent": 5.690706861011674,
+              "measured_regret_percent": 5.198893292082696
+            }
+          },
+          {
+            "workers": 12,
+            "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+            "domain": [
+              256,
+              16384
+            ],
+            "predicted_peak_batch_size": 4028,
+            "predicted_peak_rows_per_second": 785212.799730114,
+            "predicted_99pct_batch_size": 3081,
+            "predicted_99pct_rows_per_second": 777366.092685331,
+            "previous_batch_rows_per_second": 777347.1505585582,
+            "nearest_measured": {
+              "batch_size": 3000,
+              "distance_rows": 81,
+              "actual_rows_per_second": 510625.1739229392,
+              "measured_best_batch_size": 12000,
+              "measured_best_rows_per_second": 631209.7645920947,
+              "regret_percent": 19.103727070363142
+            },
+            "heldout": {
+              "batch_size": 9000,
+              "actual_rows_per_second": 615828.2832811737,
+              "predicted_rows_per_second": 716921.6263475987,
+              "absolute_rate_error_percent": 16.415833083825415,
+              "measured_regret_percent": 2.436825628142958
+            }
+          }
+        ],
+        "model_status": "rejected_six_term_baseline"
+      },
+      "unweighted_pooled": {
+        "formula": "us_per_row = a + b/C + h0/B + h1*(C-1)/B + d0*B + d1*(C-1)*B",
+        "fit_weighting": "absolute_time",
+        "calibration_normalization": "pooled_same_hardware",
+        "interpretation": null,
+        "coefficients": {
+          "a": 0.41836046617967293,
+          "b": 9.491450639253088,
+          "h0": 258.53209970480907,
+          "h1": 31.715512020093207,
+          "d0": 0.0,
+          "d1": 1.9009951519901237e-06
+        },
+        "in_sample": {
+          "mape_percent": 9.267518038549493,
+          "rmse": 55583.236750226235,
+          "r_squared": 0.9055170359195547
+        },
+        "leave_one_batch_size_out": {
+          "mape_percent": 11.844260304121606,
+          "rmse": 66663.158098742,
+          "r_squared": 0.8640943190214687
+        },
+        "heldout_batch_size": 9000,
+        "heldout": {
+          "mape_percent": 8.404165294492556,
+          "rmse": 39083.90940415876,
+          "r_squared": 0.9621630759744779
+        },
+        "predicted_batch_grid_regret": [
+          {
+            "workers": 1,
+            "predicted_batch_size": 16384,
+            "actual_best_batch_size": 9000,
+            "grid_regret_percent": 2.7199289219071776
+          },
+          {
+            "workers": 4,
+            "predicted_batch_size": 9000,
+            "actual_best_batch_size": 16384,
+            "grid_regret_percent": 3.127026326810489
+          },
+          {
+            "workers": 8,
+            "predicted_batch_size": 6000,
+            "actual_best_batch_size": 12000,
+            "grid_regret_percent": 11.07714503005608
+          },
+          {
+            "workers": 12,
+            "predicted_batch_size": 6000,
+            "actual_best_batch_size": 12000,
+            "grid_regret_percent": 8.865536245795269
+          }
+        ],
+        "continuous_99pct_selection": [
+          {
+            "workers": 1,
+            "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+            "domain": [
+              256,
+              16384
+            ],
+            "predicted_peak_batch_size": 16384,
+            "predicted_peak_rows_per_second": 100749.6717331086,
+            "predicted_99pct_batch_size": 2228,
+            "predicted_99pct_rows_per_second": 99742.17791890138,
+            "previous_batch_rows_per_second": 99741.65955529004,
+            "nearest_measured": {
+              "batch_size": 1500,
+              "distance_rows": 728,
+              "actual_rows_per_second": 98569.14983549423,
+              "measured_best_batch_size": 9000,
+              "measured_best_rows_per_second": 112490.2872840089,
+              "regret_percent": 12.375412833080768
+            },
+            "heldout": {
+              "batch_size": 9000,
+              "actual_rows_per_second": 112490.2872840089,
+              "predicted_rows_per_second": 100618.43213306848,
+              "absolute_rate_error_percent": 10.55367128805268,
+              "measured_regret_percent": 0.0
+            }
+          },
+          {
+            "workers": 4,
+            "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+            "domain": [
+              256,
+              16384
+            ],
+            "predicted_peak_batch_size": 7875,
+            "predicted_peak_rows_per_second": 347096.19385345926,
+            "predicted_99pct_batch_size": 3594,
+            "predicted_99pct_rows_per_second": 343627.5281267046,
+            "previous_batch_rows_per_second": 343624.9674834867,
+            "nearest_measured": {
+              "batch_size": 3000,
+              "distance_rows": 594,
+              "actual_rows_per_second": 350461.0414034324,
+              "measured_best_batch_size": 16384,
+              "measured_best_rows_per_second": 391490.44107748946,
+              "regret_percent": 10.480306891052793
+            },
+            "heldout": {
+              "batch_size": 9000,
+              "actual_rows_per_second": 379248.4319180499,
+              "predicted_rows_per_second": 346999.60976819415,
+              "absolute_rate_error_percent": 8.50335016199203,
+              "measured_regret_percent": 3.127026326810489
+            }
+          },
+          {
+            "workers": 8,
+            "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+            "domain": [
+              256,
+              16384
+            ],
+            "predicted_peak_batch_size": 6009,
+            "predicted_peak_rows_per_second": 566661.005037371,
+            "predicted_99pct_batch_size": 3764,
+            "predicted_99pct_rows_per_second": 560995.0970458096,
+            "previous_batch_rows_per_second": 560988.607655215,
+            "nearest_measured": {
+              "batch_size": 3000,
+              "distance_rows": 764,
+              "actual_rows_per_second": 520596.3975197368,
+              "measured_best_batch_size": 12000,
+              "measured_best_rows_per_second": 616202.5697976139,
+              "regret_percent": 15.515380325219684
+            },
+            "heldout": {
+              "batch_size": 9000,
+              "actual_rows_per_second": 584166.8557307646,
+              "predicted_rows_per_second": 562446.1774231172,
+              "absolute_rate_error_percent": 3.7182318877841514,
+              "measured_regret_percent": 5.198893292082696
+            }
+          },
+          {
+            "workers": 12,
+            "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+            "domain": [
+              256,
+              16384
+            ],
+            "predicted_peak_batch_size": 5390,
+            "predicted_peak_rows_per_second": 697002.364464533,
+            "predicted_99pct_batch_size": 3773,
+            "predicted_99pct_rows_per_second": 690036.6604636941,
+            "previous_batch_rows_per_second": 690026.295559942,
+            "nearest_measured": {
+              "batch_size": 3000,
+              "distance_rows": 773,
+              "actual_rows_per_second": 510625.1739229392,
+              "measured_best_batch_size": 12000,
+              "measured_best_rows_per_second": 631209.7645920947,
+              "regret_percent": 19.103727070363142
+            },
+            "heldout": {
+              "batch_size": 9000,
+              "actual_rows_per_second": 615828.2832811737,
+              "predicted_rows_per_second": 682592.7390666268,
+              "absolute_rate_error_percent": 10.84140784014136,
+              "measured_regret_percent": 2.436825628142958
+            }
+          }
+        ],
+        "model_status": "rejected_six_term_baseline"
+      },
+      "relative_per_worker": {
+        "formula": "us_per_row = a + b/C + h0/B + h1*(C-1)/B + d0*B + d1*(C-1)*B",
+        "fit_weighting": "relative_time",
+        "calibration_normalization": "per_worker",
+        "interpretation": null,
+        "coefficients": {
+          "a": 0.6095842819439709,
+          "b": 8.41602835792269,
+          "h0": 31.859380063281378,
+          "h1": 59.19202425373891,
+          "d0": 0.0,
+          "d1": 1.5040001924074635e-06
+        },
+        "in_sample": {
+          "mape_percent": 10.779291952012239,
+          "rmse": 49657.44385742332,
+          "r_squared": 0.9245890236957612
+        },
+        "leave_one_batch_size_out": {
+          "mape_percent": 12.620627453740992,
+          "rmse": 58882.758530246756,
+          "r_squared": 0.8939667341457234
+        },
+        "heldout_batch_size": 9000,
+        "heldout": {
+          "mape_percent": 6.857884746931394,
+          "rmse": 40387.48820078952,
+          "r_squared": 0.9595970091280392
+        },
+        "predicted_batch_grid_regret": [
+          {
+            "workers": 1,
+            "predicted_batch_size": 16384,
+            "actual_best_batch_size": 9000,
+            "grid_regret_percent": 2.7199289219071776
+          },
+          {
+            "workers": 4,
+            "predicted_batch_size": 6000,
+            "actual_best_batch_size": 16384,
+            "grid_regret_percent": 5.450068471919344
+          },
+          {
+            "workers": 8,
+            "predicted_batch_size": 6000,
+            "actual_best_batch_size": 12000,
+            "grid_regret_percent": 11.07714503005608
+          },
+          {
+            "workers": 12,
+            "predicted_batch_size": 6000,
+            "actual_best_batch_size": 12000,
+            "grid_regret_percent": 8.865536245795269
+          }
+        ],
+        "continuous_99pct_selection": [
+          {
+            "workers": 1,
+            "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+            "domain": [
+              256,
+              16384
+            ],
+            "predicted_peak_batch_size": 16384,
+            "predicted_peak_rows_per_second": 111084.49068428496,
+            "predicted_99pct_batch_size": 344,
+            "predicted_99pct_rows_per_second": 109976.8017509244,
+            "previous_batch_rows_per_second": 109973.53606786426,
+            "nearest_measured": {
+              "batch_size": 256,
+              "distance_rows": 88,
+              "actual_rows_per_second": 88796.58362283437,
+              "measured_best_batch_size": 9000,
+              "measured_best_rows_per_second": 112490.2872840089,
+              "regret_percent": 21.06288839084751
+            },
+            "heldout": {
+              "batch_size": 9000,
+              "actual_rows_per_second": 112490.2872840089,
+              "predicted_rows_per_second": 111064.8074502512,
+              "absolute_rate_error_percent": 1.2672025898189165,
+              "measured_regret_percent": 0.0
+            }
+          },
+          {
+            "workers": 4,
+            "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+            "domain": [
+              256,
+              16384
+            ],
+            "predicted_peak_batch_size": 6429,
+            "predicted_peak_rows_per_second": 321286.6136625556,
+            "predicted_99pct_batch_size": 2495,
+            "predicted_99pct_rows_per_second": 318074.4714261291,
+            "previous_batch_rows_per_second": 318071.57889454236,
+            "nearest_measured": {
+              "batch_size": 3000,
+              "distance_rows": 505,
+              "actual_rows_per_second": 350461.0414034324,
+              "measured_best_batch_size": 16384,
+              "measured_best_rows_per_second": 391490.44107748946,
+              "regret_percent": 10.480306891052793
+            },
+            "heldout": {
+              "batch_size": 9000,
+              "actual_rows_per_second": 379248.4319180499,
+              "predicted_rows_per_second": 320902.97165533295,
+              "absolute_rate_error_percent": 15.384496111858558,
+              "measured_regret_percent": 3.127026326810489
+            }
+          },
+          {
+            "workers": 8,
+            "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+            "domain": [
+              256,
+              16384
+            ],
+            "predicted_peak_batch_size": 6626,
+            "predicted_peak_rows_per_second": 575216.0142846135,
+            "predicted_99pct_batch_size": 3998,
+            "predicted_99pct_rows_per_second": 569463.9849966668,
+            "previous_batch_rows_per_second": 569458.2254377423,
+            "nearest_measured": {
+              "batch_size": 3000,
+              "distance_rows": 998,
+              "actual_rows_per_second": 520596.3975197368,
+              "measured_best_batch_size": 12000,
+              "measured_best_rows_per_second": 616202.5697976139,
+              "regret_percent": 15.515380325219684
+            },
+            "heldout": {
+              "batch_size": 9000,
+              "actual_rows_per_second": 584166.8557307646,
+              "predicted_rows_per_second": 573118.9535271706,
+              "absolute_rate_error_percent": 1.8912237308933877,
+              "measured_regret_percent": 5.198893292082696
+            }
+          },
+          {
+            "workers": 12,
+            "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+            "domain": [
+              256,
+              16384
+            ],
+            "predicted_peak_batch_size": 6525,
+            "predicted_peak_rows_per_second": 675511.6026635311,
+            "predicted_99pct_batch_size": 4482,
+            "predicted_99pct_rows_per_second": 668762.254608728,
+            "previous_batch_rows_per_second": 668754.2197606257,
+            "nearest_measured": {
+              "batch_size": 3000,
+              "distance_rows": 1482,
+              "actual_rows_per_second": 510625.1739229392,
+              "measured_best_batch_size": 12000,
+              "measured_best_rows_per_second": 631209.7645920947,
+              "regret_percent": 19.103727070363142
+            },
+            "heldout": {
+              "batch_size": 9000,
+              "actual_rows_per_second": 615828.2832811737,
+              "predicted_rows_per_second": 670566.8980202292,
+              "absolute_rate_error_percent": 8.888616555154716,
+              "measured_regret_percent": 2.436825628142958
+            }
+          }
+        ],
+        "model_status": "rejected_six_term_baseline"
+      },
+      "relative_pooled": {
+        "formula": "us_per_row = a + b/C + h0/B + h1*(C-1)/B + d0*B + d1*(C-1)*B",
+        "fit_weighting": "relative_time",
+        "calibration_normalization": "pooled_same_hardware",
+        "interpretation": null,
+        "coefficients": {
+          "a": 0.682287482386138,
+          "b": 8.710437952842764,
+          "h0": 87.40538342732805,
+          "h1": 47.22926997005179,
+          "d0": 0.0,
+          "d1": 4.2457672730223527e-07
+        },
+        "in_sample": {
+          "mape_percent": 7.860281820599096,
+          "rmse": 39490.70118532797,
+          "r_squared": 0.9523069021007228
+        },
+        "leave_one_batch_size_out": {
+          "mape_percent": 9.509355994991253,
+          "rmse": 45649.45822328417,
+          "r_squared": 0.9362710008415822
+        },
+        "heldout_batch_size": 9000,
+        "heldout": {
+          "mape_percent": 7.152297992853892,
+          "rmse": 34690.12453449762,
+          "r_squared": 0.9701920887188725
+        },
+        "predicted_batch_grid_regret": [
+          {
+            "workers": 1,
+            "predicted_batch_size": 16384,
+            "actual_best_batch_size": 9000,
+            "grid_regret_percent": 2.7199289219071776
+          },
+          {
+            "workers": 4,
+            "predicted_batch_size": 12000,
+            "actual_best_batch_size": 16384,
+            "grid_regret_percent": 1.3087871834308151
+          },
+          {
+            "workers": 8,
+            "predicted_batch_size": 12000,
+            "actual_best_batch_size": 12000,
+            "grid_regret_percent": 0.0
+          },
+          {
+            "workers": 12,
+            "predicted_batch_size": 12000,
+            "actual_best_batch_size": 12000,
+            "grid_regret_percent": 0.0
+          }
+        ],
+        "continuous_99pct_selection": [
+          {
+            "workers": 1,
+            "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+            "domain": [
+              256,
+              16384
+            ],
+            "predicted_peak_batch_size": 16384,
+            "predicted_peak_rows_per_second": 106404.93621440155,
+            "predicted_99pct_batch_size": 872,
+            "predicted_99pct_rows_per_second": 105341.21055693067,
+            "previous_batch_rows_per_second": 105339.93354519841,
+            "nearest_measured": {
+              "batch_size": 512,
+              "distance_rows": 360,
+              "actual_rows_per_second": 94480.15927591315,
+              "measured_best_batch_size": 9000,
+              "measured_best_rows_per_second": 112490.2872840089,
+              "regret_percent": 16.01038493450091
+            },
+            "heldout": {
+              "batch_size": 9000,
+              "actual_rows_per_second": 112490.2872840089,
+              "predicted_rows_per_second": 106355.40388431134,
+              "absolute_rate_error_percent": 5.453700535236939,
+              "measured_regret_percent": 0.0
+            }
+          },
+          {
+            "workers": 4,
+            "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+            "domain": [
+              256,
+              16384
+            ],
+            "predicted_peak_batch_size": 13411,
+            "predicted_peak_rows_per_second": 345535.16476521606,
+            "predicted_99pct_batch_size": 3923,
+            "predicted_99pct_rows_per_second": 342080.1794686736,
+            "previous_batch_rows_per_second": 342078.5861496088,
+            "nearest_measured": {
+              "batch_size": 3000,
+              "distance_rows": 923,
+              "actual_rows_per_second": 350461.0414034324,
+              "measured_best_batch_size": 16384,
+              "measured_best_rows_per_second": 391490.44107748946,
+              "regret_percent": 10.480306891052793
+            },
+            "heldout": {
+              "batch_size": 9000,
+              "actual_rows_per_second": 379248.4319180499,
+              "predicted_rows_per_second": 345206.677718146,
+              "absolute_rate_error_percent": 8.976109414015932,
+              "measured_regret_percent": 3.127026326810489
+            }
+          },
+          {
+            "workers": 8,
+            "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+            "domain": [
+              256,
+              16384
+            ],
+            "predicted_peak_batch_size": 11859,
+            "predicted_peak_rows_per_second": 543010.2179363841,
+            "predicted_99pct_batch_size": 5823,
+            "predicted_99pct_rows_per_second": 537581.0937529874,
+            "previous_batch_rows_per_second": 537578.3893366704,
+            "nearest_measured": {
+              "batch_size": 6000,
+              "distance_rows": 177,
+              "actual_rows_per_second": 547944.9174621997,
+              "measured_best_batch_size": 12000,
+              "measured_best_rows_per_second": 616202.5697976139,
+              "regret_percent": 11.07714503005608
+            },
+            "heldout": {
+              "batch_size": 9000,
+              "actual_rows_per_second": 584166.8557307646,
+              "predicted_rows_per_second": 542215.2099591914,
+              "absolute_rate_error_percent": 7.1814491630295745,
+              "measured_regret_percent": 5.198893292082696
+            }
+          },
+          {
+            "workers": 12,
+            "evaluation": "hypothetical integer interpolation inside the measured batch-size domain",
+            "domain": [
+              256,
+              16384
+            ],
+            "predicted_peak_batch_size": 11400,
+            "predicted_peak_rows_per_second": 660223.5560340565,
+            "predicted_99pct_batch_size": 6711,
+            "predicted_99pct_rows_per_second": 653621.3934177482,
+            "previous_batch_rows_per_second": 653617.6306045742,
+            "nearest_measured": {
+              "batch_size": 6000,
+              "distance_rows": 711,
+              "actual_rows_per_second": 575249.6341251836,
+              "measured_best_batch_size": 12000,
+              "measured_best_rows_per_second": 631209.7645920947,
+              "regret_percent": 8.865536245795269
+            },
+            "heldout": {
+              "batch_size": 9000,
+              "actual_rows_per_second": 615828.2832811737,
+              "predicted_rows_per_second": 658923.5330727424,
+              "absolute_rate_error_percent": 6.997932859133127,
+              "measured_regret_percent": 2.436825628142958
+            }
+          }
+        ],
+        "model_status": "rejected_six_term_baseline"
+      }
+    }
+  },
+  "returned_output_memory": {
+    "cells": [
+      {
+        "workers": 1,
+        "batch_size": 256,
+        "samples": 2,
+        "median_rows_per_second": 88796.58362283437,
+        "range_rows_per_second": [
+          86142.51715440521,
+          91450.65009126352
+        ],
+        "median_calibration_rows_per_second": 143116.70160726763,
+        "median_returned_output_bytes_per_row": 16481.75
+      },
+      {
+        "workers": 1,
+        "batch_size": 512,
+        "samples": 2,
+        "median_rows_per_second": 94480.15927591315,
+        "range_rows_per_second": [
+          92712.18402637824,
+          96248.13452544807
+        ],
+        "median_calibration_rows_per_second": 143116.70160726763,
+        "median_returned_output_bytes_per_row": 16486.0625
+      },
+      {
+        "workers": 1,
+        "batch_size": 1500,
+        "samples": 2,
+        "median_rows_per_second": 98569.14983549423,
+        "range_rows_per_second": [
+          98355.37985248768,
+          98782.91981850077
+        ],
+        "median_calibration_rows_per_second": 143116.70160726763,
+        "median_returned_output_bytes_per_row": 16357.874666666667
+      },
+      {
+        "workers": 1,
+        "batch_size": 3000,
+        "samples": 2,
+        "median_rows_per_second": 82942.2159591541,
+        "range_rows_per_second": [
+          63752.59709094321,
+          102131.83482736499
+        ],
+        "median_calibration_rows_per_second": 143116.70160726763,
+        "median_returned_output_bytes_per_row": 16141.625
+      },
+      {
+        "workers": 1,
+        "batch_size": 6000,
+        "samples": 2,
+        "median_rows_per_second": 107430.40405960762,
+        "range_rows_per_second": [
+          106293.14996859415,
+          108567.6581506211
+        ],
+        "median_calibration_rows_per_second": 143116.70160726763,
+        "median_returned_output_bytes_per_row": 16031.75
+      },
+      {
+        "workers": 1,
+        "batch_size": 9000,
+        "samples": 2,
+        "median_rows_per_second": 112490.2872840089,
+        "range_rows_per_second": [
+          111303.1267352155,
+          113677.44783280231
+        ],
+        "median_calibration_rows_per_second": 143116.70160726763,
+        "median_returned_output_bytes_per_row": 16357.187444444444
+      },
+      {
+        "workers": 1,
+        "batch_size": 12000,
+        "samples": 2,
+        "median_rows_per_second": 110259.88154761313,
+        "range_rows_per_second": [
+          107828.88543593907,
+          112690.8776592872
+        ],
+        "median_calibration_rows_per_second": 143116.70160726763,
+        "median_returned_output_bytes_per_row": 15799.875
+      },
+      {
+        "workers": 1,
+        "batch_size": 16384,
+        "samples": 2,
+        "median_rows_per_second": 109430.63142583467,
+        "range_rows_per_second": [
+          107842.69988303256,
+          111018.56296863679
+        ],
+        "median_calibration_rows_per_second": 143116.70160726763,
+        "median_returned_output_bytes_per_row": 16395.375
+      },
+      {
+        "workers": 4,
+        "batch_size": 256,
+        "samples": 2,
+        "median_rows_per_second": 270363.5688349698,
+        "range_rows_per_second": [
+          258852.0301838527,
+          281875.1074860868
+        ],
+        "median_calibration_rows_per_second": 127083.97868166256,
+        "median_returned_output_bytes_per_row": 16481.75
+      },
+      {
+        "workers": 4,
+        "batch_size": 512,
+        "samples": 2,
+        "median_rows_per_second": 317618.54958603135,
+        "range_rows_per_second": [
+          310747.4099723402,
+          324489.68919972255
+        ],
+        "median_calibration_rows_per_second": 127083.97868166256,
+        "median_returned_output_bytes_per_row": 16486.0625
+      },
+      {
+        "workers": 4,
+        "batch_size": 1500,
+        "samples": 2,
+        "median_rows_per_second": 340072.2614991998,
+        "range_rows_per_second": [
+          339308.4730108116,
+          340836.0499875879
+        ],
+        "median_calibration_rows_per_second": 127083.97868166256,
+        "median_returned_output_bytes_per_row": 16425.062
+      },
+      {
+        "workers": 4,
+        "batch_size": 3000,
+        "samples": 2,
+        "median_rows_per_second": 350461.0414034324,
+        "range_rows_per_second": [
+          346201.15628842224,
+          354720.92651844246
+        ],
+        "median_calibration_rows_per_second": 127083.97868166256,
+        "median_returned_output_bytes_per_row": 16407.25
+      },
+      {
+        "workers": 4,
+        "batch_size": 6000,
+        "samples": 2,
+        "median_rows_per_second": 370153.9439777472,
+        "range_rows_per_second": [
+          366060.1771333803,
+          374247.7108221141
+        ],
+        "median_calibration_rows_per_second": 127083.97868166256,
+        "median_returned_output_bytes_per_row": 16154.625
+      },
+      {
+        "workers": 4,
+        "batch_size": 9000,
+        "samples": 2,
+        "median_rows_per_second": 379248.4319180499,
+        "range_rows_per_second": [
+          378198.25000806456,
+          380298.6138280352
+        ],
+        "median_calibration_rows_per_second": 127083.97868166256,
+        "median_returned_output_bytes_per_row": 16357.187444444444
+      },
+      {
+        "workers": 4,
+        "batch_size": 12000,
+        "samples": 2,
+        "median_rows_per_second": 386366.66436031053,
+        "range_rows_per_second": [
+          385172.3109254983,
+          387561.0177951227
+        ],
+        "median_calibration_rows_per_second": 127083.97868166256,
+        "median_returned_output_bytes_per_row": 16513.6875
+      },
+      {
+        "workers": 4,
+        "batch_size": 16384,
+        "samples": 2,
+        "median_rows_per_second": 391490.44107748946,
+        "range_rows_per_second": [
+          388958.47197951877,
+          394022.41017546016
+        ],
+        "median_calibration_rows_per_second": 127083.97868166256,
+        "median_returned_output_bytes_per_row": 16395.375
+      },
+      {
+        "workers": 8,
+        "batch_size": 256,
+        "samples": 2,
+        "median_rows_per_second": 298962.01040858554,
+        "range_rows_per_second": [
+          298857.16979274235,
+          299066.8510244288
+        ],
+        "median_calibration_rows_per_second": 147855.85901943842,
+        "median_returned_output_bytes_per_row": 16481.75
+      },
+      {
+        "workers": 8,
+        "batch_size": 512,
+        "samples": 2,
+        "median_rows_per_second": 409355.5480206426,
+        "range_rows_per_second": [
+          406617.33404322,
+          412093.7619980653
+        ],
+        "median_calibration_rows_per_second": 147855.85901943842,
+        "median_returned_output_bytes_per_row": 16486.0625
+      },
+      {
+        "workers": 8,
+        "batch_size": 1500,
+        "samples": 2,
+        "median_rows_per_second": 466803.3980710278,
+        "range_rows_per_second": [
+          456791.3712205554,
+          476815.4249215003
+        ],
+        "median_calibration_rows_per_second": 147855.85901943842,
+        "median_returned_output_bytes_per_row": 16425.062
+      },
+      {
+        "workers": 8,
+        "batch_size": 3000,
+        "samples": 2,
+        "median_rows_per_second": 520596.3975197368,
+        "range_rows_per_second": [
+          518080.8957669686,
+          523111.89927250496
+        ],
+        "median_calibration_rows_per_second": 147855.85901943842,
+        "median_returned_output_bytes_per_row": 16414.75
+      },
+      {
+        "workers": 8,
+        "batch_size": 6000,
+        "samples": 2,
+        "median_rows_per_second": 547944.9174621997,
+        "range_rows_per_second": [
+          544763.258023014,
+          551126.5769013854
+        ],
+        "median_calibration_rows_per_second": 147855.85901943842,
+        "median_returned_output_bytes_per_row": 16285.8125
+      },
+      {
+        "workers": 8,
+        "batch_size": 9000,
+        "samples": 2,
+        "median_rows_per_second": 584166.8557307646,
+        "range_rows_per_second": [
+          581889.062670329,
+          586444.6487912
+        ],
+        "median_calibration_rows_per_second": 147855.85901943842,
+        "median_returned_output_bytes_per_row": 16357.187444444444
+      },
+      {
+        "workers": 8,
+        "batch_size": 12000,
+        "samples": 2,
+        "median_rows_per_second": 616202.5697976139,
+        "range_rows_per_second": [
+          607094.355443677,
+          625310.7841515506
+        ],
+        "median_calibration_rows_per_second": 147855.85901943842,
+        "median_returned_output_bytes_per_row": 16513.6875
+      },
+      {
+        "workers": 8,
+        "batch_size": 16384,
+        "samples": 2,
+        "median_rows_per_second": 601538.8399606945,
+        "range_rows_per_second": [
+          564695.9415019122,
+          638381.738419477
+        ],
+        "median_calibration_rows_per_second": 147855.85901943842,
+        "median_returned_output_bytes_per_row": 16395.375
+      },
+      {
+        "workers": 12,
+        "batch_size": 256,
+        "samples": 2,
+        "median_rows_per_second": 279708.9872888279,
+        "range_rows_per_second": [
+          271627.1765969227,
+          287790.79798073316
+        ],
+        "median_calibration_rows_per_second": 147193.4351727913,
+        "median_returned_output_bytes_per_row": 16481.75
+      },
+      {
+        "workers": 12,
+        "batch_size": 512,
+        "samples": 2,
+        "median_rows_per_second": 368991.80635717086,
+        "range_rows_per_second": [
+          354054.48585708847,
+          383929.12685725326
+        ],
+        "median_calibration_rows_per_second": 147193.4351727913,
+        "median_returned_output_bytes_per_row": 16486.0625
+      },
+      {
+        "workers": 12,
+        "batch_size": 1500,
+        "samples": 2,
+        "median_rows_per_second": 460907.16863794276,
+        "range_rows_per_second": [
+          432362.4555958809,
+          489451.88168000453
+        ],
+        "median_calibration_rows_per_second": 147193.4351727913,
+        "median_returned_output_bytes_per_row": 16425.062
+      },
+      {
+        "workers": 12,
+        "batch_size": 3000,
+        "samples": 2,
+        "median_rows_per_second": 510625.1739229392,
+        "range_rows_per_second": [
+          510201.5927249565,
+          511048.755120922
+        ],
+        "median_calibration_rows_per_second": 147193.4351727913,
+        "median_returned_output_bytes_per_row": 16414.75
+      },
+      {
+        "workers": 12,
+        "batch_size": 6000,
+        "samples": 2,
+        "median_rows_per_second": 575249.6341251836,
+        "range_rows_per_second": [
+          575205.290593272,
+          575293.9776570951
+        ],
+        "median_calibration_rows_per_second": 147193.4351727913,
+        "median_returned_output_bytes_per_row": 16285.8125
+      },
+      {
+        "workers": 12,
+        "batch_size": 9000,
+        "samples": 2,
+        "median_rows_per_second": 615828.2832811737,
+        "range_rows_per_second": [
+          605583.1577560512,
+          626073.4088062962
+        ],
+        "median_calibration_rows_per_second": 147193.4351727913,
+        "median_returned_output_bytes_per_row": 16357.187444444444
+      },
+      {
+        "workers": 12,
+        "batch_size": 12000,
+        "samples": 2,
+        "median_rows_per_second": 631209.7645920947,
+        "range_rows_per_second": [
+          626341.5310180795,
+          636077.9981661099
+        ],
+        "median_calibration_rows_per_second": 147193.4351727913,
+        "median_returned_output_bytes_per_row": 16513.6875
+      },
+      {
+        "workers": 12,
+        "batch_size": 16384,
+        "samples": 2,
+        "median_rows_per_second": 612076.599827569,
+        "range_rows_per_second": [
+          608435.9628762947,
+          615717.2367788431
+        ],
+        "median_calibration_rows_per_second": 147193.4351727913,
+        "median_returned_output_bytes_per_row": 16395.375
+      }
+    ],
+    "note": "Returned output bytes are reported separately. The historic shipped RSS formula includes resident-database/process overhead and is left unchanged here; it is not used as the adaptive working-memory cap. Resident-corpus RSS was not fitted, and no memory formula should change without separate validation."
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "version": "pattern-signature-diagnostic-v1",
+  "corpus": "target/bench/independent-sink-corpus.txt",
+  "rows_read": 1000000,
+  "schema_probes": 1112529,
+  "method": "Exact per-schema masks were precomputed from all matcher positions; real WMI and resolved candidate-year eligibility selected schema probes. This approximates actual execution because pass pruning can skip some eligible schemas.",
+  "reproduce": "cargo test -p ultravin matcher::tests::report_exact_signature_reuse_on_benchmark_corpus -- --ignored --nocapture",
+  "direct_mapped_cache": [
+    {"slots": 1024, "hits": 1367, "hit_rate": 0.001228731},
+    {"slots": 4096, "hits": 3309, "hit_rate": 0.002974301}
+  ],
+  "weighted_mask_positions": {
+    "0": 2189,
+    "1": 16264,
+    "2": 34416,
+    "3": 19779,
+    "4": 12056,
+    "5": 22889,
+    "6": 10513,
+    "7": 991249,
+    "8": 2167,
+    "9": 716,
+    "10": 291
+  },
+  "full_regex_schema_probes": 0,
+  "decision": "reject production cache"
+}

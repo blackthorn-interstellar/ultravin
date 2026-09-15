@@ -1,0 +1,390 @@
+{
+  "experiment": "placement",
+  "status": "complete",
+  "date_utc": "2026-09-14T22:21:54.995745+00:00",
+  "corpus_manifest": {
+    "candidates_examined": 10000490,
+    "chunk_size": 100000,
+    "chunks_used": 101,
+    "corpus": {
+      "bytes": 180000000,
+      "path": "target/bench/multicore-corpus.txt",
+      "sha256": "de80fb8727de3d89a7885929645953eed7b51a67c1dc988d309bbaa0ab4ec5f3"
+    },
+    "count": 10000000,
+    "database": {
+      "artifact_blake3": "907eedd5f2794a10e586e01ca6c2a5af4e8d7e0f966bcfdf030a9889d77ac538",
+      "data_month": "2026_08"
+    },
+    "distinct_rows": 10000000,
+    "diversity": {
+      "distinct_descriptor_year_keys": 9808848,
+      "distinct_wmis": 12933,
+      "distinct_year_characters": 30
+    },
+    "format_version": 1,
+    "frozen_now": "2026-09-01T00:00:00+00:00",
+    "generator": {
+      "api": "ultravin.generate(n, seed=seed + chunk_index, now=frozen_now)",
+      "decoder_version": "0.0.0",
+      "script": "/Volumes/fast-4tb/projects/ultravin/scripts/bench/large_corpus.py",
+      "script_sha256": "a5196e5aa07f1a3e14d01cb7d10e5419e6a9190af6fe84f7946fc86bf4f4621e"
+    },
+    "seed": 42,
+    "verification": {
+      "check_digits": true,
+      "unique": true,
+      "vin_alphabet": true
+    }
+  },
+  "binary_sha256": {
+    "before": "80feee2825a75a7c97dc074a39432a951f9c1e4df9d57f4d5afbe95644a5a482",
+    "after": "53b3b4cf829f142dee5f3f8bc67d14c7ef970224fe39b125c7148fab2b5895de"
+  },
+  "runner_sha256": "65e75936ab8d3240728e1dc712f3fa0ca7669c811af249a4ff4ff3eb20e9aabf",
+  "rounds": 2,
+  "samples": [
+    {
+      "round": 1,
+      "workers": 12,
+      "label": "before",
+      "rows_per_second": 614920.9665651595,
+      "peak_rss_bytes": 1362952192,
+      "native_json": {
+        "actual_rows_per_second": 614920.9665651595,
+        "benchmark": "multicore_probe",
+        "corpus_rows": 10000000,
+        "elapsed_seconds": 16.262252458,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 12000,
+        "local_rows": null,
+        "maximum_active_streaming_rows": null,
+        "mode": "managed",
+        "phase_seconds": {
+          "decode_and_local_sort": 13.660891643,
+          "drop_results": 2.601276004,
+          "whole_pass_wall": 16.262252
+        },
+        "phase_time_basis": "wall time accumulated across serial API calls",
+        "rows": 10000000,
+        "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+        "whole_passes": 1,
+        "workers": 12
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-baseline-multicore_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "12",
+        "12000",
+        "managed"
+      ],
+      "stdout": "{\"actual_rows_per_second\":614920.9665651595,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":16.262252458,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":13.660891643,\"drop_results\":2.601276004,\"whole_pass_wall\":16.262252},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":12}\n",
+      "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 16.262252s = 614921 VIN/s (12 core(s))\n"
+    },
+    {
+      "round": 1,
+      "workers": 12,
+      "label": "after",
+      "rows_per_second": 612122.006671158,
+      "peak_rss_bytes": 1326383104,
+      "native_json": {
+        "actual_rows_per_second": 612122.006671158,
+        "benchmark": "multicore_probe",
+        "corpus_rows": 10000000,
+        "elapsed_seconds": 16.336612458,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 12000,
+        "local_rows": null,
+        "maximum_active_streaming_rows": null,
+        "mode": "managed",
+        "phase_seconds": {
+          "decode_and_local_sort": 13.790184465,
+          "drop_results": 2.546319326,
+          "whole_pass_wall": 16.336611875
+        },
+        "phase_time_basis": "wall time accumulated across serial API calls",
+        "rows": 10000000,
+        "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+        "whole_passes": 1,
+        "workers": 12
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-placement-multicore_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "12",
+        "12000",
+        "managed"
+      ],
+      "stdout": "{\"actual_rows_per_second\":612122.006671158,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":16.336612458,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":13.790184465,\"drop_results\":2.546319326,\"whole_pass_wall\":16.336611875},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":12}\n",
+      "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 16.336612s = 612122 VIN/s (12 core(s))\n"
+    },
+    {
+      "round": 1,
+      "workers": 8,
+      "label": "before",
+      "rows_per_second": 620623.9947588304,
+      "peak_rss_bytes": 1208877056,
+      "native_json": {
+        "actual_rows_per_second": 620623.9947588304,
+        "benchmark": "multicore_probe",
+        "corpus_rows": 10000000,
+        "elapsed_seconds": 16.112815625,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 12000,
+        "local_rows": null,
+        "maximum_active_streaming_rows": null,
+        "mode": "managed",
+        "phase_seconds": {
+          "decode_and_local_sort": 13.828631616,
+          "drop_results": 2.284087,
+          "whole_pass_wall": 16.112814583
+        },
+        "phase_time_basis": "wall time accumulated across serial API calls",
+        "rows": 10000000,
+        "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+        "whole_passes": 1,
+        "workers": 8
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-baseline-multicore_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "8",
+        "12000",
+        "managed"
+      ],
+      "stdout": "{\"actual_rows_per_second\":620623.9947588304,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":16.112815625,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":13.828631616,\"drop_results\":2.284087,\"whole_pass_wall\":16.112814583},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":8}\n",
+      "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 16.112816s = 620624 VIN/s (8 core(s))\n"
+    },
+    {
+      "round": 1,
+      "workers": 8,
+      "label": "after",
+      "rows_per_second": 641293.8505037775,
+      "peak_rss_bytes": 1236746240,
+      "native_json": {
+        "actual_rows_per_second": 641293.8505037775,
+        "benchmark": "multicore_probe",
+        "corpus_rows": 10000000,
+        "elapsed_seconds": 15.593475584,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 12000,
+        "local_rows": null,
+        "maximum_active_streaming_rows": null,
+        "mode": "managed",
+        "phase_seconds": {
+          "decode_and_local_sort": 13.381168887,
+          "drop_results": 2.212185501,
+          "whole_pass_wall": 15.593474916
+        },
+        "phase_time_basis": "wall time accumulated across serial API calls",
+        "rows": 10000000,
+        "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+        "whole_passes": 1,
+        "workers": 8
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-placement-multicore_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "8",
+        "12000",
+        "managed"
+      ],
+      "stdout": "{\"actual_rows_per_second\":641293.8505037775,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":15.593475584,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":13.381168887,\"drop_results\":2.212185501,\"whole_pass_wall\":15.593474916},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":8}\n",
+      "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 15.593476s = 641294 VIN/s (8 core(s))\n"
+    },
+    {
+      "round": 2,
+      "workers": 8,
+      "label": "after",
+      "rows_per_second": 628333.3954119397,
+      "peak_rss_bytes": 1228636160,
+      "native_json": {
+        "actual_rows_per_second": 628333.3954119397,
+        "benchmark": "multicore_probe",
+        "corpus_rows": 10000000,
+        "elapsed_seconds": 15.915117791,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 12000,
+        "local_rows": null,
+        "maximum_active_streaming_rows": null,
+        "mode": "managed",
+        "phase_seconds": {
+          "decode_and_local_sort": 13.598100048,
+          "drop_results": 2.316934826,
+          "whole_pass_wall": 15.915117042
+        },
+        "phase_time_basis": "wall time accumulated across serial API calls",
+        "rows": 10000000,
+        "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+        "whole_passes": 1,
+        "workers": 8
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-placement-multicore_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "8",
+        "12000",
+        "managed"
+      ],
+      "stdout": "{\"actual_rows_per_second\":628333.3954119397,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":15.915117791,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":13.598100048,\"drop_results\":2.316934826,\"whole_pass_wall\":15.915117042},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":8}\n",
+      "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 15.915118s = 628333 VIN/s (8 core(s))\n"
+    },
+    {
+      "round": 2,
+      "workers": 8,
+      "label": "before",
+      "rows_per_second": 618862.1861055616,
+      "peak_rss_bytes": 1222426624,
+      "native_json": {
+        "actual_rows_per_second": 618862.1861055616,
+        "benchmark": "multicore_probe",
+        "corpus_rows": 10000000,
+        "elapsed_seconds": 16.158686416,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 12000,
+        "local_rows": null,
+        "maximum_active_streaming_rows": null,
+        "mode": "managed",
+        "phase_seconds": {
+          "decode_and_local_sort": 13.837591237,
+          "drop_results": 2.321003319,
+          "whole_pass_wall": 16.158685667
+        },
+        "phase_time_basis": "wall time accumulated across serial API calls",
+        "rows": 10000000,
+        "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+        "whole_passes": 1,
+        "workers": 8
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-baseline-multicore_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "8",
+        "12000",
+        "managed"
+      ],
+      "stdout": "{\"actual_rows_per_second\":618862.1861055616,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":16.158686416,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":13.837591237,\"drop_results\":2.321003319,\"whole_pass_wall\":16.158685667},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":8}\n",
+      "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 16.158686s = 618862 VIN/s (8 core(s))\n"
+    },
+    {
+      "round": 2,
+      "workers": 12,
+      "label": "after",
+      "rows_per_second": 634686.8821195075,
+      "peak_rss_bytes": 1345306624,
+      "native_json": {
+        "actual_rows_per_second": 634686.8821195075,
+        "benchmark": "multicore_probe",
+        "corpus_rows": 10000000,
+        "elapsed_seconds": 15.755800666,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 12000,
+        "local_rows": null,
+        "maximum_active_streaming_rows": null,
+        "mode": "managed",
+        "phase_seconds": {
+          "decode_and_local_sort": 13.209834253,
+          "drop_results": 2.545851425,
+          "whole_pass_wall": 15.755800209
+        },
+        "phase_time_basis": "wall time accumulated across serial API calls",
+        "rows": 10000000,
+        "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+        "whole_passes": 1,
+        "workers": 12
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-placement-multicore_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "12",
+        "12000",
+        "managed"
+      ],
+      "stdout": "{\"actual_rows_per_second\":634686.8821195075,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":15.755800666,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":13.209834253,\"drop_results\":2.545851425,\"whole_pass_wall\":15.755800209},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":12}\n",
+      "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 15.755801s = 634687 VIN/s (12 core(s))\n"
+    },
+    {
+      "round": 2,
+      "workers": 12,
+      "label": "before",
+      "rows_per_second": 619889.2664552999,
+      "peak_rss_bytes": 1344061440,
+      "native_json": {
+        "actual_rows_per_second": 619889.2664552999,
+        "benchmark": "multicore_probe",
+        "corpus_rows": 10000000,
+        "elapsed_seconds": 16.131913458,
+        "frozen_now_micros": 1788220800000000,
+        "live_row_budget": 12000,
+        "local_rows": null,
+        "maximum_active_streaming_rows": null,
+        "mode": "managed",
+        "phase_seconds": {
+          "decode_and_local_sort": 13.562779174,
+          "drop_results": 2.569027921,
+          "whole_pass_wall": 16.131912834
+        },
+        "phase_time_basis": "wall time accumulated across serial API calls",
+        "rows": 10000000,
+        "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+        "whole_passes": 1,
+        "workers": 12
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-baseline-multicore_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "10",
+        "12",
+        "12000",
+        "managed"
+      ],
+      "stdout": "{\"actual_rows_per_second\":619889.2664552999,\"benchmark\":\"multicore_probe\",\"corpus_rows\":10000000,\"elapsed_seconds\":16.131913458,\"frozen_now_micros\":1788220800000000,\"live_row_budget\":12000,\"local_rows\":null,\"maximum_active_streaming_rows\":null,\"mode\":\"managed\",\"phase_seconds\":{\"decode_and_local_sort\":13.562779174,\"drop_results\":2.569027921,\"whole_pass_wall\":16.131912834},\"phase_time_basis\":\"wall time accumulated across serial API calls\",\"rows\":10000000,\"semantics\":\"ordered public managed batch API; one returned batch per live-row budget\",\"whole_passes\":1,\"workers\":12}\n",
+      "stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 16.131913s = 619889 VIN/s (12 core(s))\n"
+    }
+  ],
+  "summary": {
+    "8": {
+      "before": {
+        "median_rows_per_second": 619743.0904321959,
+        "range_rows_per_second": [
+          618862.1861055616,
+          620623.9947588304
+        ],
+        "median_peak_rss_bytes": 1215651840.0
+      },
+      "after": {
+        "median_rows_per_second": 634813.6229578586,
+        "range_rows_per_second": [
+          628333.3954119397,
+          641293.8505037775
+        ],
+        "median_peak_rss_bytes": 1232691200.0
+      }
+    },
+    "12": {
+      "before": {
+        "median_rows_per_second": 617405.1165102297,
+        "range_rows_per_second": [
+          614920.9665651595,
+          619889.2664552999
+        ],
+        "median_peak_rss_bytes": 1353506816.0
+      },
+      "after": {
+        "median_rows_per_second": 623404.4443953328,
+        "range_rows_per_second": [
+          612122.006671158,
+          634686.8821195075
+        ],
+        "median_peak_rss_bytes": 1335844864.0
+      }
+    }
+  }
+}

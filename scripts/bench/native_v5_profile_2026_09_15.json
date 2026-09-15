@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "status": "complete",
+  "scope": "diagnostic sampled stacks; not an acceptance throughput measurement",
+  "configuration": {
+    "workers": 12,
+    "batch_size": 100,
+    "slots_per_worker": 5,
+    "max_inflight_rows": 6000,
+    "now_micros": 1788220800000000,
+    "full_warm_pass_before_capture": true,
+    "sample_seconds": 15,
+    "sample_nominal_interval_milliseconds": 1
+  },
+  "binary": {
+    "path": "target/bench/native-slot-retune-20260915T084704Z/native-slot-grid",
+    "sha256": "96bd767ae8e04a84ff520d188e65ba6705f84626c0c41c27ff591342b98acb9d"
+  },
+  "corpus": {
+    "path": "target/bench/independent-sink-corpus.txt",
+    "rows": 20000000,
+    "sha256": "0d6224e99d0a7f241e3dcd052ce973c8baea774feb0831db0071423de726bd9a"
+  },
+  "capture": {
+    "path": "target/bench/native-v5-production-profile.txt",
+    "sha256": "20aca8ef5f7f5524c7b04abfedf970d0ff16198687a83b5e2811475037578ad6",
+    "stdout_path": "target/bench/native-v5-production-profile.stdout",
+    "stdout_sha256": "e5bc6c7b60768fb417b3294931928eb2692c77e8c96e45e9e5945b7edcdb7660",
+    "run_metadata_path": "target/bench/native-v5-production-profile-run.json",
+    "instrumented_rows_per_second": 820194.9451878301,
+    "note": "The 1 ms stack sampler materially slowed this process. Its throughput is diagnostic and is excluded from benchmark comparisons."
+  },
+  "attribution": {
+    "basis": "macOS sample's exclusive 'Sort by top of stack' counts; symbols with fewer than five observations are omitted by sample",
+    "reported_non_wait_observations": 103303,
+    "reported_explicit_wait_observations": 10583,
+    "categories": [
+      {"name": "decode_core", "observations": 26795, "percent_of_reported_non_wait": 25.9383},
+      {"name": "full_projection", "observations": 18833, "percent_of_reported_non_wait": 18.2308},
+      {"name": "errors_and_correction", "observations": 17324, "percent_of_reported_non_wait": 16.7701},
+      {"name": "workspace_recycle", "observations": 6573, "percent_of_reported_non_wait": 6.3628},
+      {"name": "memory_primitives", "observations": 6372, "percent_of_reported_non_wait": 6.1683},
+      {"name": "formatting_and_strings", "observations": 5893, "percent_of_reported_non_wait": 5.7046},
+      {"name": "database_lookup", "observations": 5500, "percent_of_reported_non_wait": 5.3241},
+      {"name": "other_ultravin", "observations": 5167, "percent_of_reported_non_wait": 5.0018},
+      {"name": "allocator_and_growth", "observations": 4649, "percent_of_reported_non_wait": 4.5004},
+      {"name": "sorting", "observations": 4535, "percent_of_reported_non_wait": 4.3900},
+      {"name": "other_runtime", "observations": 1662, "percent_of_reported_non_wait": 1.6089}
+    ],
+    "largest_exclusive_symbols": [
+      {"symbol": "ultravin::decode::decode_core_into", "observations": 26073},
+      {"symbol": "ultravin::RawResult::full_into_workspace", "observations": 18833},
+      {"symbol": "ultravin::errors::compute_errors", "observations": 11435},
+      {"symbol": "ultravin::native_stream::recycle", "observations": 5551},
+      {"symbol": "platform_memmove", "observations": 4338},
+      {"symbol": "ultravin::db::Db::wmi_rows", "observations": 3296},
+      {"symbol": "u32 unstable quicksort", "observations": 3288},
+      {"symbol": "ultravin::errors::trunc500", "observations": 2763}
+    ]
+  },
+  "interpretation": "Projection remains the second-largest named non-wait leaf after decode_core, while error construction plus formatting is also material. Sampling cannot separate inlined projection metadata lookup from record construction, so it does not establish metadata cache misses.",
+  "next_isolated_candidate": "Replace the general integer formatting in errors::errorcode for fixed VIN positions 4..14 with static decimal text and direct push/push_str assembly, preserving exact replacement and unused-position strings. This is narrower than another projection metadata redesign and directly targets an observed errors/formatting hotspot."
+}

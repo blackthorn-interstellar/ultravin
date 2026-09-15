@@ -1,0 +1,496 @@
+{
+  "schema_version": 1,
+  "measured_at_utc": "2026-09-15T04:17:01+00:00",
+  "configuration": {
+    "workers": [
+      8,
+      12
+    ],
+    "batch_sizes": [
+      10,
+      100,
+      1000
+    ],
+    "rounds": 1,
+    "ordered_downstream_delivery": false
+  },
+  "corpus": {
+    "path": "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+    "rows": 20000000,
+    "distinct_rows": 20000000,
+    "sha256": "0d6224e99d0a7f241e3dcd052ce973c8baea774feb0831db0071423de726bd9a",
+    "manifest": "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.manifest.json",
+    "manifest_sha256": "74511c8048925936662a849d1e33d6d7c406d81b15fd5325587a4ae318778822",
+    "generation_manifest": {
+      "candidates_examined": 20001831,
+      "chunk_size": 100000,
+      "chunks_used": 201,
+      "corpus": {
+        "bytes": 360000000,
+        "path": "target/bench/independent-sink-corpus.txt",
+        "sha256": "0d6224e99d0a7f241e3dcd052ce973c8baea774feb0831db0071423de726bd9a"
+      },
+      "count": 20000000,
+      "database": {
+        "artifact_blake3": "907eedd5f2794a10e586e01ca6c2a5af4e8d7e0f966bcfdf030a9889d77ac538",
+        "data_month": "2026_08"
+      },
+      "distinct_rows": 20000000,
+      "diversity": {
+        "distinct_descriptor_year_keys": 19575350,
+        "distinct_wmis": 12933,
+        "distinct_year_characters": 30
+      },
+      "format_version": 1,
+      "frozen_now": "2026-09-01T00:00:00+00:00",
+      "generator": {
+        "api": "ultravin.generate(n, seed=seed + chunk_index, now=frozen_now)",
+        "decoder_version": "0.0.0",
+        "script": "/Volumes/fast-4tb/projects/ultravin/scripts/bench/large_corpus.py",
+        "script_sha256": "a5196e5aa07f1a3e14d01cb7d10e5419e6a9190af6fe84f7946fc86bf4f4621e"
+      },
+      "seed": 42,
+      "verification": {
+        "check_digits": true,
+        "unique": true,
+        "vin_alphabet": true
+      }
+    }
+  },
+  "build": {
+    "binary": "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-probe",
+    "binary_sha256": "f132e6b05b931cafbcccfc8f11d982195685250790b2fb023ead260d3cac79d2",
+    "control_binary": "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-control-probe",
+    "control_binary_sha256": "e06b5e780664756e810c61c3baadc74fe5d07339ae6ed9a2ae8957f432315746",
+    "source_sha256": "a6a49d7779617cad24e87fb3c14911657e04af25ef50189ea4083fc5ddecdc20",
+    "runner_sha256": "1085e8933da58c655093a5776e51aa2ff9fcf56ed8057c1e9a2608bf45b43ea0"
+  },
+  "environment": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "python": "3.13.12 (main, Feb 12 2026, 01:06:02) [Clang 21.1.4 ]",
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "cpu_model": "Apple M2 Max",
+    "git_revision": "d8d233dd7a1aaa87a1c3b594a7b11353baf86a26"
+  },
+  "samples": [
+    {
+      "aggregate_worker_cleanup_seconds": null,
+      "aggregate_worker_decode_seconds": null,
+      "aggregate_worker_other_or_wait_seconds": null,
+      "average_busy_cores": 7.662240809936822,
+      "batch_size": 12000,
+      "current_year": 2026,
+      "elapsed_seconds": 26.811713583,
+      "full_output_materialized": true,
+      "max_live_result_batches": 1,
+      "max_live_result_rows": 12000,
+      "mode": "shared",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 664996120104,
+        "instructions": 1529296228249
+      },
+      "process_system_cpu_seconds": 2.250505,
+      "process_user_cpu_seconds": 203.18730100000002,
+      "rows": 20000000,
+      "rows_per_second": 745942.6245952823,
+      "worker_local_cleanup": false,
+      "workers": 8,
+      "peak_rss_bytes": 2035105792,
+      "process_wall_seconds": 55.43634491699049,
+      "instructions_per_vin": 76464.81141245,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-control-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "shared",
+        "8",
+        "12000"
+      ],
+      "sample_binary_sha256": "e06b5e780664756e810c61c3baadc74fe5d07339ae6ed9a2ae8957f432315746",
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":null,\"aggregate_worker_decode_seconds\":null,\"aggregate_worker_other_or_wait_seconds\":null,\"average_busy_cores\":7.662240809936822,\"batch_size\":12000,\"current_year\":2026,\"elapsed_seconds\":26.811713583,\"full_output_materialized\":true,\"max_live_result_batches\":1,\"max_live_result_rows\":12000,\"mode\":\"shared\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":664996120104,\"instructions\":1529296228249},\"process_system_cpu_seconds\":2.250505,\"process_user_cpu_seconds\":203.18730100000002,\"rows\":20000000,\"rows_per_second\":745942.6245952823,\"worker_local_cleanup\":false,\"workers\":8}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": 3.231374386,
+      "aggregate_worker_decode_seconds": 145.09309946,
+      "aggregate_worker_other_or_wait_seconds": 0.2747344900000144,
+      "average_busy_cores": 7.992724034669449,
+      "batch_size": 10,
+      "batches": 2000000,
+      "elapsed_seconds": 18.574901042,
+      "full_output_materialized": true,
+      "mode": "independent_local_sink",
+      "now_micros": 1788220800000000,
+      "ordered_downstream_delivery": false,
+      "ordered_local_batch_results": true,
+      "process_counters": {
+        "cycles": 481680258165,
+        "instructions": 1537473448456
+      },
+      "process_system_cpu_seconds": 0.486078,
+      "process_user_cpu_seconds": 147.97798,
+      "rows": 20000000,
+      "rows_per_second": 1076721.7523677615,
+      "worker_local_cleanup": true,
+      "workers": 8,
+      "peak_rss_bytes": 1979891712,
+      "process_wall_seconds": 38.443570958974306,
+      "instructions_per_vin": 76873.6724228,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "8",
+        "10"
+      ],
+      "sample_binary_sha256": "f132e6b05b931cafbcccfc8f11d982195685250790b2fb023ead260d3cac79d2",
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":3.231374386,\"aggregate_worker_decode_seconds\":145.09309946,\"aggregate_worker_other_or_wait_seconds\":0.2747344900000144,\"average_busy_cores\":7.992724034669449,\"batch_size\":10,\"batches\":2000000,\"elapsed_seconds\":18.574901042,\"full_output_materialized\":true,\"mode\":\"independent_local_sink\",\"now_micros\":1788220800000000,\"ordered_downstream_delivery\":false,\"ordered_local_batch_results\":true,\"process_counters\":{\"cycles\":481680258165,\"instructions\":1537473448456},\"process_system_cpu_seconds\":0.486078,\"process_user_cpu_seconds\":147.97798,\"rows\":20000000,\"rows_per_second\":1076721.7523677615,\"worker_local_cleanup\":true,\"workers\":8}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": 3.861960238,
+      "aggregate_worker_decode_seconds": 155.483775532,
+      "aggregate_worker_other_or_wait_seconds": 0.028952229999987367,
+      "average_busy_cores": 7.990592583936543,
+      "batch_size": 100,
+      "batches": 200000,
+      "elapsed_seconds": 19.921836,
+      "full_output_materialized": true,
+      "mode": "independent_local_sink",
+      "now_micros": 1788220800000000,
+      "ordered_downstream_delivery": false,
+      "ordered_local_batch_results": true,
+      "process_counters": {
+        "cycles": 517340243840,
+        "instructions": 1538601161750
+      },
+      "process_system_cpu_seconds": 0.463021,
+      "process_user_cpu_seconds": 158.72425400000003,
+      "rows": 20000000,
+      "rows_per_second": 1003923.5339554045,
+      "worker_local_cleanup": true,
+      "workers": 8,
+      "peak_rss_bytes": 1982939136,
+      "process_wall_seconds": 40.572391459019855,
+      "instructions_per_vin": 76930.0580875,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "8",
+        "100"
+      ],
+      "sample_binary_sha256": "f132e6b05b931cafbcccfc8f11d982195685250790b2fb023ead260d3cac79d2",
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":3.861960238,\"aggregate_worker_decode_seconds\":155.483775532,\"aggregate_worker_other_or_wait_seconds\":0.028952229999987367,\"average_busy_cores\":7.990592583936543,\"batch_size\":100,\"batches\":200000,\"elapsed_seconds\":19.921836,\"full_output_materialized\":true,\"mode\":\"independent_local_sink\",\"now_micros\":1788220800000000,\"ordered_downstream_delivery\":false,\"ordered_local_batch_results\":true,\"process_counters\":{\"cycles\":517340243840,\"instructions\":1538601161750},\"process_system_cpu_seconds\":0.463021,\"process_user_cpu_seconds\":158.72425400000003,\"rows\":20000000,\"rows_per_second\":1003923.5339554045,\"worker_local_cleanup\":true,\"workers\":8}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": 21.146970613,
+      "aggregate_worker_decode_seconds": 174.949667035,
+      "aggregate_worker_other_or_wait_seconds": 0.03109235199997329,
+      "average_busy_cores": 7.979443029295247,
+      "batch_size": 1000,
+      "batches": 20000,
+      "elapsed_seconds": 24.515966249999998,
+      "full_output_materialized": true,
+      "mode": "independent_local_sink",
+      "now_micros": 1788220800000000,
+      "ordered_downstream_delivery": false,
+      "ordered_local_batch_results": true,
+      "process_counters": {
+        "cycles": 635570969187,
+        "instructions": 1542878615089
+      },
+      "process_system_cpu_seconds": 0.5440950000000001,
+      "process_user_cpu_seconds": 195.07966100000002,
+      "rows": 20000000,
+      "rows_per_second": 815794.8904012707,
+      "worker_local_cleanup": true,
+      "workers": 8,
+      "peak_rss_bytes": 2007203840,
+      "process_wall_seconds": 50.07369370799279,
+      "instructions_per_vin": 77143.93075445,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "8",
+        "1000"
+      ],
+      "sample_binary_sha256": "f132e6b05b931cafbcccfc8f11d982195685250790b2fb023ead260d3cac79d2",
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":21.146970613,\"aggregate_worker_decode_seconds\":174.949667035,\"aggregate_worker_other_or_wait_seconds\":0.03109235199997329,\"average_busy_cores\":7.979443029295247,\"batch_size\":1000,\"batches\":20000,\"elapsed_seconds\":24.515966249999998,\"full_output_materialized\":true,\"mode\":\"independent_local_sink\",\"now_micros\":1788220800000000,\"ordered_downstream_delivery\":false,\"ordered_local_batch_results\":true,\"process_counters\":{\"cycles\":635570969187,\"instructions\":1542878615089},\"process_system_cpu_seconds\":0.5440950000000001,\"process_user_cpu_seconds\":195.07966100000002,\"rows\":20000000,\"rows_per_second\":815794.8904012707,\"worker_local_cleanup\":true,\"workers\":8}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": null,
+      "aggregate_worker_decode_seconds": null,
+      "aggregate_worker_other_or_wait_seconds": null,
+      "average_busy_cores": 7.689189674716567,
+      "batch_size": 12000,
+      "current_year": 2026,
+      "elapsed_seconds": 26.719344,
+      "full_output_materialized": true,
+      "max_live_result_batches": 1,
+      "max_live_result_rows": 12000,
+      "mode": "shared",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 665328955805,
+        "instructions": 1530315940635
+      },
+      "process_system_cpu_seconds": 2.2766980000000006,
+      "process_user_cpu_seconds": 203.17340600000003,
+      "rows": 20000000,
+      "rows_per_second": 748521.3708839559,
+      "worker_local_cleanup": false,
+      "workers": 8,
+      "peak_rss_bytes": 2026455040,
+      "process_wall_seconds": 54.25005741597852,
+      "instructions_per_vin": 76515.79703175,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-control-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "shared",
+        "8",
+        "12000"
+      ],
+      "sample_binary_sha256": "e06b5e780664756e810c61c3baadc74fe5d07339ae6ed9a2ae8957f432315746",
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":null,\"aggregate_worker_decode_seconds\":null,\"aggregate_worker_other_or_wait_seconds\":null,\"average_busy_cores\":7.689189674716567,\"batch_size\":12000,\"current_year\":2026,\"elapsed_seconds\":26.719344,\"full_output_materialized\":true,\"max_live_result_batches\":1,\"max_live_result_rows\":12000,\"mode\":\"shared\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":665328955805,\"instructions\":1530315940635},\"process_system_cpu_seconds\":2.2766980000000006,\"process_user_cpu_seconds\":203.17340600000003,\"rows\":20000000,\"rows_per_second\":748521.3708839559,\"worker_local_cleanup\":false,\"workers\":8}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": null,
+      "aggregate_worker_decode_seconds": null,
+      "aggregate_worker_other_or_wait_seconds": null,
+      "average_busy_cores": 9.832561544675892,
+      "batch_size": 12000,
+      "current_year": 2026,
+      "elapsed_seconds": 25.522729541,
+      "full_output_materialized": true,
+      "max_live_result_batches": 1,
+      "max_live_result_rows": 12000,
+      "mode": "shared",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 763577287930,
+        "instructions": 1548080236128
+      },
+      "process_system_cpu_seconds": 9.941166999999998,
+      "process_user_cpu_seconds": 241.012642,
+      "rows": 20000000,
+      "rows_per_second": 783615.246475569,
+      "worker_local_cleanup": false,
+      "workers": 12,
+      "peak_rss_bytes": 2053013504,
+      "process_wall_seconds": 51.6182886249735,
+      "instructions_per_vin": 77404.0118064,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-control-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "shared",
+        "12",
+        "12000"
+      ],
+      "sample_binary_sha256": "e06b5e780664756e810c61c3baadc74fe5d07339ae6ed9a2ae8957f432315746",
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":null,\"aggregate_worker_decode_seconds\":null,\"aggregate_worker_other_or_wait_seconds\":null,\"average_busy_cores\":9.832561544675892,\"batch_size\":12000,\"current_year\":2026,\"elapsed_seconds\":25.522729541,\"full_output_materialized\":true,\"max_live_result_batches\":1,\"max_live_result_rows\":12000,\"mode\":\"shared\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":763577287930,\"instructions\":1548080236128},\"process_system_cpu_seconds\":9.941166999999998,\"process_user_cpu_seconds\":241.012642,\"rows\":20000000,\"rows_per_second\":783615.246475569,\"worker_local_cleanup\":false,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": 4.669629379,
+      "aggregate_worker_decode_seconds": 189.925277993,
+      "aggregate_worker_other_or_wait_seconds": 0.37706512799999814,
+      "average_busy_cores": 10.831870780811842,
+      "batch_size": 10,
+      "batches": 2000000,
+      "elapsed_seconds": 16.247664375,
+      "full_output_materialized": true,
+      "mode": "independent_local_sink",
+      "now_micros": 1788220800000000,
+      "ordered_downstream_delivery": false,
+      "ordered_local_batch_results": true,
+      "process_counters": {
+        "cycles": 531941873917,
+        "instructions": 1536158579684
+      },
+      "process_system_cpu_seconds": 1.070144,
+      "process_user_cpu_seconds": 174.922457,
+      "rows": 20000000,
+      "rows_per_second": 1230946.155607058,
+      "worker_local_cleanup": true,
+      "workers": 12,
+      "peak_rss_bytes": 1999437824,
+      "process_wall_seconds": 33.075132541998755,
+      "instructions_per_vin": 76807.9289842,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "12",
+        "10"
+      ],
+      "sample_binary_sha256": "f132e6b05b931cafbcccfc8f11d982195685250790b2fb023ead260d3cac79d2",
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":4.669629379,\"aggregate_worker_decode_seconds\":189.925277993,\"aggregate_worker_other_or_wait_seconds\":0.37706512799999814,\"average_busy_cores\":10.831870780811842,\"batch_size\":10,\"batches\":2000000,\"elapsed_seconds\":16.247664375,\"full_output_materialized\":true,\"mode\":\"independent_local_sink\",\"now_micros\":1788220800000000,\"ordered_downstream_delivery\":false,\"ordered_local_batch_results\":true,\"process_counters\":{\"cycles\":531941873917,\"instructions\":1536158579684},\"process_system_cpu_seconds\":1.070144,\"process_user_cpu_seconds\":174.922457,\"rows\":20000000,\"rows_per_second\":1230946.155607058,\"worker_local_cleanup\":true,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": 9.487777242,
+      "aggregate_worker_decode_seconds": 204.52497386,
+      "aggregate_worker_other_or_wait_seconds": 0.04713440200001173,
+      "average_busy_cores": 10.691276110008172,
+      "batch_size": 100,
+      "batches": 200000,
+      "elapsed_seconds": 17.838323792,
+      "full_output_materialized": true,
+      "mode": "independent_local_sink",
+      "now_micros": 1788220800000000,
+      "ordered_downstream_delivery": false,
+      "ordered_local_batch_results": true,
+      "process_counters": {
+        "cycles": 579274360453,
+        "instructions": 1539621731456
+      },
+      "process_system_cpu_seconds": 1.202841,
+      "process_user_cpu_seconds": 189.51160399999998,
+      "rows": 20000000,
+      "rows_per_second": 1121181.576991525,
+      "worker_local_cleanup": true,
+      "workers": 12,
+      "peak_rss_bytes": 2005041152,
+      "process_wall_seconds": 36.204963666037656,
+      "instructions_per_vin": 76981.0865728,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "12",
+        "100"
+      ],
+      "sample_binary_sha256": "f132e6b05b931cafbcccfc8f11d982195685250790b2fb023ead260d3cac79d2",
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":9.487777242,\"aggregate_worker_decode_seconds\":204.52497386,\"aggregate_worker_other_or_wait_seconds\":0.04713440200001173,\"average_busy_cores\":10.691276110008172,\"batch_size\":100,\"batches\":200000,\"elapsed_seconds\":17.838323792,\"full_output_materialized\":true,\"mode\":\"independent_local_sink\",\"now_micros\":1788220800000000,\"ordered_downstream_delivery\":false,\"ordered_local_batch_results\":true,\"process_counters\":{\"cycles\":579274360453,\"instructions\":1539621731456},\"process_system_cpu_seconds\":1.202841,\"process_user_cpu_seconds\":189.51160399999998,\"rows\":20000000,\"rows_per_second\":1121181.576991525,\"worker_local_cleanup\":true,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": 27.687401565,
+      "aggregate_worker_decode_seconds": 233.604158539,
+      "aggregate_worker_other_or_wait_seconds": 0.08036789600004113,
+      "average_busy_cores": 10.597790211043629,
+      "batch_size": 1000,
+      "batches": 20000,
+      "elapsed_seconds": 21.780994,
+      "full_output_materialized": true,
+      "mode": "independent_local_sink",
+      "now_micros": 1788220800000000,
+      "ordered_downstream_delivery": false,
+      "ordered_local_batch_results": true,
+      "process_counters": {
+        "cycles": 701063436416,
+        "instructions": 1544366966324
+      },
+      "process_system_cpu_seconds": 1.4295609999999999,
+      "process_user_cpu_seconds": 229.400844,
+      "rows": 20000000,
+      "rows_per_second": 918231.7391024487,
+      "worker_local_cleanup": true,
+      "workers": 12,
+      "peak_rss_bytes": 2039840768,
+      "process_wall_seconds": 44.01415854104562,
+      "instructions_per_vin": 77218.3483162,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "12",
+        "1000"
+      ],
+      "sample_binary_sha256": "f132e6b05b931cafbcccfc8f11d982195685250790b2fb023ead260d3cac79d2",
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":27.687401565,\"aggregate_worker_decode_seconds\":233.604158539,\"aggregate_worker_other_or_wait_seconds\":0.08036789600004113,\"average_busy_cores\":10.597790211043629,\"batch_size\":1000,\"batches\":20000,\"elapsed_seconds\":21.780994,\"full_output_materialized\":true,\"mode\":\"independent_local_sink\",\"now_micros\":1788220800000000,\"ordered_downstream_delivery\":false,\"ordered_local_batch_results\":true,\"process_counters\":{\"cycles\":701063436416,\"instructions\":1544366966324},\"process_system_cpu_seconds\":1.4295609999999999,\"process_user_cpu_seconds\":229.400844,\"rows\":20000000,\"rows_per_second\":918231.7391024487,\"worker_local_cleanup\":true,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": null,
+      "aggregate_worker_decode_seconds": null,
+      "aggregate_worker_other_or_wait_seconds": null,
+      "average_busy_cores": 9.783225201207676,
+      "batch_size": 12000,
+      "current_year": 2026,
+      "elapsed_seconds": 25.649243459,
+      "full_output_materialized": true,
+      "max_live_result_batches": 1,
+      "max_live_result_rows": 12000,
+      "mode": "shared",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 761933188582,
+        "instructions": 1550554892805
+      },
+      "process_system_cpu_seconds": 10.925716,
+      "process_user_cpu_seconds": 240.00660899999997,
+      "rows": 20000000,
+      "rows_per_second": 779750.094070796,
+      "worker_local_cleanup": false,
+      "workers": 12,
+      "peak_rss_bytes": 2054733824,
+      "process_wall_seconds": 51.78665833303239,
+      "instructions_per_vin": 77527.74464025,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-control-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "shared",
+        "12",
+        "12000"
+      ],
+      "sample_binary_sha256": "e06b5e780664756e810c61c3baadc74fe5d07339ae6ed9a2ae8957f432315746",
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":null,\"aggregate_worker_decode_seconds\":null,\"aggregate_worker_other_or_wait_seconds\":null,\"average_busy_cores\":9.783225201207676,\"batch_size\":12000,\"current_year\":2026,\"elapsed_seconds\":25.649243459,\"full_output_materialized\":true,\"max_live_result_batches\":1,\"max_live_result_rows\":12000,\"mode\":\"shared\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":761933188582,\"instructions\":1550554892805},\"process_system_cpu_seconds\":10.925716,\"process_user_cpu_seconds\":240.00660899999997,\"rows\":20000000,\"rows_per_second\":779750.094070796,\"worker_local_cleanup\":false,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    }
+  ],
+  "confirmations": [
+    {
+      "label": "12w B10 immutable-snapshot confirmation",
+      "mode": "independent_local_sink",
+      "workers": 12,
+      "batch_size": 10,
+      "rows": 20000000,
+      "elapsed_seconds": 16.213365083,
+      "rows_per_second": 1233550.215986338,
+      "average_busy_cores": 10.894712053650734,
+      "aggregate_worker_decode_seconds": 189.569973561,
+      "aggregate_worker_cleanup_seconds": 4.619048178,
+      "aggregate_worker_other_or_wait_seconds": 0.3713592569999946,
+      "process_counters": {
+        "cycles": 534097020031,
+        "instructions": 1536108182410
+      },
+      "instructions_per_vin": 76805.4091205,
+      "binary_sha256": "f132e6b05b931cafbcccfc8f11d982195685250790b2fb023ead260d3cac79d2",
+      "command": [
+        "target/bench/independent-sink-probe",
+        "target/bench/independent-sink-corpus.txt",
+        "12",
+        "10"
+      ],
+      "raw_stdout": "{\"aggregate_worker_cleanup_seconds\":4.619048178,\"aggregate_worker_decode_seconds\":189.569973561,\"aggregate_worker_other_or_wait_seconds\":0.3713592569999946,\"average_busy_cores\":10.894712053650734,\"batch_size\":10,\"batches\":2000000,\"elapsed_seconds\":16.213365083,\"full_output_materialized\":true,\"mode\":\"independent_local_sink\",\"now_micros\":1788220800000000,\"ordered_downstream_delivery\":false,\"ordered_local_batch_results\":true,\"process_counters\":{\"cycles\":534097020031,\"instructions\":1536108182410},\"process_system_cpu_seconds\":1.1142810000000003,\"process_user_cpu_seconds\":175.525663,\"rows\":20000000,\"rows_per_second\":1233550.215986338,\"worker_local_cleanup\":true,\"workers\":12}\n",
+      "raw_stderr": "warmup complete; starting timed whole-corpus pass\n",
+      "raw_stdout_path": "target/bench/independent-sink-confirm-12w-b10.stdout",
+      "raw_stderr_path": "target/bench/independent-sink-confirm-12w-b10.stderr"
+    }
+  ]
+}

@@ -1,0 +1,434 @@
+{
+  "schema_version": 1,
+  "source": {
+    "path": "docs/figures/native-flamegraph.json.gz",
+    "sha256": "2d67f8c5821a39c12f59fa2cf6acaf3cab7a41099886d0799ea88befdd9bb91c",
+    "meta": {
+      "title": "Ultravin \u00b7 native function flame graph",
+      "description": "Explore where eight and twelve workers were sampled. Click a frame to zoom; search a function to highlight it."
+    },
+    "provenance": {
+      "captured_at_utc": "2026-09-15T00:20:22.090976+00:00",
+      "binary": "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-placement-multicore_probe",
+      "binary_sha256": "53b3b4cf829f142dee5f3f8bc67d14c7ef970224fe39b125c7148fab2b5895de",
+      "corpus_sha256": "de80fb8727de3d89a7885929645953eed7b51a67c1dc988d309bbaa0ab4ec5f3",
+      "instrumented": true,
+      "profiles": [
+        {
+          "workers": 8,
+          "command": [
+            "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-placement-multicore_probe",
+            "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+            "10",
+            "8",
+            "12000",
+            "managed"
+          ],
+          "sample_command": [
+            "/usr/bin/sample",
+            "51534",
+            "5",
+            "5",
+            "-file",
+            "/Volumes/fast-4tb/projects/ultravin/target/bench/flame-8w.sample.txt"
+          ],
+          "sample_sha256": "00c94cef0f8a470fa6f604077d60a932c2e03cb3201297bc37d1f54da3e333db",
+          "sample_path": "/Volumes/fast-4tb/projects/ultravin/target/bench/flame-8w.sample.txt",
+          "sample_stdout": "",
+          "sample_stderr": "Sampling process 51534 for 5 seconds with 5 milliseconds of run time between samples\nSampling completed, processing symbols...\nSample analysis of process 51534 written to file /Volumes/fast-4tb/projects/ultravin/target/bench/flame-8w.sample.txt\n",
+          "native_json": {
+            "actual_rows_per_second": 598154.6570058207,
+            "benchmark": "multicore_probe",
+            "corpus_rows": 10000000,
+            "elapsed_seconds": 16.718084333,
+            "frozen_now_micros": 1788220800000000,
+            "live_row_budget": 12000,
+            "local_rows": null,
+            "maximum_active_streaming_rows": null,
+            "mode": "managed",
+            "phase_seconds": {
+              "decode_and_local_sort": 14.378455703,
+              "drop_results": 2.339454089,
+              "whole_pass_wall": 16.718083958
+            },
+            "phase_time_basis": "wall time accumulated across serial API calls",
+            "rows": 10000000,
+            "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+            "whole_passes": 1,
+            "workers": 8
+          },
+          "native_stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 16.718084s = 598155 VIN/s (8 core(s))\n"
+        },
+        {
+          "workers": 12,
+          "command": [
+            "/Volumes/fast-4tb/projects/ultravin/target/bench/coordination-placement-multicore_probe",
+            "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+            "10",
+            "12",
+            "12000",
+            "managed"
+          ],
+          "sample_command": [
+            "/usr/bin/sample",
+            "52073",
+            "5",
+            "5",
+            "-file",
+            "/Volumes/fast-4tb/projects/ultravin/target/bench/flame-12w.sample.txt"
+          ],
+          "sample_sha256": "a354cf6676136174daa4eef22502fa582710c80e8f42467ca973a1a675f100d4",
+          "sample_path": "/Volumes/fast-4tb/projects/ultravin/target/bench/flame-12w.sample.txt",
+          "sample_stdout": "",
+          "sample_stderr": "Sampling process 52073 for 5 seconds with 5 milliseconds of run time between samples\nSampling completed, processing symbols...\nSample analysis of process 52073 written to file /Volumes/fast-4tb/projects/ultravin/target/bench/flame-12w.sample.txt\n",
+          "native_json": {
+            "actual_rows_per_second": 604268.6336940085,
+            "benchmark": "multicore_probe",
+            "corpus_rows": 10000000,
+            "elapsed_seconds": 16.548931125,
+            "frozen_now_micros": 1788220800000000,
+            "live_row_budget": 12000,
+            "local_rows": null,
+            "maximum_active_streaming_rows": null,
+            "mode": "managed",
+            "phase_seconds": {
+              "decode_and_local_sort": 14.073300769,
+              "drop_results": 2.47549268,
+              "whole_pass_wall": 16.548930791
+            },
+            "phase_time_basis": "wall time accumulated across serial API calls",
+            "rows": 10000000,
+            "semantics": "ordered public managed batch API; one returned batch per live-row budget",
+            "whole_passes": 1,
+            "workers": 12
+          },
+          "native_stderr": "multicore probe: warmup complete; starting timed whole passes\nmanaged: 10000000 VINs in 16.548931s = 604269 VIN/s (12 core(s))\n"
+        }
+      ]
+    }
+  },
+  "unit": "weighted sampled thread observations; not CPU time or elapsed time",
+  "leaf_category_precedence": [
+    "explicit_wait",
+    "decode_core",
+    "full_result_construction",
+    "decode_error_and_correction",
+    "cleanup_drop",
+    "allocator",
+    "memory_primitive",
+    "sorting",
+    "database_lookup",
+    "formatting_and_strings",
+    "other_ultravin",
+    "other_runtime_or_system"
+  ],
+  "profiles": [
+    {
+      "id": "8",
+      "label": "8 workers",
+      "meta": {
+        "capture": "2026-09-15T00:20:22.090976+00:00",
+        "workload": "10 million unique VINs \u00b7 full managed results \u00b7 batch 12,000 \u00b7 warmed engine",
+        "sampling": "5 seconds, nominal 5 ms interval; thread observations, including waits",
+        "source_sha256": "00c94cef0f8a470fa6f604077d60a932c2e03cb3201297bc37d1f54da3e333db"
+      },
+      "scope": "worker threads only; main-thread observations reported separately",
+      "worker_observation_weight": 5840,
+      "main_observation_weight_excluded": 730,
+      "leaf_categories": {
+        "explicit_wait": {
+          "weight": 394,
+          "percent": 6.7465753424657535
+        },
+        "decode_core": {
+          "weight": 1094,
+          "percent": 18.732876712328768
+        },
+        "full_result_construction": {
+          "weight": 959,
+          "percent": 16.421232876712327
+        },
+        "decode_error_and_correction": {
+          "weight": 774,
+          "percent": 13.253424657534246
+        },
+        "cleanup_drop": {
+          "weight": 414,
+          "percent": 7.089041095890411
+        },
+        "allocator": {
+          "weight": 841,
+          "percent": 14.400684931506849
+        },
+        "memory_primitive": {
+          "weight": 303,
+          "percent": 5.188356164383562
+        },
+        "sorting": {
+          "weight": 263,
+          "percent": 4.5034246575342465
+        },
+        "database_lookup": {
+          "weight": 269,
+          "percent": 4.6061643835616435
+        },
+        "formatting_and_strings": {
+          "weight": 189,
+          "percent": 3.2363013698630136
+        },
+        "other_ultravin": {
+          "weight": 107,
+          "percent": 1.832191780821918
+        },
+        "other_runtime_or_system": {
+          "weight": 233,
+          "percent": 3.98972602739726
+        }
+      },
+      "allocator_leaf_among_non_wait": {
+        "allocator_weight": 841,
+        "non_wait_weight": 5446,
+        "percent": 15.442526625045906
+      },
+      "explicit_wait_breakdown": {
+        "disjoint_categories": {
+          "rayon_sleep_wake": {
+            "weight": 30
+          },
+          "rayon_idle_or_yield": {
+            "weight": 364
+          },
+          "allocator_ancestor": {
+            "weight": 0
+          },
+          "other_wait": {
+            "weight": 0
+          }
+        },
+        "leaf_symbols": {
+          "__psynch_cvwait": 144,
+          "__psynch_mutexwait": 30,
+          "swtch_pri": 220
+        },
+        "inclusive_ancestry": {
+          "rayon_worker_wait_until": 394,
+          "rayon_sleep_method": 144,
+          "rayon_wake_method": 30,
+          "allocator": 0
+        }
+      },
+      "inclusive_paths": {
+        "allocator_path": {
+          "weight": 886,
+          "percent": 15.17123287671233
+        },
+        "cleanup_path": {
+          "weight": 634,
+          "percent": 10.856164383561644
+        },
+        "decode_core_path": {
+          "weight": 1628,
+          "percent": 27.876712328767123
+        },
+        "explicit_wait": {
+          "weight": 394,
+          "percent": 6.7465753424657535
+        },
+        "full_result_path": {
+          "weight": 1363,
+          "percent": 23.339041095890412
+        }
+      },
+      "per_thread_observations": {
+        "threads": 8,
+        "total_weight_min": 730,
+        "total_weight_max": 730,
+        "explicit_wait_weight_min": 39,
+        "explicit_wait_weight_max": 61,
+        "explicit_wait_weight_by_thread": {
+          "worker / thread 15990385": 39,
+          "worker / thread 15990386": 61,
+          "worker / thread 15990387": 44,
+          "worker / thread 15990388": 51,
+          "worker / thread 15990389": 51,
+          "worker / thread 15990390": 55,
+          "worker / thread 15990391": 47,
+          "worker / thread 15990392": 46
+        }
+      }
+    },
+    {
+      "id": "12",
+      "label": "12 workers",
+      "meta": {
+        "capture": "2026-09-15T00:20:22.090976+00:00",
+        "workload": "10 million unique VINs \u00b7 full managed results \u00b7 batch 12,000 \u00b7 warmed engine",
+        "sampling": "5 seconds, nominal 5 ms interval; thread observations, including waits",
+        "source_sha256": "a354cf6676136174daa4eef22502fa582710c80e8f42467ca973a1a675f100d4"
+      },
+      "scope": "worker threads only; main-thread observations reported separately",
+      "worker_observation_weight": 8616,
+      "main_observation_weight_excluded": 718,
+      "leaf_categories": {
+        "explicit_wait": {
+          "weight": 2171,
+          "percent": 25.197307335190345
+        },
+        "decode_core": {
+          "weight": 1314,
+          "percent": 15.250696378830083
+        },
+        "full_result_construction": {
+          "weight": 1074,
+          "percent": 12.465181058495821
+        },
+        "decode_error_and_correction": {
+          "weight": 860,
+          "percent": 9.98142989786444
+        },
+        "cleanup_drop": {
+          "weight": 508,
+          "percent": 5.896007428040854
+        },
+        "allocator": {
+          "weight": 1144,
+          "percent": 13.277623026926648
+        },
+        "memory_primitive": {
+          "weight": 332,
+          "percent": 3.8532961931290624
+        },
+        "sorting": {
+          "weight": 304,
+          "percent": 3.5283194057567315
+        },
+        "database_lookup": {
+          "weight": 248,
+          "percent": 2.8783658310120708
+        },
+        "formatting_and_strings": {
+          "weight": 213,
+          "percent": 2.4721448467966574
+        },
+        "other_ultravin": {
+          "weight": 155,
+          "percent": 1.7989786443825442
+        },
+        "other_runtime_or_system": {
+          "weight": 293,
+          "percent": 3.4006499535747445
+        }
+      },
+      "allocator_leaf_among_non_wait": {
+        "allocator_weight": 1144,
+        "non_wait_weight": 6445,
+        "percent": 17.750193948797516
+      },
+      "explicit_wait_breakdown": {
+        "disjoint_categories": {
+          "rayon_sleep_wake": {
+            "weight": 130
+          },
+          "rayon_idle_or_yield": {
+            "weight": 2041
+          },
+          "allocator_ancestor": {
+            "weight": 0
+          },
+          "other_wait": {
+            "weight": 0
+          }
+        },
+        "leaf_symbols": {
+          "__psynch_cvwait": 838,
+          "__psynch_mutexwait": 130,
+          "swtch_pri": 1203
+        },
+        "inclusive_ancestry": {
+          "rayon_worker_wait_until": 2171,
+          "rayon_sleep_method": 854,
+          "rayon_wake_method": 114,
+          "allocator": 0
+        }
+      },
+      "inclusive_paths": {
+        "allocator_path": {
+          "weight": 1195,
+          "percent": 13.869545032497678
+        },
+        "cleanup_path": {
+          "weight": 808,
+          "percent": 9.377901578458681
+        },
+        "decode_core_path": {
+          "weight": 1879,
+          "percent": 21.808263695450325
+        },
+        "explicit_wait": {
+          "weight": 2171,
+          "percent": 25.197307335190345
+        },
+        "full_result_path": {
+          "weight": 1619,
+          "percent": 18.79062209842154
+        }
+      },
+      "per_thread_observations": {
+        "threads": 12,
+        "total_weight_min": 718,
+        "total_weight_max": 718,
+        "explicit_wait_weight_min": 172,
+        "explicit_wait_weight_max": 188,
+        "explicit_wait_weight_by_thread": {
+          "worker / thread 15992423": 176,
+          "worker / thread 15992424": 176,
+          "worker / thread 15992425": 185,
+          "worker / thread 15992426": 179,
+          "worker / thread 15992427": 172,
+          "worker / thread 15992428": 181,
+          "worker / thread 15992429": 187,
+          "worker / thread 15992430": 188,
+          "worker / thread 15992431": 177,
+          "worker / thread 15992432": 187,
+          "worker / thread 15992433": 179,
+          "worker / thread 15992434": 184
+        }
+      }
+    }
+  ],
+  "assessment": {
+    "allocator_evidence": "Allocator frames are directly observed as leaves and on inclusive paths, so allocation/free activity is real. Stack observations alone do not show that allocation is the dominant limiter or quantify its elapsed cost.",
+    "wait_and_straggler_evidence": "Explicit worker waiting is more prevalent at 12 workers. Its narrow per-thread range does not expose one obvious persistently lagging worker; the capture instead shows broadly distributed waiting. This is consistent with coordination slack or changing stragglers, but cannot distinguish scheduler, heterogeneous-core, allocator, cache, or memory-system causes.",
+    "percentage_point_change_12_minus_8": {
+      "inclusive_allocator_path": -1.3016878442146513,
+      "allocator_leaf_among_non_wait": 2.3076673237516108,
+      "explicit_wait": 18.45073199272459
+    }
+  },
+  "hardware_counter_tool_feasibility": {
+    "xctrace": {
+      "path": "/usr/bin/xctrace",
+      "note": "Executable present does not prove that required Xcode templates, PMU counters, or permissions are available."
+    },
+    "sample": {
+      "path": "/usr/bin/sample",
+      "note": "Function-level stack sampler; it does not expose hardware performance counters."
+    },
+    "spindump": {
+      "path": "/usr/sbin/spindump",
+      "note": "Stack and wait-state diagnostic; it does not provide per-function PMU counter attribution."
+    },
+    "powermetrics": {
+      "path": "/usr/bin/powermetrics",
+      "note": "System-level metrics generally require elevated privileges and do not provide this flamegraph's function attribution."
+    },
+    "instruments": {
+      "path": null,
+      "note": "Legacy Instruments command, when present; xctrace is the current command-line interface."
+    },
+    "perf": {
+      "path": null,
+      "note": "Linux perf is not expected on macOS."
+    }
+  }
+}

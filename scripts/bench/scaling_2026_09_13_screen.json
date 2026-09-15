@@ -1,0 +1,1907 @@
+{
+  "schema_version": 1,
+  "measured_at_utc": "2026-09-13T18:29:28+00:00",
+  "command": "/Volumes/fast-4tb/projects/ultravin/scripts/bench/scaling.py --batch-sizes 100,1000,10000,50000 --workers 1,2,4,12 --paths rust-results,python-dicts,direct-json,parquet,jsonl --rounds 1 --seconds 2 --output scripts/bench/scaling_2026_09_13_screen.json",
+  "configuration": {
+    "batch_sizes": [
+      100,
+      1000,
+      10000,
+      50000
+    ],
+    "workers": [
+      1,
+      2,
+      4,
+      12
+    ],
+    "paths": [
+      "rust-results",
+      "python-dicts",
+      "direct-json",
+      "parquet",
+      "jsonl"
+    ],
+    "rounds": 1,
+    "seconds": 2.0,
+    "now": "2026-09-01T00:00:00+00:00"
+  },
+  "work": {
+    "corpus_rows_per_pass": 50000,
+    "distinct_corpus_rows": 5000,
+    "order": "every timed pass cycles through the complete committed corpus in file order",
+    "timing": "the requested duration is a minimum; each timed loop completes a full corpus pass",
+    "warmup": "one complete untimed pass in the measured child; its allocations are included in peak RSS",
+    "jsonl_sink": "/dev/null",
+    "jsonl_scope": "CLI input parsing, chunking, serialization, and OS sink writes; excludes terminal or network backpressure",
+    "full": {
+      "rust-results": true,
+      "python-dicts": false,
+      "direct-json": false,
+      "jsonl": false,
+      "parquet": "all public element columns"
+    }
+  },
+  "environment": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "python": "3.13.12 (main, Feb 12 2026, 01:06:02) [Clang 21.1.4 ]",
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "cpu_model": "Apple M2 Max",
+    "logical_cpus": 12,
+    "git_revision": "d8d233dd7a1aaa87a1c3b594a7b11353baf86a26",
+    "git_dirty": true,
+    "build_profile": "release; locked/frozen dependencies"
+  },
+  "inputs": {
+    "corpus": "scripts/bench/corpus.txt",
+    "corpus_sha256": "b45ad4472c202ee176f86e8bc3c39609c76b6258df963ea04e08439aa3a1eb09",
+    "corpus_rows": 5000,
+    "expanded_corpus_sha256": "92c8265aed28b64ca0fd1b9422ba615a2ef0682c96c9a1e98e63459f8e6721c6",
+    "expanded_corpus_rows": 50000,
+    "parquet_input_sha256": "0fafe49b123f2cce3df29793189d1c958d73dae36ba129f419fb31d86f50fa7c",
+    "cargo_lock_sha256": "06333688674e70f089b043d466bf8e0abda8dca1f45161fefbf368cfec9c384d",
+    "uv_lock_sha256": "5ca117e340690822658c6b42e13ade269b9d02f75f166eacf7af53d23b8f4d21"
+  },
+  "artifact": {
+    "month": "2026_08",
+    "sha256": "2d555d4db3fde3867f41e415ec6e848285a286b2fe5fb45f0bdcb88245bd7787",
+    "artifact_blake3": "907eedd5f2794a10e586e01ca6c2a5af4e8d7e0f966bcfdf030a9889d77ac538",
+    "dump_sha256": "dd95bc6d6aa6e4f5103f38c792b8eccba2f4b06dad865a696327ac4dd37213c8"
+  },
+  "executables": {
+    "python_extension": "/Volumes/fast-4tb/projects/ultravin/python/ultravin/_ultravin.abi3.so",
+    "python_extension_sha256": "c2bcdcaa1340032d87fe16768da69b803e4af6713dcfb9af1811e7c66a3292e4",
+    "rust_throughput": "/Volumes/fast-4tb/projects/ultravin/target/release/examples/throughput",
+    "rust_throughput_sha256": "285914a1b6c024dda6be7cac38584c6a84088d3b9d5c049d1310e7a95ee4c889",
+    "scaling_worker_sha256": "8520015059f870e2845a853bd81e343d0ae0ba87f81a9f724f6a93ea991f90e4",
+    "scaling_runner_sha256": "cfd70fc06f7965436714dc557f2f6634f82b24840af439aa2f6bee17c94e4ac9"
+  },
+  "samples": [
+    {
+      "path": "rust-results",
+      "batch_size": 100,
+      "workers": 1,
+      "trial": 1,
+      "rows": 200000,
+      "seconds": 2.1,
+      "rows_per_second": 93784,
+      "process_wall_seconds": 5.822655291005503,
+      "peak_rss_bytes": 149274624
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 100,
+      "workers": 1,
+      "trial": 1,
+      "rows": 200000,
+      "passes": 4,
+      "seconds": 2.4503917089896277,
+      "rows_per_second": 81619.603619401,
+      "process_wall_seconds": 3.6183829170186073,
+      "peak_rss_bytes": 167149568
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 100,
+      "workers": 1,
+      "trial": 1,
+      "rows": 200000,
+      "passes": 4,
+      "seconds": 2.320601292012725,
+      "rows_per_second": 86184.55944516612,
+      "process_wall_seconds": 3.397458083985839,
+      "peak_rss_bytes": 167788544
+    },
+    {
+      "path": "parquet",
+      "batch_size": 100,
+      "workers": 1,
+      "trial": 1,
+      "rows": 150000,
+      "passes": 3,
+      "seconds": 2.497357042040676,
+      "rows_per_second": 60063.49812016862,
+      "process_wall_seconds": 3.8258681670413353,
+      "peak_rss_bytes": 269369344
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 100,
+      "workers": 1,
+      "trial": 1,
+      "rows": 150000,
+      "passes": 3,
+      "seconds": 2.058824250008911,
+      "rows_per_second": 72857.11735683645,
+      "process_wall_seconds": 3.2783410000265576,
+      "peak_rss_bytes": 173555712
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 100,
+      "workers": 2,
+      "trial": 1,
+      "rows": 350000,
+      "seconds": 2.1,
+      "rows_per_second": 166795,
+      "process_wall_seconds": 2.7240783749730326,
+      "peak_rss_bytes": 150896640
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 100,
+      "workers": 2,
+      "trial": 1,
+      "rows": 250000,
+      "passes": 5,
+      "seconds": 2.018829500011634,
+      "rows_per_second": 123834.13259938954,
+      "process_wall_seconds": 2.7474567919853143,
+      "peak_rss_bytes": 169295872
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 100,
+      "workers": 2,
+      "trial": 1,
+      "rows": 350000,
+      "passes": 7,
+      "seconds": 2.2945512919686735,
+      "rows_per_second": 152535.26962986644,
+      "process_wall_seconds": 2.958572749979794,
+      "peak_rss_bytes": 169623552
+    },
+    {
+      "path": "parquet",
+      "batch_size": 100,
+      "workers": 2,
+      "trial": 1,
+      "rows": 150000,
+      "passes": 3,
+      "seconds": 2.5006444579921663,
+      "rows_per_second": 59984.536994291055,
+      "process_wall_seconds": 3.8173035419895314,
+      "peak_rss_bytes": 269271040
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 100,
+      "workers": 2,
+      "trial": 1,
+      "rows": 250000,
+      "passes": 5,
+      "seconds": 2.072233667015098,
+      "rows_per_second": 120642.76533066217,
+      "process_wall_seconds": 2.8422096249996684,
+      "peak_rss_bytes": 175505408
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 100,
+      "workers": 4,
+      "trial": 1,
+      "rows": 500000,
+      "seconds": 2.2,
+      "rows_per_second": 227341,
+      "process_wall_seconds": 2.816025583015289,
+      "peak_rss_bytes": 165445632
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 100,
+      "workers": 4,
+      "trial": 1,
+      "rows": 350000,
+      "passes": 7,
+      "seconds": 2.2769147910294123,
+      "rows_per_second": 153716.77560307915,
+      "process_wall_seconds": 3.0177120409789495,
+      "peak_rss_bytes": 180797440
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 100,
+      "workers": 4,
+      "trial": 1,
+      "rows": 500000,
+      "passes": 10,
+      "seconds": 2.1092082500108518,
+      "rows_per_second": 237055.7767339605,
+      "process_wall_seconds": 2.7528022920014337,
+      "peak_rss_bytes": 182583296
+    },
+    {
+      "path": "parquet",
+      "batch_size": 100,
+      "workers": 4,
+      "trial": 1,
+      "rows": 150000,
+      "passes": 3,
+      "seconds": 2.5142282499582507,
+      "rows_per_second": 59660.45445654776,
+      "process_wall_seconds": 3.841494749998674,
+      "peak_rss_bytes": 269320192
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 100,
+      "workers": 4,
+      "trial": 1,
+      "rows": 350000,
+      "passes": 7,
+      "seconds": 2.1041165000060573,
+      "rows_per_second": 166340.5994862891,
+      "process_wall_seconds": 2.867647666018456,
+      "peak_rss_bytes": 187482112
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 100,
+      "workers": 12,
+      "trial": 1,
+      "rows": 300000,
+      "seconds": 2.1,
+      "rows_per_second": 141978,
+      "process_wall_seconds": 2.9335392499924637,
+      "peak_rss_bytes": 215875584
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 100,
+      "workers": 12,
+      "trial": 1,
+      "rows": 250000,
+      "passes": 5,
+      "seconds": 2.339280540996697,
+      "rows_per_second": 106870.4653497791,
+      "process_wall_seconds": 3.254507042001933,
+      "peak_rss_bytes": 223330304
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 100,
+      "workers": 12,
+      "trial": 1,
+      "rows": 400000,
+      "passes": 8,
+      "seconds": 2.1681361660012044,
+      "rows_per_second": 184490.25770265106,
+      "process_wall_seconds": 2.9706434160470963,
+      "peak_rss_bytes": 230817792
+    },
+    {
+      "path": "parquet",
+      "batch_size": 100,
+      "workers": 12,
+      "trial": 1,
+      "rows": 150000,
+      "passes": 3,
+      "seconds": 2.520514332980383,
+      "rows_per_second": 59511.66317020401,
+      "process_wall_seconds": 3.852739499998279,
+      "peak_rss_bytes": 270598144
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 100,
+      "workers": 12,
+      "trial": 1,
+      "rows": 250000,
+      "passes": 5,
+      "seconds": 2.109719750005752,
+      "rows_per_second": 118499.1513680044,
+      "process_wall_seconds": 2.9892374579794705,
+      "peak_rss_bytes": 230490112
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 1000,
+      "workers": 1,
+      "trial": 1,
+      "rows": 200000,
+      "seconds": 2.3,
+      "rows_per_second": 87110,
+      "process_wall_seconds": 3.371097333030775,
+      "peak_rss_bytes": 162529280
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 1000,
+      "workers": 1,
+      "trial": 1,
+      "rows": 200000,
+      "passes": 4,
+      "seconds": 2.5655844580032863,
+      "rows_per_second": 77954.94682550959,
+      "process_wall_seconds": 3.6868927500327118,
+      "peak_rss_bytes": 175226880
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 1000,
+      "workers": 1,
+      "trial": 1,
+      "rows": 200000,
+      "passes": 4,
+      "seconds": 2.3000554160098545,
+      "rows_per_second": 86954.42666636303,
+      "process_wall_seconds": 3.364135875017382,
+      "peak_rss_bytes": 195362816
+    },
+    {
+      "path": "parquet",
+      "batch_size": 1000,
+      "workers": 1,
+      "trial": 1,
+      "rows": 200000,
+      "passes": 4,
+      "seconds": 2.416156667051837,
+      "rows_per_second": 82776.08928564943,
+      "process_wall_seconds": 3.5094837920041755,
+      "peak_rss_bytes": 195002368
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 1000,
+      "workers": 1,
+      "trial": 1,
+      "rows": 150000,
+      "passes": 3,
+      "seconds": 2.0286977919749916,
+      "rows_per_second": 73939.05617355209,
+      "process_wall_seconds": 3.219496582983993,
+      "peak_rss_bytes": 278052864
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 1000,
+      "workers": 2,
+      "trial": 1,
+      "rows": 350000,
+      "seconds": 2.3,
+      "rows_per_second": 154809,
+      "process_wall_seconds": 2.8782244159956463,
+      "peak_rss_bytes": 166068224
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 1000,
+      "workers": 2,
+      "trial": 1,
+      "rows": 250000,
+      "passes": 5,
+      "seconds": 2.0164265829953365,
+      "rows_per_second": 123981.70213994753,
+      "process_wall_seconds": 2.740576250012964,
+      "peak_rss_bytes": 176979968
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 1000,
+      "workers": 2,
+      "trial": 1,
+      "rows": 350000,
+      "passes": 7,
+      "seconds": 2.1574862910201773,
+      "rows_per_second": 162225.82801881948,
+      "process_wall_seconds": 2.7720722910016775,
+      "peak_rss_bytes": 197083136
+    },
+    {
+      "path": "parquet",
+      "batch_size": 1000,
+      "workers": 2,
+      "trial": 1,
+      "rows": 300000,
+      "passes": 6,
+      "seconds": 2.2836756669566967,
+      "rows_per_second": 131367.16581115485,
+      "process_wall_seconds": 2.9876424170215614,
+      "peak_rss_bytes": 198688768
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 1000,
+      "workers": 2,
+      "trial": 1,
+      "rows": 250000,
+      "passes": 5,
+      "seconds": 2.0493262090021744,
+      "rows_per_second": 121991.31543910038,
+      "process_wall_seconds": 2.783350874960888,
+      "peak_rss_bytes": 280150016
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 1000,
+      "workers": 4,
+      "trial": 1,
+      "rows": 500000,
+      "seconds": 2.1,
+      "rows_per_second": 234760,
+      "process_wall_seconds": 2.7061620409949683,
+      "peak_rss_bytes": 188121088
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 1000,
+      "workers": 4,
+      "trial": 1,
+      "rows": 350000,
+      "passes": 7,
+      "seconds": 2.1775660420535132,
+      "rows_per_second": 160729.91277451176,
+      "process_wall_seconds": 2.827700374997221,
+      "peak_rss_bytes": 191332352
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 1000,
+      "workers": 4,
+      "trial": 1,
+      "rows": 550000,
+      "passes": 11,
+      "seconds": 2.0044277089764364,
+      "rows_per_second": 274392.5348551773,
+      "process_wall_seconds": 2.534468666999601,
+      "peak_rss_bytes": 209944576
+    },
+    {
+      "path": "parquet",
+      "batch_size": 1000,
+      "workers": 4,
+      "trial": 1,
+      "rows": 400000,
+      "passes": 8,
+      "seconds": 2.266041958006099,
+      "rows_per_second": 176519.23813094877,
+      "process_wall_seconds": 2.9120896250242367,
+      "peak_rss_bytes": 211238912
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 1000,
+      "workers": 4,
+      "trial": 1,
+      "rows": 400000,
+      "passes": 8,
+      "seconds": 2.264622499991674,
+      "rows_per_second": 176629.87981505555,
+      "process_wall_seconds": 2.9030214580125175,
+      "peak_rss_bytes": 293289984
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 1000,
+      "workers": 12,
+      "trial": 1,
+      "rows": 550000,
+      "seconds": 2.1,
+      "rows_per_second": 267763,
+      "process_wall_seconds": 2.5181362080038525,
+      "peak_rss_bytes": 253100032
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 1000,
+      "workers": 12,
+      "trial": 1,
+      "rows": 350000,
+      "passes": 7,
+      "seconds": 2.0633777920156717,
+      "rows_per_second": 169624.77804808208,
+      "process_wall_seconds": 2.6585271669900976,
+      "peak_rss_bytes": 237322240
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 1000,
+      "workers": 12,
+      "trial": 1,
+      "rows": 750000,
+      "passes": 15,
+      "seconds": 2.0598836250137538,
+      "rows_per_second": 364098.2387997731,
+      "process_wall_seconds": 2.5048377919592895,
+      "peak_rss_bytes": 259375104
+    },
+    {
+      "path": "parquet",
+      "batch_size": 1000,
+      "workers": 12,
+      "trial": 1,
+      "rows": 350000,
+      "passes": 7,
+      "seconds": 2.2161338750156574,
+      "rows_per_second": 157932.69709282665,
+      "process_wall_seconds": 3.0158055420033634,
+      "peak_rss_bytes": 231292928
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 1000,
+      "workers": 12,
+      "trial": 1,
+      "rows": 450000,
+      "passes": 9,
+      "seconds": 2.1818344999919645,
+      "rows_per_second": 206248.4574341717,
+      "process_wall_seconds": 2.7343669590190984,
+      "peak_rss_bytes": 339476480
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 10000,
+      "workers": 1,
+      "trial": 1,
+      "rows": 200000,
+      "seconds": 2.3,
+      "rows_per_second": 87973,
+      "process_wall_seconds": 3.282592084025964,
+      "peak_rss_bytes": 281149440
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 10000,
+      "workers": 1,
+      "trial": 1,
+      "rows": 200000,
+      "passes": 4,
+      "seconds": 2.4853848749771714,
+      "rows_per_second": 80470.43418248734,
+      "process_wall_seconds": 3.597152083995752,
+      "peak_rss_bytes": 240828416
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 10000,
+      "workers": 1,
+      "trial": 1,
+      "rows": 250000,
+      "passes": 5,
+      "seconds": 2.4889487079926766,
+      "rows_per_second": 100444.01445364601,
+      "process_wall_seconds": 3.4832306249882095,
+      "peak_rss_bytes": 265797632
+    },
+    {
+      "path": "parquet",
+      "batch_size": 10000,
+      "workers": 1,
+      "trial": 1,
+      "rows": 200000,
+      "passes": 4,
+      "seconds": 2.2574470000108704,
+      "rows_per_second": 88595.65695187393,
+      "process_wall_seconds": 3.324193332984578,
+      "peak_rss_bytes": 239435776
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 10000,
+      "workers": 1,
+      "trial": 1,
+      "rows": 200000,
+      "passes": 4,
+      "seconds": 2.374368124990724,
+      "rows_per_second": 84232.93671059594,
+      "process_wall_seconds": 3.4908389589982107,
+      "peak_rss_bytes": 853770240
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 10000,
+      "workers": 2,
+      "trial": 1,
+      "rows": 300000,
+      "seconds": 2.1,
+      "rows_per_second": 142313,
+      "process_wall_seconds": 2.7323968750424683,
+      "peak_rss_bytes": 283377664
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 10000,
+      "workers": 2,
+      "trial": 1,
+      "rows": 250000,
+      "passes": 5,
+      "seconds": 2.1394355410011485,
+      "rows_per_second": 116853.25180819075,
+      "process_wall_seconds": 2.8635502079850994,
+      "peak_rss_bytes": 242122752
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 10000,
+      "workers": 2,
+      "trial": 1,
+      "rows": 400000,
+      "passes": 8,
+      "seconds": 2.2326895000296645,
+      "rows_per_second": 179156.12537913822,
+      "process_wall_seconds": 3.064623458951246,
+      "peak_rss_bytes": 271908864
+    },
+    {
+      "path": "parquet",
+      "batch_size": 10000,
+      "workers": 2,
+      "trial": 1,
+      "rows": 350000,
+      "passes": 7,
+      "seconds": 2.333185625029728,
+      "rows_per_second": 150009.49613494234,
+      "process_wall_seconds": 3.154819542018231,
+      "peak_rss_bytes": 246677504
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 10000,
+      "workers": 2,
+      "trial": 1,
+      "rows": 300000,
+      "passes": 6,
+      "seconds": 2.239188125007786,
+      "rows_per_second": 133977.1306615682,
+      "process_wall_seconds": 2.95607762504369,
+      "peak_rss_bytes": 1039597568
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 10000,
+      "workers": 4,
+      "trial": 1,
+      "rows": 450000,
+      "seconds": 2.2,
+      "rows_per_second": 208405,
+      "process_wall_seconds": 2.7222195409704,
+      "peak_rss_bytes": 375242752
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 10000,
+      "workers": 4,
+      "trial": 1,
+      "rows": 300000,
+      "passes": 6,
+      "seconds": 2.0286572920158505,
+      "rows_per_second": 147881.06457443774,
+      "process_wall_seconds": 2.6966957920230925,
+      "peak_rss_bytes": 273072128
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 10000,
+      "workers": 4,
+      "trial": 1,
+      "rows": 600000,
+      "passes": 12,
+      "seconds": 2.04246399999829,
+      "rows_per_second": 293762.8276437197,
+      "process_wall_seconds": 2.5051914589712396,
+      "peak_rss_bytes": 297517056
+    },
+    {
+      "path": "parquet",
+      "batch_size": 10000,
+      "workers": 4,
+      "trial": 1,
+      "rows": 450000,
+      "passes": 9,
+      "seconds": 2.033781459031161,
+      "rows_per_second": 221262.7113900271,
+      "process_wall_seconds": 2.7400609999895096,
+      "peak_rss_bytes": 271515648
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 10000,
+      "workers": 4,
+      "trial": 1,
+      "rows": 400000,
+      "passes": 8,
+      "seconds": 2.1288038339698687,
+      "rows_per_second": 187898.94757661436,
+      "process_wall_seconds": 2.8428508329670876,
+      "peak_rss_bytes": 1110654976
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 10000,
+      "workers": 12,
+      "trial": 1,
+      "rows": 550000,
+      "seconds": 2.1,
+      "rows_per_second": 261506,
+      "process_wall_seconds": 2.4594461250235327,
+      "peak_rss_bytes": 476807168
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 10000,
+      "workers": 12,
+      "trial": 1,
+      "rows": 350000,
+      "passes": 7,
+      "seconds": 2.1425087500247173,
+      "rows_per_second": 163359.89292737414,
+      "process_wall_seconds": 2.627857542014681,
+      "peak_rss_bytes": 327843840
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 10000,
+      "workers": 12,
+      "trial": 1,
+      "rows": 900000,
+      "passes": 18,
+      "seconds": 2.0051749579724856,
+      "rows_per_second": 448838.63945220364,
+      "process_wall_seconds": 2.332404332992155,
+      "peak_rss_bytes": 353746944
+    },
+    {
+      "path": "parquet",
+      "batch_size": 10000,
+      "workers": 12,
+      "trial": 1,
+      "rows": 500000,
+      "passes": 10,
+      "seconds": 2.0851442500134,
+      "rows_per_second": 239791.56357973162,
+      "process_wall_seconds": 2.654552292020526,
+      "peak_rss_bytes": 343654400
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 10000,
+      "workers": 12,
+      "trial": 1,
+      "rows": 500000,
+      "passes": 10,
+      "seconds": 2.1615137500339188,
+      "rows_per_second": 231319.37050696713,
+      "process_wall_seconds": 2.6220649580354802,
+      "peak_rss_bytes": 1120796672
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 50000,
+      "workers": 1,
+      "trial": 1,
+      "rows": 250000,
+      "seconds": 2.5,
+      "rows_per_second": 101117,
+      "process_wall_seconds": 3.397123124974314,
+      "peak_rss_bytes": 821198848
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 50000,
+      "workers": 1,
+      "trial": 1,
+      "rows": 200000,
+      "passes": 4,
+      "seconds": 2.28045216598548,
+      "rows_per_second": 87701.90534278167,
+      "process_wall_seconds": 3.317331666999962,
+      "peak_rss_bytes": 548192256
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 50000,
+      "workers": 1,
+      "trial": 1,
+      "rows": 250000,
+      "passes": 5,
+      "seconds": 2.1977209160104394,
+      "rows_per_second": 113754.20699632294,
+      "process_wall_seconds": 3.1411914579803124,
+      "peak_rss_bytes": 664977408
+    },
+    {
+      "path": "parquet",
+      "batch_size": 50000,
+      "workers": 1,
+      "trial": 1,
+      "rows": 200000,
+      "passes": 4,
+      "seconds": 2.1846691659884527,
+      "rows_per_second": 91547.04204813093,
+      "process_wall_seconds": 3.2413044159766287,
+      "peak_rss_bytes": 461619200
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 50000,
+      "workers": 1,
+      "trial": 1,
+      "rows": 200000,
+      "passes": 4,
+      "seconds": 2.1122032910352573,
+      "rows_per_second": 94687.85549613158,
+      "process_wall_seconds": 3.187308624968864,
+      "peak_rss_bytes": 1258471424
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 50000,
+      "workers": 2,
+      "trial": 1,
+      "rows": 350000,
+      "seconds": 2.2,
+      "rows_per_second": 158339,
+      "process_wall_seconds": 2.7937110410421155,
+      "peak_rss_bytes": 817889280
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 50000,
+      "workers": 2,
+      "trial": 1,
+      "rows": 250000,
+      "passes": 5,
+      "seconds": 2.3211142079671845,
+      "rows_per_second": 107706.89315582978,
+      "process_wall_seconds": 3.037620084010996,
+      "peak_rss_bytes": 569475072
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 50000,
+      "workers": 2,
+      "trial": 1,
+      "rows": 400000,
+      "passes": 8,
+      "seconds": 2.015525583003182,
+      "rows_per_second": 198459.4010481327,
+      "process_wall_seconds": 2.5958816669881344,
+      "peak_rss_bytes": 665894912
+    },
+    {
+      "path": "parquet",
+      "batch_size": 50000,
+      "workers": 2,
+      "trial": 1,
+      "rows": 350000,
+      "passes": 7,
+      "seconds": 2.1979269169969484,
+      "rows_per_second": 159240.96351584283,
+      "process_wall_seconds": 3.011010374990292,
+      "peak_rss_bytes": 494551040
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 50000,
+      "workers": 2,
+      "trial": 1,
+      "rows": 300000,
+      "passes": 6,
+      "seconds": 2.0654966669972055,
+      "rows_per_second": 145243.5168709986,
+      "process_wall_seconds": 2.770158125029411,
+      "peak_rss_bytes": 1493270528
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 50000,
+      "workers": 4,
+      "trial": 1,
+      "rows": 450000,
+      "seconds": 2.1,
+      "rows_per_second": 212987,
+      "process_wall_seconds": 2.48995149997063,
+      "peak_rss_bytes": 1042513920
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 50000,
+      "workers": 4,
+      "trial": 1,
+      "rows": 300000,
+      "passes": 6,
+      "seconds": 2.195775333966594,
+      "rows_per_second": 136625.99964544646,
+      "process_wall_seconds": 2.65799216699088,
+      "peak_rss_bytes": 608485376
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 50000,
+      "workers": 4,
+      "trial": 1,
+      "rows": 600000,
+      "passes": 12,
+      "seconds": 2.029129041999113,
+      "rows_per_second": 295693.3677361769,
+      "process_wall_seconds": 2.408428709022701,
+      "peak_rss_bytes": 784449536
+    },
+    {
+      "path": "parquet",
+      "batch_size": 50000,
+      "workers": 4,
+      "trial": 1,
+      "rows": 500000,
+      "passes": 10,
+      "seconds": 2.0724407090456225,
+      "rows_per_second": 241261.4256309675,
+      "process_wall_seconds": 2.735678458993789,
+      "peak_rss_bytes": 526024704
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 50000,
+      "workers": 4,
+      "trial": 1,
+      "rows": 400000,
+      "passes": 8,
+      "seconds": 2.1051323330029845,
+      "rows_per_second": 190011.80768023143,
+      "process_wall_seconds": 2.526917624985799,
+      "peak_rss_bytes": 1798864896
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 50000,
+      "workers": 12,
+      "trial": 1,
+      "rows": 550000,
+      "seconds": 2.0,
+      "rows_per_second": 272662,
+      "process_wall_seconds": 2.2175947920186445,
+      "peak_rss_bytes": 1200439296
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 50000,
+      "workers": 12,
+      "trial": 1,
+      "rows": 350000,
+      "passes": 7,
+      "seconds": 2.0649754159967415,
+      "rows_per_second": 169493.54325899263,
+      "process_wall_seconds": 2.428573166951537,
+      "peak_rss_bytes": 682639360
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 50000,
+      "workers": 12,
+      "trial": 1,
+      "rows": 1000000,
+      "passes": 20,
+      "seconds": 2.0436950830044225,
+      "rows_per_second": 489309.78418263193,
+      "process_wall_seconds": 2.2369961249642074,
+      "peak_rss_bytes": 789659648
+    },
+    {
+      "path": "parquet",
+      "batch_size": 50000,
+      "workers": 12,
+      "trial": 1,
+      "rows": 650000,
+      "passes": 13,
+      "seconds": 2.092681832960807,
+      "rows_per_second": 310606.2229633613,
+      "process_wall_seconds": 2.648924040957354,
+      "peak_rss_bytes": 600064000
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 50000,
+      "workers": 12,
+      "trial": 1,
+      "rows": 550000,
+      "passes": 11,
+      "seconds": 2.205046167015098,
+      "rows_per_second": 249427.88419914027,
+      "process_wall_seconds": 2.5313331249635667,
+      "peak_rss_bytes": 2162245632
+    }
+  ],
+  "summary": [
+    {
+      "path": "rust-results",
+      "batch_size": 100,
+      "workers": 1,
+      "median_rows_per_second": 93784,
+      "range_rows_per_second": [
+        93784,
+        93784
+      ],
+      "median_peak_rss_bytes": 149274624
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 100,
+      "workers": 1,
+      "median_rows_per_second": 81619.603619401,
+      "range_rows_per_second": [
+        81619.603619401,
+        81619.603619401
+      ],
+      "median_peak_rss_bytes": 167149568
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 100,
+      "workers": 1,
+      "median_rows_per_second": 86184.55944516612,
+      "range_rows_per_second": [
+        86184.55944516612,
+        86184.55944516612
+      ],
+      "median_peak_rss_bytes": 167788544
+    },
+    {
+      "path": "parquet",
+      "batch_size": 100,
+      "workers": 1,
+      "median_rows_per_second": 60063.49812016862,
+      "range_rows_per_second": [
+        60063.49812016862,
+        60063.49812016862
+      ],
+      "median_peak_rss_bytes": 269369344
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 100,
+      "workers": 1,
+      "median_rows_per_second": 72857.11735683645,
+      "range_rows_per_second": [
+        72857.11735683645,
+        72857.11735683645
+      ],
+      "median_peak_rss_bytes": 173555712
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 100,
+      "workers": 2,
+      "median_rows_per_second": 166795,
+      "range_rows_per_second": [
+        166795,
+        166795
+      ],
+      "median_peak_rss_bytes": 150896640
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 100,
+      "workers": 2,
+      "median_rows_per_second": 123834.13259938954,
+      "range_rows_per_second": [
+        123834.13259938954,
+        123834.13259938954
+      ],
+      "median_peak_rss_bytes": 169295872
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 100,
+      "workers": 2,
+      "median_rows_per_second": 152535.26962986644,
+      "range_rows_per_second": [
+        152535.26962986644,
+        152535.26962986644
+      ],
+      "median_peak_rss_bytes": 169623552
+    },
+    {
+      "path": "parquet",
+      "batch_size": 100,
+      "workers": 2,
+      "median_rows_per_second": 59984.536994291055,
+      "range_rows_per_second": [
+        59984.536994291055,
+        59984.536994291055
+      ],
+      "median_peak_rss_bytes": 269271040
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 100,
+      "workers": 2,
+      "median_rows_per_second": 120642.76533066217,
+      "range_rows_per_second": [
+        120642.76533066217,
+        120642.76533066217
+      ],
+      "median_peak_rss_bytes": 175505408
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 100,
+      "workers": 4,
+      "median_rows_per_second": 227341,
+      "range_rows_per_second": [
+        227341,
+        227341
+      ],
+      "median_peak_rss_bytes": 165445632
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 100,
+      "workers": 4,
+      "median_rows_per_second": 153716.77560307915,
+      "range_rows_per_second": [
+        153716.77560307915,
+        153716.77560307915
+      ],
+      "median_peak_rss_bytes": 180797440
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 100,
+      "workers": 4,
+      "median_rows_per_second": 237055.7767339605,
+      "range_rows_per_second": [
+        237055.7767339605,
+        237055.7767339605
+      ],
+      "median_peak_rss_bytes": 182583296
+    },
+    {
+      "path": "parquet",
+      "batch_size": 100,
+      "workers": 4,
+      "median_rows_per_second": 59660.45445654776,
+      "range_rows_per_second": [
+        59660.45445654776,
+        59660.45445654776
+      ],
+      "median_peak_rss_bytes": 269320192
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 100,
+      "workers": 4,
+      "median_rows_per_second": 166340.5994862891,
+      "range_rows_per_second": [
+        166340.5994862891,
+        166340.5994862891
+      ],
+      "median_peak_rss_bytes": 187482112
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 100,
+      "workers": 12,
+      "median_rows_per_second": 141978,
+      "range_rows_per_second": [
+        141978,
+        141978
+      ],
+      "median_peak_rss_bytes": 215875584
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 100,
+      "workers": 12,
+      "median_rows_per_second": 106870.4653497791,
+      "range_rows_per_second": [
+        106870.4653497791,
+        106870.4653497791
+      ],
+      "median_peak_rss_bytes": 223330304
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 100,
+      "workers": 12,
+      "median_rows_per_second": 184490.25770265106,
+      "range_rows_per_second": [
+        184490.25770265106,
+        184490.25770265106
+      ],
+      "median_peak_rss_bytes": 230817792
+    },
+    {
+      "path": "parquet",
+      "batch_size": 100,
+      "workers": 12,
+      "median_rows_per_second": 59511.66317020401,
+      "range_rows_per_second": [
+        59511.66317020401,
+        59511.66317020401
+      ],
+      "median_peak_rss_bytes": 270598144
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 100,
+      "workers": 12,
+      "median_rows_per_second": 118499.1513680044,
+      "range_rows_per_second": [
+        118499.1513680044,
+        118499.1513680044
+      ],
+      "median_peak_rss_bytes": 230490112
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 1000,
+      "workers": 1,
+      "median_rows_per_second": 87110,
+      "range_rows_per_second": [
+        87110,
+        87110
+      ],
+      "median_peak_rss_bytes": 162529280
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 1000,
+      "workers": 1,
+      "median_rows_per_second": 77954.94682550959,
+      "range_rows_per_second": [
+        77954.94682550959,
+        77954.94682550959
+      ],
+      "median_peak_rss_bytes": 175226880
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 1000,
+      "workers": 1,
+      "median_rows_per_second": 86954.42666636303,
+      "range_rows_per_second": [
+        86954.42666636303,
+        86954.42666636303
+      ],
+      "median_peak_rss_bytes": 195362816
+    },
+    {
+      "path": "parquet",
+      "batch_size": 1000,
+      "workers": 1,
+      "median_rows_per_second": 82776.08928564943,
+      "range_rows_per_second": [
+        82776.08928564943,
+        82776.08928564943
+      ],
+      "median_peak_rss_bytes": 195002368
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 1000,
+      "workers": 1,
+      "median_rows_per_second": 73939.05617355209,
+      "range_rows_per_second": [
+        73939.05617355209,
+        73939.05617355209
+      ],
+      "median_peak_rss_bytes": 278052864
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 1000,
+      "workers": 2,
+      "median_rows_per_second": 154809,
+      "range_rows_per_second": [
+        154809,
+        154809
+      ],
+      "median_peak_rss_bytes": 166068224
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 1000,
+      "workers": 2,
+      "median_rows_per_second": 123981.70213994753,
+      "range_rows_per_second": [
+        123981.70213994753,
+        123981.70213994753
+      ],
+      "median_peak_rss_bytes": 176979968
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 1000,
+      "workers": 2,
+      "median_rows_per_second": 162225.82801881948,
+      "range_rows_per_second": [
+        162225.82801881948,
+        162225.82801881948
+      ],
+      "median_peak_rss_bytes": 197083136
+    },
+    {
+      "path": "parquet",
+      "batch_size": 1000,
+      "workers": 2,
+      "median_rows_per_second": 131367.16581115485,
+      "range_rows_per_second": [
+        131367.16581115485,
+        131367.16581115485
+      ],
+      "median_peak_rss_bytes": 198688768
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 1000,
+      "workers": 2,
+      "median_rows_per_second": 121991.31543910038,
+      "range_rows_per_second": [
+        121991.31543910038,
+        121991.31543910038
+      ],
+      "median_peak_rss_bytes": 280150016
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 1000,
+      "workers": 4,
+      "median_rows_per_second": 234760,
+      "range_rows_per_second": [
+        234760,
+        234760
+      ],
+      "median_peak_rss_bytes": 188121088
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 1000,
+      "workers": 4,
+      "median_rows_per_second": 160729.91277451176,
+      "range_rows_per_second": [
+        160729.91277451176,
+        160729.91277451176
+      ],
+      "median_peak_rss_bytes": 191332352
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 1000,
+      "workers": 4,
+      "median_rows_per_second": 274392.5348551773,
+      "range_rows_per_second": [
+        274392.5348551773,
+        274392.5348551773
+      ],
+      "median_peak_rss_bytes": 209944576
+    },
+    {
+      "path": "parquet",
+      "batch_size": 1000,
+      "workers": 4,
+      "median_rows_per_second": 176519.23813094877,
+      "range_rows_per_second": [
+        176519.23813094877,
+        176519.23813094877
+      ],
+      "median_peak_rss_bytes": 211238912
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 1000,
+      "workers": 4,
+      "median_rows_per_second": 176629.87981505555,
+      "range_rows_per_second": [
+        176629.87981505555,
+        176629.87981505555
+      ],
+      "median_peak_rss_bytes": 293289984
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 1000,
+      "workers": 12,
+      "median_rows_per_second": 267763,
+      "range_rows_per_second": [
+        267763,
+        267763
+      ],
+      "median_peak_rss_bytes": 253100032
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 1000,
+      "workers": 12,
+      "median_rows_per_second": 169624.77804808208,
+      "range_rows_per_second": [
+        169624.77804808208,
+        169624.77804808208
+      ],
+      "median_peak_rss_bytes": 237322240
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 1000,
+      "workers": 12,
+      "median_rows_per_second": 364098.2387997731,
+      "range_rows_per_second": [
+        364098.2387997731,
+        364098.2387997731
+      ],
+      "median_peak_rss_bytes": 259375104
+    },
+    {
+      "path": "parquet",
+      "batch_size": 1000,
+      "workers": 12,
+      "median_rows_per_second": 157932.69709282665,
+      "range_rows_per_second": [
+        157932.69709282665,
+        157932.69709282665
+      ],
+      "median_peak_rss_bytes": 231292928
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 1000,
+      "workers": 12,
+      "median_rows_per_second": 206248.4574341717,
+      "range_rows_per_second": [
+        206248.4574341717,
+        206248.4574341717
+      ],
+      "median_peak_rss_bytes": 339476480
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 10000,
+      "workers": 1,
+      "median_rows_per_second": 87973,
+      "range_rows_per_second": [
+        87973,
+        87973
+      ],
+      "median_peak_rss_bytes": 281149440
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 10000,
+      "workers": 1,
+      "median_rows_per_second": 80470.43418248734,
+      "range_rows_per_second": [
+        80470.43418248734,
+        80470.43418248734
+      ],
+      "median_peak_rss_bytes": 240828416
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 10000,
+      "workers": 1,
+      "median_rows_per_second": 100444.01445364601,
+      "range_rows_per_second": [
+        100444.01445364601,
+        100444.01445364601
+      ],
+      "median_peak_rss_bytes": 265797632
+    },
+    {
+      "path": "parquet",
+      "batch_size": 10000,
+      "workers": 1,
+      "median_rows_per_second": 88595.65695187393,
+      "range_rows_per_second": [
+        88595.65695187393,
+        88595.65695187393
+      ],
+      "median_peak_rss_bytes": 239435776
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 10000,
+      "workers": 1,
+      "median_rows_per_second": 84232.93671059594,
+      "range_rows_per_second": [
+        84232.93671059594,
+        84232.93671059594
+      ],
+      "median_peak_rss_bytes": 853770240
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 10000,
+      "workers": 2,
+      "median_rows_per_second": 142313,
+      "range_rows_per_second": [
+        142313,
+        142313
+      ],
+      "median_peak_rss_bytes": 283377664
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 10000,
+      "workers": 2,
+      "median_rows_per_second": 116853.25180819075,
+      "range_rows_per_second": [
+        116853.25180819075,
+        116853.25180819075
+      ],
+      "median_peak_rss_bytes": 242122752
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 10000,
+      "workers": 2,
+      "median_rows_per_second": 179156.12537913822,
+      "range_rows_per_second": [
+        179156.12537913822,
+        179156.12537913822
+      ],
+      "median_peak_rss_bytes": 271908864
+    },
+    {
+      "path": "parquet",
+      "batch_size": 10000,
+      "workers": 2,
+      "median_rows_per_second": 150009.49613494234,
+      "range_rows_per_second": [
+        150009.49613494234,
+        150009.49613494234
+      ],
+      "median_peak_rss_bytes": 246677504
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 10000,
+      "workers": 2,
+      "median_rows_per_second": 133977.1306615682,
+      "range_rows_per_second": [
+        133977.1306615682,
+        133977.1306615682
+      ],
+      "median_peak_rss_bytes": 1039597568
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 10000,
+      "workers": 4,
+      "median_rows_per_second": 208405,
+      "range_rows_per_second": [
+        208405,
+        208405
+      ],
+      "median_peak_rss_bytes": 375242752
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 10000,
+      "workers": 4,
+      "median_rows_per_second": 147881.06457443774,
+      "range_rows_per_second": [
+        147881.06457443774,
+        147881.06457443774
+      ],
+      "median_peak_rss_bytes": 273072128
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 10000,
+      "workers": 4,
+      "median_rows_per_second": 293762.8276437197,
+      "range_rows_per_second": [
+        293762.8276437197,
+        293762.8276437197
+      ],
+      "median_peak_rss_bytes": 297517056
+    },
+    {
+      "path": "parquet",
+      "batch_size": 10000,
+      "workers": 4,
+      "median_rows_per_second": 221262.7113900271,
+      "range_rows_per_second": [
+        221262.7113900271,
+        221262.7113900271
+      ],
+      "median_peak_rss_bytes": 271515648
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 10000,
+      "workers": 4,
+      "median_rows_per_second": 187898.94757661436,
+      "range_rows_per_second": [
+        187898.94757661436,
+        187898.94757661436
+      ],
+      "median_peak_rss_bytes": 1110654976
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 10000,
+      "workers": 12,
+      "median_rows_per_second": 261506,
+      "range_rows_per_second": [
+        261506,
+        261506
+      ],
+      "median_peak_rss_bytes": 476807168
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 10000,
+      "workers": 12,
+      "median_rows_per_second": 163359.89292737414,
+      "range_rows_per_second": [
+        163359.89292737414,
+        163359.89292737414
+      ],
+      "median_peak_rss_bytes": 327843840
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 10000,
+      "workers": 12,
+      "median_rows_per_second": 448838.63945220364,
+      "range_rows_per_second": [
+        448838.63945220364,
+        448838.63945220364
+      ],
+      "median_peak_rss_bytes": 353746944
+    },
+    {
+      "path": "parquet",
+      "batch_size": 10000,
+      "workers": 12,
+      "median_rows_per_second": 239791.56357973162,
+      "range_rows_per_second": [
+        239791.56357973162,
+        239791.56357973162
+      ],
+      "median_peak_rss_bytes": 343654400
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 10000,
+      "workers": 12,
+      "median_rows_per_second": 231319.37050696713,
+      "range_rows_per_second": [
+        231319.37050696713,
+        231319.37050696713
+      ],
+      "median_peak_rss_bytes": 1120796672
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 50000,
+      "workers": 1,
+      "median_rows_per_second": 101117,
+      "range_rows_per_second": [
+        101117,
+        101117
+      ],
+      "median_peak_rss_bytes": 821198848
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 50000,
+      "workers": 1,
+      "median_rows_per_second": 87701.90534278167,
+      "range_rows_per_second": [
+        87701.90534278167,
+        87701.90534278167
+      ],
+      "median_peak_rss_bytes": 548192256
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 50000,
+      "workers": 1,
+      "median_rows_per_second": 113754.20699632294,
+      "range_rows_per_second": [
+        113754.20699632294,
+        113754.20699632294
+      ],
+      "median_peak_rss_bytes": 664977408
+    },
+    {
+      "path": "parquet",
+      "batch_size": 50000,
+      "workers": 1,
+      "median_rows_per_second": 91547.04204813093,
+      "range_rows_per_second": [
+        91547.04204813093,
+        91547.04204813093
+      ],
+      "median_peak_rss_bytes": 461619200
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 50000,
+      "workers": 1,
+      "median_rows_per_second": 94687.85549613158,
+      "range_rows_per_second": [
+        94687.85549613158,
+        94687.85549613158
+      ],
+      "median_peak_rss_bytes": 1258471424
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 50000,
+      "workers": 2,
+      "median_rows_per_second": 158339,
+      "range_rows_per_second": [
+        158339,
+        158339
+      ],
+      "median_peak_rss_bytes": 817889280
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 50000,
+      "workers": 2,
+      "median_rows_per_second": 107706.89315582978,
+      "range_rows_per_second": [
+        107706.89315582978,
+        107706.89315582978
+      ],
+      "median_peak_rss_bytes": 569475072
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 50000,
+      "workers": 2,
+      "median_rows_per_second": 198459.4010481327,
+      "range_rows_per_second": [
+        198459.4010481327,
+        198459.4010481327
+      ],
+      "median_peak_rss_bytes": 665894912
+    },
+    {
+      "path": "parquet",
+      "batch_size": 50000,
+      "workers": 2,
+      "median_rows_per_second": 159240.96351584283,
+      "range_rows_per_second": [
+        159240.96351584283,
+        159240.96351584283
+      ],
+      "median_peak_rss_bytes": 494551040
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 50000,
+      "workers": 2,
+      "median_rows_per_second": 145243.5168709986,
+      "range_rows_per_second": [
+        145243.5168709986,
+        145243.5168709986
+      ],
+      "median_peak_rss_bytes": 1493270528
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 50000,
+      "workers": 4,
+      "median_rows_per_second": 212987,
+      "range_rows_per_second": [
+        212987,
+        212987
+      ],
+      "median_peak_rss_bytes": 1042513920
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 50000,
+      "workers": 4,
+      "median_rows_per_second": 136625.99964544646,
+      "range_rows_per_second": [
+        136625.99964544646,
+        136625.99964544646
+      ],
+      "median_peak_rss_bytes": 608485376
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 50000,
+      "workers": 4,
+      "median_rows_per_second": 295693.3677361769,
+      "range_rows_per_second": [
+        295693.3677361769,
+        295693.3677361769
+      ],
+      "median_peak_rss_bytes": 784449536
+    },
+    {
+      "path": "parquet",
+      "batch_size": 50000,
+      "workers": 4,
+      "median_rows_per_second": 241261.4256309675,
+      "range_rows_per_second": [
+        241261.4256309675,
+        241261.4256309675
+      ],
+      "median_peak_rss_bytes": 526024704
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 50000,
+      "workers": 4,
+      "median_rows_per_second": 190011.80768023143,
+      "range_rows_per_second": [
+        190011.80768023143,
+        190011.80768023143
+      ],
+      "median_peak_rss_bytes": 1798864896
+    },
+    {
+      "path": "rust-results",
+      "batch_size": 50000,
+      "workers": 12,
+      "median_rows_per_second": 272662,
+      "range_rows_per_second": [
+        272662,
+        272662
+      ],
+      "median_peak_rss_bytes": 1200439296
+    },
+    {
+      "path": "python-dicts",
+      "batch_size": 50000,
+      "workers": 12,
+      "median_rows_per_second": 169493.54325899263,
+      "range_rows_per_second": [
+        169493.54325899263,
+        169493.54325899263
+      ],
+      "median_peak_rss_bytes": 682639360
+    },
+    {
+      "path": "direct-json",
+      "batch_size": 50000,
+      "workers": 12,
+      "median_rows_per_second": 489309.78418263193,
+      "range_rows_per_second": [
+        489309.78418263193,
+        489309.78418263193
+      ],
+      "median_peak_rss_bytes": 789659648
+    },
+    {
+      "path": "parquet",
+      "batch_size": 50000,
+      "workers": 12,
+      "median_rows_per_second": 310606.2229633613,
+      "range_rows_per_second": [
+        310606.2229633613,
+        310606.2229633613
+      ],
+      "median_peak_rss_bytes": 600064000
+    },
+    {
+      "path": "jsonl",
+      "batch_size": 50000,
+      "workers": 12,
+      "median_rows_per_second": 249427.88419914027,
+      "range_rows_per_second": [
+        249427.88419914027,
+        249427.88419914027
+      ],
+      "median_peak_rss_bytes": 2162245632
+    }
+  ]
+}

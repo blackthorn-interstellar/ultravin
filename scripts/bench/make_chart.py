@@ -12,6 +12,7 @@ Usage: python -m scripts.bench.make_chart
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 RESULTS = Path(__file__).parent / "results.json"
@@ -19,27 +20,13 @@ OUT = Path(__file__).resolve().parents[2] / "assets" / "benchmark.svg"
 
 # (label, results-key, highlighted?) top -> bottom, fastest first.
 ROWS = [
-    ("ultravin — batched (4 cores)", "ultravin-batch", True),
-    ("ultravin — 1 core", "ultravin", True),
+    ("ultravin — auto (4 cores)", "ultravin-batch", True),
+    ("ultravin — auto (1 core)", "ultravin", True),
     ("corgi v3", "corgi-v3", False),
     ("corgi v2", "corgi-v2", False),
     ("NHTSA MSSQL", "mssql", False),
     ("NHTSA Postgres", "postgres", False),
     ("NHTSA vPIC API (rate limit)", "nhtsa-api", False),
-]
-
-# Linear axis: 0 .. 200,000 VIN/s, with room for the fastest bar's label.
-AXIS_MAX = 200_000
-TICKS = [
-    (0, "0"),
-    (25_000, "25k"),
-    (50_000, "50k"),
-    (75_000, "75k"),
-    (100_000, "100k"),
-    (125_000, "125k"),
-    (150_000, "150k"),
-    (175_000, "175k"),
-    (200_000, "200k"),
 ]
 
 X0, X1 = 220, 690  # plot area (px); X0 leaves room for the longest label
@@ -56,14 +43,16 @@ def human(n: float) -> str:
     return f"{n:.1f}".rstrip("0").rstrip(".")
 
 
-def x(value: float) -> float:
-    frac = min(1.0, value / AXIS_MAX)
+def x(value: float, axis_max: int) -> float:
+    frac = min(1.0, value / axis_max)
     return X0 + frac * (X1 - X0)
 
 
 def main() -> int:
     data = json.loads(RESULTS.read_text())
     rows = [(lbl, data[key], hi) for lbl, key, hi in ROWS if key in data]
+    axis_max = max(50_000, math.ceil(max(value for _, value, _ in rows) / 50_000) * 50_000)
+    ticks = [(value, "0" if value == 0 else f"{value // 1000}k") for value in range(0, axis_max + 1, 50_000)]
     height = TOP + len(rows) * ROW_H + 42
 
     s: list[str] = []
@@ -73,27 +62,33 @@ def main() -> int:
         'Helvetica, Arial, sans-serif">'
     )
     s.append(
+        "<desc>Ultravin: September 14, 2026, Apple M2 Max, ten million unique synthetic VINs; "
+        "both Ultravin rows use automatic batching, with one or four workers. Other engines retain historical comparison figures.</desc>"
+    )
+    s.append(
         "<style>"
-        ".label{fill:#57606a;font-size:13px}.value{fill:#57606a;font-size:13px}"
+        ".background{fill:#ffffff}.label{fill:#57606a;font-size:13px}.value{fill:#57606a;font-size:13px}"
         ".strong{fill:#1f2328;font-weight:700}.axis{fill:#8c8c98;font-size:11px}"
         ".grid{stroke:#d8dee4;stroke-width:1}.bar{fill:#c3aef5}.bar-hi{fill:#7c4dff}"
         "@media(prefers-color-scheme:dark){"
-        ".label,.value{fill:#9198a1}.strong{fill:#f0f6fc}.axis{fill:#7d8590}"
+        ".background{fill:#0d1117}.label,.value{fill:#9198a1}.strong{fill:#f0f6fc}.axis{fill:#7d8590}"
         ".grid{stroke:#30363d}.bar{fill:#6b5bb0}.bar-hi{fill:#a786ff}}"
         "</style>"
     )
 
+    s.append(f'<rect class="background" width="{WIDTH}" height="{height}" rx="8"/>')
+
     plot_bottom = TOP + len(rows) * ROW_H
     # gridlines
-    for val, _ in TICKS:
-        gx = x(val)
+    for val, _ in ticks:
+        gx = x(val, axis_max)
         s.append(f'<line class="grid" x1="{gx:.1f}" y1="{TOP - 2}" x2="{gx:.1f}" y2="{plot_bottom}"/>')
 
     for i, (lbl, val, hi) in enumerate(rows):
         cy = TOP + i * ROW_H
         by = cy + (ROW_H - BAR_H) / 2
         text_y = by + BAR_H - 5
-        bw = x(val) - X0
+        bw = x(val, axis_max) - X0
         cls = "bar-hi" if hi else "bar"
         lcls = "label strong" if hi else "label"
         vcls = "value strong" if hi else "value"
@@ -103,8 +98,8 @@ def main() -> int:
 
     # axis
     s.append(f'<line class="grid" x1="{X0}" y1="{plot_bottom}" x2="{X1}" y2="{plot_bottom}"/>')
-    for val, lab in TICKS:
-        gx = x(val)
+    for val, lab in ticks:
+        gx = x(val, axis_max)
         s.append(f'<text class="axis" x="{gx:.1f}" y="{plot_bottom + 16}" text-anchor="middle">{lab}</text>')
     s.append(
         f'<text class="axis" x="{(X0 + X1) / 2:.1f}" y="{plot_bottom + 32}" '

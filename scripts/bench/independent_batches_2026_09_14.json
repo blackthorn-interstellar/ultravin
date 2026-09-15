@@ -1,0 +1,724 @@
+{
+  "schema_version": 1,
+  "measured_at_utc": "2026-09-15T03:56:48+00:00",
+  "configuration": {
+    "rounds": 2,
+    "batch_sizes": [
+      10,
+      100,
+      1000
+    ],
+    "workers": [
+      8,
+      12
+    ],
+    "shared_control_batch_size": 12000,
+    "now_micros": 1788220800000000,
+    "full_warm_corpus_pass_per_child": true,
+    "timed_whole_corpus_passes": 1,
+    "order_reversed_on_even_trials": true
+  },
+  "corpus": {
+    "path": "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+    "rows": 10000000,
+    "distinct_rows": 10000000,
+    "sha256": "de80fb8727de3d89a7885929645953eed7b51a67c1dc988d309bbaa0ab4ec5f3",
+    "manifest": "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.manifest.json",
+    "manifest_sha256": "bcbde4b06425c0dc7d5858234ec7d959016777cadf234cc5717234bfcb6ef3ad",
+    "generation_manifest": {
+      "candidates_examined": 10000490,
+      "chunk_size": 100000,
+      "chunks_used": 101,
+      "corpus": {
+        "bytes": 180000000,
+        "path": "target/bench/multicore-corpus.txt",
+        "sha256": "de80fb8727de3d89a7885929645953eed7b51a67c1dc988d309bbaa0ab4ec5f3"
+      },
+      "count": 10000000,
+      "database": {
+        "artifact_blake3": "907eedd5f2794a10e586e01ca6c2a5af4e8d7e0f966bcfdf030a9889d77ac538",
+        "data_month": "2026_08"
+      },
+      "distinct_rows": 10000000,
+      "diversity": {
+        "distinct_descriptor_year_keys": 9808848,
+        "distinct_wmis": 12933,
+        "distinct_year_characters": 30
+      },
+      "format_version": 1,
+      "frozen_now": "2026-09-01T00:00:00+00:00",
+      "generator": {
+        "api": "ultravin.generate(n, seed=seed + chunk_index, now=frozen_now)",
+        "decoder_version": "0.0.0",
+        "script": "/Volumes/fast-4tb/projects/ultravin/scripts/bench/large_corpus.py",
+        "script_sha256": "a5196e5aa07f1a3e14d01cb7d10e5419e6a9190af6fe84f7946fc86bf4f4621e"
+      },
+      "seed": 42,
+      "verification": {
+        "check_digits": true,
+        "unique": true,
+        "vin_alphabet": true
+      }
+    }
+  },
+  "build": {
+    "binary": "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-batch-probe",
+    "binary_sha256": "2fe51eab530713927cc9f0acc08bcc5f336a77a0ddfdec3433d9c28a6258f1ee",
+    "source": "/Volumes/fast-4tb/projects/ultravin/crates/ultravin/examples/independent_batch_probe.rs",
+    "source_sha256": "f5fbb7b1233925cb8bdc3d75cdfdd19899e659439d76fcd0971b811fc4d4bac4",
+    "runner_sha256": "41d48fbb922225a5486eecf5fc08736c7d4c95f1ed11f16f7c0488f33bae5b28",
+    "profile": "release",
+    "locked": true
+  },
+  "environment": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "python": "3.13.12 (main, Feb 12 2026, 01:06:02) [Clang 21.1.4 ]",
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "cpu_model": "Apple M2 Max",
+    "logical_cpus": 12,
+    "git_revision": "d8d233dd7a1aaa87a1c3b594a7b11353baf86a26",
+    "git_dirty": true
+  },
+  "samples": [
+    {
+      "aggregate_worker_cleanup_seconds": null,
+      "aggregate_worker_decode_seconds": null,
+      "aggregate_worker_other_or_wait_seconds": null,
+      "average_busy_cores": 7.682373669178974,
+      "batch_size": 12000,
+      "current_year": 2026,
+      "elapsed_seconds": 13.242671,
+      "full_output_materialized": true,
+      "max_live_result_batches": 1,
+      "max_live_result_rows": 12000,
+      "mode": "shared",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 329291058295,
+        "instructions": 764473091485
+      },
+      "process_system_cpu_seconds": 1.1503299999999999,
+      "process_user_cpu_seconds": 100.58481699999999,
+      "rows": 10000000,
+      "rows_per_second": 755134.670339541,
+      "worker_local_cleanup": false,
+      "workers": 8,
+      "trial": 1,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-batch-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "shared",
+        "8",
+        "12000"
+      ],
+      "process_wall_seconds": 27.87325470900396,
+      "peak_rss_bytes": 1194688512,
+      "instructions_per_vin": 76447.3091485,
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":null,\"aggregate_worker_decode_seconds\":null,\"aggregate_worker_other_or_wait_seconds\":null,\"average_busy_cores\":7.682373669178974,\"batch_size\":12000,\"current_year\":2026,\"elapsed_seconds\":13.242671,\"full_output_materialized\":true,\"max_live_result_batches\":1,\"max_live_result_rows\":12000,\"mode\":\"shared\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":329291058295,\"instructions\":764473091485},\"process_system_cpu_seconds\":1.1503299999999999,\"process_user_cpu_seconds\":100.58481699999999,\"rows\":10000000,\"rows_per_second\":755134.670339541,\"worker_local_cleanup\":false,\"workers\":8}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": 4.467083844,
+      "aggregate_worker_decode_seconds": 82.799211334,
+      "aggregate_worker_other_or_wait_seconds": 51.72457515800001,
+      "average_busy_cores": 5.707484110879264,
+      "batch_size": 10,
+      "current_year": 2026,
+      "elapsed_seconds": 17.373858792,
+      "full_output_materialized": true,
+      "max_live_result_batches": 8,
+      "max_live_result_rows": 80,
+      "mode": "independent",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 315148293223,
+        "instructions": 786977061089
+      },
+      "process_system_cpu_seconds": 9.747636,
+      "process_user_cpu_seconds": 89.413387,
+      "rows": 10000000,
+      "rows_per_second": 575577.372863455,
+      "worker_local_cleanup": true,
+      "workers": 8,
+      "trial": 1,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-batch-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "independent",
+        "8",
+        "10"
+      ],
+      "process_wall_seconds": 35.528977082984056,
+      "peak_rss_bytes": 1026867200,
+      "instructions_per_vin": 78697.7061089,
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":4.467083844,\"aggregate_worker_decode_seconds\":82.799211334,\"aggregate_worker_other_or_wait_seconds\":51.72457515800001,\"average_busy_cores\":5.707484110879264,\"batch_size\":10,\"current_year\":2026,\"elapsed_seconds\":17.373858792,\"full_output_materialized\":true,\"max_live_result_batches\":8,\"max_live_result_rows\":80,\"mode\":\"independent\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":315148293223,\"instructions\":786977061089},\"process_system_cpu_seconds\":9.747636,\"process_user_cpu_seconds\":89.413387,\"rows\":10000000,\"rows_per_second\":575577.372863455,\"worker_local_cleanup\":true,\"workers\":8}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": 5.150710613,
+      "aggregate_worker_decode_seconds": 80.685958017,
+      "aggregate_worker_other_or_wait_seconds": 44.96052403399999,
+      "average_busy_cores": 5.327793921312505,
+      "batch_size": 100,
+      "current_year": 2026,
+      "elapsed_seconds": 16.349649083,
+      "full_output_materialized": true,
+      "max_live_result_batches": 8,
+      "max_live_result_rows": 800,
+      "mode": "independent",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 282779062720,
+        "instructions": 752043495202
+      },
+      "process_system_cpu_seconds": 1.3511090000000001,
+      "process_user_cpu_seconds": 85.75645199999998,
+      "rows": 10000000,
+      "rows_per_second": 611633.9224918153,
+      "worker_local_cleanup": true,
+      "workers": 8,
+      "trial": 1,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-batch-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "independent",
+        "8",
+        "100"
+      ],
+      "process_wall_seconds": 33.087613333016634,
+      "peak_rss_bytes": 1029160960,
+      "instructions_per_vin": 75204.3495202,
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":5.150710613,\"aggregate_worker_decode_seconds\":80.685958017,\"aggregate_worker_other_or_wait_seconds\":44.96052403399999,\"average_busy_cores\":5.327793921312505,\"batch_size\":100,\"current_year\":2026,\"elapsed_seconds\":16.349649083,\"full_output_materialized\":true,\"max_live_result_batches\":8,\"max_live_result_rows\":800,\"mode\":\"independent\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":282779062720,\"instructions\":752043495202},\"process_system_cpu_seconds\":1.3511090000000001,\"process_user_cpu_seconds\":85.75645199999998,\"rows\":10000000,\"rows_per_second\":611633.9224918153,\"worker_local_cleanup\":true,\"workers\":8}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": 10.55138376,
+      "aggregate_worker_decode_seconds": 86.861598853,
+      "aggregate_worker_other_or_wait_seconds": 19.731038386999998,
+      "average_busy_cores": 6.637273548941947,
+      "batch_size": 1000,
+      "current_year": 2026,
+      "elapsed_seconds": 14.643002625,
+      "full_output_materialized": true,
+      "max_live_result_batches": 8,
+      "max_live_result_rows": 8000,
+      "mode": "independent",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 317038373710,
+        "instructions": 750741322362
+      },
+      "process_system_cpu_seconds": 0.496962,
+      "process_user_cpu_seconds": 96.692652,
+      "rows": 10000000,
+      "rows_per_second": 682920.0442078047,
+      "worker_local_cleanup": true,
+      "workers": 8,
+      "trial": 1,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-batch-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "independent",
+        "8",
+        "1000"
+      ],
+      "process_wall_seconds": 30.402581417001784,
+      "peak_rss_bytes": 1105870848,
+      "instructions_per_vin": 75074.1322362,
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":10.55138376,\"aggregate_worker_decode_seconds\":86.861598853,\"aggregate_worker_other_or_wait_seconds\":19.731038386999998,\"average_busy_cores\":6.637273548941947,\"batch_size\":1000,\"current_year\":2026,\"elapsed_seconds\":14.643002625,\"full_output_materialized\":true,\"max_live_result_batches\":8,\"max_live_result_rows\":8000,\"mode\":\"independent\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":317038373710,\"instructions\":750741322362},\"process_system_cpu_seconds\":0.496962,\"process_user_cpu_seconds\":96.692652,\"rows\":10000000,\"rows_per_second\":682920.0442078047,\"worker_local_cleanup\":true,\"workers\":8}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": 10.856193664,
+      "aggregate_worker_decode_seconds": 88.383274833,
+      "aggregate_worker_other_or_wait_seconds": 11.783524502999995,
+      "average_busy_cores": 7.135949433465552,
+      "batch_size": 1000,
+      "current_year": 2026,
+      "elapsed_seconds": 13.877874125,
+      "full_output_materialized": true,
+      "max_live_result_batches": 8,
+      "max_live_result_rows": 8000,
+      "mode": "independent",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 321769691970,
+        "instructions": 750530898913
+      },
+      "process_system_cpu_seconds": 0.42332899999999996,
+      "process_user_cpu_seconds": 98.608479,
+      "rows": 10000000,
+      "rows_per_second": 720571.4585626421,
+      "worker_local_cleanup": true,
+      "workers": 8,
+      "trial": 2,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-batch-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "independent",
+        "8",
+        "1000"
+      ],
+      "process_wall_seconds": 28.767711209016852,
+      "peak_rss_bytes": 1105428480,
+      "instructions_per_vin": 75053.0898913,
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":10.856193664,\"aggregate_worker_decode_seconds\":88.383274833,\"aggregate_worker_other_or_wait_seconds\":11.783524502999995,\"average_busy_cores\":7.135949433465552,\"batch_size\":1000,\"current_year\":2026,\"elapsed_seconds\":13.877874125,\"full_output_materialized\":true,\"max_live_result_batches\":8,\"max_live_result_rows\":8000,\"mode\":\"independent\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":321769691970,\"instructions\":750530898913},\"process_system_cpu_seconds\":0.42332899999999996,\"process_user_cpu_seconds\":98.608479,\"rows\":10000000,\"rows_per_second\":720571.4585626421,\"worker_local_cleanup\":true,\"workers\":8}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": 5.552076516,
+      "aggregate_worker_decode_seconds": 82.311499456,
+      "aggregate_worker_other_or_wait_seconds": 45.745752691999996,
+      "average_busy_cores": 5.336193027306954,
+      "batch_size": 100,
+      "current_year": 2026,
+      "elapsed_seconds": 16.701166083,
+      "full_output_materialized": true,
+      "max_live_result_batches": 8,
+      "max_live_result_rows": 800,
+      "mode": "independent",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 289513715036,
+        "instructions": 752040282355
+      },
+      "process_system_cpu_seconds": 1.3577160000000001,
+      "process_user_cpu_seconds": 87.76293,
+      "rows": 10000000,
+      "rows_per_second": 598760.5865544281,
+      "worker_local_cleanup": true,
+      "workers": 8,
+      "trial": 2,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-batch-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "independent",
+        "8",
+        "100"
+      ],
+      "process_wall_seconds": 33.942205416969955,
+      "peak_rss_bytes": 1028767744,
+      "instructions_per_vin": 75204.0282355,
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":5.552076516,\"aggregate_worker_decode_seconds\":82.311499456,\"aggregate_worker_other_or_wait_seconds\":45.745752691999996,\"average_busy_cores\":5.336193027306954,\"batch_size\":100,\"current_year\":2026,\"elapsed_seconds\":16.701166083,\"full_output_materialized\":true,\"max_live_result_batches\":8,\"max_live_result_rows\":800,\"mode\":\"independent\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":289513715036,\"instructions\":752040282355},\"process_system_cpu_seconds\":1.3577160000000001,\"process_user_cpu_seconds\":87.76293,\"rows\":10000000,\"rows_per_second\":598760.5865544281,\"worker_local_cleanup\":true,\"workers\":8}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": 4.44226222,
+      "aggregate_worker_decode_seconds": 83.191204982,
+      "aggregate_worker_other_or_wait_seconds": 52.26703212599999,
+      "average_busy_cores": 5.682474643182997,
+      "batch_size": 10,
+      "current_year": 2026,
+      "elapsed_seconds": 17.487562416,
+      "full_output_materialized": true,
+      "max_live_result_batches": 8,
+      "max_live_result_rows": 80,
+      "mode": "independent",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 315923583869,
+        "instructions": 787589101002
+      },
+      "process_system_cpu_seconds": 9.441189999999999,
+      "process_user_cpu_seconds": 89.93144,
+      "rows": 10000000,
+      "rows_per_second": 571834.9854666217,
+      "worker_local_cleanup": true,
+      "workers": 8,
+      "trial": 2,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-batch-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "independent",
+        "8",
+        "10"
+      ],
+      "process_wall_seconds": 35.888049124972895,
+      "peak_rss_bytes": 1025277952,
+      "instructions_per_vin": 78758.9101002,
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":4.44226222,\"aggregate_worker_decode_seconds\":83.191204982,\"aggregate_worker_other_or_wait_seconds\":52.26703212599999,\"average_busy_cores\":5.682474643182997,\"batch_size\":10,\"current_year\":2026,\"elapsed_seconds\":17.487562416,\"full_output_materialized\":true,\"max_live_result_batches\":8,\"max_live_result_rows\":80,\"mode\":\"independent\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":315923583869,\"instructions\":787589101002},\"process_system_cpu_seconds\":9.441189999999999,\"process_user_cpu_seconds\":89.93144,\"rows\":10000000,\"rows_per_second\":571834.9854666217,\"worker_local_cleanup\":true,\"workers\":8}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": null,
+      "aggregate_worker_decode_seconds": null,
+      "aggregate_worker_other_or_wait_seconds": null,
+      "average_busy_cores": 7.634594233344853,
+      "batch_size": 12000,
+      "current_year": 2026,
+      "elapsed_seconds": 13.455230083,
+      "full_output_materialized": true,
+      "max_live_result_batches": 1,
+      "max_live_result_rows": 12000,
+      "mode": "shared",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 332656734899,
+        "instructions": 765047771489
+      },
+      "process_system_cpu_seconds": 1.1757710000000001,
+      "process_user_cpu_seconds": 101.54945099999999,
+      "rows": 10000000,
+      "rows_per_second": 743205.4255716142,
+      "worker_local_cleanup": false,
+      "workers": 8,
+      "trial": 2,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-batch-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "shared",
+        "8",
+        "12000"
+      ],
+      "process_wall_seconds": 27.34278012503637,
+      "peak_rss_bytes": 1192837120,
+      "instructions_per_vin": 76504.7771489,
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":null,\"aggregate_worker_decode_seconds\":null,\"aggregate_worker_other_or_wait_seconds\":null,\"average_busy_cores\":7.634594233344853,\"batch_size\":12000,\"current_year\":2026,\"elapsed_seconds\":13.455230083,\"full_output_materialized\":true,\"max_live_result_batches\":1,\"max_live_result_rows\":12000,\"mode\":\"shared\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":332656734899,\"instructions\":765047771489},\"process_system_cpu_seconds\":1.1757710000000001,\"process_user_cpu_seconds\":101.54945099999999,\"rows\":10000000,\"rows_per_second\":743205.4255716142,\"worker_local_cleanup\":false,\"workers\":8}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": null,
+      "aggregate_worker_decode_seconds": null,
+      "aggregate_worker_other_or_wait_seconds": null,
+      "average_busy_cores": 10.099313351749235,
+      "batch_size": 12000,
+      "current_year": 2026,
+      "elapsed_seconds": 12.469631708,
+      "full_output_materialized": true,
+      "max_live_result_batches": 1,
+      "max_live_result_rows": 12000,
+      "mode": "shared",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 381296510341,
+        "instructions": 771978346050
+      },
+      "process_system_cpu_seconds": 4.816751,
+      "process_user_cpu_seconds": 121.11796700000001,
+      "rows": 10000000,
+      "rows_per_second": 801948.3040212337,
+      "worker_local_cleanup": false,
+      "workers": 12,
+      "trial": 1,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-batch-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "shared",
+        "12",
+        "12000"
+      ],
+      "process_wall_seconds": 25.202195915975608,
+      "peak_rss_bytes": 1278246912,
+      "instructions_per_vin": 77197.834605,
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":null,\"aggregate_worker_decode_seconds\":null,\"aggregate_worker_other_or_wait_seconds\":null,\"average_busy_cores\":10.099313351749235,\"batch_size\":12000,\"current_year\":2026,\"elapsed_seconds\":12.469631708,\"full_output_materialized\":true,\"max_live_result_batches\":1,\"max_live_result_rows\":12000,\"mode\":\"shared\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":381296510341,\"instructions\":771978346050},\"process_system_cpu_seconds\":4.816751,\"process_user_cpu_seconds\":121.11796700000001,\"rows\":10000000,\"rows_per_second\":801948.3040212337,\"worker_local_cleanup\":false,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": 4.682947266,
+      "aggregate_worker_decode_seconds": 84.472865471,
+      "aggregate_worker_other_or_wait_seconds": 115.52582727100001,
+      "average_busy_cores": 5.9189073135853745,
+      "batch_size": 10,
+      "current_year": 2026,
+      "elapsed_seconds": 17.056803334,
+      "full_output_materialized": true,
+      "max_live_result_batches": 12,
+      "max_live_result_rows": 120,
+      "mode": "independent",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 321528071804,
+        "instructions": 787236392159
+      },
+      "process_system_cpu_seconds": 9.851634,
+      "process_user_cpu_seconds": 91.106004,
+      "rows": 10000000,
+      "rows_per_second": 586276.3264712447,
+      "worker_local_cleanup": true,
+      "workers": 12,
+      "trial": 1,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-batch-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "independent",
+        "12",
+        "10"
+      ],
+      "process_wall_seconds": 34.82027475000359,
+      "peak_rss_bytes": 1038745600,
+      "instructions_per_vin": 78723.6392159,
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":4.682947266,\"aggregate_worker_decode_seconds\":84.472865471,\"aggregate_worker_other_or_wait_seconds\":115.52582727100001,\"average_busy_cores\":5.9189073135853745,\"batch_size\":10,\"current_year\":2026,\"elapsed_seconds\":17.056803334,\"full_output_materialized\":true,\"max_live_result_batches\":12,\"max_live_result_rows\":120,\"mode\":\"independent\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":321528071804,\"instructions\":787236392159},\"process_system_cpu_seconds\":9.851634,\"process_user_cpu_seconds\":91.106004,\"rows\":10000000,\"rows_per_second\":586276.3264712447,\"worker_local_cleanup\":true,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": 7.815446753,
+      "aggregate_worker_decode_seconds": 84.693425652,
+      "aggregate_worker_other_or_wait_seconds": 94.580559091,
+      "average_busy_cores": 6.004233221607801,
+      "batch_size": 100,
+      "current_year": 2026,
+      "elapsed_seconds": 15.590785958,
+      "full_output_materialized": true,
+      "max_live_result_batches": 12,
+      "max_live_result_rows": 1200,
+      "mode": "independent",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 301224640312,
+        "instructions": 752129620357
+      },
+      "process_system_cpu_seconds": 1.446826,
+      "process_user_cpu_seconds": 92.163889,
+      "rows": 10000000,
+      "rows_per_second": 641404.4825539257,
+      "worker_local_cleanup": true,
+      "workers": 12,
+      "trial": 1,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-batch-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "independent",
+        "12",
+        "100"
+      ],
+      "process_wall_seconds": 31.982296292029787,
+      "peak_rss_bytes": 1048297472,
+      "instructions_per_vin": 75212.9620357,
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":7.815446753,\"aggregate_worker_decode_seconds\":84.693425652,\"aggregate_worker_other_or_wait_seconds\":94.580559091,\"average_busy_cores\":6.004233221607801,\"batch_size\":100,\"current_year\":2026,\"elapsed_seconds\":15.590785958,\"full_output_materialized\":true,\"max_live_result_batches\":12,\"max_live_result_rows\":1200,\"mode\":\"independent\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":301224640312,\"instructions\":752129620357},\"process_system_cpu_seconds\":1.446826,\"process_user_cpu_seconds\":92.163889,\"rows\":10000000,\"rows_per_second\":641404.4825539257,\"worker_local_cleanup\":true,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": 13.332203831,
+      "aggregate_worker_decode_seconds": 91.023111277,
+      "aggregate_worker_other_or_wait_seconds": 57.73916089199999,
+      "average_busy_cores": 7.646269697679271,
+      "batch_size": 1000,
+      "current_year": 2026,
+      "elapsed_seconds": 13.507873,
+      "full_output_materialized": true,
+      "max_live_result_batches": 12,
+      "max_live_result_rows": 12000,
+      "mode": "independent",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 329405714341,
+        "instructions": 750783675195
+      },
+      "process_system_cpu_seconds": 0.73446,
+      "process_user_cpu_seconds": 102.55037999999999,
+      "rows": 10000000,
+      "rows_per_second": 740309.0034974419,
+      "worker_local_cleanup": true,
+      "workers": 12,
+      "trial": 1,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-batch-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "independent",
+        "12",
+        "1000"
+      ],
+      "process_wall_seconds": 27.666083040996455,
+      "peak_rss_bytes": 1171570688,
+      "instructions_per_vin": 75078.3675195,
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":13.332203831,\"aggregate_worker_decode_seconds\":91.023111277,\"aggregate_worker_other_or_wait_seconds\":57.73916089199999,\"average_busy_cores\":7.646269697679271,\"batch_size\":1000,\"current_year\":2026,\"elapsed_seconds\":13.507873,\"full_output_materialized\":true,\"max_live_result_batches\":12,\"max_live_result_rows\":12000,\"mode\":\"independent\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":329405714341,\"instructions\":750783675195},\"process_system_cpu_seconds\":0.73446,\"process_user_cpu_seconds\":102.55037999999999,\"rows\":10000000,\"rows_per_second\":740309.0034974419,\"worker_local_cleanup\":true,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": 13.041443965,
+      "aggregate_worker_decode_seconds": 90.987168048,
+      "aggregate_worker_other_or_wait_seconds": 59.821176995000016,
+      "average_busy_cores": 7.552430720185917,
+      "batch_size": 1000,
+      "current_year": 2026,
+      "elapsed_seconds": 13.654149084,
+      "full_output_materialized": true,
+      "max_live_result_batches": 12,
+      "max_live_result_rows": 12000,
+      "mode": "independent",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 329632476816,
+        "instructions": 750432192906
+      },
+      "process_system_cpu_seconds": 0.726131,
+      "process_user_cpu_seconds": 102.39588400000001,
+      "rows": 10000000,
+      "rows_per_second": 732378.1173385641,
+      "worker_local_cleanup": true,
+      "workers": 12,
+      "trial": 2,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-batch-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "independent",
+        "12",
+        "1000"
+      ],
+      "process_wall_seconds": 27.324498458008748,
+      "peak_rss_bytes": 1171341312,
+      "instructions_per_vin": 75043.2192906,
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":13.041443965,\"aggregate_worker_decode_seconds\":90.987168048,\"aggregate_worker_other_or_wait_seconds\":59.821176995000016,\"average_busy_cores\":7.552430720185917,\"batch_size\":1000,\"current_year\":2026,\"elapsed_seconds\":13.654149084,\"full_output_materialized\":true,\"max_live_result_batches\":12,\"max_live_result_rows\":12000,\"mode\":\"independent\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":329632476816,\"instructions\":750432192906},\"process_system_cpu_seconds\":0.726131,\"process_user_cpu_seconds\":102.39588400000001,\"rows\":10000000,\"rows_per_second\":732378.1173385641,\"worker_local_cleanup\":true,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": 8.002961772,
+      "aggregate_worker_decode_seconds": 85.634694857,
+      "aggregate_worker_other_or_wait_seconds": 99.251883871,
+      "average_busy_cores": 5.894069823863777,
+      "batch_size": 100,
+      "current_year": 2026,
+      "elapsed_seconds": 16.074128375,
+      "full_output_materialized": true,
+      "max_live_result_batches": 12,
+      "max_live_result_rows": 1200,
+      "mode": "independent",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 305372271115,
+        "instructions": 752099191808
+      },
+      "process_system_cpu_seconds": 1.4668669999999997,
+      "process_user_cpu_seconds": 93.27516800000001,
+      "rows": 10000000,
+      "rows_per_second": 622117.7140499228,
+      "worker_local_cleanup": true,
+      "workers": 12,
+      "trial": 2,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-batch-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "independent",
+        "12",
+        "100"
+      ],
+      "process_wall_seconds": 32.28127716702875,
+      "peak_rss_bytes": 1048707072,
+      "instructions_per_vin": 75209.9191808,
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":8.002961772,\"aggregate_worker_decode_seconds\":85.634694857,\"aggregate_worker_other_or_wait_seconds\":99.251883871,\"average_busy_cores\":5.894069823863777,\"batch_size\":100,\"current_year\":2026,\"elapsed_seconds\":16.074128375,\"full_output_materialized\":true,\"max_live_result_batches\":12,\"max_live_result_rows\":1200,\"mode\":\"independent\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":305372271115,\"instructions\":752099191808},\"process_system_cpu_seconds\":1.4668669999999997,\"process_user_cpu_seconds\":93.27516800000001,\"rows\":10000000,\"rows_per_second\":622117.7140499228,\"worker_local_cleanup\":true,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": 4.691846547,
+      "aggregate_worker_decode_seconds": 83.889682169,
+      "aggregate_worker_other_or_wait_seconds": 116.31292628800001,
+      "average_busy_cores": 5.878911774242423,
+      "batch_size": 10,
+      "current_year": 2026,
+      "elapsed_seconds": 17.074537917,
+      "full_output_materialized": true,
+      "max_live_result_batches": 12,
+      "max_live_result_rows": 120,
+      "mode": "independent",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 319909274188,
+        "instructions": 786935123153
+      },
+      "process_system_cpu_seconds": 9.834204999999999,
+      "process_user_cpu_seconds": 90.545497,
+      "rows": 10000000,
+      "rows_per_second": 585667.386643808,
+      "worker_local_cleanup": true,
+      "workers": 12,
+      "trial": 2,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-batch-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "independent",
+        "12",
+        "10"
+      ],
+      "process_wall_seconds": 34.924019667028915,
+      "peak_rss_bytes": 1038909440,
+      "instructions_per_vin": 78693.5123153,
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":4.691846547,\"aggregate_worker_decode_seconds\":83.889682169,\"aggregate_worker_other_or_wait_seconds\":116.31292628800001,\"average_busy_cores\":5.878911774242423,\"batch_size\":10,\"current_year\":2026,\"elapsed_seconds\":17.074537917,\"full_output_materialized\":true,\"max_live_result_batches\":12,\"max_live_result_rows\":120,\"mode\":\"independent\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":319909274188,\"instructions\":786935123153},\"process_system_cpu_seconds\":9.834204999999999,\"process_user_cpu_seconds\":90.545497,\"rows\":10000000,\"rows_per_second\":585667.386643808,\"worker_local_cleanup\":true,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    },
+    {
+      "aggregate_worker_cleanup_seconds": null,
+      "aggregate_worker_decode_seconds": null,
+      "aggregate_worker_other_or_wait_seconds": null,
+      "average_busy_cores": 10.021736626405945,
+      "batch_size": 12000,
+      "current_year": 2026,
+      "elapsed_seconds": 12.489767958,
+      "full_output_materialized": true,
+      "max_live_result_batches": 1,
+      "max_live_result_rows": 12000,
+      "mode": "shared",
+      "now_micros": 1788220800000000,
+      "ordered_consumption": true,
+      "process_counters": {
+        "cycles": 379950555175,
+        "instructions": 771697926664
+      },
+      "process_system_cpu_seconds": 4.639570999999999,
+      "process_user_cpu_seconds": 120.52959399999999,
+      "rows": 10000000,
+      "rows_per_second": 800655.387163919,
+      "worker_local_cleanup": false,
+      "workers": 12,
+      "trial": 2,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-batch-probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/multicore-corpus.txt",
+        "shared",
+        "12",
+        "12000"
+      ],
+      "process_wall_seconds": 25.49127837503329,
+      "peak_rss_bytes": 1285734400,
+      "instructions_per_vin": 77169.7926664,
+      "raw": {
+        "stdout": "{\"aggregate_worker_cleanup_seconds\":null,\"aggregate_worker_decode_seconds\":null,\"aggregate_worker_other_or_wait_seconds\":null,\"average_busy_cores\":10.021736626405945,\"batch_size\":12000,\"current_year\":2026,\"elapsed_seconds\":12.489767958,\"full_output_materialized\":true,\"max_live_result_batches\":1,\"max_live_result_rows\":12000,\"mode\":\"shared\",\"now_micros\":1788220800000000,\"ordered_consumption\":true,\"process_counters\":{\"cycles\":379950555175,\"instructions\":771697926664},\"process_system_cpu_seconds\":4.639570999999999,\"process_user_cpu_seconds\":120.52959399999999,\"rows\":10000000,\"rows_per_second\":800655.387163919,\"worker_local_cleanup\":false,\"workers\":12}\n",
+        "stderr": "warmup complete; starting timed whole-corpus pass\n"
+      }
+    }
+  ]
+}

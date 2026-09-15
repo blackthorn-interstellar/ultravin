@@ -1,0 +1,170 @@
+[
+  {
+    "label": "0-8w-12000",
+    "workers": 8,
+    "batch": 12000,
+    "whole_pass_vins_per_second": 311393.2459694787,
+    "counter_seconds": 10.150059454,
+    "cpu_equivalent_cores": 1.7487106843502436,
+    "p_core_equivalent": 1.3458503387994045,
+    "e_core_equivalent": 0.402860345550839,
+    "live_other_process_cpu_equivalent": 9.708911648312005,
+    "host_active_cores": 11.985731173772043,
+    "p_instructions_per_cpu_second": 7426960212.705356,
+    "e_instructions_per_cpu_second": 2872095339.78215,
+    "system_cpu_percent": 3.9604651536571454,
+    "ipc": 2.108221160122761,
+    "p_core_ipc": 2.309561777022005,
+    "e_core_ipc": 1.2025631941216104,
+    "p_e_switches_per_second": 804.3302639752202,
+    "selective_forced_idle_seconds": 0.0,
+    "thermal_states": [
+      "Nominal"
+    ],
+    "phase_seconds": {
+      "decode_and_local_sort": 25.140963995,
+      "drop_results": 6.972578659,
+      "whole_pass_wall": 32.113733958
+    }
+  },
+  {
+    "label": "1-12w-12000",
+    "workers": 12,
+    "batch": 12000,
+    "whole_pass_vins_per_second": 183518.61273068708,
+    "counter_seconds": 10.157237788,
+    "cpu_equivalent_cores": 3.0121674985443394,
+    "p_core_equivalent": 2.1785921651005458,
+    "e_core_equivalent": 0.8335753334437935,
+    "live_other_process_cpu_equivalent": 7.874919488691998,
+    "host_active_cores": 11.94711977605168,
+    "p_instructions_per_cpu_second": 7401808433.693416,
+    "e_instructions_per_cpu_second": 2800145975.3225145,
+    "system_cpu_percent": 5.477055192287932,
+    "ipc": 2.053246466537507,
+    "p_core_ipc": 2.3032988531512113,
+    "e_core_ipc": 1.1732747793089318,
+    "p_e_switches_per_second": 2034.7067215868944,
+    "selective_forced_idle_seconds": 0.0,
+    "thermal_states": [
+      "Nominal"
+    ],
+    "phase_seconds": {
+      "decode_and_local_sort": 37.601823004,
+      "drop_results": 16.88840997,
+      "whole_pass_wall": 54.490384958
+    }
+  },
+  {
+    "label": "2-12w-12000",
+    "workers": 12,
+    "batch": 12000,
+    "whole_pass_vins_per_second": 346993.5358071421,
+    "counter_seconds": 10.142180164,
+    "cpu_equivalent_cores": 1.5126594575252903,
+    "p_core_equivalent": 1.0143708537654803,
+    "e_core_equivalent": 0.49828860375980993,
+    "live_other_process_cpu_equivalent": 10.328533137167804,
+    "host_active_cores": 11.999980601429428,
+    "p_instructions_per_cpu_second": 7538277893.150669,
+    "e_instructions_per_cpu_second": 2807752325.103984,
+    "system_cpu_percent": 5.297826547888061,
+    "ipc": 2.030270740622468,
+    "p_core_ipc": 2.342332380835309,
+    "e_core_ipc": 1.174823026800573,
+    "p_e_switches_per_second": 895.6654144484589,
+    "selective_forced_idle_seconds": 0.0,
+    "thermal_states": [
+      "Nominal"
+    ],
+    "phase_seconds": {
+      "decode_and_local_sort": 21.833203529,
+      "drop_results": 6.9855645410000005,
+      "whole_pass_wall": 28.818980041
+    }
+  },
+  {
+    "label": "3-8w-12000",
+    "workers": 8,
+    "batch": 12000,
+    "whole_pass_vins_per_second": 563231.6229067553,
+    "counter_seconds": 10.148962078,
+    "cpu_equivalent_cores": 6.465629755996808,
+    "p_core_equivalent": 5.066266047880685,
+    "e_core_equivalent": 1.3993637081161237,
+    "live_other_process_cpu_equivalent": 4.681947136841002,
+    "host_active_cores": 11.656339701069792,
+    "p_instructions_per_cpu_second": 7474861303.068225,
+    "e_instructions_per_cpu_second": 2870352340.8307796,
+    "system_cpu_percent": 2.964942546932601,
+    "ipc": 2.1340379817370394,
+    "p_core_ipc": 2.3250204168052995,
+    "e_core_ipc": 1.2026492801510502,
+    "p_e_switches_per_second": 5584.906078511017,
+    "selective_forced_idle_seconds": 0.0,
+    "thermal_states": [
+      "Nominal"
+    ],
+    "phase_seconds": {
+      "decode_and_local_sort": 15.167652379,
+      "drop_results": 2.586888417,
+      "whole_pass_wall": 17.754684
+    }
+  },
+  {
+    "label": "4-8w-48000",
+    "workers": 8,
+    "batch": 48000,
+    "whole_pass_vins_per_second": 628329.7763934463,
+    "counter_seconds": 10.148336246,
+    "cpu_equivalent_cores": 6.71205430159532,
+    "p_core_equivalent": 5.604171720208491,
+    "e_core_equivalent": 1.107882581386829,
+    "live_other_process_cpu_equivalent": 4.535939493840062,
+    "host_active_cores": 11.60761288077479,
+    "p_instructions_per_cpu_second": 8112064527.897423,
+    "e_instructions_per_cpu_second": 3007462767.7634277,
+    "system_cpu_percent": 2.588809612611771,
+    "ipc": 2.3608587506835783,
+    "p_core_ipc": 2.5224181792634233,
+    "e_core_ipc": 1.2598606505458474,
+    "p_e_switches_per_second": 2534.109964097459,
+    "selective_forced_idle_seconds": 0.0,
+    "thermal_states": [
+      "Nominal"
+    ],
+    "phase_seconds": {
+      "decode_and_local_sort": 13.636830582,
+      "drop_results": 2.278342626,
+      "whole_pass_wall": 15.915208958000001
+    }
+  },
+  {
+    "label": "5-12w-48000",
+    "workers": 12,
+    "batch": 48000,
+    "whole_pass_vins_per_second": 729076.7836049607,
+    "counter_seconds": 10.15175183,
+    "cpu_equivalent_cores": 8.199858418524796,
+    "p_core_equivalent": 6.3096356243373615,
+    "e_core_equivalent": 1.8902227941874343,
+    "live_other_process_cpu_equivalent": 3.2918859117737123,
+    "host_active_cores": 11.715493958781003,
+    "p_instructions_per_cpu_second": 7924818889.225313,
+    "e_instructions_per_cpu_second": 3100597975.690301,
+    "system_cpu_percent": 3.6712333380374287,
+    "ipc": 2.2530887397369774,
+    "p_core_ipc": 2.4655026954092802,
+    "e_core_ipc": 1.2985780542369183,
+    "p_e_switches_per_second": 3790.9713165239973,
+    "selective_forced_idle_seconds": 0.0,
+    "thermal_states": [
+      "Nominal"
+    ],
+    "phase_seconds": {
+      "decode_and_local_sort": 11.553358505,
+      "drop_results": 2.162571828,
+      "whole_pass_wall": 13.715962
+    }
+  }
+]

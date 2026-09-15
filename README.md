@@ -6,26 +6,32 @@
   <a href="https://github.com/blackthorn-interstellar/ultravin/blob/master/LICENSE"><img src="https://img.shields.io/github/license/blackthorn-interstellar/ultravin" alt="License"></a>
 </p>
 
-**An extremely fast, fully offline NHTSA vPIC VIN decoder, written in Rust.**
+**The complete NHTSA VIN decoder, thousands of times faster. Fully offline.**
 
 <p align="center">
-  <img src="assets/benchmark.svg" alt="VINs decoded per second: ultravin 195,203 batched on 4 cores / 84,822 single-core vs corgi v3 83, corgi v2 33, NHTSA MSSQL 22.5, NHTSA Postgres 19.5" width="640"><br>
-  <sub>VINs decoded per second over a random corpus, single sequential caller — ultravin also batches across cores.</sub>
+  <img src="assets/benchmark.svg" alt="VINs decoded per second: ultravin 400,843 with automatic batching on 4 cores / 105,372 with automatic batching on 1 core vs corgi v3 83, corgi v2 33, NHTSA MSSQL 22.5, NHTSA Postgres 19.5" width="640"><br>
+  <sub>VINs decoded per second — ultravin uses automatic batching over ten million unique VINs.</sub>
 </p>
 
-- ⚡️ ~84,800 VIN/s on one core — orders of magnitude faster than the NHTSA SQL procedures
+- ⚡️ ~105,000 VIN/s on one core with automatic batching — orders of magnitude faster than the NHTSA SQL procedures
 - 🦀 Pure Rust core, shipped as a Python library and a Rust crate
 - 📦 The entire vPIC vehicle database baked into the wheel
 - 🔌 Fully offline — no network, no database, no data files at runtime
-- 🎯 Byte-for-byte parity with vPIC's `spVinDecode`, verified across every decodable VIN — except documented vPIC defects, which ultravin deliberately does not reproduce ([the registry](scripts/known_problems.json), [evidence](docs/KNOWN_DEVIATIONS.md))
+- 🎯 Full-field vPIC parity, tested across decoding rules and their interactions — with documented upstream defects corrected ([accuracy policy](docs/ACCEPTANCE.md), [evidence](docs/KNOWN_DEVIATIONS.md))
 - 🐍 Installable via `pip`, with a CLI and a library API
-- 🧵 Batches in parallel to ~195,000 VIN/s on 4 cores
+- 🧵 Batches in parallel to ~401,000 VIN/s on 4 cores with automatic batching
 - 🗃️ Parquet in, parquet out — decodes a dataset of any size in the memory of one chunk
 
-ultravin is a faithful port of NHTSA's `spVinDecode` — the SQL procedure behind
-vPIC — reimplemented in Rust and verified against the reference Postgres
-implementation. Because the vehicle database ships inside the binary, decoding
-needs no network, no database server, and no data files. Install it and decode.
+ultravin brings the complete `spVinDecode` algorithm into your process: vehicle
+attributes, model-year resolution, VIN correction, errors, and provenance.
+It checks every output field against NHTSA's unmodified Postgres procedure and
+corrects documented defects in the upstream data and procedures. You get vPIC
+fidelity with better answers on those defective cases, at **over 1,200× the
+published corgi throughput and over 4,700× the measured SQL baselines** on one
+core. [Benchmarks and reproduction](docs/BENCHMARKS.md).
+
+The complete vehicle database ships inside the binary. No network, no database
+server, no runtime data files. Install it and decode.
 
 ## Getting Started
 
@@ -105,15 +111,52 @@ default's ~41.
 (`element_id`, `group_name`, `data_type`, …). Pin to `element_id` if you need a
 key that survives NHTSA renaming a variable between data releases.
 
-From the command line — every command emits JSON:
+From the command line:
 
 ```bash
 ultravin decode 1HGCM82633A004352             # JSON object
 ultravin decode 1HGCM82633A004352 --year 1995 # with a caller model-year hint
 ultravin decode 1HGCM82633A004352 --full      # with per-element provenance
 ultravin decode-batch vins.txt                # one VIN per line -> JSON array
+ultravin decode-batch - --jsonl < vins.txt    # stdin -> streaming JSON Lines
+ultravin decode-batch vins.txt --jsonl --batch-size 1000
+ultravin info                                # decoder version + data identity as JSON
 ultravin version
 ```
+
+`decode-batch` accepts `VIN,year` on each input line. JSONL mode processes
+bounded chunks and emits complete JSON objects in input order, ready for shell
+pipelines. Its automatic default adapts under an 8 MiB working-buffer target;
+pass `--batch-size N` to pin a measured size or `--batch-memory-mb N` to change
+the automatic target. If a later input line is malformed, the command exits with
+an error; already-emitted lines remain valid results.
+
+### Reproducible results
+
+Every batch automatically captures one clock for the whole job. That includes
+Python and Rust batches, CLI input loading, every JSONL chunk, and every file in
+a Parquet stream. A job that spans a date or year boundary keeps using its
+starting instant.
+
+Pin the package version and freeze the decode clock when a job needs to produce
+the same answers on a later date:
+
+```python
+from datetime import datetime, timezone
+
+as_of = datetime(2026, 9, 1, tzinfo=timezone.utc)
+r = ultravin.decode("1HGCM82633A004352", now=as_of)
+results = ultravin.decode_batch(vins, now=as_of)
+identity = ultravin.provenance()
+# data_month, artifact_blake3, decoder_version
+```
+
+`now=` also works on the JSON APIs and `decode_stream`. It controls publication
+dates and year resolution; `year=` remains the vehicle's model-year hint.
+Naive datetimes mean UTC. Each stream captures one clock reading for the whole
+job, and its Arrow/Parquet metadata records the data identity and decode clock:
+`ultravin.data_month`, `ultravin.artifact_blake3`, `ultravin.decoder_version`,
+and `ultravin.now_micros` (Unix epoch microseconds).
 
 ## Rust
 
@@ -142,6 +185,9 @@ rows = ultravin.decode_stream("registrations.parquet").to_parquet("decoded.parqu
 
 rows  # 4812004 — the rows written, not the rows themselves
 ```
+
+Parquet output replaces its destination only after every batch and the footer
+have been written successfully. A failed decode leaves an existing output intact.
 
 The source is a parquet file, a directory of `*.parquet` read in sorted order, or
 anything speaking the Arrow C data interface — so the same call takes a pandas
@@ -222,12 +268,24 @@ The output holds the VIN and caller year passed through, then
 Row order and row count always equal the input's: an undecodable VIN is a row of
 nulls, never a raise and never a dropped row.
 
-For a parquet source, rows stream through in `batch_size`-row chunks with the GIL
-released, so peak memory is one chunk no matter how large the source is. For an
-Arrow source the producer decides the input chunking, and `batch_size` only sets
-the parquet row-group size of `to_parquet`. Reading and writing parquet is the
-same Rust as the decoding, so the parquet path needs no pyarrow and no other
-install; only the pyarrow/polars/pandas hand-offs need those libraries.
+By default, `batch_size="auto"` adapts Parquet and Arrow work chunks to measured
+throughput under a 64 MiB working-buffer budget. A shipped predictor uses the
+worker count and a short single-core measurement on real input rows to choose
+the starting size; runtime feedback then refines it. See the
+[predictor and heatmaps](docs/BATCH_PREDICTOR.md), or call
+`ultravin.predict_batch_size(workers=12, single_core_rows_per_second=100_000)`
+to inspect an estimate. Change the working-buffer target with
+`batch_memory_mb=`. It is a budget for buffers ultravin builds for the current
+batch, not a process-RSS limit, and it does not include buffers retained by an
+upstream Arrow producer. Adaptation respects `RAYON_NUM_THREADS`; it never
+changes the process-global worker pool.
+
+Pass an integer for fixed-size Parquet chunks. With an Arrow source an explicit
+integer preserves the producer's batches and only sets the parquet row-group
+size of `to_parquet`. In either mode the GIL is released while Rust decodes, and
+memory stays bounded independently of total source rows. Reading and writing
+parquet is the same Rust as the decoding, so this path needs no pyarrow and no
+other install; only the pyarrow/polars/pandas hand-offs need those libraries.
 
 From the command line:
 
@@ -239,32 +297,57 @@ ultravin decode-parquet registrations.parquet decoded.parquet --column-names id
 
 ## Benchmarks
 
-How many VINs each engine decodes **per second**. ultravin was measured on
-September 9, 2026, over a random corpus of 5,000 valid VINs on an Apple M1 Max:
-medians of three 60-second runs after warming the full corpus, with batches
-capped at four cores. The other engines retain their earlier comparison figures:
+The [multicore optimization](docs/MULTICORE_OPTIMIZATION_2026_09_14.md)
+reaches **656,900 VIN/s with eight workers** and **630,092 VIN/s with twelve**
+using automatic batching over ten million unique VINs. Paired before/after
+runs improved throughput **35.9% at eight workers**, **24.1% at twelve**, and
+**23.1% at four**, while reducing peak process memory by 21–47%.
+The shipped native predictor selects batch sizes for the managed result path,
+and the live controller adapts them during the job.
+A [coordination follow-up](docs/COORDINATION_EXPERIMENTS_2026_09_14.md) improves
+eight-worker automatic throughput a further **3.3%** by writing decoded results
+into input-order slots.
+
+For throughput, startup, and memory at each output boundary, see the
+[consolidated performance report](docs/PERFORMANCE_2026_09_13.md): native Rust
+results, Python dictionaries, direct JSON, and complete Parquet files, measured
+from the same checkout with a frozen decode clock.
+
+The [batch scaling guide](docs/PERFORMANCE_SCALING_2026_09_13.md) gives measured
+batch-size and worker-count recommendations, including JSONL. Full Python
+batches now use **27% less peak memory** in the paired 50,000-row benchmark,
+with unchanged throughput.
+The [adaptive sizing report](docs/ADAPTIVE_BATCHING_2026_09_13.md) compares the
+automatic defaults with fixed 1,000, 8,192, and 50,000-row batches over complete
+200,000-row Parquet and JSONL jobs.
+
+How many VINs each engine decodes **per second**. Measured September 14, 2026,
+on an Apple M2 Max using **10,000,000 unique synthetic VINs**, with automatic
+batching on one or four workers. Each of two fresh-process trials warms the full
+corpus, then times a complete pass, including automatic calibration, tuning,
+full native results, and synchronous cleanup. The fastest four-worker pass
+takes **24.7 seconds without repeating a VIN**. The table reports medians;
+other engines retain their earlier comparison figures.
+[Inputs, raw results, and reproduction](docs/MULTICORE_OPTIMIZATION_2026_09_14.md).
 
 | engine | VIN/s | vs ultravin (1 core) |
 |---|---|---|
-| **ultravin** — batched, 4 cores | **195,203** | ~2.3× faster |
-| **ultravin** — 1 core | **84,822** | 1× |
-| corgi v3 — `@cardog/corgi` (binary index) | ~83 | ~1,022× slower |
-| corgi v2 — `@cardog/corgi` 2.0.1 (SQLite) | ~33 | ~2,570× slower |
-| NHTSA MSSQL — `spVinDecode` (SQL Server) | 22.5 | ~3,770× slower |
-| NHTSA Postgres — `spvindecode` | 19.5 | ~4,350× slower |
-| NHTSA vPIC web API — public rate limit | ~10 | ~8,482× slower |
+| **ultravin** — automatic batches, 4 cores | **400,843** | ~3.8× faster |
+| **ultravin** — automatic batches, 1 core | **105,372** | 1× |
+| corgi v3 — `@cardog/corgi` (binary index) | ~83 | ~1,270× slower |
+| corgi v2 — `@cardog/corgi` 2.0.1 (SQLite) | ~33 | ~3,193× slower |
+| NHTSA MSSQL — `spVinDecode` (SQL Server) | 22.5 | ~4,683× slower |
+| NHTSA Postgres — `spvindecode` | 19.5 | ~5,404× slower |
+| NHTSA vPIC web API — public rate limit | ~10 | ~10,537× slower |
 
 ultravin runs in-process with the database embedded — no server, no round-trip.
-These measure the Rust engine on a shared host. Python output construction
-and parquet I/O have separate costs. The [latest paired benchmark report](docs/THROUGHPUT_2026_09_09_FOLLOWUP.md)
-records a further 1.19× single-core and 1.10× batch improvement over the starting
-September 9 build, with identical output on 1,862,306 compatibility cases and
-about 0.3 ms more startup time on the two measured registered WMIs. The 2× target
-remains unmet. The corgi figures are derived from its project's
+These measure the Rust engine on a shared host. The [consolidated performance report](docs/PERFORMANCE_2026_09_13.md)
+measures Python output construction and Parquet I/O end to end, alongside startup
+and memory. The corgi figures are derived from its project's
 published per-VIN latency (~12 ms v3 / ~30 ms v2, not re-measured here). The NHTSA
 Postgres and MSSQL oracles run the **unmodified** `spVinDecode` over localhost;
 MSSQL is SQL Server under amd64 emulation on Apple Silicon, so its number
-understates native hardware — ultravin is still ~3,770× faster. The NHTSA vPIC web API row is its
+understates native hardware — ultravin is still ~4,683× faster. The NHTSA vPIC web API row is its
 [published](https://cardog.app/blog/corgi-vin-decoder) ~10 req/s rate limit, not
 a decode time — a hard ceiling regardless of hardware. Methodology and
 reproduction: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
@@ -273,6 +356,7 @@ reproduction: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
 
 - [Vision](docs/VISION.md) — what this is, and what it deliberately is not
 - [Benchmarks](docs/BENCHMARKS.md) — the numbers, the methodology, how to reproduce them
+- [End-to-end performance](docs/PERFORMANCE_2026_09_13.md) — throughput, startup, and memory across all output paths
 - [Performance improvements](PERFORMANCE_IMPROVEMENTS.md) — the optimization history, measured gains, tradeoffs, and rejected experiments
 - [Acceptance](docs/ACCEPTANCE.md) — the parity policy: what counts as passing, how a divergence is adjudicated
 - [Known deviations](docs/KNOWN_DEVIATIONS.md) — the vPIC defects ultravin does not reproduce, with evidence
