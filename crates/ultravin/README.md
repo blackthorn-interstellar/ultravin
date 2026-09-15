@@ -1,11 +1,11 @@
 # ultravin
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/blackthorn-interstellar/ultravin/master/assets/benchmark.svg" alt="VINs decoded per second: ultravin batched on 4 cores and single-core vs corgi v3, corgi v2, NHTSA MSSQL, NHTSA Postgres" width="640">
+  <img src="https://raw.githubusercontent.com/blackthorn-interstellar/ultravin/master/assets/benchmark.svg" alt="VINs decoded per second: ultravin with automatic batching on 12, 4 and 1 cores vs corgi v3, corgi v2, NHTSA MSSQL, NHTSA Postgres" width="640">
 </p>
 
 Pure-Rust NHTSA vPIC VIN decoder: full-field `spVinDecode` parity with documented
-upstream defects corrected, ~84,800 VIN/s on one core, fully offline at runtime.
+upstream defects corrected, ~164,000 VIN/s on one core, fully offline at runtime.
 Same engine as the [`ultravin`](https://pypi.org/project/ultravin/) Python
 package; the repo, benchmarks and parity evidence live at
 [github.com/blackthorn-interstellar/ultravin](https://github.com/blackthorn-interstellar/ultravin).

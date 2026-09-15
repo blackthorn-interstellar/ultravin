@@ -1,12 +1,13 @@
 # ultravin benchmarks
 
-The README uses the [ten-million-unique-VIN multicore benchmark](MULTICORE_OPTIMIZATION_2026_09_14.md):
-**400,843 VIN/s with automatic four-worker batching** and **105,372 VIN/s with
-automatic one-worker batching**, measured September 14 on an Apple M2 Max.
-Both are medians of two fresh-process trials using complete unique passes;
-the fastest four-worker pass takes 24.74 seconds. Eight workers reach **656,900
-VIN/s**, twelve **630,092 VIN/s**. The historical sessions below retain their
-original inputs and hardware.
+The README uses the [September 15 headline benchmark](#headline-throughput-september-15-2026):
+**1,147,742 VIN/s on twelve workers**, **521,234 VIN/s on four**, and
+**164,316 VIN/s on one**, all with automatic batching over twenty million unique
+VINs on an Apple M2 Max. The [September 14 multicore
+session](MULTICORE_OPTIMIZATION_2026_09_14.md) is the previous headline —
+400,843 VIN/s on four workers and 105,372 on one, with 656,900 at eight workers
+and 630,092 at twelve. The historical sessions below retain their original
+inputs, hardware, and engine builds.
 
 The [September 13 consolidated report](PERFORMANCE_2026_09_13.md) measures the
 then-current Rust, Python dictionary, direct JSON, and Parquet output paths together,
@@ -26,7 +27,63 @@ calibration, batch-size and memory heatmaps, and a separate validation of the
 current automatic defaults at 4, 8, and 12 workers.
 The comparison tables below preserve their dated measurement sessions.
 
-## Throughput (random corpus)
+## Headline throughput (September 15, 2026)
+
+Commit `66b5622`, Apple M2 Max (eight performance and four efficiency cores),
+**20,000,000 unique synthetic VINs**, automatic batching, decode clock frozen at
+`2026-09-01T00:00:00Z`.
+
+| engine | VIN/s | vs ultravin (1 core) |
+|---|---:|---:|
+| **ultravin** — automatic batches, 12 cores | **1,147,742** | ~7.0× faster |
+| **ultravin** — automatic batches, 4 cores | **521,234** | ~3.2× faster |
+| **ultravin** — automatic batches, 1 core | **164,316** | 1× |
+| corgi v3 (binary index, published) | ~83 | ~1,980× slower |
+| corgi v2 (SQLite, published) | ~33 | ~4,979× slower |
+| NHTSA MSSQL (`spVinDecode`, SQL Server) | 22.5 | ~7,303× slower |
+| NHTSA Postgres (`spvindecode`) | 19.5 | ~8,426× slower |
+| NHTSA vPIC web API (public rate limit) | ~10 | ~16,432× slower |
+
+Each ultravin figure is the median of two fresh-process trials, run 1/4/12 and
+then reversed to 12/4/1. Every process loads the corpus and completes one
+untimed unique warm pass, then times one complete unique pass; calibration, live
+batch tuning, full native result construction, input-order restoration, and
+synchronous cleanup are all inside the timer. The individual trials were
+163,359 / 165,273 VIN/s (one worker), 524,792 / 517,676 (four), and
+1,128,545 / 1,166,940 (twelve). The one-minute load average was 1.2–2.0 when each
+trial started; the host is shared but was otherwise idle.
+
+The input is the hashed twenty-million-VIN corpus
+(`target/bench/independent-sink-corpus.txt`, SHA-256 `0d6224e9…bd9a`) and the
+timed binary is SHA-256 `0a1fd680…ec58`. Twenty million rows are required, not
+decorative: the corpus-size gate wants at least ten seconds of unique input at
+the fastest observed rate, and the previous ten-million corpus yields only
+8.6 seconds at 1,166,940 VIN/s.
+
+Twelve workers beat the September 14 session's 630,092 VIN/s by 82%. That gap is
+shipped native-stream work rather than a measurement artifact: this exact binary
+is the confirmed candidate in the [twelve-worker native
+report](NATIVE_MILLION_2026_09_15.md), which measured 1,037,755 VIN/s on a
+busier host. The corgi and NHTSA rows are their earlier published or measured
+figures, were not re-run here, and are compared against the one-core number.
+
+These figures and their provenance live together in
+[`scripts/bench/results.json`](../scripts/bench/results.json); `make chart`
+renders `assets/benchmark.svg` from that file, caption included. Reproduce:
+
+```sh
+cargo build -p ultravin --release --example throughput
+RAYON_NUM_THREADS=12 ULTRAVIN_NOW_MICROS=1788220800000000 \
+  target/release/examples/throughput \
+  target/bench/independent-sink-corpus.txt 10 batch full auto
+```
+
+Set `RAYON_NUM_THREADS` to 1 or 4 for the other ultravin rows. Regenerate the
+corpus with `UV_FROZEN=1 uv run python -m scripts.bench.large_corpus --count
+20000000 --out target/bench/independent-sink-corpus.txt --manifest
+target/bench/independent-sink-corpus.manifest.json`.
+
+## Earlier throughput (random corpus, September 9, 2026)
 
 Measured September 9, 2026: the Rust engine decodes **84,822 VIN/s on one core** and **195,203 VIN/s in
 four-core batches** over the random 5,000-VIN corpus. Both are medians of three
@@ -246,7 +303,7 @@ uv run -- python -m scripts.bench.mssql_setup --bak /bak/VPICList_lite_2026_06.b
 uv run -- python -m scripts.bench.throughput mssql --seconds 60
 
 # 5. Regenerate assets/benchmark.svg from scripts/bench/results.json
-uv run -- python -m scripts.bench.make_chart
+make chart
 ```
 
 The MSSQL steps pin `2026_06` while the Postgres oracle runs the current dump.

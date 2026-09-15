@@ -1,7 +1,7 @@
 # Native benchmark with five million unique VINs
 
-The README benchmark uses five million distinct, well-formed synthetic VINs
-from the embedded database's WMI/schema/pattern generator. It varies descriptor,
+This September 14 session uses five million distinct, well-formed synthetic
+VINs from the embedded database's WMI/schema/pattern generator. It varies descriptor,
 plant, serial, and model-year characters. It does not expand a small corpus by
 repeating rows or changing only serial numbers.
 
@@ -66,6 +66,8 @@ include every sample, automatic predictions, selected batch sizes, and build
 provenance. Corpus SHA-256:
 `94d156f7897934e048a2f1c4892408b03d9cb830d70eb3fa73c3dde3db4c1530`.
 
-The README chart uses these medians. Its other-engine figures remain their
+The README chart has since moved to the [September 15 twenty-million-VIN
+benchmark](BENCHMARKS.md#headline-throughput-september-15-2026); these medians
+are retained as the September 14 record. Their other-engine figures remain their
 previously dated measurements or published figures; they were not remeasured
-against this new corpus. Historical comparisons are in [BENCHMARKS.md](BENCHMARKS.md).
+against this corpus. Historical comparisons are in [BENCHMARKS.md](BENCHMARKS.md).

@@ -1,9 +1,35 @@
 {
-  "ultravin-batch": 400843,
-  "ultravin": 105372,
-  "corgi-v3": 83,
-  "corgi-v2": 33,
-  "mssql": 22.5,
-  "postgres": 19.5,
-  "nhtsa-api": 10
+  "provenance": {
+    "commit": "66b56226e174f40eefaa9a73cee684e9707f6614",
+    "version": "v2.2.1-7-g66b5622",
+    "date": "September 15, 2026",
+    "machine": "Apple M2 Max (8 performance + 4 efficiency cores)",
+    "corpus": "twenty million unique synthetic VINs",
+    "corpus_path": "target/bench/independent-sink-corpus.txt",
+    "corpus_sha256": "0d6224e99d0a7f241e3dcd052ce973c8baea774feb0831db0071423de726bd9a",
+    "binary_sha256": "0a1fd680a5126edd03fcb88c34f45cf9fa4ec84372c9d6c14bf244f8eeec2c58",
+    "command": "RAYON_NUM_THREADS=$N ULTRAVIN_NOW_MICROS=1788220800000000 target/release/examples/throughput target/bench/independent-sink-corpus.txt 10 batch full auto",
+    "method": "Median of two fresh-process trials per worker count, run 1/4/12 then 12/4/1. Each process warms one full unique pass, then times one full unique pass including calibration, live tuning, full native results, order restoration and synchronous cleanup. One-minute load average 1.2-2.0 at the start of each trial.",
+    "ultravin_rows": {
+      "ultravin": 1,
+      "ultravin-batch": 4,
+      "ultravin-auto-12": 12
+    },
+    "ultravin_trials": {
+      "ultravin": [163359, 165273],
+      "ultravin-batch": [524792, 517676],
+      "ultravin-auto-12": [1128545, 1166940]
+    },
+    "other_engines": "corgi and NHTSA rows are their earlier published or measured figures; they were not re-run for this session."
+  },
+  "engines": {
+    "ultravin-auto-12": 1147742,
+    "ultravin-batch": 521234,
+    "ultravin": 164316,
+    "corgi-v3": 83,
+    "corgi-v2": 33,
+    "mssql": 22.5,
+    "postgres": 19.5,
+    "nhtsa-api": 10
+  }
 }

@@ -1,48 +1,57 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 268" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
-<desc>Ultravin: September 14, 2026, Apple M2 Max, ten million unique synthetic VINs; both Ultravin rows use automatic batching, with one or four workers. Other engines retain historical comparison figures.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 298" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
+<desc>Ultravin: September 15, 2026, Apple M2 Max (8 performance + 4 efficiency cores), twenty million unique synthetic VINs; every Ultravin row uses automatic batching at the worker count shown. Other engines retain historical comparison figures.</desc>
 <style>.background{fill:#ffffff}.label{fill:#57606a;font-size:13px}.value{fill:#57606a;font-size:13px}.strong{fill:#1f2328;font-weight:700}.axis{fill:#8c8c98;font-size:11px}.grid{stroke:#d8dee4;stroke-width:1}.bar{fill:#c3aef5}.bar-hi{fill:#7c4dff}@media(prefers-color-scheme:dark){.background{fill:#0d1117}.label,.value{fill:#9198a1}.strong{fill:#f0f6fc}.axis{fill:#7d8590}.grid{stroke:#30363d}.bar{fill:#6b5bb0}.bar-hi{fill:#a786ff}}</style>
-<rect class="background" width="760" height="268" rx="8"/>
-<line class="grid" x1="220.0" y1="14" x2="220.0" y2="226"/>
-<line class="grid" x1="272.2" y1="14" x2="272.2" y2="226"/>
-<line class="grid" x1="324.4" y1="14" x2="324.4" y2="226"/>
-<line class="grid" x1="376.7" y1="14" x2="376.7" y2="226"/>
-<line class="grid" x1="428.9" y1="14" x2="428.9" y2="226"/>
-<line class="grid" x1="481.1" y1="14" x2="481.1" y2="226"/>
-<line class="grid" x1="533.3" y1="14" x2="533.3" y2="226"/>
-<line class="grid" x1="585.6" y1="14" x2="585.6" y2="226"/>
-<line class="grid" x1="637.8" y1="14" x2="637.8" y2="226"/>
-<line class="grid" x1="690.0" y1="14" x2="690.0" y2="226"/>
-<text class="label strong" x="210" y="35.0" text-anchor="end">ultravin — auto (4 cores)</text>
-<rect class="bar-hi" x="220" y="22.0" width="418.7" height="18" rx="2"/>
-<text class="value strong" x="644.7" y="35.0">400,843</text>
-<text class="label strong" x="210" y="65.0" text-anchor="end">ultravin — auto (1 core)</text>
-<rect class="bar-hi" x="220" y="52.0" width="110.1" height="18" rx="2"/>
-<text class="value strong" x="336.1" y="65.0">105,372</text>
-<text class="label" x="210" y="95.0" text-anchor="end">corgi v3</text>
-<rect class="bar" x="220" y="82.0" width="2.0" height="18" rx="2"/>
-<text class="value" x="226.1" y="95.0">83</text>
-<text class="label" x="210" y="125.0" text-anchor="end">corgi v2</text>
+<rect class="background" width="760" height="298" rx="8"/>
+<line class="grid" x1="220.0" y1="14" x2="220.0" y2="256"/>
+<line class="grid" x1="259.2" y1="14" x2="259.2" y2="256"/>
+<line class="grid" x1="298.3" y1="14" x2="298.3" y2="256"/>
+<line class="grid" x1="337.5" y1="14" x2="337.5" y2="256"/>
+<line class="grid" x1="376.7" y1="14" x2="376.7" y2="256"/>
+<line class="grid" x1="415.8" y1="14" x2="415.8" y2="256"/>
+<line class="grid" x1="455.0" y1="14" x2="455.0" y2="256"/>
+<line class="grid" x1="494.2" y1="14" x2="494.2" y2="256"/>
+<line class="grid" x1="533.3" y1="14" x2="533.3" y2="256"/>
+<line class="grid" x1="572.5" y1="14" x2="572.5" y2="256"/>
+<line class="grid" x1="611.7" y1="14" x2="611.7" y2="256"/>
+<line class="grid" x1="650.8" y1="14" x2="650.8" y2="256"/>
+<line class="grid" x1="690.0" y1="14" x2="690.0" y2="256"/>
+<text class="label strong" x="210" y="35.0" text-anchor="end">ultravin — auto (12 cores)</text>
+<rect class="bar-hi" x="220" y="22.0" width="449.5" height="18" rx="2"/>
+<text class="value strong" x="675.5" y="35.0">1,147,742</text>
+<text class="label strong" x="210" y="65.0" text-anchor="end">ultravin — auto (4 cores)</text>
+<rect class="bar-hi" x="220" y="52.0" width="204.1" height="18" rx="2"/>
+<text class="value strong" x="430.1" y="65.0">521,234</text>
+<text class="label strong" x="210" y="95.0" text-anchor="end">ultravin — auto (1 core)</text>
+<rect class="bar-hi" x="220" y="82.0" width="64.4" height="18" rx="2"/>
+<text class="value strong" x="290.4" y="95.0">164,316</text>
+<text class="label" x="210" y="125.0" text-anchor="end">corgi v3</text>
 <rect class="bar" x="220" y="112.0" width="2.0" height="18" rx="2"/>
-<text class="value" x="226.0" y="125.0">33</text>
-<text class="label" x="210" y="155.0" text-anchor="end">NHTSA MSSQL</text>
+<text class="value" x="226.0" y="125.0">83</text>
+<text class="label" x="210" y="155.0" text-anchor="end">corgi v2</text>
 <rect class="bar" x="220" y="142.0" width="2.0" height="18" rx="2"/>
-<text class="value" x="226.0" y="155.0">22.5</text>
-<text class="label" x="210" y="185.0" text-anchor="end">NHTSA Postgres</text>
+<text class="value" x="226.0" y="155.0">33</text>
+<text class="label" x="210" y="185.0" text-anchor="end">NHTSA MSSQL</text>
 <rect class="bar" x="220" y="172.0" width="2.0" height="18" rx="2"/>
-<text class="value" x="226.0" y="185.0">19.5</text>
-<text class="label" x="210" y="215.0" text-anchor="end">NHTSA vPIC API (rate limit)</text>
+<text class="value" x="226.0" y="185.0">22.5</text>
+<text class="label" x="210" y="215.0" text-anchor="end">NHTSA Postgres</text>
 <rect class="bar" x="220" y="202.0" width="2.0" height="18" rx="2"/>
-<text class="value" x="226.0" y="215.0">10</text>
-<line class="grid" x1="220" y1="226" x2="690" y2="226"/>
-<text class="axis" x="220.0" y="242" text-anchor="middle">0</text>
-<text class="axis" x="272.2" y="242" text-anchor="middle">50k</text>
-<text class="axis" x="324.4" y="242" text-anchor="middle">100k</text>
-<text class="axis" x="376.7" y="242" text-anchor="middle">150k</text>
-<text class="axis" x="428.9" y="242" text-anchor="middle">200k</text>
-<text class="axis" x="481.1" y="242" text-anchor="middle">250k</text>
-<text class="axis" x="533.3" y="242" text-anchor="middle">300k</text>
-<text class="axis" x="585.6" y="242" text-anchor="middle">350k</text>
-<text class="axis" x="637.8" y="242" text-anchor="middle">400k</text>
-<text class="axis" x="690.0" y="242" text-anchor="middle">450k</text>
-<text class="axis" x="455.0" y="258" text-anchor="middle">VINs decoded per second — higher is better</text>
+<text class="value" x="226.0" y="215.0">19.5</text>
+<text class="label" x="210" y="245.0" text-anchor="end">NHTSA vPIC API (rate limit)</text>
+<rect class="bar" x="220" y="232.0" width="2.0" height="18" rx="2"/>
+<text class="value" x="226.0" y="245.0">10</text>
+<line class="grid" x1="220" y1="256" x2="690" y2="256"/>
+<text class="axis" x="220.0" y="272" text-anchor="middle">0</text>
+<text class="axis" x="259.2" y="272" text-anchor="middle">100k</text>
+<text class="axis" x="298.3" y="272" text-anchor="middle">200k</text>
+<text class="axis" x="337.5" y="272" text-anchor="middle">300k</text>
+<text class="axis" x="376.7" y="272" text-anchor="middle">400k</text>
+<text class="axis" x="415.8" y="272" text-anchor="middle">500k</text>
+<text class="axis" x="455.0" y="272" text-anchor="middle">600k</text>
+<text class="axis" x="494.2" y="272" text-anchor="middle">700k</text>
+<text class="axis" x="533.3" y="272" text-anchor="middle">800k</text>
+<text class="axis" x="572.5" y="272" text-anchor="middle">900k</text>
+<text class="axis" x="611.7" y="272" text-anchor="middle">1M</text>
+<text class="axis" x="650.8" y="272" text-anchor="middle">1.1M</text>
+<text class="axis" x="690.0" y="272" text-anchor="middle">1.2M</text>
+<text class="axis" x="455.0" y="288" text-anchor="middle">VINs decoded per second — higher is better</text>
 </svg>

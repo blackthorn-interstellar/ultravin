@@ -60,6 +60,9 @@ check: afu lint typecheck rust test ## Run all checks (format, lint, typecheck, 
 
 checku: check
 
+chart:  ## Regenerate assets/benchmark.svg from scripts/bench/results.json.
+	@uv run -- python -m scripts.bench.make_chart
+
 refresh-detect:  ## Probe NHTSA for a vPIC dump newer than the pinned month.
 	@python3 scripts/refresh.py detect
 

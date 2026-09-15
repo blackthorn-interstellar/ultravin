@@ -2,11 +2,14 @@
 
 Horizontal bars on a linear x-axis: the engines span ~3 orders of magnitude, so
 every SQL procedure collapses to a sliver next to ultravin — which is the honest
-visual of how far ahead the in-process engine is. Reads results from
-scripts/bench/results.json: {engine: vins_per_second}. ultravin rows are
-highlighted.
+visual of how far ahead the in-process engine is. ultravin rows are highlighted.
 
-Usage: python -m scripts.bench.make_chart
+Reads scripts/bench/results.json, which carries both the figures
+(`engines`: {engine: vins_per_second}) and the run's `provenance` — commit,
+date, machine, corpus. The chart renders that provenance instead of restating
+it, so the numbers and their caption cannot drift apart.
+
+Usage: make chart  (or: python -m scripts.bench.make_chart)
 """
 
 from __future__ import annotations
@@ -20,6 +23,7 @@ OUT = Path(__file__).resolve().parents[2] / "assets" / "benchmark.svg"
 
 # (label, results-key, highlighted?) top -> bottom, fastest first.
 ROWS = [
+    ("ultravin — auto (12 cores)", "ultravin-auto-12", True),
     ("ultravin — auto (4 cores)", "ultravin-batch", True),
     ("ultravin — auto (1 core)", "ultravin", True),
     ("corgi v3", "corgi-v3", False),
@@ -43,6 +47,20 @@ def human(n: float) -> str:
     return f"{n:.1f}".rstrip("0").rstrip(".")
 
 
+def tick_label(value: int) -> str:
+    if value == 0:
+        return "0"
+    if value >= 1_000_000:
+        return f"{value / 1_000_000:g}M"
+    return f"{value // 1000}k"
+
+
+def axis(peak: float) -> tuple[int, int]:
+    """Smallest round gridline step that keeps the axis under 13 labels."""
+    step = next(s for s in (50_000, 100_000, 250_000, 500_000, 1_000_000) if peak / s <= 12)
+    return step, max(step, math.ceil(peak / step) * step)
+
+
 def x(value: float, axis_max: int) -> float:
     frac = min(1.0, value / axis_max)
     return X0 + frac * (X1 - X0)
@@ -50,9 +68,10 @@ def x(value: float, axis_max: int) -> float:
 
 def main() -> int:
     data = json.loads(RESULTS.read_text())
-    rows = [(lbl, data[key], hi) for lbl, key, hi in ROWS if key in data]
-    axis_max = max(50_000, math.ceil(max(value for _, value, _ in rows) / 50_000) * 50_000)
-    ticks = [(value, "0" if value == 0 else f"{value // 1000}k") for value in range(0, axis_max + 1, 50_000)]
+    prov, engines = data["provenance"], data["engines"]
+    rows = [(lbl, engines[key], hi) for lbl, key, hi in ROWS if key in engines]
+    step, axis_max = axis(max(value for _, value, _ in rows))
+    ticks = [(value, tick_label(value)) for value in range(0, axis_max + 1, step)]
     height = TOP + len(rows) * ROW_H + 42
 
     s: list[str] = []
@@ -62,8 +81,9 @@ def main() -> int:
         'Helvetica, Arial, sans-serif">'
     )
     s.append(
-        "<desc>Ultravin: September 14, 2026, Apple M2 Max, ten million unique synthetic VINs; "
-        "both Ultravin rows use automatic batching, with one or four workers. Other engines retain historical comparison figures.</desc>"
+        f"<desc>Ultravin: {prov['date']}, {prov['machine']}, {prov['corpus']}; "
+        "every Ultravin row uses automatic batching at the worker count shown. "
+        "Other engines retain historical comparison figures.</desc>"
     )
     s.append(
         "<style>"
