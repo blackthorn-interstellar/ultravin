@@ -1,0 +1,45 @@
+{
+  "base_commit": "911ea46c1101dcabd7846a64b4216f3e8e9d1477",
+  "retained_trial_commit": "c42e993841b24106a92a39a40edf183bab2be73d",
+  "checku": {
+    "command": "UV_FROZEN=1 make checku",
+    "exit_code": 0,
+    "python_passed": 951,
+    "rust_library_passed": 243,
+    "rust_library_ignored": 1,
+    "rust_integration_passed": 14,
+    "log_path": "/tmp/ultravin-three-trials-checku.log",
+    "log_sha256": "2e21d8fd77dca9c0b794dcc9fa5e703fa29c2851a78c26c609776837a400ff97"
+  },
+  "individual_rust_library_tests": {
+    "conversion_indices": {
+      "passed": 242,
+      "ignored": 1
+    },
+    "deferred_output": {
+      "passed": 243,
+      "ignored": 1
+    },
+    "pass_context": {
+      "passed": 243,
+      "ignored": 1
+    },
+    "deferred_custom_database_followup": {
+      "passed": 1
+    }
+  },
+  "fingerprints": {
+    "cases": 162403,
+    "equal": true,
+    "now_micros": 1788739200000000,
+    "current_year": 2026,
+    "generation_command": "UV_FROZEN=1 uv run -- python -m scripts.bench.fingerprint_cases target/answerkey/answerkey-2026_08.jsonl target/bench/native-trial-fingerprint-cases.jsonl --stride 100",
+    "files": {
+      "target/bench/native-trial-fingerprint-cases.jsonl": "e83a8dc137a2a7e731b285dd3de418681dba078872da73500feb6e98b4d6850c",
+      "target/bench/native-trial-baseline-fingerprints.txt": "a82a52056247e8b0b7af52c9fbbe989738fd12d7d043a19ab5092d8b989a391d",
+      "target/bench/native-trial-final-fingerprints.txt": "a82a52056247e8b0b7af52c9fbbe989738fd12d7d043a19ab5092d8b989a391d"
+    },
+    "baseline_binary_sha256": "6d07087ef3ab397d11ca0a8d96340cd1b4b49f769862d1a4836c51e6cab95345",
+    "final_binary_sha256": "1aec734532f59a76e528d30375e4a6c59cd032c9032d99474adceb31c0e9abd0"
+  }
+}

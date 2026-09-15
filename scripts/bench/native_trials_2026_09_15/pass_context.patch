@@ -1,0 +1,548 @@
+diff --git a/crates/ultravin/src/db.rs b/crates/ultravin/src/db.rs
+index b1f8e10..ce7a5b8 100644
+--- a/crates/ultravin/src/db.rs
++++ b/crates/ultravin/src/db.rs
+@@ -336,6 +336,19 @@ impl Db {
+         self.wmi_rows(wmi).first()
+     }
+ 
++    /// Resolve unrestricted and time-gated views with one index lookup.
++    pub(crate) fn wmi_context(
++        &self,
++        wmi: &str,
++        now_micros: i64,
++    ) -> (Option<&ArchivedWmi>, Option<&ArchivedWmi>) {
++        let rows = self.wmi_rows(wmi);
++        (
++            rows.first(),
++            rows.iter().find(|row| row.is_public(now_micros)),
++        )
++    }
++
+     /// All rows for one WMI, in archive order. Availability remains a per-call
+     /// decision: a cached range must not freeze a future publication date.
+     fn wmi_rows(&self, wmi: &str) -> &[ArchivedWmi] {
+@@ -389,8 +402,17 @@ impl Db {
+     /// compete. Any year-eligible link is enough, including orphan/QC schemas:
+     /// formula matching intentionally permits those. With no links, only a
+     /// conversion to Model could enable the vehicle-spec source later in core.
++    #[cfg(test)]
+     pub(crate) fn may_have_pattern_rows(&self, wmi: &str, year: Option<i32>, now: i64) -> bool {
+-        let Some(wmi) = self.wmi_by_str(wmi, now) else {
++        self.may_have_pattern_rows_for(self.wmi_by_str(wmi, now), year)
++    }
++
++    pub(crate) fn may_have_pattern_rows_for(
++        &self,
++        wmi: Option<&ArchivedWmi>,
++        year: Option<i32>,
++    ) -> bool {
++        let Some(wmi) = wmi else {
+             return false;
+         };
+         self.wmi_vinschema_for(wmi.id.to_native()).iter().any(|r| {
+diff --git a/crates/ultravin/src/decode.rs b/crates/ultravin/src/decode.rs
+index 70d4823..0416851 100644
+--- a/crates/ultravin/src/decode.rs
++++ b/crates/ultravin/src/decode.rs
+@@ -9,7 +9,7 @@ use std::cmp::Ordering;
+ use crate::db::Db;
+ use crate::hash::{ElementIndex, ElementSet, IntMap, IntSet};
+ use crate::matcher::like_match;
+-use crate::tables::{element_lookup_tag, is_exempt, NULL_I32, NULL_I64};
++use crate::tables::{element_lookup_tag, is_exempt, ArchivedWmi, NULL_I32, NULL_I64};
+ 
+ /// A single decoding item (the `tblDecodingItem` ROW), pre-resolution.
+ ///
+@@ -349,15 +349,15 @@ fn build_var_keys_reference(vin: &str) -> String {
+ pub(crate) fn decode_core_into<'a>(
+     db: &'a Db,
+     var_wmi: &str,
++    wmi: Option<&'a ArchivedWmi>,
+     var_keys: &str,
+     model_year: Option<i32>,
+     model_year_source: &str,
+-    now_micros: i64,
+     scan: &mut PatternScan,
+     mut items: Vec<DecodingItem<'a>>,
+ ) -> CoreResult<'a> {
+     items.clear();
+-    let Some(wmi) = db.wmi_by_str(var_wmi, now_micros) else {
++    let Some(wmi) = wmi else {
+         return CoreResult {
+             items,
+             wmi_found: false,
+@@ -1290,10 +1290,10 @@ mod tests {
+         let result = decode_core_into(
+             Db::embedded(),
+             "___",
++            None,
+             "",
+             None,
+             DEFAULT_MODEL_YEAR_SOURCE,
+-            1_788_220_800_000_000,
+             &mut scan,
+             items,
+         );
+diff --git a/crates/ultravin/src/errors.rs b/crates/ultravin/src/errors.rs
+index 83dc610..c2aaaea 100644
+--- a/crates/ultravin/src/errors.rs
++++ b/crates/ultravin/src/errors.rs
+@@ -14,7 +14,9 @@ use crate::checkdigit::{check_digit_v1, check_digit_with_flag, is_default_char,
+ use crate::db::Db;
+ use crate::decode::CoreResult;
+ use crate::hash::FxBuildHasher;
+-use crate::tables::{ArchivedWmi, NULL_I32};
++#[cfg(test)]
++use crate::tables::ArchivedWmi;
++use crate::tables::NULL_I32;
+ 
+ /// The "possible values" payload for element 144, in the reference's order.
+ ///
+@@ -106,6 +108,7 @@ const ADDL_ERR_4: &str = "In the Possible values section, the Numeric value befo
+ const ADDL_ERR_5: &str = "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position";
+ 
+ /// Computed error state for one decode pass.
++#[derive(Debug, PartialEq, Eq)]
+ pub struct ErrorState {
+     /// Sorted error codes (the element-143 CSV / `error_codes` list).
+     pub codes: Vec<i32>,
+@@ -120,17 +123,14 @@ pub struct ErrorState {
+     pub check_digit_valid: bool,
+ }
+ 
+-/// Body-style/start-position context used by both the scan and the check digit.
+-fn start_context(vin: &str, wmi: Option<&ArchivedWmi>) -> (usize, bool) {
+-    let pos3 = vin.as_bytes().get(2).copied();
+-    if pos3 == Some(b'9') {
++/// Body-style/start-position context used by both the scan and check digit.
++/// Low-volume VINs use their six-character WMI form regardless of the WMI row's
++/// vehicle type, so they deliberately suppress the car/light-truck flag.
++fn start_context(vin: &str, is_car_mpv_lt: bool) -> (usize, bool) {
++    if vin.as_bytes().get(2) == Some(&b'9') {
+         (15, false)
+-    } else if let Some(w) = wmi {
+-        if w.is_car_mpv_lt() {
+-            (13, true)
+-        } else {
+-            (14, false)
+-        }
++    } else if is_car_mpv_lt {
++        (13, true)
+     } else {
+         (14, false)
+     }
+@@ -897,7 +897,8 @@ impl ErrorCodes {
+ /// Compute the full error state for a decode pass (the `spvindecode_core` error
+ /// assembly C1-C11). `var_wmi`/`model_year`/`error12`/`conclusive` are the
+ /// pass's inputs.
+-pub fn compute_errors(
++#[cfg(test)]
++pub(crate) fn compute_errors(
+     db: &Db,
+     vin: &str,
+     var_wmi: &str,
+@@ -905,6 +906,32 @@ pub fn compute_errors(
+     model_year: Option<i32>,
+     error12: bool,
+     conclusive: bool,
++) -> ErrorState {
++    let any_wmi = db.wmi_any(var_wmi);
++    compute_errors_with_context(
++        db,
++        vin,
++        var_wmi,
++        core,
++        model_year,
++        error12,
++        conclusive,
++        any_wmi.map(ArchivedWmi::is_car_mpv_lt).unwrap_or(false),
++        db.vinexception_checkdigit(vin),
++    )
++}
++
++#[allow(clippy::too_many_arguments)]
++pub(crate) fn compute_errors_with_context(
++    db: &Db,
++    vin: &str,
++    var_wmi: &str,
++    core: &CoreResult,
++    model_year: Option<i32>,
++    error12: bool,
++    conclusive: bool,
++    is_car_mpv_lt: bool,
++    is_vin_exception: bool,
+ ) -> ErrorState {
+     let items = &core.items;
+     let mut raw = ErrorCodes::default();
+@@ -956,8 +983,7 @@ pub fn compute_errors(
+         .iter()
+         .find(|it| it.element_id == 39)
+         .map(|it| it.attribute_id.as_ref());
+-    let is_vin_exception = db.vinexception_checkdigit(vin);
+-    let (start_pos, is_car_mpv_lt) = start_context(vin, db.wmi_any(var_wmi));
++    let (start_pos, is_car_mpv_lt) = start_context(vin, is_car_mpv_lt);
+ 
+     // C5: invalid-char scan; stamps `!` into the corrected VIN AFTER the helper.
+     let vb = vin.as_bytes();
+@@ -1112,6 +1138,13 @@ pub fn compute_errors(
+ mod malformed_class_tests {
+     use super::*;
+ 
++    #[test]
++    fn low_volume_wmi_suppresses_car_flag_for_check_digit_context() {
++        assert_eq!(start_context("1F9TC25FTAB123456", true), (15, false));
++        assert_eq!(start_context("1HGCM82633A004352", true), (13, true));
++        assert_eq!(start_context("ZZZCM82633A004352", false), (14, false));
++    }
++
+     #[test]
+     fn compact_codes_keep_numeric_order_and_remove_duplicates() {
+         let mut actual = ErrorCodes::default();
+diff --git a/crates/ultravin/src/lib.rs b/crates/ultravin/src/lib.rs
+index 90d0629..2bc11e1 100644
+--- a/crates/ultravin/src/lib.rs
++++ b/crates/ultravin/src/lib.rs
+@@ -1198,6 +1198,30 @@ struct RawResult<'a> {
+     items: Vec<decode::DecodingItem<'a>>,
+ }
+ 
++/// Year-independent database and validation facts for one sanitized VIN.
++struct VinPassContext<'a> {
++    /// First row regardless of publication, matching `wmi_any` semantics.
++    any_wmi: Option<&'a tables::ArchivedWmi>,
++    /// First row public at this decode's fixed clock.
++    public_wmi: Option<&'a tables::ArchivedWmi>,
++    is_car_mpv_lt: bool,
++    is_vin_exception: bool,
++}
++
++impl<'a> VinPassContext<'a> {
++    fn new(db: &'a Db, vin: &str, var_wmi: &str, now_micros: i64) -> Self {
++        let (any_wmi, public_wmi) = db.wmi_context(var_wmi, now_micros);
++        Self {
++            any_wmi,
++            public_wmi,
++            is_car_mpv_lt: any_wmi
++                .map(tables::ArchivedWmi::is_car_mpv_lt)
++                .unwrap_or(false),
++            is_vin_exception: db.vinexception_checkdigit(vin),
++        }
++    }
++}
++
+ impl<'a> RawResult<'a> {
+     fn full(mut self) -> DecodeResult<'a> {
+         resolve::resolve_xxx(self.db, &mut self.items);
+@@ -1349,9 +1373,10 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
+     let var_wmi = sanitized_wmi_into(&vin, wmi);
+     let descriptor = sanitized_descriptor_into(&vin, descriptor);
+     let var_keys = decode::build_var_keys_stack(&vin);
++    let context = VinPassContext::new(db, &vin, &var_wmi, now_micros);
+ 
+     let v_limit = current_year + 2;
+-    let plan = year::resolve_years(&vin, &var_wmi, db, current_year);
++    let plan = year::resolve_years_with_wmi(&vin, db, context.any_wmi, current_year);
+ 
+     // Pass 1 (descriptor/dmy) is permanently dead in the proc — skipped here.
+     let mut passes = workspace.take_passes();
+@@ -1373,7 +1398,6 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
+                     &vin,
+                     &var_wmi,
+                     var_keys.as_str(),
+-                    now_micros,
+                     &descriptor,
+                     2,
+                     Some(yc),
+@@ -1382,6 +1406,7 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
+                     true,
+                     &mut scan,
+                     i32::MIN,
++                    &context,
+                     workspace,
+                 )
+                 .expect("the first pass is never pruned");
+@@ -1404,7 +1429,6 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
+             &vin,
+             &var_wmi,
+             var_keys.as_str(),
+-            now_micros,
+             &descriptor,
+             3,
+             plan.rmy,
+@@ -1413,6 +1437,7 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
+             e12,
+             &mut scan,
+             floor,
++            &context,
+             workspace,
+         ));
+         // Pass 4: omy (only when inconclusive).
+@@ -1428,7 +1453,6 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
+                 &vin,
+                 &var_wmi,
+                 var_keys.as_str(),
+-                now_micros,
+                 &descriptor,
+                 4,
+                 Some(omy),
+@@ -1437,6 +1461,7 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
+                 e12,
+                 &mut scan,
+                 floor,
++                &context,
+                 workspace,
+             ));
+         }
+@@ -1487,7 +1512,6 @@ fn run_pass<'a>(
+     vin: &str,
+     var_wmi: &str,
+     var_keys: &str,
+-    now_micros: i64,
+     descriptor: &str,
+     id: i32,
+     model_year: Option<i32>,
+@@ -1496,21 +1520,22 @@ fn run_pass<'a>(
+     error12: bool,
+     scan: &mut decode::PatternScan,
+     error_floor: i32,
++    context: &VinPassContext<'a>,
+     workspace: &mut DecodeWorkspace<'a>,
+ ) -> Option<Pass<'a>> {
+     // No WMI means error 7; no PatternId-bearing item means error 8. All
+     // additional code weights are non-positive, so this bounds either score.
+     let ceiling = tables::errorcode_weight(7).max(tables::errorcode_weight(8));
+-    if error_floor > ceiling && !db.may_have_pattern_rows(var_wmi, model_year, now_micros) {
++    if error_floor > ceiling && !db.may_have_pattern_rows_for(context.public_wmi, model_year) {
+         return None;
+     }
+     let core = decode::decode_core_into(
+         db,
+         var_wmi,
++        context.public_wmi,
+         var_keys,
+         model_year,
+         model_year_source,
+-        now_micros,
+         scan,
+         workspace.take_items(),
+     );
+@@ -1523,7 +1548,17 @@ fn run_pass<'a>(
+         workspace.put_items(core.items);
+         return None;
+     }
+-    let err = errors::compute_errors(db, vin, var_wmi, &core, model_year, error12, conclusive);
++    let err = errors::compute_errors_with_context(
++        db,
++        vin,
++        var_wmi,
++        &core,
++        model_year,
++        error12,
++        conclusive,
++        context.is_car_mpv_lt,
++        context.is_vin_exception,
++    );
+ 
+     let mut items = core.items;
+     let (codes_csv, error_text) = correction_text(db, &err);
+@@ -2292,6 +2327,90 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn per_vin_context_preserves_lookup_and_year_semantics() {
++        let Some(db) = Db::try_embedded() else { return };
++        let cases = [
++            // Normal WMI, low-volume six-character WMI, ambiguous model year,
++            // unknown WMI, and Unicode sanitization/error input.
++            ("1HGCM82633A004352", 2026),
++            ("1F9TC25FTAB123456", 2026),
++            ("ZZZCM82633A004352", 2050),
++            ("1HGCM8263Ł3A00435", 2026),
++        ];
++        for (input, current_year) in cases {
++            let vin = sanitize(input);
++            let var_wmi = sanitized_wmi_into(&vin, String::new());
++            for now in [i64::MIN, 1_788_739_200_000_000, i64::MAX] {
++                let context = VinPassContext::new(db, &vin, &var_wmi, now);
++                assert_eq!(
++                    context.any_wmi.map(|w| w as *const _),
++                    db.wmi_any(&var_wmi).map(|w| w as *const _),
++                    "any-WMI row changed for {input:?}"
++                );
++                assert_eq!(
++                    context.public_wmi.map(|w| w as *const _),
++                    db.wmi_by_str(&var_wmi, now).map(|w| w as *const _),
++                    "publication gate changed for {input:?} at {now}"
++                );
++                assert_eq!(
++                    year::resolve_years_with_wmi(&vin, db, context.any_wmi, current_year),
++                    year::resolve_years(&vin, &var_wmi, db, current_year),
++                    "year plan changed for {input:?}"
++                );
++            }
++            let now = 1_788_739_200_000_000;
++            let context = VinPassContext::new(db, &vin, &var_wmi, now);
++            let plan = year::resolve_years(&vin, &var_wmi, db, current_year);
++            let var_keys = decode::build_var_keys_stack(&vin);
++            for model_year in [None, plan.rmy, plan.omy] {
++                let core = decode::decode_core_into(
++                    db,
++                    &var_wmi,
++                    context.public_wmi,
++                    var_keys.as_str(),
++                    model_year,
++                    decode::DEFAULT_MODEL_YEAR_SOURCE,
++                    &mut decode::PatternScan::default(),
++                    Vec::new(),
++                );
++                for error12 in [false, true] {
++                    assert_eq!(
++                        errors::compute_errors_with_context(
++                            db,
++                            &vin,
++                            &var_wmi,
++                            &core,
++                            model_year,
++                            error12,
++                            plan.conclusive,
++                            context.is_car_mpv_lt,
++                            context.is_vin_exception,
++                        ),
++                        errors::compute_errors(
++                            db,
++                            &vin,
++                            &var_wmi,
++                            &core,
++                            model_year,
++                            error12,
++                            plan.conclusive,
++                        ),
++                        "validation state changed for {input:?}, {model_year:?}, error12={error12}"
++                    );
++                }
++            }
++            // Caller years never enter the context and therefore cannot alter
++            // any invariant reused by pass 2/3/4.
++            for caller_year in [None, Some(1979), Some(1995), Some(2028)] {
++                let result =
++                    decode_full(db, input, 1_788_739_200_000_000, current_year, caller_year);
++                assert_eq!(result.vin, vin, "caller year {caller_year:?}");
++                assert_eq!(result.wmi, var_wmi, "caller year {caller_year:?}");
++            }
++        }
++    }
++
+     #[test]
+     fn a_patternless_pass_can_be_pruned_only_below_a_strict_score_floor() {
+         let Some(db) = Db::try_embedded() else { return };
+@@ -2302,13 +2421,13 @@ mod tests {
+             );
+         }
+         let mut workspace = DecodeWorkspace::default();
++        let context = VinPassContext::new(db, "", "", 1_788_739_200_000_000);
+         let mut run = |floor| {
+             run_pass(
+                 db,
+                 "",
+                 "",
+                 "",
+-                1_788_739_200_000_000,
+                 "",
+                 3,
+                 None,
+@@ -2317,6 +2436,7 @@ mod tests {
+                 false,
+                 &mut decode::PatternScan::default(),
+                 floor,
++                &context,
+                 &mut workspace,
+             )
+         };
+diff --git a/crates/ultravin/src/year.rs b/crates/ultravin/src/year.rs
+index 7775c09..e56d260 100644
+--- a/crates/ultravin/src/year.rs
++++ b/crates/ultravin/src/year.rs
+@@ -3,13 +3,16 @@
+ //! W2; W1 decodes against this one year.
+ 
+ use crate::db::Db;
++use crate::tables::ArchivedWmi;
+ 
+ /// Raw `fVinModelYear2`: `None` when position 10 is unmapped, a negative value
+ /// when the year is inconclusive, otherwise the positive model year. `carLT`
+ /// (passenger car / MPV / light truck) triggers the position-7 −30 adjustment.
+-/// `var_wmi` is the precomputed `fVinWMI(vin)` (threaded in to avoid recomputing
+-/// it on the hot path).
+-pub fn vin_model_year_raw(vin: &str, var_wmi: &str, db: &Db, current_year: i32) -> Option<i32> {
++pub(crate) fn vin_model_year_raw_with_wmi(
++    vin: &str,
++    wmi: Option<&ArchivedWmi>,
++    current_year: i32,
++) -> Option<i32> {
+     let b = vin.as_bytes();
+     if b.len() < 10 {
+         return None;
+@@ -30,10 +33,7 @@ pub fn vin_model_year_raw(vin: &str, var_wmi: &str, db: &Db, current_year: i32)
+     // `if var_wmi is not null` guard is always taken. The `Wmi` row lookup only
+     // gates the carLT (position-7) branches; the future-year correction below runs
+     // even when the WMI is absent from the table (e.g. an unknown WMI like `ZKU`).
+-    let car_lt = db
+-        .wmi_any(var_wmi)
+-        .map(|w| w.is_car_mpv_lt())
+-        .unwrap_or(false);
++    let car_lt = wmi.map(ArchivedWmi::is_car_mpv_lt).unwrap_or(false);
+     let pos7 = b.get(6).copied().unwrap_or(b' ');
+     if car_lt && pos7.is_ascii_digit() {
+         my -= 30;
+@@ -51,6 +51,7 @@ pub fn vin_model_year_raw(vin: &str, var_wmi: &str, db: &Db, current_year: i32)
+ }
+ 
+ /// The model-year candidates the wrapper feeds into the decode passes.
++#[derive(Debug, PartialEq, Eq)]
+ pub struct YearPlan {
+     /// Primary candidate (pass 3). `None` when position 10 is unmapped.
+     pub rmy: Option<i32>,
+@@ -63,9 +64,19 @@ pub struct YearPlan {
+ /// Port of the wrapper's year computation: `rmy`/`omy`/`conclusive`, including
+ /// the `altMY` ±30 schema-count swap (only when conclusive). The dead descriptor
+ /// pass is skipped (it never runs in the proc — see vpic/procs/spvindecode.sql).
+-pub fn resolve_years(vin: &str, var_wmi: &str, db: &Db, current_year: i32) -> YearPlan {
++#[cfg(test)]
++pub(crate) fn resolve_years(vin: &str, var_wmi: &str, db: &Db, current_year: i32) -> YearPlan {
++    resolve_years_with_wmi(vin, db, db.wmi_any(var_wmi), current_year)
++}
++
++pub(crate) fn resolve_years_with_wmi(
++    vin: &str,
++    db: &Db,
++    wmi: Option<&ArchivedWmi>,
++    current_year: i32,
++) -> YearPlan {
+     let v_limit = current_year + 2;
+-    match vin_model_year_raw(vin, var_wmi, db, current_year) {
++    match vin_model_year_raw_with_wmi(vin, wmi, current_year) {
+         None => YearPlan {
+             rmy: None,
+             omy: None,
+@@ -84,7 +95,7 @@ pub fn resolve_years(vin: &str, var_wmi: &str, db: &Db, current_year: i32) -> Ye
+                     None
+                 };
+                 if let Some(a) = alt {
+-                    if a != rmy && !has_schema(var_wmi, db, rmy) && has_schema(var_wmi, db, a) {
++                    if a != rmy && !has_schema(wmi, db, rmy) && has_schema(wmi, db, a) {
+                         rmy = a;
+                     }
+                 }
+@@ -99,8 +110,8 @@ pub fn resolve_years(vin: &str, var_wmi: &str, db: &Db, current_year: i32) -> Ye
+ }
+ 
+ /// Whether a WMI schema covers `year` for this VIN's WMI.
+-fn has_schema(var_wmi: &str, db: &Db, year: i32) -> bool {
+-    let Some(w) = db.wmi_any(var_wmi) else {
++fn has_schema(wmi: Option<&ArchivedWmi>, db: &Db, year: i32) -> bool {
++    let Some(w) = wmi else {
+         return false;
+     };
+     db.wmi_vinschema_for(w.id.to_native())

@@ -3,13 +3,16 @@
 //! W2; W1 decodes against this one year.
 
 use crate::db::Db;
+use crate::tables::ArchivedWmi;
 
 /// Raw `fVinModelYear2`: `None` when position 10 is unmapped, a negative value
 /// when the year is inconclusive, otherwise the positive model year. `carLT`
 /// (passenger car / MPV / light truck) triggers the position-7 −30 adjustment.
-/// `var_wmi` is the precomputed `fVinWMI(vin)` (threaded in to avoid recomputing
-/// it on the hot path).
-pub fn vin_model_year_raw(vin: &str, var_wmi: &str, db: &Db, current_year: i32) -> Option<i32> {
+pub(crate) fn vin_model_year_raw_with_wmi(
+    vin: &str,
+    wmi: Option<&ArchivedWmi>,
+    current_year: i32,
+) -> Option<i32> {
     let b = vin.as_bytes();
     if b.len() < 10 {
         return None;
@@ -30,10 +33,7 @@ pub fn vin_model_year_raw(vin: &str, var_wmi: &str, db: &Db, current_year: i32) 
     // `if var_wmi is not null` guard is always taken. The `Wmi` row lookup only
     // gates the carLT (position-7) branches; the future-year correction below runs
     // even when the WMI is absent from the table (e.g. an unknown WMI like `ZKU`).
-    let car_lt = db
-        .wmi_any(var_wmi)
-        .map(|w| w.is_car_mpv_lt())
-        .unwrap_or(false);
+    let car_lt = wmi.map(ArchivedWmi::is_car_mpv_lt).unwrap_or(false);
     let pos7 = b.get(6).copied().unwrap_or(b' ');
     if car_lt && pos7.is_ascii_digit() {
         my -= 30;
@@ -51,6 +51,7 @@ pub fn vin_model_year_raw(vin: &str, var_wmi: &str, db: &Db, current_year: i32) 
 }
 
 /// The model-year candidates the wrapper feeds into the decode passes.
+#[derive(Debug, PartialEq, Eq)]
 pub struct YearPlan {
     /// Primary candidate (pass 3). `None` when position 10 is unmapped.
     pub rmy: Option<i32>,
@@ -63,9 +64,19 @@ pub struct YearPlan {
 /// Port of the wrapper's year computation: `rmy`/`omy`/`conclusive`, including
 /// the `altMY` ±30 schema-count swap (only when conclusive). The dead descriptor
 /// pass is skipped (it never runs in the proc — see vpic/procs/spvindecode.sql).
-pub fn resolve_years(vin: &str, var_wmi: &str, db: &Db, current_year: i32) -> YearPlan {
+#[cfg(test)]
+pub(crate) fn resolve_years(vin: &str, var_wmi: &str, db: &Db, current_year: i32) -> YearPlan {
+    resolve_years_with_wmi(vin, db, db.wmi_any(var_wmi), current_year)
+}
+
+pub(crate) fn resolve_years_with_wmi(
+    vin: &str,
+    db: &Db,
+    wmi: Option<&ArchivedWmi>,
+    current_year: i32,
+) -> YearPlan {
     let v_limit = current_year + 2;
-    match vin_model_year_raw(vin, var_wmi, db, current_year) {
+    match vin_model_year_raw_with_wmi(vin, wmi, current_year) {
         None => YearPlan {
             rmy: None,
             omy: None,
@@ -84,7 +95,7 @@ pub fn resolve_years(vin: &str, var_wmi: &str, db: &Db, current_year: i32) -> Ye
                     None
                 };
                 if let Some(a) = alt {
-                    if a != rmy && !has_schema(var_wmi, db, rmy) && has_schema(var_wmi, db, a) {
+                    if a != rmy && !has_schema(wmi, db, rmy) && has_schema(wmi, db, a) {
                         rmy = a;
                     }
                 }
@@ -99,8 +110,8 @@ pub fn resolve_years(vin: &str, var_wmi: &str, db: &Db, current_year: i32) -> Ye
 }
 
 /// Whether a WMI schema covers `year` for this VIN's WMI.
-fn has_schema(var_wmi: &str, db: &Db, year: i32) -> bool {
-    let Some(w) = db.wmi_any(var_wmi) else {
+fn has_schema(wmi: Option<&ArchivedWmi>, db: &Db, year: i32) -> bool {
+    let Some(w) = wmi else {
         return false;
     };
     db.wmi_vinschema_for(w.id.to_native())

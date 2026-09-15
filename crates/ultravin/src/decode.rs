@@ -9,7 +9,7 @@ use std::cmp::Ordering;
 use crate::db::Db;
 use crate::hash::{ElementIndex, ElementSet, IntMap, IntSet};
 use crate::matcher::like_match;
-use crate::tables::{element_lookup_tag, is_exempt, NULL_I32, NULL_I64};
+use crate::tables::{element_lookup_tag, is_exempt, ArchivedWmi, NULL_I32, NULL_I64};
 
 /// A single decoding item (the `tblDecodingItem` ROW), pre-resolution.
 ///
@@ -349,15 +349,15 @@ fn build_var_keys_reference(vin: &str) -> String {
 pub(crate) fn decode_core_into<'a>(
     db: &'a Db,
     var_wmi: &str,
+    wmi: Option<&'a ArchivedWmi>,
     var_keys: &str,
     model_year: Option<i32>,
     model_year_source: &str,
-    now_micros: i64,
     scan: &mut PatternScan,
     mut items: Vec<DecodingItem<'a>>,
 ) -> CoreResult<'a> {
     items.clear();
-    let Some(wmi) = db.wmi_by_str(var_wmi, now_micros) else {
+    let Some(wmi) = wmi else {
         return CoreResult {
             items,
             wmi_found: false,
@@ -1290,10 +1290,10 @@ mod tests {
         let result = decode_core_into(
             Db::embedded(),
             "___",
+            None,
             "",
             None,
             DEFAULT_MODEL_YEAR_SOURCE,
-            1_788_220_800_000_000,
             &mut scan,
             items,
         );

@@ -1198,6 +1198,30 @@ struct RawResult<'a> {
     items: Vec<decode::DecodingItem<'a>>,
 }
 
+/// Year-independent database and validation facts for one sanitized VIN.
+struct VinPassContext<'a> {
+    /// First row regardless of publication, matching `wmi_any` semantics.
+    any_wmi: Option<&'a tables::ArchivedWmi>,
+    /// First row public at this decode's fixed clock.
+    public_wmi: Option<&'a tables::ArchivedWmi>,
+    is_car_mpv_lt: bool,
+    is_vin_exception: bool,
+}
+
+impl<'a> VinPassContext<'a> {
+    fn new(db: &'a Db, vin: &str, var_wmi: &str, now_micros: i64) -> Self {
+        let (any_wmi, public_wmi) = db.wmi_context(var_wmi, now_micros);
+        Self {
+            any_wmi,
+            public_wmi,
+            is_car_mpv_lt: any_wmi
+                .map(tables::ArchivedWmi::is_car_mpv_lt)
+                .unwrap_or(false),
+            is_vin_exception: db.vinexception_checkdigit(vin),
+        }
+    }
+}
+
 impl<'a> RawResult<'a> {
     fn full(mut self) -> DecodeResult<'a> {
         resolve::resolve_xxx(self.db, &mut self.items);
@@ -1349,9 +1373,10 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
     let var_wmi = sanitized_wmi_into(&vin, wmi);
     let descriptor = sanitized_descriptor_into(&vin, descriptor);
     let var_keys = decode::build_var_keys_stack(&vin);
+    let context = VinPassContext::new(db, &vin, &var_wmi, now_micros);
 
     let v_limit = current_year + 2;
-    let plan = year::resolve_years(&vin, &var_wmi, db, current_year);
+    let plan = year::resolve_years_with_wmi(&vin, db, context.any_wmi, current_year);
 
     // Pass 1 (descriptor/dmy) is permanently dead in the proc — skipped here.
     let mut passes = workspace.take_passes();
@@ -1373,7 +1398,6 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
                     &vin,
                     &var_wmi,
                     var_keys.as_str(),
-                    now_micros,
                     &descriptor,
                     2,
                     Some(yc),
@@ -1382,6 +1406,7 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
                     true,
                     &mut scan,
                     i32::MIN,
+                    &context,
                     workspace,
                 )
                 .expect("the first pass is never pruned");
@@ -1404,7 +1429,6 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
             &vin,
             &var_wmi,
             var_keys.as_str(),
-            now_micros,
             &descriptor,
             3,
             plan.rmy,
@@ -1413,6 +1437,7 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
             e12,
             &mut scan,
             floor,
+            &context,
             workspace,
         ));
         // Pass 4: omy (only when inconclusive).
@@ -1428,7 +1453,6 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
                 &vin,
                 &var_wmi,
                 var_keys.as_str(),
-                now_micros,
                 &descriptor,
                 4,
                 Some(omy),
@@ -1437,6 +1461,7 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
                 e12,
                 &mut scan,
                 floor,
+                &context,
                 workspace,
             ));
         }
@@ -1487,7 +1512,6 @@ fn run_pass<'a>(
     vin: &str,
     var_wmi: &str,
     var_keys: &str,
-    now_micros: i64,
     descriptor: &str,
     id: i32,
     model_year: Option<i32>,
@@ -1496,21 +1520,22 @@ fn run_pass<'a>(
     error12: bool,
     scan: &mut decode::PatternScan,
     error_floor: i32,
+    context: &VinPassContext<'a>,
     workspace: &mut DecodeWorkspace<'a>,
 ) -> Option<Pass<'a>> {
     // No WMI means error 7; no PatternId-bearing item means error 8. All
     // additional code weights are non-positive, so this bounds either score.
     let ceiling = tables::errorcode_weight(7).max(tables::errorcode_weight(8));
-    if error_floor > ceiling && !db.may_have_pattern_rows(var_wmi, model_year, now_micros) {
+    if error_floor > ceiling && !db.may_have_pattern_rows_for(context.public_wmi, model_year) {
         return None;
     }
     let core = decode::decode_core_into(
         db,
         var_wmi,
+        context.public_wmi,
         var_keys,
         model_year,
         model_year_source,
-        now_micros,
         scan,
         workspace.take_items(),
     );
@@ -1523,7 +1548,17 @@ fn run_pass<'a>(
         workspace.put_items(core.items);
         return None;
     }
-    let err = errors::compute_errors(db, vin, var_wmi, &core, model_year, error12, conclusive);
+    let err = errors::compute_errors_with_context(
+        db,
+        vin,
+        var_wmi,
+        &core,
+        model_year,
+        error12,
+        conclusive,
+        context.is_car_mpv_lt,
+        context.is_vin_exception,
+    );
 
     let mut items = core.items;
     let (codes_csv, error_text) = correction_text(db, &err);
@@ -2293,6 +2328,90 @@ mod tests {
     }
 
     #[test]
+    fn per_vin_context_preserves_lookup_and_year_semantics() {
+        let Some(db) = Db::try_embedded() else { return };
+        let cases = [
+            // Normal WMI, low-volume six-character WMI, ambiguous model year,
+            // unknown WMI, and Unicode sanitization/error input.
+            ("1HGCM82633A004352", 2026),
+            ("1F9TC25FTAB123456", 2026),
+            ("ZZZCM82633A004352", 2050),
+            ("1HGCM8263Ł3A00435", 2026),
+        ];
+        for (input, current_year) in cases {
+            let vin = sanitize(input);
+            let var_wmi = sanitized_wmi_into(&vin, String::new());
+            for now in [i64::MIN, 1_788_739_200_000_000, i64::MAX] {
+                let context = VinPassContext::new(db, &vin, &var_wmi, now);
+                assert_eq!(
+                    context.any_wmi.map(|w| w as *const _),
+                    db.wmi_any(&var_wmi).map(|w| w as *const _),
+                    "any-WMI row changed for {input:?}"
+                );
+                assert_eq!(
+                    context.public_wmi.map(|w| w as *const _),
+                    db.wmi_by_str(&var_wmi, now).map(|w| w as *const _),
+                    "publication gate changed for {input:?} at {now}"
+                );
+                assert_eq!(
+                    year::resolve_years_with_wmi(&vin, db, context.any_wmi, current_year),
+                    year::resolve_years(&vin, &var_wmi, db, current_year),
+                    "year plan changed for {input:?}"
+                );
+            }
+            let now = 1_788_739_200_000_000;
+            let context = VinPassContext::new(db, &vin, &var_wmi, now);
+            let plan = year::resolve_years(&vin, &var_wmi, db, current_year);
+            let var_keys = decode::build_var_keys_stack(&vin);
+            for model_year in [None, plan.rmy, plan.omy] {
+                let core = decode::decode_core_into(
+                    db,
+                    &var_wmi,
+                    context.public_wmi,
+                    var_keys.as_str(),
+                    model_year,
+                    decode::DEFAULT_MODEL_YEAR_SOURCE,
+                    &mut decode::PatternScan::default(),
+                    Vec::new(),
+                );
+                for error12 in [false, true] {
+                    assert_eq!(
+                        errors::compute_errors_with_context(
+                            db,
+                            &vin,
+                            &var_wmi,
+                            &core,
+                            model_year,
+                            error12,
+                            plan.conclusive,
+                            context.is_car_mpv_lt,
+                            context.is_vin_exception,
+                        ),
+                        errors::compute_errors(
+                            db,
+                            &vin,
+                            &var_wmi,
+                            &core,
+                            model_year,
+                            error12,
+                            plan.conclusive,
+                        ),
+                        "validation state changed for {input:?}, {model_year:?}, error12={error12}"
+                    );
+                }
+            }
+            // Caller years never enter the context and therefore cannot alter
+            // any invariant reused by pass 2/3/4.
+            for caller_year in [None, Some(1979), Some(1995), Some(2028)] {
+                let result =
+                    decode_full(db, input, 1_788_739_200_000_000, current_year, caller_year);
+                assert_eq!(result.vin, vin, "caller year {caller_year:?}");
+                assert_eq!(result.wmi, var_wmi, "caller year {caller_year:?}");
+            }
+        }
+    }
+
+    #[test]
     fn a_patternless_pass_can_be_pruned_only_below_a_strict_score_floor() {
         let Some(db) = Db::try_embedded() else { return };
         for code in (0..=14).chain([400]) {
@@ -2302,13 +2421,13 @@ mod tests {
             );
         }
         let mut workspace = DecodeWorkspace::default();
+        let context = VinPassContext::new(db, "", "", 1_788_739_200_000_000);
         let mut run = |floor| {
             run_pass(
                 db,
                 "",
                 "",
                 "",
-                1_788_739_200_000_000,
                 "",
                 3,
                 None,
@@ -2317,6 +2436,7 @@ mod tests {
                 false,
                 &mut decode::PatternScan::default(),
                 floor,
+                &context,
                 &mut workspace,
             )
         };

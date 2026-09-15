@@ -1,0 +1,489 @@
+diff --git a/crates/ultravin/src/lib.rs b/crates/ultravin/src/lib.rs
+index 90d0629..b682fe5 100644
+--- a/crates/ultravin/src/lib.rs
++++ b/crates/ultravin/src/lib.rs
+@@ -979,16 +979,13 @@ fn batch_json_framed(
+     out
+ }
+ 
+-/// One decode pass (a single `spvindecode_core` invocation): its items (with the
+-/// 142/143/144/156/191/196 corrections appended, values still pre-resolution) and
+-/// the metadata the scorer and result need.
++/// One decode pass (a single `spvindecode_core` invocation). Correction rows are
++/// kept as their compact error state until the winning pass is known.
+ struct Pass<'a> {
+     id: i32,
+     model_year: Option<i32>,
+     items: Vec<decode::DecodingItem<'a>>,
+-    codes: Vec<i32>,
+-    corrected_vin: String,
+-    check_digit_valid: bool,
++    error: errors::ErrorState,
+ }
+ 
+ /// Normalize raw decode input into the byte-safe VIN the engine works on.
+@@ -1374,7 +1371,6 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
+                     &var_wmi,
+                     var_keys.as_str(),
+                     now_micros,
+-                    &descriptor,
+                     2,
+                     Some(yc),
+                     model_year_source.as_ref(),
+@@ -1385,7 +1381,7 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
+                     workspace,
+                 )
+                 .expect("the first pass is never pruned");
+-                do3and4 = p.codes.contains(&8) && plan.rmy.is_some();
++                do3and4 = p.error.codes.contains(&8) && plan.rmy.is_some();
+                 passes.push(p);
+             }
+         }
+@@ -1405,7 +1401,6 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
+             &var_wmi,
+             var_keys.as_str(),
+             now_micros,
+-            &descriptor,
+             3,
+             plan.rmy,
+             model_year_source.as_ref(),
+@@ -1429,7 +1424,6 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
+                 &var_wmi,
+                 var_keys.as_str(),
+                 now_micros,
+-                &descriptor,
+                 4,
+                 Some(omy),
+                 model_year_source.as_ref(),
+@@ -1442,7 +1436,7 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
+         }
+     }
+ 
+-    let best_id = best_pass(&passes, db, caller_year);
++    let best_id = best_pass(&passes, db, caller_year, &descriptor);
+     let best_index = passes
+         .iter()
+         .position(|pass| pass.id == best_id)
+@@ -1454,6 +1448,8 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
+     workspace.put_passes(passes);
+ 
+     let mut items = best.items;
++    let (error_codes, corrected_vin, check_digit_valid) =
++        append_corrections(db, &mut items, best.error, &descriptor);
+     // QC filtering belongs after scoring, before every output shape.
+     items.retain(|it| !it.to_be_qced);
+ 
+@@ -1463,9 +1459,9 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
+         wmi: var_wmi,
+         descriptor,
+         model_year: best.model_year,
+-        error_codes: best.codes,
+-        check_digit_valid: best.check_digit_valid,
+-        corrected_vin: best.corrected_vin,
++        error_codes,
++        check_digit_valid,
++        corrected_vin,
+         items,
+     }
+ }
+@@ -1475,12 +1471,18 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
+ fn best_error_value(passes: &[Pass]) -> i32 {
+     passes
+         .iter()
+-        .map(|p| p.codes.iter().map(|c| tables::errorcode_weight(*c)).sum())
++        .map(|p| {
++            p.error
++                .codes
++                .iter()
++                .map(|c| tables::errorcode_weight(*c))
++                .sum()
++        })
+         .max()
+         .unwrap_or(i32::MIN)
+ }
+ 
+-/// Run one `spvindecode_core` pass and append its corrections.
++/// Run one `spvindecode_core` pass. Corrections are appended only for the winner.
+ #[allow(clippy::too_many_arguments)]
+ fn run_pass<'a>(
+     db: &'a Db,
+@@ -1488,7 +1490,6 @@ fn run_pass<'a>(
+     var_wmi: &str,
+     var_keys: &str,
+     now_micros: i64,
+-    descriptor: &str,
+     id: i32,
+     model_year: Option<i32>,
+     model_year_source: &str,
+@@ -1525,35 +1526,24 @@ fn run_pass<'a>(
+     }
+     let err = errors::compute_errors(db, vin, var_wmi, &core, model_year, error12, conclusive);
+ 
+-    let mut items = core.items;
+-    let (codes_csv, error_text) = correction_text(db, &err);
+-    append_correction(&mut items, 142, err.corrected_vin.clone());
+-    append_correction(&mut items, 143, codes_csv);
+-    append_correction(&mut items, 144, err.error_bytes);
+-    append_correction(&mut items, 156, err.additional_info);
+-    append_correction(&mut items, 191, error_text);
+-    append_correction(&mut items, 196, descriptor.to_string());
+-
+     Some(Pass {
+         id,
+         model_year,
+-        items,
+-        codes: err.codes,
+-        corrected_vin: err.corrected_vin,
+-        check_digit_valid: err.check_digit_valid,
++        items: core.items,
++        error: err,
+     })
+ }
+ 
+ /// Pick the best pass by the `x` scoring table: ErrorValue desc, ElementsWeight
+ /// desc, Patterns desc, ModelYear desc (NULLs last), then lowest pass id.
+-fn best_pass(passes: &[Pass], db: &Db, caller_year: Option<i32>) -> i32 {
++fn best_pass(passes: &[Pass], db: &Db, caller_year: Option<i32>, descriptor: &str) -> i32 {
+     if let [pass] = passes {
+         return pass.id;
+     }
+     // Score each candidate once, without allocating a collection of scores.
+     passes
+         .iter()
+-        .map(|p| (p.id, score(p, db, caller_year)))
++        .map(|p| (p.id, score(p, db, caller_year, descriptor)))
+         .max_by(|(ida, sa), (idb, sb)| {
+             // a is "greater" (preferred) when its tuple ranks higher.
+             sa.0.cmp(&sb.0)
+@@ -1569,15 +1559,16 @@ fn best_pass(passes: &[Pass], db: &Db, caller_year: Option<i32>) -> i32 {
+ /// (ErrorValue, ElementsWeight, Patterns, ModelYear+bonus) for a pass.
+ type Score = (i32, i32, i32, Option<i32>);
+ 
+-fn score(pass: &Pass, db: &Db, caller_year: Option<i32>) -> Score {
++fn score(pass: &Pass, db: &Db, caller_year: Option<i32>, descriptor: &str) -> Score {
+     let error_value: i32 = pass
++        .error
+         .codes
+         .iter()
+         .map(|c| tables::errorcode_weight(*c))
+         .sum();
+ 
+     let mut weighted = hash::ElementSet::default();
+-    let elements_weight: i32 = pass
++    let mut elements_weight: i32 = pass
+         .items
+         .iter()
+         .filter(|it| !it.value.is_empty() && weighted.insert(it.element_id))
+@@ -1586,6 +1577,18 @@ fn score(pass: &Pass, db: &Db, caller_year: Option<i32>) -> Score {
+         .filter(|w| *w != tables::NULL_I32)
+         .sum();
+ 
++    for (element_id, nonempty) in correction_presence(db, &pass.error, descriptor) {
++        if nonempty && weighted.insert(element_id) {
++            if let Some(weight) = db
++                .element_by_id(element_id)
++                .map(|element| element.weight.to_native())
++                .filter(|weight| *weight != tables::NULL_I32)
++            {
++                elements_weight += weight;
++            }
++        }
++    }
++
+     let patterns = pass
+         .items
+         .iter()
+@@ -1608,6 +1611,46 @@ fn score(pass: &Pass, db: &Db, caller_year: Option<i32>) -> Score {
+     (error_value, elements_weight, patterns, model_year)
+ }
+ 
++/// Whether each deferred correction would have a nonempty value. This is the
++/// only property of correction values consulted by best-pass scoring.
++fn correction_presence(db: &Db, err: &errors::ErrorState, descriptor: &str) -> [(i32, bool); 6] {
++    [
++        (142, !err.corrected_vin.is_empty()),
++        (143, !err.codes.is_empty()),
++        (144, !err.error_bytes.is_empty()),
++        (156, !err.additional_info.is_empty()),
++        (191, error_messages_nonempty(db, err)),
++        (196, !descriptor.is_empty()),
++    ]
++}
++
++/// `error_messages` joins every successful lookup, including blank names. Two
++/// blank names therefore still produce the nonempty separator `; `.
++fn error_messages_nonempty(db: &Db, err: &errors::ErrorState) -> bool {
++    let Some(tag) = tables::element_lookup_tag(143) else {
++        return false;
++    };
++    joined_error_parts_nonempty(err.codes.iter().filter_map(|&code| {
++        db.lookup(tag, code).map(|name| {
++            (
++                name,
++                (err.is_off_road && code == 1) || (err.is_vin_exception && code == 0),
++            )
++        })
++    }))
++}
++
++fn joined_error_parts_nonempty<'a>(parts: impl IntoIterator<Item = (&'a str, bool)>) -> bool {
++    let mut emitted = false;
++    for (name, has_note) in parts {
++        if emitted || !name.trim().is_empty() || has_note {
++            return true;
++        }
++        emitted = true;
++    }
++    false
++}
++
+ /// DESC ordering with NULLs last: `Some` always beats `None`.
+ fn cmp_year_nulls_last(a: Option<i32>, b: Option<i32>) -> std::cmp::Ordering {
+     match (a, b) {
+@@ -1864,6 +1907,30 @@ fn correction_text<'a>(
+     )
+ }
+ 
++fn append_corrections<'a>(
++    db: &'a Db,
++    items: &mut Vec<decode::DecodingItem<'a>>,
++    err: errors::ErrorState,
++    descriptor: &str,
++) -> (Vec<i32>, String, bool) {
++    let (codes_csv, error_text) = correction_text(db, &err);
++    let errors::ErrorState {
++        codes,
++        corrected_vin,
++        error_bytes,
++        additional_info,
++        check_digit_valid,
++        ..
++    } = err;
++    append_correction(items, 142, corrected_vin.clone());
++    append_correction(items, 143, codes_csv);
++    append_correction(items, 144, error_bytes);
++    append_correction(items, 156, additional_info);
++    append_correction(items, 191, error_text);
++    append_correction(items, 196, descriptor.to_string());
++    (codes, corrected_vin, check_digit_valid)
++}
++
+ fn append_correction<'a>(
+     items: &mut Vec<decode::DecodingItem<'a>>,
+     element_id: i32,
+@@ -2217,6 +2284,207 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn deferred_correction_score_matches_materialized_reference_for_custom_database() {
++        use crate::tables::{serialize_artifact, Element, LookupRow, VpicData};
++        use std::borrow::Cow;
++
++        let strings = ["", "   ", "named error"];
++        let mut arena_bytes = Vec::new();
++        let mut arena_offsets = vec![0];
++        for value in strings {
++            arena_bytes.extend_from_slice(value.as_bytes());
++            arena_offsets.push(arena_bytes.len() as u32);
++        }
++        let weights = [
++            (26, 5),
++            (29, tables::NULL_I32),
++            (142, 11),
++            (143, tables::NULL_I32),
++            (144, -7),
++            (156, 0),
++            (191, 23),
++            (196, 31),
++        ];
++        let data = VpicData {
++            arena_bytes,
++            arena_offsets,
++            element: weights
++                .into_iter()
++                .map(|(id, weight)| Element {
++                    id,
++                    name: 0,
++                    code: 0,
++                    isprivate: false,
++                    groupname: 0,
++                    datatype: 0,
++                    decode: 0,
++                    decode_present: true,
++                    weight,
++                })
++                .collect(),
++            lookups: vec![
++                LookupRow {
++                    tag: tables::element_lookup_tag(143).expect("error-code lookup tag"),
++                    id: 0,
++                    name: 1,
++                },
++                LookupRow {
++                    tag: tables::element_lookup_tag(143).expect("error-code lookup tag"),
++                    id: 1,
++                    name: 1,
++                },
++                LookupRow {
++                    tag: tables::element_lookup_tag(143).expect("error-code lookup tag"),
++                    id: 14,
++                    name: 2,
++                },
++            ],
++            wmi: vec![],
++            wmi_vinschema: vec![],
++            vinschema: vec![],
++            pattern: vec![],
++            make_model: vec![],
++            wmi_make: vec![],
++            enginemodel: vec![],
++            enginemodelpattern: vec![],
++            defaultvalue: vec![],
++            vinexception: vec![],
++            conversion: vec![],
++            cover: vec![],
++            vspecschema: vec![],
++            vspecschemapattern: vec![],
++            vspecpattern: vec![],
++            vspecschemamodel: vec![],
++            vspecschemayear: vec![],
++        };
++        let d = Db::from_bytes(&serialize_artifact(&data, 1)).expect("custom external database");
++        let item = |element_id, value: &'static str, source: &'static str| decode::DecodingItem {
++            created_on: tables::NULL_I64,
++            pattern_id: if source == "Pattern" {
++                1
++            } else {
++                tables::NULL_I32
++            },
++            keys: Cow::Borrowed(""),
++            vin_schema_id: tables::NULL_I32,
++            wmi_id: tables::NULL_I32,
++            element_id,
++            attribute_id: Cow::Borrowed(value),
++            value: Cow::Borrowed(value),
++            source: Cow::Borrowed(source),
++            priority: 0,
++            to_be_qced: false,
++        };
++        let state =
++            |codes: Vec<i32>, corrected_vin: &str, bytes: &str, info: &str| errors::ErrorState {
++                codes,
++                corrected_vin: corrected_vin.to_string(),
++                error_bytes: bytes.to_string(),
++                additional_info: info.to_string(),
++                is_off_road: false,
++                is_vin_exception: false,
++                check_digit_valid: false,
++            };
++        let materialized_score =
++            |items: &[decode::DecodingItem<'_>], codes: &[i32], caller_year: Option<i32>| {
++                let error_value = codes
++                    .iter()
++                    .map(|code| tables::errorcode_weight(*code))
++                    .sum();
++                let mut weighted = hash::ElementSet::default();
++                let elements_weight = items
++                    .iter()
++                    .filter(|item| !item.value.is_empty() && weighted.insert(item.element_id))
++                    .filter_map(|item| d.element_by_id(item.element_id))
++                    .map(|element| element.weight.to_native())
++                    .filter(|weight| *weight != tables::NULL_I32)
++                    .sum();
++                let patterns = items
++                    .iter()
++                    .filter(|item| {
++                        matches!(
++                            item.source.as_ref(),
++                            "Pattern" | "EngineModelPattern" | "Formula Pattern"
++                        ) && !item.value.is_empty()
++                            && item.value != "Not Applicable"
++                    })
++                    .count() as i32;
++                let model_year = items
++                    .iter()
++                    .find(|item| item.element_id == 29)
++                    .and_then(|item| item.value.parse::<i32>().ok())
++                    .map(|year| year + if caller_year == Some(year) { 10000 } else { 0 });
++                (error_value, elements_weight, patterns, model_year)
++            };
++        let cases = [
++            (
++                vec![
++                    item(142, "core wins dedup", "Default"),
++                    item(143, "", "Default"),
++                    item(143, "later core value", "Default"),
++                    item(196, "", "Default"),
++                    item(29, "2003", "Default"),
++                    item(26, "HONDA", "Pattern"),
++                ],
++                // Blank + named lookup makes 191 nonempty; 143 has NULL weight.
++                state(vec![0, 14], "fixed", "(5:M)", "details"),
++                "descriptor",
++            ),
++            (
++                vec![
++                    item(142, "", "Default"),
++                    item(191, "", "Default"),
++                    item(196, "core", "Default"),
++                    item(29, "not a year", "Default"),
++                ],
++                // Code 999 has no lookup, so correction 191 stays empty.
++                state(vec![999], "", "", ""),
++                "",
++            ),
++            (
++                vec![item(191, "", "Default"), item(142, "", "Default")],
++                // Two blank successful lookups produce the nonempty `; ` join.
++                state(vec![0, 1], "", "", ""),
++                "descriptor",
++            ),
++        ];
++
++        for (items, error, descriptor) in cases {
++            let pass = Pass {
++                id: 3,
++                model_year: Some(2003),
++                items,
++                error,
++            };
++            let mut materialized = pass.items.clone();
++            let (codes_csv, messages) = correction_text(&d, &pass.error);
++            append_correction(&mut materialized, 142, pass.error.corrected_vin.clone());
++            append_correction(&mut materialized, 143, codes_csv);
++            append_correction(&mut materialized, 144, pass.error.error_bytes.clone());
++            append_correction(&mut materialized, 156, pass.error.additional_info.clone());
++            append_correction(&mut materialized, 191, messages);
++            append_correction(&mut materialized, 196, descriptor.to_string());
++            assert_eq!(
++                score(&pass, &d, Some(2003), descriptor),
++                materialized_score(&materialized, &pass.error.codes, Some(2003))
++            );
++        }
++    }
++
++    #[test]
++    fn error_message_presence_matches_join_semantics() {
++        assert!(!joined_error_parts_nonempty(std::iter::empty()));
++        assert!(!joined_error_parts_nonempty([("  ", false)]));
++        assert!(joined_error_parts_nonempty([("", false), ("", false)]));
++        assert!(joined_error_parts_nonempty([("", true)]));
++        assert!(joined_error_parts_nonempty([("name", false)]));
++        // A missing lookup contributes no part at all; represent that by filtering.
++        assert!(!joined_error_parts_nonempty(
++            [None, Some(("", false)), None].into_iter().flatten()
++        ));
++    }
++
+     #[test]
+     fn full_result_borrows_are_anchored_to_an_external_db() {
+         use std::borrow::Cow;
+@@ -2309,7 +2577,6 @@ mod tests {
+                 "",
+                 "",
+                 1_788_739_200_000_000,
+-                "",
+                 3,
+                 None,
+                 "***X*|Y",

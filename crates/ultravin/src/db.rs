@@ -336,6 +336,19 @@ impl Db {
         self.wmi_rows(wmi).first()
     }
 
+    /// Resolve unrestricted and time-gated views with one index lookup.
+    pub(crate) fn wmi_context(
+        &self,
+        wmi: &str,
+        now_micros: i64,
+    ) -> (Option<&ArchivedWmi>, Option<&ArchivedWmi>) {
+        let rows = self.wmi_rows(wmi);
+        (
+            rows.first(),
+            rows.iter().find(|row| row.is_public(now_micros)),
+        )
+    }
+
     /// All rows for one WMI, in archive order. Availability remains a per-call
     /// decision: a cached range must not freeze a future publication date.
     fn wmi_rows(&self, wmi: &str) -> &[ArchivedWmi] {
@@ -389,8 +402,17 @@ impl Db {
     /// compete. Any year-eligible link is enough, including orphan/QC schemas:
     /// formula matching intentionally permits those. With no links, only a
     /// conversion to Model could enable the vehicle-spec source later in core.
+    #[cfg(test)]
     pub(crate) fn may_have_pattern_rows(&self, wmi: &str, year: Option<i32>, now: i64) -> bool {
-        let Some(wmi) = self.wmi_by_str(wmi, now) else {
+        self.may_have_pattern_rows_for(self.wmi_by_str(wmi, now), year)
+    }
+
+    pub(crate) fn may_have_pattern_rows_for(
+        &self,
+        wmi: Option<&ArchivedWmi>,
+        year: Option<i32>,
+    ) -> bool {
+        let Some(wmi) = wmi else {
             return false;
         };
         self.wmi_vinschema_for(wmi.id.to_native()).iter().any(|r| {

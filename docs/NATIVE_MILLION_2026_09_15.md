@@ -78,6 +78,11 @@ model. Final acceptance used the production **auto** path, including calibration
 
 ## Experiments and profiling
 
+[Three follow-up trials](NATIVE_THREE_TRIALS_2026_09_15.md) compare per-VIN
+context reuse, conversion indices, and deferred correction output against this
+confirmed V7 binary. Those results are separate from the historical comparison
+above.
+
 Earlier comparisons are retained rather than overwritten:
 [buffer reuse](../scripts/bench/native_million_2026_09_15.json),
 [deferred recycling](../scripts/bench/native_million_v2_2026_09_15.json),

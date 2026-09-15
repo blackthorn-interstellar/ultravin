@@ -1,0 +1,227 @@
+diff --git a/crates/ultravin/src/decode.rs b/crates/ultravin/src/decode.rs
+index 70d4823..56a7459 100644
+--- a/crates/ultravin/src/decode.rs
++++ b/crates/ultravin/src/decode.rs
+@@ -837,34 +837,23 @@ fn append_make<'a>(
+ /// source wins when several would produce the same target.
+ fn append_conversions<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
+     struct Row<'a> {
+-        priority: i32,
+-        created_on: i64,
++        item_index: usize,
+         conv_id: i32,
+         to_elem: i32,
+         formula: &'a str,
+-        value: Cow<'a, str>,
+-        keys: Cow<'a, str>,
+-        pattern_id: i32,
+-        vin_schema_id: i32,
+-        wmi_id: i32,
+     }
+ 
+     // Snapshot the cursor rows before any insert (PostgreSQL evaluates the FOR
+     // query once, so conversion-derived items never spawn further conversions).
+     let mut rows: Vec<Row> = Vec::new();
+-    for it in items.iter() {
++    let original_len = items.len();
++    for (item_index, it) in items[..original_len].iter().enumerate() {
+         for c in db.conversions_from(it.element_id) {
+             rows.push(Row {
+-                priority: it.priority,
+-                created_on: it.created_on,
++                item_index,
+                 conv_id: c.id.to_native(),
+                 to_elem: c.toelementid.to_native(),
+                 formula: db.s(c.formula.to_native()),
+-                value: it.attribute_id.clone(),
+-                keys: it.keys.clone(),
+-                pattern_id: it.pattern_id,
+-                vin_schema_id: it.vin_schema_id,
+-                wmi_id: it.wmi_id,
+             });
+         }
+     }
+@@ -872,9 +861,15 @@ fn append_conversions<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
+         return;
+     }
+     rows.sort_by(|a, b| {
+-        b.priority
+-            .cmp(&a.priority)
+-            .then(created_desc_nulls_first(a.created_on, b.created_on))
++        let a_item = &items[a.item_index];
++        let b_item = &items[b.item_index];
++        b_item
++            .priority
++            .cmp(&a_item.priority)
++            .then(created_desc_nulls_first(
++                a_item.created_on,
++                b_item.created_on,
++            ))
+             .then(a.conv_id.cmp(&b.conv_id))
+     });
+ 
+@@ -883,14 +878,19 @@ fn append_conversions<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
+         if !present.insert(r.to_elem) {
+             continue;
+         }
+-        let result = crate::conversion::eval(r.formula, &r.value);
+-        let source = conversion_source(r.conv_id, r.formula, &r.value);
++        let source_item = &items[r.item_index];
++        let result = crate::conversion::eval(r.formula, &source_item.attribute_id);
++        let source = conversion_source(r.conv_id, r.formula, &source_item.attribute_id);
++        let pattern_id = source_item.pattern_id;
++        let keys = source_item.keys.clone();
++        let vin_schema_id = source_item.vin_schema_id;
++        let wmi_id = source_item.wmi_id;
+         items.push(DecodingItem {
+             created_on: NULL_I64,
+-            pattern_id: r.pattern_id,
+-            keys: r.keys,
+-            vin_schema_id: r.vin_schema_id,
+-            wmi_id: r.wmi_id,
++            pattern_id,
++            keys,
++            vin_schema_id,
++            wmi_id,
+             element_id: r.to_elem,
+             attribute_id: Cow::Owned(result.clone()),
+             value: Cow::Owned(result),
+@@ -1130,6 +1130,138 @@ fn append_default_values<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    use crate::tables::{serialize_artifact, Conversion, VpicData};
++
++    fn conversion_test_db() -> Db {
++        let formulas = ["#x# * 2", "#x# * 3", "#x# * 4"];
++        let mut arena_bytes = Vec::new();
++        let mut arena_offsets = vec![0];
++        for formula in formulas {
++            arena_bytes.extend_from_slice(formula.as_bytes());
++            arena_offsets.push(arena_bytes.len() as u32);
++        }
++        let data = VpicData {
++            arena_bytes,
++            arena_offsets,
++            wmi: vec![],
++            wmi_vinschema: vec![],
++            vinschema: vec![],
++            pattern: vec![],
++            element: vec![],
++            make_model: vec![],
++            wmi_make: vec![],
++            enginemodel: vec![],
++            enginemodelpattern: vec![],
++            defaultvalue: vec![],
++            vinexception: vec![],
++            conversion: vec![
++                Conversion {
++                    id: 1,
++                    fromelementid: 10,
++                    toelementid: 20,
++                    formula: 0,
++                },
++                Conversion {
++                    id: 2,
++                    fromelementid: 11,
++                    toelementid: 20,
++                    formula: 1,
++                },
++                Conversion {
++                    id: 3,
++                    fromelementid: 20,
++                    toelementid: 30,
++                    formula: 2,
++                },
++                Conversion {
++                    id: 4,
++                    fromelementid: 13,
++                    toelementid: 50,
++                    formula: 0,
++                },
++                Conversion {
++                    id: 5,
++                    fromelementid: 12,
++                    toelementid: 40,
++                    formula: 0,
++                },
++                Conversion {
++                    id: 5,
++                    fromelementid: 12,
++                    toelementid: 40,
++                    formula: 1,
++                },
++            ],
++            lookups: vec![],
++            cover: vec![],
++            vspecschema: vec![],
++            vspecschemapattern: vec![],
++            vspecpattern: vec![],
++            vspecschemamodel: vec![],
++            vspecschemayear: vec![],
++        };
++        Db::from_bytes(&serialize_artifact(&data, 1)).expect("conversion test database")
++    }
++
++    fn conversion_source_item(
++        element_id: i32,
++        attribute_id: &str,
++        keys: &str,
++        created_on: i64,
++        pattern_id: i32,
++    ) -> DecodingItem<'static> {
++        DecodingItem {
++            created_on,
++            pattern_id,
++            keys: Cow::Owned(keys.to_owned()),
++            vin_schema_id: pattern_id + 100,
++            wmi_id: pattern_id + 200,
++            element_id,
++            attribute_id: Cow::Owned(attribute_id.to_owned()),
++            value: Cow::Owned(format!("display-{attribute_id}")),
++            source: Cow::Borrowed("test"),
++            priority: 500,
++            to_be_qced: false,
++        }
++    }
++
++    #[test]
++    fn conversions_select_stably_from_original_owned_items_and_keep_provenance() {
++        let db = conversion_test_db();
++        let mut items = vec![
++            conversion_source_item(10, "7", "older", 100, 1),
++            conversion_source_item(11, "5", "null-wins", NULL_I64, 2),
++            conversion_source_item(12, "6", "stable", 50, 3),
++            conversion_source_item(13, "9", "blocked", 50, 4),
++            conversion_source_item(50, "existing", "existing", 0, 5),
++        ];
++
++        append_conversions(&db, &mut items);
++
++        assert_eq!(
++            items.iter().map(|item| item.element_id).collect::<Vec<_>>(),
++            [10, 11, 12, 13, 50, 20, 40]
++        );
++        let null_winner = &items[5];
++        assert_eq!(null_winner.attribute_id, "15");
++        assert_eq!(null_winner.value, "15");
++        assert_eq!(null_winner.source, "Conversion 2: 5 * 3");
++        assert_eq!(null_winner.keys, "null-wins");
++        assert_eq!(
++            (
++                null_winner.pattern_id,
++                null_winner.vin_schema_id,
++                null_winner.wmi_id
++            ),
++            (2, 102, 202)
++        );
++
++        let stable_winner = &items[6];
++        assert_eq!(stable_winner.attribute_id, "12");
++        assert_eq!(stable_winner.source, "Conversion 5: 6 * 2");
++        assert!(items.iter().all(|item| item.element_id != 30));
++        assert_eq!(items.iter().filter(|item| item.element_id == 50).count(), 1);
++    }
+ 
+     #[test]
+     fn borrowed_keys_preserve_ascii_uppercase_semantics() {

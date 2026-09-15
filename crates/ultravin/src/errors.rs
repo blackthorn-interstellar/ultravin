@@ -14,7 +14,9 @@ use crate::checkdigit::{check_digit_v1, check_digit_with_flag, is_default_char, 
 use crate::db::Db;
 use crate::decode::CoreResult;
 use crate::hash::FxBuildHasher;
-use crate::tables::{ArchivedWmi, NULL_I32};
+#[cfg(test)]
+use crate::tables::ArchivedWmi;
+use crate::tables::NULL_I32;
 
 /// The "possible values" payload for element 144, in the reference's order.
 ///
@@ -106,6 +108,7 @@ const ADDL_ERR_4: &str = "In the Possible values section, the Numeric value befo
 const ADDL_ERR_5: &str = "The error positions are indicated by ! in Suggested VIN. In the Possible values section, each pair of parenthesis indicate information about each error position in VIN . The Numeric value before the : indicates the position in error and the values after the : indicate the possible values that are allowed in this position";
 
 /// Computed error state for one decode pass.
+#[derive(Debug, PartialEq, Eq)]
 pub struct ErrorState {
     /// Sorted error codes (the element-143 CSV / `error_codes` list).
     pub codes: Vec<i32>,
@@ -120,17 +123,14 @@ pub struct ErrorState {
     pub check_digit_valid: bool,
 }
 
-/// Body-style/start-position context used by both the scan and the check digit.
-fn start_context(vin: &str, wmi: Option<&ArchivedWmi>) -> (usize, bool) {
-    let pos3 = vin.as_bytes().get(2).copied();
-    if pos3 == Some(b'9') {
+/// Body-style/start-position context used by both the scan and check digit.
+/// Low-volume VINs use their six-character WMI form regardless of the WMI row's
+/// vehicle type, so they deliberately suppress the car/light-truck flag.
+fn start_context(vin: &str, is_car_mpv_lt: bool) -> (usize, bool) {
+    if vin.as_bytes().get(2) == Some(&b'9') {
         (15, false)
-    } else if let Some(w) = wmi {
-        if w.is_car_mpv_lt() {
-            (13, true)
-        } else {
-            (14, false)
-        }
+    } else if is_car_mpv_lt {
+        (13, true)
     } else {
         (14, false)
     }
@@ -897,7 +897,8 @@ impl ErrorCodes {
 /// Compute the full error state for a decode pass (the `spvindecode_core` error
 /// assembly C1-C11). `var_wmi`/`model_year`/`error12`/`conclusive` are the
 /// pass's inputs.
-pub fn compute_errors(
+#[cfg(test)]
+pub(crate) fn compute_errors(
     db: &Db,
     vin: &str,
     var_wmi: &str,
@@ -905,6 +906,32 @@ pub fn compute_errors(
     model_year: Option<i32>,
     error12: bool,
     conclusive: bool,
+) -> ErrorState {
+    let any_wmi = db.wmi_any(var_wmi);
+    compute_errors_with_context(
+        db,
+        vin,
+        var_wmi,
+        core,
+        model_year,
+        error12,
+        conclusive,
+        any_wmi.map(ArchivedWmi::is_car_mpv_lt).unwrap_or(false),
+        db.vinexception_checkdigit(vin),
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn compute_errors_with_context(
+    db: &Db,
+    vin: &str,
+    var_wmi: &str,
+    core: &CoreResult,
+    model_year: Option<i32>,
+    error12: bool,
+    conclusive: bool,
+    is_car_mpv_lt: bool,
+    is_vin_exception: bool,
 ) -> ErrorState {
     let items = &core.items;
     let mut raw = ErrorCodes::default();
@@ -956,8 +983,7 @@ pub fn compute_errors(
         .iter()
         .find(|it| it.element_id == 39)
         .map(|it| it.attribute_id.as_ref());
-    let is_vin_exception = db.vinexception_checkdigit(vin);
-    let (start_pos, is_car_mpv_lt) = start_context(vin, db.wmi_any(var_wmi));
+    let (start_pos, is_car_mpv_lt) = start_context(vin, is_car_mpv_lt);
 
     // C5: invalid-char scan; stamps `!` into the corrected VIN AFTER the helper.
     let vb = vin.as_bytes();
@@ -1111,6 +1137,13 @@ pub fn compute_errors(
 #[cfg(test)]
 mod malformed_class_tests {
     use super::*;
+
+    #[test]
+    fn low_volume_wmi_suppresses_car_flag_for_check_digit_context() {
+        assert_eq!(start_context("1F9TC25FTAB123456", true), (15, false));
+        assert_eq!(start_context("1HGCM82633A004352", true), (13, true));
+        assert_eq!(start_context("ZZZCM82633A004352", false), (14, false));
+    }
 
     #[test]
     fn compact_codes_keep_numeric_order_and_remove_duplicates() {
