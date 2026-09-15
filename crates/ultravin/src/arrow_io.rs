@@ -9,17 +9,17 @@
 //! Memory is O(batch) and flat in the input's width — only the VIN and
 //! caller-year columns are read.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 
 use arrow_array::builder::{ArrayBuilder, Float64Builder, Int64Builder, StringBuilder};
 use arrow_array::{cast::AsArray, new_empty_array, Array, ArrayRef, Int32Array, RecordBatch};
 use arrow_cast::cast;
 use arrow_schema::{DataType, Field, Schema, SchemaRef};
-use arrow_select::concat::concat;
+use arrow_select::concat::{concat, concat_batches};
 
 use crate::db::Db;
-use crate::ids::{decode_chunks, resolve_columns, ColumnSpec, ColumnWriter, IdMeta, IdsDType};
+use crate::ids::{decode_chunks_at, resolve_columns, ColumnSpec, ColumnWriter, IdMeta, IdsDType};
 
 /// `Io` covers a batch that will not cast or assemble; `Config` is a caller
 /// mistake (missing/ambiguous columns, bad column requests) worth a
@@ -70,6 +70,75 @@ impl From<arrow_schema::ArrowError> for ArrowError {
 /// already would be shadowed.
 pub const DECODED_YEAR: &str = "decoded_model_year";
 
+/// Buffers arbitrary input batches and returns row-exact batches on demand.
+/// Slices are zero-copy; concatenation is only used when a requested batch
+/// crosses an input boundary.
+#[derive(Debug, Default)]
+pub struct ArrowBatchRebatcher {
+    batches: VecDeque<RecordBatch>,
+    rows: usize,
+}
+
+impl ArrowBatchRebatcher {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn push(&mut self, batch: RecordBatch) {
+        self.rows += batch.num_rows();
+        if batch.num_rows() > 0 {
+            self.batches.push_back(batch);
+        }
+    }
+
+    pub fn buffered_rows(&self) -> usize {
+        self.rows
+    }
+
+    pub fn take(&mut self, rows: usize) -> Result<Option<RecordBatch>, ArrowError> {
+        let rows = rows.max(1);
+        if self.rows < rows {
+            return Ok(None);
+        }
+        self.take_available(rows).map(Some)
+    }
+
+    pub fn finish(&mut self) -> Result<Option<RecordBatch>, ArrowError> {
+        if self.rows == 0 {
+            Ok(None)
+        } else {
+            self.take_available(self.rows).map(Some)
+        }
+    }
+
+    fn take_available(&mut self, rows: usize) -> Result<RecordBatch, ArrowError> {
+        let mut remaining = rows;
+        let mut pieces = Vec::new();
+        while remaining > 0 {
+            let batch = self
+                .batches
+                .pop_front()
+                .expect("buffered row count is exact");
+            if batch.num_rows() <= remaining {
+                remaining -= batch.num_rows();
+                pieces.push(batch);
+            } else {
+                pieces.push(batch.slice(0, remaining));
+                self.batches
+                    .push_front(batch.slice(remaining, batch.num_rows() - remaining));
+                remaining = 0;
+            }
+        }
+        self.rows -= rows;
+        if pieces.len() == 1 {
+            Ok(pieces.pop().expect("one piece"))
+        } else {
+            let schema = pieces[0].schema();
+            concat_batches(&schema, &pieces).map_err(ArrowError::from)
+        }
+    }
+}
+
 /// Year-column candidates tried by name (case-insensitive) — the common names
 /// across NHTSA, fleet-telemetry, and registration exports.
 pub(crate) const YEAR_NAMES: [&str; 5] = [
@@ -107,6 +176,7 @@ pub struct ArrowDecoder {
     year_idx: Option<usize>,
     metas: Vec<IdMeta>,
     out_schema: SchemaRef,
+    now_micros: i64,
 }
 
 impl ArrowDecoder {
@@ -116,6 +186,14 @@ impl ArrowDecoder {
     /// called `vin` (case-insensitively). A caller-year column is optional: it is
     /// taken from [`YEAR_NAMES`] when not named, and its absence is not an error.
     pub fn new(in_schema: &SchemaRef, opts: &ArrowOpts) -> Result<ArrowDecoder, ArrowError> {
+        Self::new_at(in_schema, opts, crate::now_micros())
+    }
+
+    pub fn new_at(
+        in_schema: &SchemaRef,
+        opts: &ArrowOpts,
+        now_micros: i64,
+    ) -> Result<ArrowDecoder, ArrowError> {
         let metas = resolve_columns(Db::embedded(), &opts.columns).map_err(ArrowError::Config)?;
         let vin_idx = vin_by_name(in_schema, opts.vin.as_deref())?.ok_or_else(|| {
             ArrowError::Config(
@@ -124,7 +202,7 @@ impl ArrowDecoder {
             )
         })?;
         let year_idx = year_by_name(in_schema, opts.year.as_deref())?;
-        ArrowDecoder::with_columns(in_schema, vin_idx, year_idx, metas, opts.names)
+        ArrowDecoder::with_columns_at(in_schema, vin_idx, year_idx, metas, opts.names, now_micros)
     }
 
     /// Bind a decoder to `in_schema` with the columns already resolved — for a
@@ -136,6 +214,24 @@ impl ArrowDecoder {
         year_idx: Option<usize>,
         metas: Vec<IdMeta>,
         names: ColumnNames,
+    ) -> Result<ArrowDecoder, ArrowError> {
+        Self::with_columns_at(
+            in_schema,
+            vin_idx,
+            year_idx,
+            metas,
+            names,
+            crate::now_micros(),
+        )
+    }
+
+    pub fn with_columns_at(
+        in_schema: &SchemaRef,
+        vin_idx: usize,
+        year_idx: Option<usize>,
+        metas: Vec<IdMeta>,
+        names: ColumnNames,
+        now_micros: i64,
     ) -> Result<ArrowDecoder, ArrowError> {
         if vin_idx >= in_schema.fields().len() {
             return Err(ArrowError::Config(format!(
@@ -183,12 +279,26 @@ impl ArrowDecoder {
                 )));
             }
         }
-        let out_schema = build_out_schema(in_schema, vin_idx, year_idx, &metas, names)?;
+        let base = build_out_schema(in_schema, vin_idx, year_idx, &metas, names)?;
+        let provenance = crate::provenance();
+        let mut metadata = base.metadata().clone();
+        metadata.insert("ultravin.data_month".into(), provenance.data_month.into());
+        metadata.insert(
+            "ultravin.artifact_blake3".into(),
+            provenance.artifact_blake3.into(),
+        );
+        metadata.insert(
+            "ultravin.decoder_version".into(),
+            provenance.decoder_version.into(),
+        );
+        metadata.insert("ultravin.now_micros".into(), now_micros.to_string());
+        let out_schema = Arc::new(base.as_ref().clone().with_metadata(metadata));
         Ok(ArrowDecoder {
             vin_idx,
             year_idx,
             metas,
             out_schema,
+            now_micros,
         })
     }
 
@@ -210,6 +320,28 @@ impl ArrowDecoder {
     /// The resolved caller-year column, if the input has one.
     pub fn year_index(&self) -> Option<usize> {
         self.year_idx
+    }
+
+    /// Estimate buffers owned by one decode batch without charging a zero-copy
+    /// passthrough slice for the full upstream allocation it references.
+    pub fn batch_working_bytes(&self, output: &RecordBatch) -> usize {
+        let rows = output.num_rows();
+        let passthrough = 1 + usize::from(self.year_idx.is_some());
+        let owned: usize = output
+            .columns()
+            .iter()
+            .skip(passthrough)
+            .map(|column| column.get_array_memory_size())
+            .sum();
+        let vin = output.column(0).as_string::<i32>();
+        let offsets = vin.value_offsets();
+        let vin_values = offsets
+            .last()
+            .zip(offsets.first())
+            .map_or(0, |(last, first)| (*last - *first) as usize);
+        let logical_vin = vin_values + (rows + 1) * std::mem::size_of::<i32>() + rows.div_ceil(8);
+        let logical_year = usize::from(self.year_idx.is_some()) * rows * std::mem::size_of::<i32>();
+        owned + logical_vin + logical_year
     }
 
     /// Decode + project one batch into [`out_schema`](Self::out_schema).
@@ -249,7 +381,8 @@ impl ArrowDecoder {
                 .collect()
         });
 
-        let (model_year, decoded) = decode_arrays(&vins, years.as_deref(), &self.metas)?;
+        let (model_year, decoded) =
+            decode_arrays(&vins, years.as_deref(), &self.metas, self.now_micros)?;
 
         let mut cols: Vec<ArrayRef> = Vec::with_capacity(self.metas.len() + 3);
         cols.push(vin_arr);
@@ -318,8 +451,9 @@ fn decode_arrays(
     vins: &[&str],
     years: Option<&[Option<i32>]>,
     metas: &[IdMeta],
+    now_micros: i64,
 ) -> Result<(Vec<Option<i32>>, Vec<ArrayRef>), ArrowError> {
-    let mut chunks = decode_chunks(vins, years, metas, ArrowColumn::new);
+    let mut chunks = decode_chunks_at(vins, years, metas, ArrowColumn::new, now_micros);
     let model_year = chunks
         .iter_mut()
         .flat_map(|c| std::mem::take(&mut c.model_year))
@@ -976,5 +1110,18 @@ mod tests {
         };
         let err = ArrowDecoder::new(&input.schema(), &named).unwrap_err();
         assert!(format!("{err}").contains("remove or rename it"), "{err}");
+    }
+
+    #[test]
+    fn working_bytes_do_not_charge_a_slice_for_its_upstream_vin_buffer() {
+        if !loaded() {
+            return;
+        }
+        let vins = vec![Some(HONDA); 100_000];
+        let input = batch(vec![utf8("vin", &vins)]).slice(50_000, 1);
+        let decoder = ArrowDecoder::new(&input.schema(), &opts(ids(&[MAKE]))).expect("decoder");
+        let output = decoder.decode_batch(&input).expect("decode");
+        assert!(decoder.batch_working_bytes(&output) < 10_000);
+        assert!(output.column(0).get_array_memory_size() > 1_000_000);
     }
 }

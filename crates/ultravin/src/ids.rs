@@ -9,7 +9,7 @@
 
 use crate::db::Db;
 use crate::hash::{ElementIndex, ElementSet, IntSet};
-use crate::{decode_items, epoch_to_year, now_secs, public_decode};
+use crate::{decode_items, public_decode};
 
 /// Value type of a projected column, taken from the element's vPIC `data_type`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -218,11 +218,27 @@ pub fn decode_batch_ids(
     years: Option<&[Option<i32>]>,
     metas: &[IdMeta],
 ) -> IdsBatch {
-    let mut chunks = decode_chunks(inputs, years, metas, |dtype, rows| match dtype {
-        IdsDType::Str => ColumnValues::Str(Vec::with_capacity(rows)),
-        IdsDType::Int => ColumnValues::Int(Vec::with_capacity(rows)),
-        IdsDType::Float => ColumnValues::Float(Vec::with_capacity(rows)),
-    });
+    decode_batch_ids_at(inputs, years, metas, crate::now_micros())
+}
+
+/// [`decode_batch_ids`] at an explicit instant.
+pub fn decode_batch_ids_at(
+    inputs: &[String],
+    years: Option<&[Option<i32>]>,
+    metas: &[IdMeta],
+    now_micros: i64,
+) -> IdsBatch {
+    let mut chunks = decode_chunks_at(
+        inputs,
+        years,
+        metas,
+        |dtype, rows| match dtype {
+            IdsDType::Str => ColumnValues::Str(Vec::with_capacity(rows)),
+            IdsDType::Int => ColumnValues::Int(Vec::with_capacity(rows)),
+            IdsDType::Float => ColumnValues::Float(Vec::with_capacity(rows)),
+        },
+        now_micros,
+    );
 
     let model_year = chunks
         .iter_mut()
@@ -252,19 +268,16 @@ pub fn decode_batch_ids(
     }
 }
 
-/// Decode each row once into bounded typed chunks, resolving only public
-/// requested values after the winning model-year pass has been selected.
-pub(crate) fn decode_chunks<I: AsRef<str> + Sync, C: ColumnWriter>(
+/// Decode each row once into bounded typed chunks at one explicit instant.
+pub(crate) fn decode_chunks_at<I: AsRef<str> + Sync, C: ColumnWriter>(
     inputs: &[I],
     years: Option<&[Option<i32>]>,
     metas: &[IdMeta],
     make_column: impl Fn(IdsDType, usize) -> C + Sync,
+    now_micros: i64,
 ) -> Vec<ColumnChunk<C>> {
     use rayon::prelude::*;
-
-    let secs = now_secs();
-    let now_micros = secs * 1_000_000;
-    let current_year = epoch_to_year(secs);
+    let current_year = crate::current_year_at(now_micros);
     let db = Db::embedded();
     // IdMeta is public: retain visibility filtering and last-column-wins
     // behavior even when the caller bypasses resolve_columns.
@@ -501,7 +514,7 @@ mod tests {
                     .elements
                     .iter()
                     .find(|e| e.element_id == m.id)
-                    .map(|e| e.value.as_str())
+                    .map(|e| e.value.as_ref())
                     .filter(|v| !v.is_empty());
                 let what = format!("element {} for {vin:?}", m.id);
                 match &batch.columns[ci] {
@@ -571,7 +584,7 @@ mod tests {
                     .elements
                     .iter()
                     .find(|e| e.element_id == meta.id)
-                    .map(|e| e.value.as_str())
+                    .map(|e| e.value.as_ref())
                     .filter(|v| !v.is_empty());
                 match &batch.columns[ci] {
                     ColumnValues::Str(values) => assert_eq!(values[row].as_deref(), expected),

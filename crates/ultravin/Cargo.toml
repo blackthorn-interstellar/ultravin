@@ -17,6 +17,8 @@ exclude = ["data/*.rkyv"]
 
 [features]
 default = ["download-data"]
+batch-slab = []
+stage-trace = []
 # build.rs fetches this version's vpic.rkyv from its GitHub release when no
 # artifact is supplied — once per machine, blake3-verified against
 # data/manifest.json, then embedded. Off for offline/reproducible builds:
@@ -85,6 +87,13 @@ criterion = { version = "0.5", default-features = false, features = ["cargo_benc
 [target.'cfg(any(target_arch = "x86_64", target_arch = "aarch64"))'.dev-dependencies]
 mimalloc = { version = "0.1", default-features = false, features = ["v2", "local_dynamic_tls"] }
 
+[target."cfg(unix)".dev-dependencies]
+libc = "0.2.189"
+
 [[bench]]
 name = "decode"
 harness = false
+
+[[example]]
+name = "storage_probe"
+required-features = ["batch-slab"]

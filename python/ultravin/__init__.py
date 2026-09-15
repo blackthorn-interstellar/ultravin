@@ -10,6 +10,8 @@ from ultravin import _ultravin
 from ultravin._ultravin import (
     DecodeStream,
     __version__,
+    _BatchTuner as _BatchTuner,
+    _decode_batch_jsonl as _decode_batch_jsonl,
     cover_vins,
     decode,
     decode_batch,
@@ -18,6 +20,8 @@ from ultravin._ultravin import (
     decode_stream,
     generate,
     pairwise,
+    predict_batch_size,
+    provenance,
     seeded,
     sweep,
 )
@@ -43,6 +47,8 @@ __all__ = [
     "decode_stream",
     "generate",
     "pairwise",
+    "predict_batch_size",
+    "provenance",
     "seeded",
     "sweep",
 ]

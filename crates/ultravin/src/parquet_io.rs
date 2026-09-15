@@ -14,8 +14,10 @@
 //! does. No row of the output is materialized as a Python object on this path —
 //! the pyo3 layer hands back either a row count or lazily-iterated column dicts.
 
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 use arrow_array::{cast::AsArray, Array, RecordBatch, RecordBatchReader};
 use arrow_cast::cast;
@@ -25,11 +27,14 @@ use parquet::arrow::{ArrowWriter, ProjectionMask};
 use parquet::basic::Compression;
 use parquet::file::properties::WriterProperties;
 
+use crate::adaptive::BatchFeedback;
 use crate::arrow_io::{
-    is_intish, is_stringish, vin_by_name, year_by_name, ArrowDecoder, ColumnNames,
+    is_intish, is_stringish, vin_by_name, year_by_name, ArrowBatchRebatcher, ArrowDecoder,
+    ColumnNames,
 };
 use crate::db::Db;
 use crate::ids::{resolve_columns, ColumnSpec, IdMeta};
+use crate::predictor::BatchFormat;
 
 /// The dataset door reports failures through the arrow layer's error type, so a
 /// column mistake reads the same whether it came off disk or out of a stream.
@@ -123,9 +128,9 @@ fn sniff_vin_candidates(batch: &RecordBatch, sample: usize) -> Vec<usize> {
 
 /// Integer columns whose first `sample` non-null values are ≥90% plausible model
 /// years (`[1980, current_year + 2]`, the same window vPIC accepts).
-fn sniff_year_candidates(batch: &RecordBatch, sample: usize) -> Vec<usize> {
+fn sniff_year_candidates_at(batch: &RecordBatch, sample: usize, now_micros: i64) -> Vec<usize> {
     let lo = 1980i64;
-    let hi = i64::from(crate::current_year() + 2);
+    let hi = i64::from(crate::current_year_at(now_micros) + 2);
     let mut cands = Vec::new();
     for i in 0..batch.num_columns() {
         let dt = batch.column(i).data_type();
@@ -183,13 +188,21 @@ fn expand_src(src: &Path) -> Result<Vec<PathBuf>, ParquetError> {
 struct FileState {
     reader: parquet::arrow::arrow_reader::ParquetRecordBatchReader,
     decoder: ArrowDecoder,
+    rebatcher: ArrowBatchRebatcher,
+    exhausted: bool,
 }
 
 impl FileState {
     /// Open one file: footer-based column resolution (names first, then a sniff
     /// over the leading rows), then a streaming reader projected down to the one
     /// or two columns the decode reads.
-    fn open(path: &Path, opts: &ParquetOpts, metas: &[IdMeta]) -> Result<Self, ParquetError> {
+    fn open(
+        path: &Path,
+        opts: &ParquetOpts,
+        metas: &[IdMeta],
+        now_micros: i64,
+        reader_batch_size: usize,
+    ) -> Result<Self, ParquetError> {
         let file =
             File::open(path).map_err(|e| ParquetError::Io(format!("{}: {e}", path.display())))?;
         let builder = ParquetRecordBatchReaderBuilder::try_new(file).map_err(|e| {
@@ -226,7 +239,7 @@ impl FileState {
                 // caller hint, so an empty file is not fatal here the way a
                 // missing VIN column is. Only ambiguity is a mistake.
                 let cands = match peek_first(&mut sample, path, opts)? {
-                    Some(b) => sniff_year_candidates(b, opts.sample_rows.max(1)),
+                    Some(b) => sniff_year_candidates_at(b, opts.sample_rows.max(1), now_micros),
                     None => Vec::new(),
                 };
                 if cands.len() > 1 {
@@ -258,22 +271,28 @@ impl FileState {
         let mask = ProjectionMask::roots(builder.parquet_schema(), keep.iter().copied());
         let reader = builder
             .with_projection(mask)
-            .with_batch_size(opts.batch_size.max(1))
+            .with_batch_size(reader_batch_size.max(1))
             .build()
             .map_err(|e| ParquetError::Io(format!("{}: {e}", path.display())))?;
 
         // Validation (a non-text VIN column, one column claimed twice, a name
         // collision in the output) lives with the decoder, so `vin=` naming a
         // number column fails here exactly as it does for any other source.
-        let decoder = ArrowDecoder::with_columns(
+        let decoder = ArrowDecoder::with_columns_at(
             &reader.schema(),
             projected(vin_idx),
             year_idx.map(projected),
             metas.to_vec(),
             opts.names,
+            now_micros,
         )?;
 
-        Ok(FileState { reader, decoder })
+        Ok(FileState {
+            reader,
+            decoder,
+            rebatcher: ArrowBatchRebatcher::new(),
+            exhausted: false,
+        })
     }
 }
 
@@ -348,6 +367,8 @@ pub struct ParquetChunkIter {
     state: Option<FileState>,
     opts: ParquetOpts,
     metas: Vec<IdMeta>,
+    now_micros: i64,
+    feedback: Option<BatchFeedback>,
     /// Set once a chunk or a file open has failed. The reader is then parked
     /// mid-source, so resuming would silently skip whatever it could not read —
     /// stop instead.
@@ -358,12 +379,57 @@ pub struct ParquetChunkIter {
 
 /// Open a dataset source for chunked decoding.
 pub fn open_chunks(src: &Path, opts: ParquetOpts) -> Result<ParquetChunkIter, ParquetError> {
+    open_chunks_at(src, opts, crate::now_micros())
+}
+
+/// [`open_chunks`] at one explicit instant, shared by every file and batch.
+pub fn open_chunks_at(
+    src: &Path,
+    opts: ParquetOpts,
+    now_micros: i64,
+) -> Result<ParquetChunkIter, ParquetError> {
+    open_chunks_impl(src, opts, now_micros, None)
+}
+
+/// Open a dataset with batch sizes learned from the work itself.
+pub fn open_chunks_auto(
+    src: &Path,
+    opts: ParquetOpts,
+    memory_bytes: usize,
+) -> Result<ParquetChunkIter, ParquetError> {
+    open_chunks_auto_at(src, opts, memory_bytes, crate::now_micros())
+}
+
+/// [`open_chunks_auto`] at one stable instant shared by the whole dataset.
+pub fn open_chunks_auto_at(
+    src: &Path,
+    opts: ParquetOpts,
+    memory_bytes: usize,
+    now_micros: i64,
+) -> Result<ParquetChunkIter, ParquetError> {
+    let feedback = BatchFeedback::new_predictive(
+        BatchFormat::Columnar,
+        memory_bytes,
+        rayon::current_num_threads(),
+    )
+    .map_err(|e| ParquetError::Config(e.to_string()))?;
+    open_chunks_impl(src, opts, now_micros, Some(feedback))
+}
+
+fn open_chunks_impl(
+    src: &Path,
+    opts: ParquetOpts,
+    now_micros: i64,
+    feedback: Option<BatchFeedback>,
+) -> Result<ParquetChunkIter, ParquetError> {
     let metas = resolve_columns(Db::embedded(), &opts.columns).map_err(ParquetError::Config)?;
     let mut iter = ParquetChunkIter {
         files: expand_src(src)?.into_iter(),
         state: None,
         opts,
         metas,
+        now_micros,
+        feedback,
         failed: false,
         out_schema: None,
     };
@@ -372,6 +438,10 @@ pub fn open_chunks(src: &Path, opts: ParquetOpts) -> Result<ParquetChunkIter, Pa
 }
 
 impl ParquetChunkIter {
+    pub fn feedback(&self) -> Option<BatchFeedback> {
+        self.feedback.clone()
+    }
+
     /// Open the next file, if any. `Ok(false)` = exhausted.
     ///
     /// Every file in a directory must resolve the same output shape. They are
@@ -385,7 +455,18 @@ impl ParquetChunkIter {
         let Some(path) = self.files.next() else {
             return Ok(false);
         };
-        let st = FileState::open(&path, &self.opts, &self.metas)?;
+        let reader_batch_size = if self.feedback.is_some() {
+            8_192
+        } else {
+            self.opts.batch_size.max(1)
+        };
+        let st = FileState::open(
+            &path,
+            &self.opts,
+            &self.metas,
+            self.now_micros,
+            reader_batch_size,
+        )?;
         let schema = st.decoder.out_schema();
         match &self.out_schema {
             Some(first) if first != schema => {
@@ -421,6 +502,13 @@ impl ParquetChunkIter {
             if self.state.is_none() && !self.advance_file()? {
                 return Ok(None);
             }
+            if self.feedback.is_some() {
+                if let Some(batch) = self.next_adaptive_batch()? {
+                    return Ok(Some(batch));
+                }
+                self.state = None;
+                continue;
+            }
             let st = self.state.as_mut().expect("a file is open");
             let batch = match st.reader.next().transpose() {
                 Err(e) => return Err(ParquetError::Io(format!("reading row group: {e}"))),
@@ -434,6 +522,42 @@ impl ParquetChunkIter {
             let st = self.state.as_ref().expect("a file is open");
             return st.decoder.decode_batch(&batch).map(Some);
         }
+    }
+
+    fn next_adaptive_batch(&mut self) -> Result<Option<RecordBatch>, ParquetError> {
+        let feedback = self.feedback.as_ref().expect("adaptive mode").clone();
+        let target = feedback.next_rows();
+        let started = Instant::now();
+        let input = loop {
+            let st = self.state.as_mut().expect("a file is open");
+            if let Some(batch) = st.rebatcher.take(target)? {
+                break Some(batch);
+            }
+            if st.exhausted {
+                break st.rebatcher.finish()?;
+            }
+            match st.reader.next().transpose() {
+                Err(e) => return Err(ParquetError::Io(format!("reading row group: {e}"))),
+                Ok(Some(batch)) => st.rebatcher.push(batch),
+                Ok(None) => st.exhausted = true,
+            }
+        };
+        let Some(input) = input else {
+            return Ok(None);
+        };
+        let rows = input.num_rows();
+        let decoder = &self.state.as_ref().expect("a file is open").decoder;
+        let output = feedback.decode(rows, || {
+            let output = decoder.decode_batch(&input)?;
+            let output_bytes = decoder.batch_working_bytes(&output);
+            Ok::<_, ParquetError>((output, output_bytes))
+        })?;
+        feedback.observe_total(
+            rows,
+            started.elapsed(),
+            decoder.batch_working_bytes(&output),
+        );
+        Ok(Some(output))
     }
 }
 
@@ -461,10 +585,9 @@ fn resolve_dst(dst: &Path) -> Option<PathBuf> {
     Some(parent.canonicalize().ok()?.join(dst.file_name()?))
 }
 
-/// The writer truncates `dst` before the reader has finished with the source, so
-/// a destination that *is* the source (or lives inside a source directory) would
-/// destroy the input mid-decode. Both are caller mistakes worth refusing up
-/// front, while the input is still intact.
+/// Keep source paths separate from generated output. Replacing the source loses
+/// the original input, and adding output inside a source directory changes what
+/// the next job reads. Refuse both before consuming the stream.
 pub fn check_dst_outside_src(src: &Path, dst: &Path) -> Result<(), ParquetError> {
     let (Ok(src_real), Some(dst_real)) = (src.canonicalize(), resolve_dst(dst)) else {
         return Ok(());
@@ -514,25 +637,110 @@ pub fn write_parquet(
     dst: &Path,
     row_group: usize,
 ) -> Result<usize, ParquetError> {
-    let out = File::create(dst).map_err(|e| ParquetError::Io(format!("{}: {e}", dst.display())))?;
+    write_parquet_inner(batches, schema, dst, row_group, None)
+}
+
+pub fn write_parquet_adaptive(
+    batches: impl Iterator<Item = Result<RecordBatch, ParquetError>>,
+    schema: SchemaRef,
+    dst: &Path,
+    feedback: BatchFeedback,
+) -> Result<usize, ParquetError> {
+    write_parquet_inner(batches, schema, dst, 65_536, Some(feedback))
+}
+
+fn write_parquet_inner(
+    batches: impl Iterator<Item = Result<RecordBatch, ParquetError>>,
+    schema: SchemaRef,
+    dst: &Path,
+    row_group: usize,
+    feedback: Option<BatchFeedback>,
+) -> Result<usize, ParquetError> {
+    static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
+
+    let parent = dst.parent().unwrap_or_else(|| Path::new("."));
+    let (tmp, out) = (0..100)
+        .find_map(|_| {
+            let nonce = NEXT_TEMP.fetch_add(1, Ordering::Relaxed);
+            let tmp = parent.join(format!(".ultravin-{}-{nonce}.tmp", std::process::id()));
+            match OpenOptions::new().write(true).create_new(true).open(&tmp) {
+                Ok(file) => Some(Ok((tmp, file))),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => None,
+                Err(e) => Some(Err(ParquetError::Io(format!("{}: {e}", tmp.display())))),
+            }
+        })
+        .unwrap_or_else(|| {
+            Err(ParquetError::Io(format!(
+                "could not reserve a temporary file next to {}",
+                dst.display()
+            )))
+        })?;
+    let cleanup = TempOutput(tmp.clone());
+    let destination_permissions = std::fs::metadata(dst)
+        .ok()
+        .filter(|metadata| metadata.is_file())
+        .map(|metadata| metadata.permissions());
     let props = WriterProperties::builder()
         .set_compression(Compression::SNAPPY)
         .set_max_row_group_row_count(Some(row_group.max(1)))
         .build();
     let mut writer = ArrowWriter::try_new(out, schema, Some(props))
-        .map_err(|e| ParquetError::Io(format!("{}: {e}", dst.display())))?;
+        .map_err(|e| ParquetError::Io(format!("{}: {e}", tmp.display())))?;
     let mut rows = 0usize;
     for batch in batches {
         let batch = batch?;
         rows += batch.num_rows();
+        let started = Instant::now();
         writer
             .write(&batch)
             .map_err(|e| ParquetError::Io(format!("writing row group: {e}")))?;
+        if let Some(feedback) = &feedback {
+            writer
+                .flush()
+                .map_err(|e| ParquetError::Io(format!("flushing row group: {e}")))?;
+            feedback.add_output_time(started.elapsed());
+        }
     }
     writer
         .close()
-        .map_err(|e| ParquetError::Io(format!("finalizing {}: {e}", dst.display())))?;
+        .map_err(|e| ParquetError::Io(format!("finalizing {}: {e}", tmp.display())))?;
+    if let Some(permissions) = destination_permissions {
+        std::fs::set_permissions(&tmp, permissions).map_err(|e| {
+            ParquetError::Io(format!("setting permissions on {}: {e}", tmp.display()))
+        })?;
+    }
+    std::fs::rename(&tmp, dst).map_err(|e| {
+        ParquetError::Io(format!(
+            "installing completed parquet at {}: {e}",
+            dst.display()
+        ))
+    })?;
+    cleanup.keep();
     Ok(rows)
+}
+
+/// Removes an incomplete output on every error path. The destination itself is
+/// untouched until the parquet footer has been written successfully.
+struct TempOutput(PathBuf);
+
+impl TempOutput {
+    fn keep(mut self) {
+        self.0.clear();
+    }
+}
+
+impl Drop for TempOutput {
+    fn drop(&mut self) {
+        if !self.0.as_os_str().is_empty() {
+            #[cfg(windows)]
+            if let Ok(metadata) = std::fs::metadata(&self.0) {
+                let mut permissions = metadata.permissions();
+                permissions.set_readonly(false);
+                let _ = std::fs::set_permissions(&self.0, permissions);
+            }
+            let _ = std::fs::remove_file(&self.0);
+        }
+    }
 }
 
 #[cfg(test)]
@@ -634,6 +842,56 @@ mod tests {
         batches.pop().expect("batch")
     }
 
+    #[test]
+    fn adaptive_chunks_preserve_multifile_rows_order_and_empty_parts() {
+        if !loaded() {
+            return;
+        }
+        let scratch = Scratch::new();
+        let parts = scratch.join("parts");
+        std::fs::create_dir(&parts).expect("parts");
+        write(
+            &parts.join("00-empty.parquet"),
+            &batch(vec![utf8("vin", &[]), i32s("year", &[])]),
+        );
+        let hondas = vec![Some(HONDA); 5_000];
+        let honda_years = vec![Some(2003); 5_000];
+        write(
+            &parts.join("01-honda.parquet"),
+            &batch(vec![utf8("vin", &hondas), i32s("year", &honda_years)]),
+        );
+        let fords = vec![Some(FORD); 5_000];
+        let ford_years = vec![Some(2013); 5_000];
+        write(
+            &parts.join("02-ford.parquet"),
+            &batch(vec![utf8("vin", &fords), i32s("year", &ford_years)]),
+        );
+        let named = ParquetOpts {
+            vin: Some("vin".into()),
+            year: Some("year".into()),
+            ..opts(&[MAKE])
+        };
+        let chunks: Vec<_> = open_chunks_auto_at(&parts, named, 64 << 20, 0)
+            .expect("open")
+            .collect::<Result<_, _>>()
+            .expect("decode");
+        assert!(chunks.iter().all(|batch| batch.num_rows() <= 16_384));
+        let vins: Vec<_> = chunks
+            .iter()
+            .flat_map(|batch| {
+                batch
+                    .column_by_name("vin")
+                    .expect("vin")
+                    .as_string::<i32>()
+                    .iter()
+            })
+            .flatten()
+            .collect();
+        assert_eq!(vins.len(), 10_000);
+        assert!(vins[..5_000].iter().all(|vin| *vin == HONDA));
+        assert!(vins[5_000..].iter().all(|vin| *vin == FORD));
+    }
+
     fn col_utf8(b: &RecordBatch, name: &str) -> Vec<Option<String>> {
         let a = b.column_by_name(name).expect(name).as_string::<i32>();
         (0..a.len())
@@ -683,7 +941,14 @@ mod tests {
     fn reader_width(path: &Path, opts: &ParquetOpts) -> usize {
         use arrow_array::RecordBatchReader;
         let metas = resolve_columns(Db::embedded(), &opts.columns).expect("columns");
-        let st = FileState::open(path, opts, &metas).expect("open");
+        let st = FileState::open(
+            path,
+            opts,
+            &metas,
+            crate::now_micros(),
+            opts.batch_size.max(1),
+        )
+        .expect("open");
         st.reader.schema().fields().len()
     }
 
@@ -1073,6 +1338,105 @@ mod tests {
             }
             other => panic!("expected the write to be refused, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn failed_write_preserves_existing_destination_and_removes_temporary_file() {
+        let dir = Scratch::new();
+        let dst = dir.join("out.parquet");
+        std::fs::write(&dst, b"previous output").expect("seed destination");
+        let input = batch(vec![utf8("vin", &[Some(HONDA)])]);
+        let schema = input.schema();
+        let batches = vec![
+            Ok(input),
+            Err(ParquetError::Io("injected reader failure".to_string())),
+        ];
+
+        let err = write_parquet(batches.into_iter(), schema, &dst, 1).unwrap_err();
+        assert!(err.to_string().contains("injected reader failure"), "{err}");
+        assert_eq!(std::fs::read(&dst).unwrap(), b"previous output");
+        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn failed_write_leaves_no_destination_when_none_existed() {
+        let dir = Scratch::new();
+        let dst = dir.join("out.parquet");
+        let input = batch(vec![utf8("vin", &[Some(HONDA)])]);
+        let schema = input.schema();
+        let batches = vec![
+            Ok(input),
+            Err(ParquetError::Io("injected reader failure".to_string())),
+        ];
+
+        assert!(write_parquet(batches.into_iter(), schema, &dst, 1).is_err());
+        assert!(!dst.exists());
+        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 0);
+    }
+
+    #[test]
+    fn successful_write_atomically_replaces_existing_destination() {
+        let dir = Scratch::new();
+        let dst = dir.join("out.parquet");
+        std::fs::write(&dst, b"previous output").expect("seed destination");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&dst, std::fs::Permissions::from_mode(0o640)).unwrap();
+        }
+        let input = batch(vec![utf8("vin", &[Some(HONDA), Some(FORD)])]);
+        let schema = input.schema();
+
+        assert_eq!(
+            write_parquet(vec![Ok(input)].into_iter(), schema, &dst, 2).unwrap(),
+            2
+        );
+        assert_eq!(read(&dst).num_rows(), 2);
+        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 1);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            assert_eq!(
+                std::fs::metadata(&dst).unwrap().permissions().mode() & 0o777,
+                0o640
+            );
+        }
+    }
+
+    #[test]
+    fn rename_failure_preserves_destination_and_removes_temporary_file() {
+        let dir = Scratch::new();
+        let dst = dir.join("existing-directory");
+        std::fs::create_dir(&dst).unwrap();
+        let input = batch(vec![utf8("vin", &[Some(HONDA)])]);
+        let schema = input.schema();
+
+        let err = write_parquet(vec![Ok(input)].into_iter(), schema, &dst, 1).unwrap_err();
+        assert!(
+            err.to_string().contains("installing completed parquet"),
+            "{err}"
+        );
+        assert!(dst.is_dir());
+        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn a_hardlink_destination_does_not_modify_the_source_inode() {
+        if !loaded() {
+            return;
+        }
+        let dir = Scratch::new();
+        let src = dir.join("in.parquet");
+        let dst = dir.join("out.parquet");
+        write(&src, &batch(vec![utf8("vin", &[Some(HONDA)])]));
+        std::fs::hard_link(&src, &dst).expect("hard link");
+
+        assert_eq!(
+            decode_parquet_to_file(&src, &dst, opts(&[MAKE])).unwrap(),
+            1
+        );
+        assert_eq!(col_utf8(&read(&src), "vin"), [Some(HONDA.to_string())]);
+        assert_eq!(col_utf8(&read(&dst), "Make"), [Some("HONDA".to_string())]);
     }
 
     #[test]

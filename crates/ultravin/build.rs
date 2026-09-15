@@ -63,7 +63,43 @@ fn main() {
             }
         }
     };
+    emit_provenance(&data_dir.join("manifest.json"), &artifact);
     println!("cargo:rustc-env=ULTRAVIN_ARTIFACT={}", artifact.display());
+}
+
+/// Make the release manifest's stable identity available to the library without
+/// parsing JSON or touching the filesystem at runtime.
+fn emit_provenance(manifest: &Path, artifact: &Path) {
+    let text = String::from_utf8(read(manifest, "data manifest")).unwrap();
+    for (json_key, env_key) in [
+        ("month", "ULTRAVIN_DATA_MONTH"),
+        ("artifact_blake3", "ULTRAVIN_ARTIFACT_BLAKE3"),
+    ] {
+        let needle = format!("\"{json_key}\"");
+        let value = text
+            .find(&needle)
+            .and_then(|i| {
+                text[i + needle.len()..]
+                    .find(':')
+                    .map(|j| i + needle.len() + j + 1)
+            })
+            .and_then(|i| {
+                let rest = &text[i..];
+                let start = rest.find('"')? + 1;
+                let end = rest[start..].find('"')? + start;
+                Some(&rest[start..end])
+            })
+            .unwrap_or_else(|| panic!("ultravin: {} has no {json_key}", manifest.display()));
+        println!("cargo:rustc-env={env_key}={value}");
+    }
+    let bytes = read(artifact, "selected artifact");
+    let mut hasher = blake3::Hasher::new();
+    hasher.update(&bytes[tables::HEADER_LEN..]);
+    hasher.update(&bytes[10..14]);
+    println!(
+        "cargo:rustc-env=ULTRAVIN_ACTUAL_ARTIFACT_BLAKE3={}",
+        hasher.finalize().to_hex()
+    );
 }
 
 fn env_path(name: &str) -> Option<PathBuf> {

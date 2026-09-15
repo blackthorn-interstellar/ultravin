@@ -66,8 +66,11 @@ impl Dec {
             }
             _ => {}
         }
-        let mut int_part = String::new();
-        let mut frac_part = String::new();
+        // The trimmed source bounds the digit count exactly. Build the stored
+        // magnitude in one buffer instead of growing integer/fraction buffers
+        // separately and then allocating a third concatenated String.
+        let mut mag = String::with_capacity(s.len());
+        let mut dscale = 0;
         let mut seen_dot = false;
         let mut any_digit = false;
         for ch in chars {
@@ -78,10 +81,9 @@ impl Dec {
                 seen_dot = true;
             } else if ch.is_ascii_digit() {
                 any_digit = true;
+                mag.push(ch);
                 if seen_dot {
-                    frac_part.push(ch);
-                } else {
-                    int_part.push(ch);
+                    dscale += 1;
                 }
             } else {
                 return None;
@@ -90,11 +92,7 @@ impl Dec {
         if !any_digit {
             return None;
         }
-        Some(Dec {
-            dscale: frac_part.len(),
-            mag: format!("{int_part}{frac_part}"),
-            neg,
-        })
+        Some(Dec { dscale, mag, neg })
     }
 
     fn is_zero(&self) -> bool {
@@ -302,5 +300,24 @@ mod tests {
     fn whitespace_in_value_is_tolerated() {
         // PostgreSQL parses ` 223 / 16.387064 ` fine.
         assert_eq!(eval("#x# / 16.387064 ", " 223 "), "13.6082949331252993");
+    }
+
+    #[test]
+    fn decimal_parser_preserves_sign_digits_and_scale() {
+        for (text, neg, mag, dscale) in [
+            ("001.2300", false, "0012300", 4),
+            ("-.50", true, "50", 2),
+            ("+5.", false, "5", 0),
+            ("  -0.00  ", true, "000", 2),
+        ] {
+            let parsed = Dec::parse(text).expect("valid decimal");
+            assert_eq!(
+                (parsed.neg, parsed.mag.as_str(), parsed.dscale),
+                (neg, mag, dscale)
+            );
+        }
+        for invalid in ["", "+", "-", ".", "1.2.3", "1e3", "1 2", "é"] {
+            assert!(Dec::parse(invalid).is_none(), "accepted {invalid:?}");
+        }
     }
 }

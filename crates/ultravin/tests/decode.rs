@@ -13,7 +13,7 @@ fn value(vin: &str, element_id: i32) -> Option<String> {
         .elements
         .into_iter()
         .find(|e| e.element_id == element_id)
-        .map(|e| e.value)
+        .map(|e| e.value.into_owned())
 }
 
 #[test]
@@ -119,7 +119,7 @@ fn embedded_loader_is_consistent() {
         let mut v: Vec<_> = r
             .elements
             .iter()
-            .map(|e| (e.element_id, e.value.clone(), e.source.to_string()))
+            .map(|e| (e.element_id, e.value.to_string(), e.source.to_string()))
             .collect();
         v.sort();
         v

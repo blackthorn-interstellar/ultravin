@@ -8,6 +8,7 @@
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::rc::Rc;
+use std::sync::OnceLock;
 
 use crate::checkdigit::{check_digit_v1, check_digit_with_flag, is_default_char, is_my_char};
 use crate::db::Db;
@@ -38,7 +39,7 @@ pub(crate) struct ValidChars {
     /// at that position renders the same set again — sorting and formatting it
     /// char by char was ~4% of a decode. Cleared on `insert`, so the cache can
     /// never outlive the set it describes.
-    rendered: std::cell::OnceCell<String>,
+    rendered: OnceLock<String>,
 }
 
 impl ValidChars {
@@ -228,7 +229,7 @@ thread_local! {
     /// key, compiles a regex to do it (see [`valid_chars_in_regex`]). The
     /// expansion is a pure function of the key text and the keys come from the
     /// immutable archive, so a hit is byte-identical to recomputing; this is the
-    /// same trade as [`CHARSET_CACHE`] below.
+    /// same trade as the shared valid-charset cache below.
     /// Not shared with [`valid_charset`], which sweeps *every* key of a WMI-year
     /// (already memoized as a whole) and would flood the memo with keys E6 never
     /// asks about. Keys are archive-derived, never caller-derived, so the fast
@@ -255,18 +256,72 @@ fn key_chars(key: &str) -> KeyChars {
 
 // The correction helper consults only VIN positions 4..14. Index those
 // directly; the public recomputation function still returns every position.
-type Charset = Rc<[ValidChars; 11]>;
+type Charset = [ValidChars; 11];
 
-thread_local! {
-    /// Per-thread memo of [`valid_charset`], keyed by wmi then `model_year`. The
-    /// charset is a pure function of those two inputs and the immutable archive,
-    /// yet the SQL recomputes it on every decode (and once per best-of pass) —
-    /// the same work the server-side `WMIYearValidChars` table materialises.
-    /// `Rc` keeps a hit clone-free. The
-    /// outer key is a `String` but lookups borrow it as `&str`, so a cache hit
-    /// allocates nothing (the old `(String, i32)` key allocated on every call).
-    static CHARSET_CACHE: RefCell<HashMap<String, HashMap<i32, Charset>>> =
-        RefCell::new(HashMap::new());
+pub(crate) struct ValidCharsetCache {
+    /// Keys are copied only from the immutable archive. Caller input can query
+    /// this map but cannot grow it.
+    by_wmi: HashMap<String, OnceLock<Box<[CharsetInterval]>>, FxBuildHasher>,
+}
+
+struct CharsetInterval {
+    start: i64,
+    end: i64,
+    charset: OnceLock<Option<Box<Charset>>>,
+}
+
+impl ValidCharsetCache {
+    pub(crate) fn new(db: &Db) -> Self {
+        let mut by_wmi = HashMap::default();
+        for row in db.wmis() {
+            by_wmi
+                .entry(db.s(row.wmi.to_native()).to_owned())
+                .or_insert_with(OnceLock::new);
+        }
+        Self { by_wmi }
+    }
+
+    fn get<'a>(&'a self, db: &Db, wmi: &str, year: i32) -> Option<&'a Charset> {
+        let intervals = self
+            .by_wmi
+            .get(wmi)?
+            .get_or_init(|| charset_intervals(db, wmi));
+        let year = i64::from(year);
+        let interval = intervals.get(intervals.partition_point(|interval| interval.end <= year))?;
+        if year < interval.start {
+            return None;
+        }
+        interval
+            .charset
+            .get_or_init(|| build_charset(db, wmi, interval.start as i32).map(Box::new))
+            .as_deref()
+    }
+}
+
+/// Partition all i32 years at this WMI's archive range changes. The topology is
+/// bounded by archive links; reversed ranges contribute no intervals.
+fn charset_intervals(db: &Db, wmi: &str) -> Box<[CharsetInterval]> {
+    let mut boundaries = vec![i64::from(i32::MIN), i64::from(i32::MAX) + 1];
+    for wmiid in db.wmi_ids_for_str(wmi) {
+        for row in db.wmi_vinschema_for(wmiid) {
+            let start = i64::from(row.yearfrom.to_native());
+            let end = i64::from(row.yearto_or(2999));
+            if start <= end {
+                boundaries.push(start);
+                boundaries.push(end + 1);
+            }
+        }
+    }
+    boundaries.sort_unstable();
+    boundaries.dedup();
+    boundaries
+        .windows(2)
+        .map(|bounds| CharsetInterval {
+            start: bounds[0],
+            end: bounds[1],
+            charset: OnceLock::new(),
+        })
+        .collect()
 }
 
 /// The distinct pattern keys covering `wmi` in `year` — the cursor body of
@@ -307,14 +362,8 @@ pub fn recompute_valid_chars(db: &Db, wmi: &str, year: i32) -> BTreeMap<i32, BTr
 /// `WMIYearValidChars` cache and only calls the function on an empty cell, and
 /// the shipped cache is stale for ~2% of (wmi, year) cells — see
 /// `docs/KNOWN_DEVIATIONS.md` and the `--stale-cache-report` scan.
-fn valid_charset(db: &Db, wmi: &str, model_year: Option<i32>) -> Option<Charset> {
-    let year = model_year?;
-    if let Some(hit) =
-        CHARSET_CACHE.with(|c| c.borrow().get(wmi).and_then(|m| m.get(&year)).cloned())
-    {
-        return Some(hit);
-    }
-    let mut map: [ValidChars; 11] = std::array::from_fn(|_| ValidChars::default());
+fn build_charset(db: &Db, wmi: &str, year: i32) -> Option<Charset> {
+    let mut map: Charset = std::array::from_fn(|_| ValidChars::default());
     let mut any = false;
     for key in &charset_keys(db, wmi, year) {
         for (kpos, c) in valid_chars_in_key(key) {
@@ -324,22 +373,12 @@ fn valid_charset(db: &Db, wmi: &str, model_year: Option<i32>) -> Option<Charset>
             }
         }
     }
-    // Preserve cache eligibility for keys that constrain only later positions.
-    if !any {
-        return None;
-    }
-    let charset = Rc::new(map);
-    // Only memoize WMIs that actually have schemas (a non-empty charset). Unknown
-    // or garbage WMIs from adversarial input yield an empty map that is cheap to
-    // recompute; caching them would let the (input-derived) WMI keyspace grow the
-    // cache without bound. Caching is transparent, so this never changes output.
-    CHARSET_CACHE.with(|c| {
-        c.borrow_mut()
-            .entry(wmi.to_string())
-            .or_default()
-            .insert(year, charset.clone())
-    });
-    Some(charset)
+    any.then_some(map)
+}
+
+fn valid_charset<'a>(db: &'a Db, wmi: &str, model_year: Option<i32>) -> Option<&'a Charset> {
+    let year = model_year?;
+    db.valid_charset_cache().get(db, wmi, year)
 }
 
 /// `substring(vin,1,pos-1) || rep || substring(vin, pos+1, 17-pos)`.
@@ -352,6 +391,68 @@ fn build_replace(vb: &[char], pos: i32, rep: &str) -> String {
     out
 }
 
+/// VIN characters without a heap allocation for the supported 17-character case.
+/// Longer malformed inputs retain the complete character sequence in the fallback.
+enum VinChars {
+    Stack { chars: [char; 17], len: usize },
+    Owned(Vec<char>),
+}
+
+impl VinChars {
+    fn new(vin: &str) -> Self {
+        let mut input = vin.chars();
+        let mut chars = ['\0'; 17];
+        let mut len = 0;
+        while len < chars.len() {
+            let Some(value) = input.next() else {
+                return Self::Stack { chars, len };
+            };
+            chars[len] = value;
+            len += 1;
+        }
+        let Some(next) = input.next() else {
+            return Self::Stack { chars, len };
+        };
+        let mut owned = Vec::with_capacity(18 + input.size_hint().0);
+        owned.extend_from_slice(&chars);
+        owned.push(next);
+        owned.extend(input);
+        Self::Owned(owned)
+    }
+
+    fn as_slice(&self) -> &[char] {
+        match self {
+            Self::Stack { chars, len } => &chars[..*len],
+            Self::Owned(chars) => chars,
+        }
+    }
+}
+
+/// Positions 4 through 14 contribute at most eleven characters.
+struct CorrectedChars {
+    chars: [char; 11],
+    len: usize,
+}
+
+impl CorrectedChars {
+    fn new() -> Self {
+        Self {
+            chars: ['\0'; 11],
+            len: 0,
+        }
+    }
+
+    fn push(&mut self, value: char) {
+        debug_assert!(self.len < self.chars.len());
+        self.chars[self.len] = value;
+        self.len += 1;
+    }
+
+    fn iter(&self) -> impl Iterator<Item = char> + '_ {
+        self.chars[..self.len].iter().copied()
+    }
+}
+
 /// Output of the `spvindecode_errorcode` helper.
 struct ErrorCodeOut {
     codes: Vec<i32>,
@@ -359,6 +460,33 @@ struct ErrorCodeOut {
     error_bytes: String,
     /// `None` mirrors the SQL OUT param left NULL (no unused positions).
     unused_positions: Option<String>,
+}
+
+fn correction_position_text(position: i32) -> &'static str {
+    match position {
+        4 => "4",
+        5 => "5",
+        6 => "6",
+        7 => "7",
+        8 => "8",
+        9 => "9",
+        10 => "10",
+        11 => "11",
+        12 => "12",
+        13 => "13",
+        14 => "14",
+        _ => unreachable!("correction position is bounded to 4..=14"),
+    }
+}
+
+fn push_replacement(out: &mut String, position: i32, replacements: &str) {
+    let position = correction_position_text(position);
+    out.reserve(position.len() + replacements.len() + 3);
+    out.push('(');
+    out.push_str(position);
+    out.push(':');
+    out.push_str(replacements);
+    out.push(')');
 }
 
 /// Port of `vpic.spvindecode_errorcode` (E0-E6). `matched_keys` are the
@@ -370,7 +498,8 @@ fn errorcode<'a>(
     model_year: Option<i32>,
     matched_keys: impl Iterator<Item = &'a str>,
 ) -> ErrorCodeOut {
-    let vb: Vec<char> = vin.chars().collect();
+    let vb = VinChars::new(vin);
+    let vb = vb.as_slice();
     let vlen = vb.len() as i32;
     let mut codes: Vec<i32> = Vec::new();
     let mut corrected_vin = String::new();
@@ -384,7 +513,7 @@ fn errorcode<'a>(
     // E1/E2: scan positions 4..min(n,len) against the correction charset.
     let charset = valid_charset(db, var_wmi, model_year);
     let n: i32 = if var_wmi.chars().count() == 6 { 11 } else { 14 };
-    let mut corrected = String::new();
+    let mut corrected = CorrectedChars::new();
     let mut replacements = String::new();
     let mut cnt_errors = 0;
     let mut last_error_pos = 0i32;
@@ -397,17 +526,13 @@ fn errorcode<'a>(
             corrected.push(var_c);
             continue;
         }
-        match charset
-            .as_deref()
-            .and_then(|chars| chars.get((i - 4) as usize))
-        {
+        match charset.and_then(|chars| chars.get((i - 4) as usize)) {
             Some(set) if !set.is_empty() => {
                 if set.contains(var_c) {
                     corrected.push(var_c);
                 } else {
                     let x = set.rendered();
-                    let _ =
-                        std::fmt::Write::write_fmt(&mut replacements, format_args!("({i}:{x})"));
+                    push_replacement(&mut replacements, i, x);
                     cnt_errors += 1;
                     last_error_pos = i;
                     last_replacements = x;
@@ -425,10 +550,10 @@ fn errorcode<'a>(
         let wmi_len = var_wmi.chars().count();
         if wmi_len == 3 {
             out.push_str(var_wmi);
-            out.push_str(&corrected);
+            out.extend(corrected.iter());
         } else {
             out.extend(var_wmi.chars().take(3));
-            out.push_str(&corrected);
+            out.extend(corrected.iter());
             out.extend(var_wmi.chars().skip(wmi_len.saturating_sub(3)));
         }
         let len = out.chars().count();
@@ -441,7 +566,7 @@ fn errorcode<'a>(
     if cnt_errors == 1 {
         if last_replacements.chars().count() == 1 {
             // E4(a): single candidate -> auto-correct (code 2).
-            corrected_vin = build_replace(&vb, last_error_pos, last_replacements);
+            corrected_vin = build_replace(vb, last_error_pos, last_replacements);
             codes.push(2);
             error_bytes = replacements.clone();
         } else {
@@ -450,7 +575,7 @@ fn errorcode<'a>(
             let mut new_repl = String::new();
             let mut corrected1 = String::new();
             for var_c in last_replacements.chars() {
-                let tmp = build_replace(&vb, last_error_pos, &var_c.to_string());
+                let tmp = build_replace(vb, last_error_pos, &var_c.to_string());
                 if let Some(cd) = check_digit_v1(&tmp) {
                     if tmp.chars().nth(8) == Some(cd) {
                         good += 1;
@@ -462,11 +587,11 @@ fn errorcode<'a>(
             if good == 1 {
                 codes.push(3);
                 corrected_vin = corrected1;
-                error_bytes = format!("({last_error_pos}:{new_repl})");
+                push_replacement(&mut error_bytes, last_error_pos, &new_repl);
             } else {
                 codes.push(4);
                 corrected_vin = compose_corrected();
-                error_bytes = format!("({last_error_pos}:{last_replacements})");
+                push_replacement(&mut error_bytes, last_error_pos, last_replacements);
             }
         }
     }
@@ -479,7 +604,7 @@ fn errorcode<'a>(
     // E6 only asks whether the VIN's own character is present at six positions.
     // Keep those membership answers, rather than allocating a set containing
     // every possible character from every matched key.
-    let used = used_key_positions(&vb, matched_keys);
+    let used = used_key_positions(vb, matched_keys);
     let ubound = 11.min(vlen);
     let mut unused = String::new();
     let mut i = 3i32;
@@ -495,7 +620,7 @@ fn errorcode<'a>(
             if !unused.is_empty() {
                 unused.push(',');
             }
-            let _ = std::fmt::Write::write_fmt(&mut unused, format_args!("{i}"));
+            unused.push_str(correction_position_text(i));
         }
     }
     if !unused.is_empty() {
@@ -619,6 +744,34 @@ mod tests {
     }
 
     #[test]
+    fn stack_errorcode_buffers_preserve_character_sequences() {
+        for vin in [
+            "",
+            "ABC",
+            "1HGCM82633A004352",
+            "é日本語abcdefghijkl",
+            "é日本語abcdefghijklmnop",
+            "a malformed input much longer than seventeen characters",
+        ] {
+            let expected: Vec<_> = vin.chars().collect();
+            let actual = VinChars::new(vin);
+            assert_eq!(actual.as_slice(), expected);
+            assert_eq!(
+                matches!(actual, VinChars::Stack { .. }),
+                expected.len() <= 17
+            );
+        }
+
+        for text in ["", "A", "CM8263A0043", "é日本語ABC"] {
+            let mut actual = CorrectedChars::new();
+            for value in text.chars() {
+                actual.push(value);
+            }
+            assert_eq!(actual.iter().collect::<String>(), text);
+        }
+    }
+
+    #[test]
     fn position_flags_equal_the_full_character_set() {
         let key_sets: &[&[&str]] = &[
             &[],
@@ -660,6 +813,7 @@ mod tests {
     }
 }
 
+#[cfg(test)]
 pub(crate) fn trunc500(s: &str) -> String {
     let end = if s.len() <= 500 {
         s.len()
@@ -667,6 +821,30 @@ pub(crate) fn trunc500(s: &str) -> String {
         s.char_indices().nth(500).map_or(s.len(), |(i, _)| i)
     };
     s[..end].to_string()
+}
+
+fn trim_truncate500(mut value: String) -> String {
+    let leading = value.len() - value.trim_start().len();
+    if leading != 0 {
+        value.drain(..leading);
+    }
+    let trailing_end = value.trim_end().len();
+    value.truncate(trailing_end);
+    if value.len() > 500 {
+        if let Some((end, _)) = value.char_indices().nth(500) {
+            value.truncate(end);
+        }
+    }
+    value
+}
+
+fn append_info(info: Option<String>, parts: &[&str]) -> String {
+    let mut value = info.unwrap_or_default();
+    value.reserve(parts.iter().map(|part| part.len()).sum());
+    for part in parts {
+        value.push_str(part);
+    }
+    trim_truncate500(value)
 }
 
 /// ASCII case-insensitive substring test without allocating — the proc's
@@ -887,9 +1065,9 @@ pub fn compute_errors(
     if raw.contains(&14) {
         // `prev || ' Unused position(s): ' || UnUsedPositions || '. '`; a NULL
         // UnUsedPositions makes the whole concat NULL (no-model code-14 case).
-        info = unused_positions.as_ref().map(|u| {
-            trunc500(format!("{} Unused position(s): {}. ", info.unwrap_or_default(), u).trim())
-        });
+        info = unused_positions
+            .as_ref()
+            .map(|u| append_info(info, &[" Unused position(s): ", u, ". "]));
     }
     if raw.contains(&400) {
         let stripped = if invalid_chars.len() > 2 {
@@ -897,13 +1075,9 @@ pub fn compute_errors(
         } else {
             ""
         };
-        info = Some(trunc500(
-            format!(
-                "{} Invalid character(s): {}. ",
-                info.unwrap_or_default(),
-                stripped
-            )
-            .trim(),
+        info = Some(append_info(
+            info,
+            &[" Invalid character(s): ", stripped, ". "],
         ));
     }
     let incomplete = vehicle_type == Some("10")
@@ -911,21 +1085,15 @@ pub fn compute_errors(
             .iter()
             .any(|it| it.element_id == 5 && INCOMPLETE.contains(&it.attribute_id.as_ref()));
     if incomplete {
-        info = Some(trunc500(
-            format!(
-                "{} Incomplete Vehicle Warning - Please be advised that the vehicle may have been altered and may not be an accurate representation of the vehicle in its current condition. ",
-                info.unwrap_or_default()
-            )
-            .trim(),
+        info = Some(append_info(
+            info,
+            &[" Incomplete Vehicle Warning - Please be advised that the vehicle may have been altered and may not be an accurate representation of the vehicle in its current condition. "],
         ));
     }
     if !conclusive {
-        info = Some(trunc500(
-            format!(
-                "{} The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information. ",
-                info.unwrap_or_default()
-            )
-            .trim(),
+        info = Some(append_info(
+            info,
+            &[" The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information. "],
         ));
     }
 
@@ -1002,6 +1170,56 @@ mod malformed_class_tests {
         }
     }
 
+    #[test]
+    fn static_replacement_positions_match_integer_formatting() {
+        for position in 4..=14 {
+            for replacements in ["", "A", "é日本", "ABCDEFGH"] {
+                let mut actual = String::new();
+                push_replacement(&mut actual, position, replacements);
+                assert_eq!(actual, format!("({position}:{replacements})"));
+            }
+        }
+    }
+
+    #[test]
+    fn in_place_info_append_matches_trimmed_truncation() {
+        let values = [
+            String::new(),
+            "  existing  ".to_string(),
+            "\u{2003}Unicode 日本\u{2003}".to_string(),
+            "é".repeat(499),
+            "😀".repeat(500),
+            "中".repeat(501),
+        ];
+        let suffixes = [
+            " Unused position(s): 4,11. ",
+            " Invalid character(s): 2:I. ",
+            " \u{2003}Unicode suffix\u{2003} ",
+            " x",
+        ];
+        for value in &values {
+            for suffix in suffixes {
+                let expected = trunc500(format!("{value}{suffix}").trim());
+                assert_eq!(
+                    append_info(Some(value.clone()), &[suffix]),
+                    expected,
+                    "value chars={}, suffix={suffix:?}",
+                    value.chars().count()
+                );
+            }
+        }
+
+        let mut actual = None;
+        let mut expected = None;
+        for suffix in suffixes.into_iter().cycle().take(12) {
+            actual = Some(append_info(actual, &[suffix]));
+            expected = Some(trunc500(
+                format!("{}{suffix}", expected.unwrap_or_default()).trim(),
+            ));
+            assert_eq!(actual, expected);
+        }
+    }
+
     /// docs/KNOWN_DEVIATIONS.md #1. `pattern` rows 1827685/1827686 (vinschema
     /// 24522, WMI 7T0, MY 2023-2025) carry the key `*****|*[1-A-JT]`. Postgres
     /// refuses to compile that class ("invalid character range") and aborts the
@@ -1067,6 +1285,182 @@ mod collation_tests {
             .chars()
             .for_each(|c| set.insert(c));
         assert_eq!(set.to_string(), "_|0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+    }
+}
+
+#[cfg(test)]
+mod shared_charset_tests {
+    use super::*;
+    use crate::tables::{serialize_artifact, Pattern, VpicData, Wmi, WmiVinSchema};
+
+    fn test_db(first_key: &str, second_key: &str) -> Db {
+        let strings = [
+            "ABC",
+            first_key,
+            second_key,
+            "E**********",
+            "F**********",
+            "Z**********",
+        ];
+        let mut arena_bytes = Vec::new();
+        let mut arena_offsets = vec![0];
+        for value in strings {
+            arena_bytes.extend_from_slice(value.as_bytes());
+            arena_offsets.push(arena_bytes.len() as u32);
+        }
+        let pattern = |id, schema, keys| Pattern {
+            id,
+            vinschemaid: schema,
+            keys,
+            keys_regex: 0,
+            elementid: 1,
+            attributeid: 0,
+            createdon_key: 0,
+            specificity: 0,
+            has_bracket: false,
+        };
+        let wmi = |id| Wmi {
+            id,
+            wmi: 0,
+            manufacturerid: 1,
+            makeid: 1,
+            vehicletypeid: 2,
+            trucktypeid: 0,
+            publicavailabilitydate: 0,
+            createdon_key: 0,
+        };
+        let data = VpicData {
+            arena_bytes,
+            arena_offsets,
+            wmi: vec![wmi(1), wmi(2)],
+            wmi_vinschema: vec![
+                WmiVinSchema {
+                    id: 1,
+                    wmiid: 1,
+                    vinschemaid: 10,
+                    yearfrom: 2000,
+                    yearto: 2005,
+                },
+                WmiVinSchema {
+                    id: 2,
+                    wmiid: 2,
+                    vinschemaid: 20,
+                    yearfrom: 2000,
+                    yearto: 2005,
+                },
+                WmiVinSchema {
+                    id: 3,
+                    wmiid: 2,
+                    vinschemaid: 30,
+                    yearfrom: 2006,
+                    yearto: 2010,
+                },
+                WmiVinSchema {
+                    id: 4,
+                    wmiid: 2,
+                    vinschemaid: 40,
+                    yearfrom: 2998,
+                    yearto: NULL_I32,
+                },
+                WmiVinSchema {
+                    id: 5,
+                    wmiid: 2,
+                    vinschemaid: 50,
+                    yearfrom: i32::MAX,
+                    yearto: i32::MAX,
+                },
+                WmiVinSchema {
+                    id: 6,
+                    wmiid: 2,
+                    vinschemaid: 60,
+                    yearfrom: 2020,
+                    yearto: 2019,
+                },
+            ],
+            vinschema: vec![],
+            pattern: vec![
+                pattern(1, 10, 1),
+                pattern(2, 20, 2),
+                pattern(3, 30, 2),
+                pattern(4, 40, 4),
+                pattern(5, 50, 3),
+                pattern(6, 60, 5),
+            ],
+            element: vec![],
+            make_model: vec![],
+            wmi_make: vec![],
+            enginemodel: vec![],
+            enginemodelpattern: vec![],
+            defaultvalue: vec![],
+            vinexception: vec![],
+            conversion: vec![],
+            lookups: vec![],
+            cover: vec![],
+            vspecschema: vec![],
+            vspecschemapattern: vec![],
+            vspecpattern: vec![],
+            vspecschemamodel: vec![],
+            vspecschemayear: vec![],
+        };
+        Db::from_bytes(&serialize_artifact(&data, 1)).expect("test database")
+    }
+
+    fn allows(db: &Db, year: i32, value: char) -> bool {
+        valid_charset(db, "ABC", Some(year)).is_some_and(|charset| charset[0].contains(value))
+    }
+
+    #[test]
+    fn cache_is_scoped_to_its_database() {
+        let first = test_db("A**********", "B**********");
+        let second = test_db("C**********", "D**********");
+        assert!(allows(&first, 2000, 'A'));
+        assert!(!allows(&first, 2000, 'C'));
+        assert!(allows(&second, 2000, 'C'));
+        assert!(!allows(&second, 2000, 'A'));
+    }
+
+    #[test]
+    fn duplicate_wmis_share_inclusive_interval_boundaries() {
+        let db = test_db("A**********", "B**********");
+        assert!(!allows(&db, 1999, 'A'));
+        assert!(allows(&db, 2000, 'A'));
+        assert!(allows(&db, 2000, 'B'), "duplicate WMI ranges are unioned");
+        assert!(allows(&db, 2005, 'A'));
+        assert!(allows(&db, 2005, 'B'));
+        assert!(allows(&db, 2006, 'B'));
+        assert!(allows(&db, 2010, 'B'));
+        assert!(valid_charset(&db, "ABC", Some(2011)).is_none());
+        assert!(valid_charset(&db, "ABC", Some(2020)).is_none());
+        assert!(allows(&db, 2998, 'F'));
+        assert!(allows(&db, 2999, 'F'));
+        assert!(valid_charset(&db, "ABC", Some(3000)).is_none());
+        assert!(allows(&db, i32::MAX, 'E'));
+        assert!(valid_charset(&db, "UNKNOWN", Some(2000)).is_none());
+
+        let first = valid_charset(&db, "ABC", Some(2000)).expect("first interval");
+        let last = valid_charset(&db, "ABC", Some(2005)).expect("same interval");
+        assert!(std::ptr::eq(first, last));
+
+        for year in [
+            1999,
+            2000,
+            2005,
+            2006,
+            2010,
+            2011,
+            2998,
+            2999,
+            3000,
+            i32::MAX,
+        ] {
+            let oracle = recompute_valid_chars(&db, "ABC", year);
+            for value in "ABEFZ".chars() {
+                let cached = valid_charset(&db, "ABC", Some(year))
+                    .is_some_and(|charset| charset[0].contains(value));
+                let recomputed = oracle.get(&4).is_some_and(|chars| chars.contains(&value));
+                assert_eq!(cached, recomputed, "year={year}, value={value}");
+            }
+        }
     }
 }
 

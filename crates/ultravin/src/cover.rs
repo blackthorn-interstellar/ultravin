@@ -49,7 +49,7 @@ pub fn token_signature(
             n_specs += 1;
         }
         if e.element_id == 39 {
-            veh_type = e.attribute_id.clone();
+            veh_type = e.attribute_id.to_string();
         }
         t.insert(format!("element|{}|{src}", e.element_id));
         t.insert(format!("value|{}|{}", e.element_id, !e.value.is_empty()));

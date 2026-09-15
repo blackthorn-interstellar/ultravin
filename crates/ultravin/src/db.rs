@@ -38,7 +38,7 @@ enum Backing {
     /// The process-static embedded blob; nothing to own.
     Static,
     /// An owned, 16-aligned copy of the rkyv body (header stripped).
-    Owned(rkyv::util::AlignedVec<16>),
+    Owned(rkyv::util::AlignedVec<16>, String),
     /// A memory-mapped artifact file (header included; body at `HEADER_LEN`).
     #[cfg(feature = "external-data")]
     Mmap(memmap2::Mmap),
@@ -49,9 +49,18 @@ impl Backing {
     fn body(&self) -> &[u8] {
         match self {
             Backing::Static => &EMBEDDED.0[HEADER_LEN..],
-            Backing::Owned(v) => &v[..],
+            Backing::Owned(v, _) => &v[..],
             #[cfg(feature = "external-data")]
             Backing::Mmap(m) => &m[HEADER_LEN..],
+        }
+    }
+
+    fn artifact_blake3(&self) -> String {
+        match self {
+            Backing::Static => env!("ULTRAVIN_ACTUAL_ARTIFACT_BLAKE3").to_owned(),
+            Backing::Owned(_, digest) => digest.clone(),
+            #[cfg(feature = "external-data")]
+            Backing::Mmap(m) => crate::tables::compute_artifact_blake3_hex(m),
         }
     }
 }
@@ -64,6 +73,14 @@ pub(crate) struct WmiStrings {
     pub manufacturer: Option<(String, String)>,
 }
 
+pub(crate) struct ProjectionMeta {
+    pub group_name: Box<str>,
+    pub variable: Box<str>,
+    pub code: Box<str>,
+    pub data_type: Box<str>,
+    pub decode: Box<str>,
+}
+
 /// The decode database: validated archived bytes plus a pointer to the root.
 ///
 /// The pointer references the heap/static buffer owned by `_backing`; that buffer
@@ -71,6 +88,7 @@ pub(crate) struct WmiStrings {
 /// the pointer stays valid for the lifetime of the `Db`.
 pub struct Db {
     _backing: Backing,
+    artifact_blake3: String,
     archive: *const ArchivedVpicData,
     /// Dense `element_id -> slice index` table (`-1` = absent), built once on first
     /// use. Resolution and projection repeatedly consult element metadata, so
@@ -78,7 +96,9 @@ pub struct Db {
     element_index: OnceLock<Box<[i32]>>,
     wmi_strings: OnceLock<Box<[OnceLock<Box<WmiStrings>>]>>,
     output_order: OnceLock<Box<[u32]>>,
+    projection_meta: OnceLock<Box<[Option<ProjectionMeta>]>>,
     json_elements: OnceLock<Box<[OnceLock<crate::json::ElementJson>]>>,
+    correction_text: OnceLock<Box<[OnceLock<CorrectionPage>]>>,
     /// Initialize lookup tables separately: a first error-code lookup should not
     /// allocate an index for every make/model/engine name in the archive.
     lookup_index: OnceLock<Box<[OnceLock<LookupIndex>]>>,
@@ -107,6 +127,7 @@ pub struct Db {
     spec_model_index: OnceLock<IntMap<(i32, i32), Vec<u32>>>,
     engine_name_index:
         OnceLock<std::collections::HashMap<String, usize, crate::hash::FxBuildHasher>>,
+    valid_charset_cache: OnceLock<crate::errors::ValidCharsetCache>,
 }
 
 // SAFETY: the archive is immutable, validated bytes; sharing `&Db` across threads
@@ -126,13 +147,17 @@ impl Db {
         let archive = unsafe {
             rkyv::access_unchecked::<ArchivedVpicData>(backing.body()) as *const ArchivedVpicData
         };
+        let artifact_blake3 = backing.artifact_blake3();
         Ok(Db {
             _backing: backing,
+            artifact_blake3,
             archive,
             element_index: OnceLock::new(),
             wmi_strings: OnceLock::new(),
             output_order: OnceLock::new(),
+            projection_meta: OnceLock::new(),
             json_elements: OnceLock::new(),
+            correction_text: OnceLock::new(),
             lookup_index: OnceLock::new(),
             pattern_element_ok: OnceLock::new(),
             pattern_indexes: OnceLock::new(),
@@ -144,6 +169,7 @@ impl Db {
             wmi_index: OnceLock::new(),
             spec_model_index: OnceLock::new(),
             engine_name_index: OnceLock::new(),
+            valid_charset_cache: OnceLock::new(),
         })
     }
 
@@ -159,13 +185,17 @@ impl Db {
     unsafe fn build_trusted(backing: Backing) -> Db {
         let archive =
             rkyv::access_unchecked::<ArchivedVpicData>(backing.body()) as *const ArchivedVpicData;
+        let artifact_blake3 = backing.artifact_blake3();
         Db {
             _backing: backing,
+            artifact_blake3,
             archive,
             element_index: OnceLock::new(),
             wmi_strings: OnceLock::new(),
             output_order: OnceLock::new(),
+            projection_meta: OnceLock::new(),
             json_elements: OnceLock::new(),
+            correction_text: OnceLock::new(),
             lookup_index: OnceLock::new(),
             pattern_element_ok: OnceLock::new(),
             pattern_indexes: OnceLock::new(),
@@ -177,6 +207,7 @@ impl Db {
             wmi_index: OnceLock::new(),
             spec_model_index: OnceLock::new(),
             engine_name_index: OnceLock::new(),
+            valid_charset_cache: OnceLock::new(),
         }
     }
 
@@ -186,7 +217,10 @@ impl Db {
         // 16-byte-align the rkyv body (input alignment is unknown).
         let mut aligned = rkyv::util::AlignedVec::<16>::new();
         aligned.extend_from_slice(&bytes[HEADER_LEN..]);
-        Db::build(Backing::Owned(aligned))
+        Db::build(Backing::Owned(
+            aligned,
+            crate::tables::compute_artifact_blake3_hex(bytes),
+        ))
     }
 
     /// The process-wide embedded database (loaded once).
@@ -234,6 +268,16 @@ impl Db {
     /// `true` once a real (non-empty) artifact has been baked in.
     pub fn is_loaded(&self) -> bool {
         !self.a().wmi.is_empty()
+    }
+
+    /// The digest computed from this database artifact's content.
+    pub fn artifact_blake3(&self) -> &str {
+        &self.artifact_blake3
+    }
+
+    pub(crate) fn valid_charset_cache(&self) -> &crate::errors::ValidCharsetCache {
+        self.valid_charset_cache
+            .get_or_init(|| crate::errors::ValidCharsetCache::new(self))
     }
 
     /// Load an artifact from a file via memory map (external-data backend).
@@ -445,6 +489,32 @@ impl Db {
         } else {
             Some(&self.a().element.as_slice()[slot as usize])
         }
+    }
+
+    pub(crate) fn projection_meta(&self, id: i32) -> Option<&ProjectionMeta> {
+        if id < 0 {
+            return None;
+        }
+        let slot = *self.element_index().get(id as usize)?;
+        if slot < 0 {
+            return None;
+        }
+        let metadata = self.projection_meta.get_or_init(|| {
+            self.elements()
+                .iter()
+                .map(|element| {
+                    let decode = crate::public_decode(self, element)?;
+                    Some(ProjectionMeta {
+                        group_name: self.s(element.groupname.to_native()).into(),
+                        variable: self.s(element.name.to_native()).into(),
+                        code: self.s(element.code.to_native()).into(),
+                        data_type: self.s(element.datatype.to_native()).into(),
+                        decode: decode.into(),
+                    })
+                })
+                .collect()
+        });
+        metadata[slot as usize].as_ref()
     }
 
     /// Called only for elements admitted by the public projection order.
@@ -758,6 +828,43 @@ impl Db {
         };
         name.map(|name| self.s(name))
     }
+
+    /// Cache immutable correction strings by a validated 18-bit code/flag key.
+    /// The top-level table and each 256-entry page allocate lazily, bounding the
+    /// address space while paying only for key regions this database observes.
+    /// Its size is independent of input rows: VIN text and decode clocks are not
+    /// part of correction text and are never retained here.
+    pub(crate) fn correction_text(
+        &self,
+        key: usize,
+        build: impl FnOnce() -> CorrectionText,
+    ) -> &CorrectionText {
+        const PAGE_BITS: usize = 8;
+        const PAGE_SIZE: usize = 1 << PAGE_BITS;
+        const PAGE_COUNT: usize = 1 << (18 - PAGE_BITS);
+        debug_assert!(key < 1 << 18);
+
+        let pages = self.correction_text.get_or_init(|| {
+            std::iter::repeat_with(OnceLock::new)
+                .take(PAGE_COUNT)
+                .collect()
+        });
+        let page = pages[key >> PAGE_BITS].get_or_init(|| {
+            std::iter::repeat_with(OnceLock::new)
+                .take(PAGE_SIZE)
+                .collect()
+        });
+        page[key & (PAGE_SIZE - 1)]
+            .get_or_init(|| Box::new(build()))
+            .as_ref()
+    }
+}
+
+type CorrectionPage = Box<[OnceLock<Box<CorrectionText>>]>;
+
+pub(crate) struct CorrectionText {
+    pub codes: Box<str>,
+    pub messages: Box<str>,
 }
 
 /// Dense id ranges need one array load. Sparse external ids keep a binary

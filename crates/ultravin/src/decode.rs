@@ -3,6 +3,7 @@
 //! and defaults.
 
 use std::borrow::Cow;
+use std::cell::RefCell;
 use std::cmp::Ordering;
 
 use crate::db::Db;
@@ -59,9 +60,99 @@ fn uppercase_name(name: &str) -> Cow<'_, str> {
 /// hottest loop in a decode. Caching the hit list per schema makes the later
 /// passes a replay instead of a rescan. Values are indices into
 /// [`crate::db::Db::patterns`], avoiding another schema-range search on replay.
+const MAX_RETAINED_PATTERN_SCHEMAS: usize = 128;
+const MAX_RETAINED_PATTERN_HITS: usize = 4_096;
+
 #[derive(Default)]
+struct PatternScanStorage {
+    schema_slots: IntMap<i32, usize>,
+    hit_vectors: Vec<Vec<u32>>,
+}
+
+impl PatternScanStorage {
+    fn clear(&mut self) {
+        self.schema_slots.clear();
+        for hits in &mut self.hit_vectors {
+            hits.clear();
+        }
+    }
+
+    fn retained_capacity(&self) -> usize {
+        self.schema_slots.capacity()
+            + self.hit_vectors.capacity()
+            + self.hit_vectors.iter().map(Vec::capacity).sum::<usize>()
+    }
+
+    fn bound_retained_capacity(&mut self) {
+        let total_hits = self.hit_vectors.iter().map(Vec::capacity).sum::<usize>();
+        if self.schema_slots.capacity() > MAX_RETAINED_PATTERN_SCHEMAS
+            || self.hit_vectors.capacity() > MAX_RETAINED_PATTERN_SCHEMAS
+            || total_hits > MAX_RETAINED_PATTERN_HITS
+        {
+            *self = Self::default();
+        }
+    }
+}
+
+thread_local! {
+    static PATTERN_SCAN_SCRATCH: RefCell<PatternScanStorage> = RefCell::new(PatternScanStorage::default());
+}
+
 pub struct PatternScan {
-    hits: IntMap<i32, Vec<u32>>,
+    storage: PatternScanStorage,
+    used_vectors: usize,
+}
+
+impl Default for PatternScan {
+    fn default() -> Self {
+        let mut storage = PATTERN_SCAN_SCRATCH
+            .try_with(|slot| {
+                slot.try_borrow_mut()
+                    .map(|mut slot| std::mem::take(&mut *slot))
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+        storage.clear();
+        Self {
+            storage,
+            used_vectors: 0,
+        }
+    }
+}
+
+impl PatternScan {
+    fn hits<'scan>(&'scan mut self, db: &Db, schema_id: i32, keys: &str) -> &'scan [u32] {
+        let slot = match self.storage.schema_slots.get(&schema_id) {
+            Some(&slot) => slot,
+            None => {
+                let slot = self.used_vectors;
+                self.used_vectors += 1;
+                if slot == self.storage.hit_vectors.len() {
+                    self.storage.hit_vectors.push(Vec::new());
+                }
+                db.pattern_index(schema_id)
+                    .expect("schema exists")
+                    .hits_into(db, keys, &mut self.storage.hit_vectors[slot]);
+                self.storage.schema_slots.insert(schema_id, slot);
+                slot
+            }
+        };
+        &self.storage.hit_vectors[slot]
+    }
+}
+
+impl Drop for PatternScan {
+    fn drop(&mut self) {
+        self.storage.clear();
+        self.storage.bound_retained_capacity();
+        let _ = PATTERN_SCAN_SCRATCH.try_with(|slot| {
+            if let Ok(mut slot) = slot.try_borrow_mut() {
+                if slot.retained_capacity() < self.storage.retained_capacity() {
+                    *slot = std::mem::take(&mut self.storage);
+                }
+            }
+        });
+    }
 }
 
 /// Output of the core pass.
@@ -70,8 +161,170 @@ pub struct CoreResult<'a> {
     pub wmi_found: bool,
 }
 
+const MAX_RETAINED_MATCHED_PATTERNS: usize = 256;
+const MAX_RETAINED_SCHEMA_PRIORITIES: usize = 128;
+const MAX_RETAINED_MAKE_IDS: usize = 64;
+
+#[derive(Default)]
+struct DecodeScratch {
+    matched_patterns: Vec<(i32, u32)>,
+    schema_yearfrom: IntMap<i32, i32>,
+    distinct_makeids: Vec<i32>,
+}
+
+impl DecodeScratch {
+    fn clear(&mut self) {
+        self.matched_patterns.clear();
+        self.schema_yearfrom.clear();
+        self.distinct_makeids.clear();
+    }
+
+    fn bound_retained_capacity(&mut self) {
+        if self.matched_patterns.capacity() > MAX_RETAINED_MATCHED_PATTERNS {
+            self.matched_patterns = Vec::new();
+        }
+        if self.schema_yearfrom.capacity() > MAX_RETAINED_SCHEMA_PRIORITIES {
+            self.schema_yearfrom = IntMap::default();
+        }
+        if self.distinct_makeids.capacity() > MAX_RETAINED_MAKE_IDS {
+            self.distinct_makeids = Vec::new();
+        }
+    }
+}
+
+thread_local! {
+    static DECODE_SCRATCH: RefCell<DecodeScratch> = RefCell::new(DecodeScratch::default());
+}
+
+struct DecodeScratchGuard {
+    scratch: DecodeScratch,
+}
+
+impl DecodeScratchGuard {
+    fn take() -> Self {
+        let scratch = DECODE_SCRATCH
+            .try_with(|slot| {
+                slot.try_borrow_mut()
+                    .map(|mut slot| std::mem::take(&mut *slot))
+                    .unwrap_or_default()
+            })
+            .unwrap_or_default();
+        Self { scratch }
+    }
+}
+
+impl std::ops::Deref for DecodeScratchGuard {
+    type Target = DecodeScratch;
+
+    fn deref(&self) -> &Self::Target {
+        &self.scratch
+    }
+}
+
+impl std::ops::DerefMut for DecodeScratchGuard {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.scratch
+    }
+}
+
+impl Drop for DecodeScratchGuard {
+    fn drop(&mut self) {
+        self.scratch.clear();
+        self.scratch.bound_retained_capacity();
+        let _ = DECODE_SCRATCH.try_with(|slot| {
+            if let Ok(mut slot) = slot.try_borrow_mut() {
+                if slot.matched_patterns.capacity() < self.scratch.matched_patterns.capacity() {
+                    slot.matched_patterns = std::mem::take(&mut self.scratch.matched_patterns);
+                }
+                if slot.schema_yearfrom.capacity() < self.scratch.schema_yearfrom.capacity() {
+                    slot.schema_yearfrom = std::mem::take(&mut self.scratch.schema_yearfrom);
+                }
+                if slot.distinct_makeids.capacity() < self.scratch.distinct_makeids.capacity() {
+                    slot.distinct_makeids = std::mem::take(&mut self.scratch.distinct_makeids);
+                }
+            }
+        });
+    }
+}
+
+pub(crate) const DEFAULT_MODEL_YEAR_SOURCE: &str = "***X*|Y";
+
+const FIRST_STATIC_MODEL_YEAR: i32 = 1900;
+const STATIC_MODEL_YEAR_COUNT: usize = 300;
+
+const fn static_model_year_texts() -> [[u8; 4]; STATIC_MODEL_YEAR_COUNT] {
+    let mut texts = [[0; 4]; STATIC_MODEL_YEAR_COUNT];
+    let mut index = 0;
+    while index < STATIC_MODEL_YEAR_COUNT {
+        let year = FIRST_STATIC_MODEL_YEAR as usize + index;
+        texts[index] = [
+            b'0' + (year / 1000) as u8,
+            b'0' + ((year / 100) % 10) as u8,
+            b'0' + ((year / 10) % 10) as u8,
+            b'0' + (year % 10) as u8,
+        ];
+        index += 1;
+    }
+    texts
+}
+
+static MODEL_YEAR_TEXTS: [[u8; 4]; STATIC_MODEL_YEAR_COUNT] = static_model_year_texts();
+
+fn static_model_year_text(year: i32) -> Option<&'static str> {
+    let index = usize::try_from(year.checked_sub(FIRST_STATIC_MODEL_YEAR)?).ok()?;
+    let bytes = MODEL_YEAR_TEXTS.get(index)?;
+    Some(std::str::from_utf8(bytes).expect("static model years contain only ASCII digits"))
+}
+
+fn model_year_values(year: i32) -> (Cow<'static, str>, Cow<'static, str>) {
+    if let Some(text) = static_model_year_text(year) {
+        (Cow::Borrowed(text), Cow::Borrowed(text))
+    } else {
+        let text = year.to_string();
+        (Cow::Owned(text.clone()), Cow::Owned(text))
+    }
+}
+
+/// Stack-backed form of the at-most-14-byte VIN key used by the decode core.
+pub(crate) struct VarKeys {
+    bytes: [u8; 14],
+    len: usize,
+}
+
+impl VarKeys {
+    pub(crate) fn as_str(&self) -> &str {
+        // `sanitize` makes the internal decode VIN ASCII before constructing this.
+        std::str::from_utf8(&self.bytes[..self.len]).expect("sanitized VIN keys are ASCII")
+    }
+}
+
+pub(crate) fn build_var_keys_stack(vin: &str) -> VarKeys {
+    let b = vin.as_bytes();
+    let mut out = VarKeys {
+        bytes: [0; 14],
+        len: 0,
+    };
+    if b.len() <= 3 {
+        return out;
+    }
+    let end = b.len().min(8);
+    let first = &b[3..end];
+    out.bytes[..first.len()].copy_from_slice(first);
+    out.len = first.len();
+    if b.len() > 9 {
+        out.bytes[out.len] = b'|';
+        out.len += 1;
+        let end2 = b.len().min(17);
+        let second = &b[9..end2];
+        out.bytes[out.len..out.len + second.len()].copy_from_slice(second);
+        out.len += second.len();
+    }
+    out
+}
+
 /// `var_keys = vin[3..8] || ('|' || vin[9..17])` (1-based 4-8 and 10-17).
-pub fn build_var_keys(vin: &str) -> String {
+#[cfg(test)]
+fn build_var_keys_reference(vin: &str) -> String {
     let b = vin.as_bytes();
     if b.len() <= 3 {
         return String::new();
@@ -87,8 +340,13 @@ pub fn build_var_keys(vin: &str) -> String {
     k
 }
 
-/// Run the W1 decode core for `var_wmi` / `var_keys` / `model_year`.
-pub fn decode_core<'a>(
+/// Run the decode core using caller-owned item storage.
+///
+/// The returned [`CoreResult`] always owns the supplied vector, cleared before
+/// use. This lets a worker recycle its allocation without retaining database
+/// references between calls.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn decode_core_into<'a>(
     db: &'a Db,
     var_wmi: &str,
     var_keys: &str,
@@ -96,25 +354,30 @@ pub fn decode_core<'a>(
     model_year_source: &str,
     now_micros: i64,
     scan: &mut PatternScan,
+    mut items: Vec<DecodingItem<'a>>,
 ) -> CoreResult<'a> {
+    items.clear();
     let Some(wmi) = db.wmi_by_str(var_wmi, now_micros) else {
         return CoreResult {
-            items: Vec::new(),
+            items,
             wmi_found: false,
         };
     };
     let wmiid = wmi.id.to_native();
+    // Move owned scratch out instead of holding a RefCell borrow through the
+    // decode. A nested decode therefore receives a fresh default scratch, and
+    // the guard restores bounded capacity even while unwinding a panic.
+    let mut scratch = DecodeScratchGuard::take();
+    scratch.clear();
 
     // Pre-size for a typical decode (pattern matches + layered sources + specs +
     // defaults + the 6 corrections) so the hot push loops don't repeatedly realloc.
-    let mut items: Vec<DecodingItem> = Vec::with_capacity(64);
+    items.reserve(96);
 
     // --- Pattern pass: collect matches, then order globally by Pattern.Id ASC.
-    let mut matched: Vec<&crate::tables::ArchivedPattern> = Vec::with_capacity(32);
     // Capture each year-eligible schema's `YearFrom` here (in slice order, first
     // wins) so the Pattern-source priority is one map lookup per matched pattern
     // instead of `schema_year_from` rescanning `wmi_vinschema` per pattern.
-    let mut schema_yearfrom: IntMap<i32, i32> = IntMap::default();
     for wvs in db.wmi_vinschema_for(wmiid) {
         if let Some(my) = model_year {
             if my < wvs.yearfrom.to_native() || my > wvs.yearto_or(2999) {
@@ -122,7 +385,8 @@ pub fn decode_core<'a>(
             }
         }
         let sid = wvs.vinschemaid.to_native();
-        schema_yearfrom
+        scratch
+            .schema_yearfrom
             .entry(sid)
             .or_insert(wvs.yearfrom.to_native());
         let Some(vs) = db.vinschema_by_id(sid) else {
@@ -133,17 +397,17 @@ pub fn decode_core<'a>(
         }
         // Year-independent, so the first pass to reach this schema pays for the
         // scan and any later pass replays its hit list (see [`PatternScan`]).
-        let hits = scan.hits.entry(sid).or_insert_with(|| {
-            db.pattern_index(sid)
-                .expect("schema exists")
-                .hits(db, var_keys)
-        });
-        matched.extend(hits.iter().map(|&i| &db.patterns()[i as usize]));
+        let hits = scan.hits(db, sid, var_keys);
+        scratch.matched_patterns.extend(
+            hits.iter()
+                .map(|&index| (db.patterns()[index as usize].id.to_native(), index)),
+        );
     }
     // Pattern ids are unique, so the order is total — no need for a stable sort
     // (which allocates a scratch buffer).
-    matched.sort_unstable_by_key(|p| p.id.to_native());
-    for p in matched {
+    scratch.matched_patterns.sort_unstable_by_key(|&(id, _)| id);
+    for &(_, index) in &scratch.matched_patterns {
+        let p = &db.patterns()[index as usize];
         items.push(DecodingItem {
             created_on: p.createdon_key.to_native(),
             pattern_id: p.id.to_native(),
@@ -154,7 +418,8 @@ pub fn decode_core<'a>(
             attribute_id: Cow::Borrowed(db.s(p.attributeid.to_native())),
             value: Cow::Borrowed("XXX"),
             source: Cow::Borrowed("Pattern"),
-            priority: *schema_yearfrom
+            priority: *scratch
+                .schema_yearfrom
                 .get(&p.vinschemaid.to_native())
                 .unwrap_or(&0),
             to_be_qced: false,
@@ -238,15 +503,20 @@ pub fn decode_core<'a>(
 
     // --- (e) ModelYear 29 (priority 100).
     if let Some(my) = model_year {
+        let (attribute_id, value) = model_year_values(my);
         items.push(DecodingItem {
             created_on: NULL_I64,
             pattern_id: NULL_I32,
-            keys: Cow::Owned(model_year_source.to_string()),
+            keys: if model_year_source == DEFAULT_MODEL_YEAR_SOURCE {
+                Cow::Borrowed(DEFAULT_MODEL_YEAR_SOURCE)
+            } else {
+                Cow::Owned(model_year_source.to_string())
+            },
             vin_schema_id: NULL_I32,
             wmi_id: NULL_I32,
             element_id: 29,
-            attribute_id: Cow::Owned(my.to_string()),
-            value: Cow::Owned(my.to_string()),
+            attribute_id,
+            value,
             source: Cow::Borrowed("ModelYear"),
             priority: 100,
             to_be_qced: false,
@@ -267,6 +537,7 @@ pub fn decode_core<'a>(
         wmiid,
         db.s(wmi.wmi.to_native()),
         wmi.createdon_key.to_native(),
+        &mut scratch.distinct_makeids,
     );
 
     // --- Conversion (priority 100): derive sibling elements via vpic.conversion.
@@ -495,6 +766,7 @@ fn append_make<'a>(
     wmiid: i32,
     var_wmi: &'a str,
     wmi_created: i64,
+    distinct_makeids: &mut Vec<i32>,
 ) {
     let model_item = items.iter().find(|it| it.element_id == 28).map(|it| {
         (
@@ -531,11 +803,11 @@ fn append_make<'a>(
     } else {
         // single distinct public make via wmi_make
         let makes = db.wmi_makes_for(wmiid);
-        let mut distinct: Vec<i32> = makes.iter().map(|m| m.makeid.to_native()).collect();
-        distinct.sort_unstable();
-        distinct.dedup();
-        if distinct.len() == 1 {
-            let makeid = distinct[0];
+        distinct_makeids.extend(makes.iter().map(|m| m.makeid.to_native()));
+        distinct_makeids.sort_unstable();
+        distinct_makeids.dedup();
+        if distinct_makeids.len() == 1 {
+            let makeid = distinct_makeids[0];
             let name = element_lookup_tag(26)
                 .and_then(|t| db.lookup(t, makeid))
                 .map(uppercase_name)
@@ -866,6 +1138,169 @@ mod tests {
         }
         assert!(matches!(uppercase_key("ABC*"), Cow::Borrowed(_)));
         assert!(matches!(uppercase_key("AbC*"), Cow::Owned(_)));
+    }
+
+    #[test]
+    fn stack_var_keys_match_the_public_owned_result_at_every_length() {
+        let vin = "1HGCM82633A004352EXTRA";
+        for len in 0..=vin.len() {
+            let input = &vin[..len];
+            assert_eq!(
+                build_var_keys_stack(input).as_str(),
+                build_var_keys_reference(input)
+            );
+        }
+        assert_eq!(build_var_keys_stack(vin).as_str(), "CM826|3A004352");
+        assert_eq!(build_var_keys_stack("1HG").as_str(), "");
+        assert_eq!(build_var_keys_stack("1HGCM8263").as_str(), "CM826");
+    }
+
+    #[test]
+    fn static_model_year_text_matches_formatting_and_preserves_fallback_ownership() {
+        for year in 1900..=2199 {
+            let expected = year.to_string();
+            assert_eq!(static_model_year_text(year), Some(expected.as_str()));
+            let (attribute_id, value) = model_year_values(year);
+            assert!(matches!(attribute_id, Cow::Borrowed(_)));
+            assert!(matches!(value, Cow::Borrowed(_)));
+            assert_eq!(attribute_id, expected);
+            assert_eq!(value, expected);
+        }
+
+        for year in [i32::MIN, -1, 0, 1899, 2200, i32::MAX] {
+            assert_eq!(static_model_year_text(year), None);
+            let expected = year.to_string();
+            let (attribute_id, value) = model_year_values(year);
+            assert!(matches!(attribute_id, Cow::Owned(_)));
+            assert!(matches!(value, Cow::Owned(_)));
+            assert_eq!(attribute_id, expected);
+            assert_eq!(value, expected);
+        }
+    }
+
+    #[test]
+    fn nested_and_panicking_scratch_users_do_not_hold_tls_borrows() {
+        DECODE_SCRATCH.with(|slot| *slot.borrow_mut() = DecodeScratch::default());
+        let mut outer = DecodeScratchGuard::take();
+        outer.matched_patterns.reserve(32);
+        {
+            let mut nested = DecodeScratchGuard::take();
+            assert!(nested.matched_patterns.is_empty());
+            nested.distinct_makeids.reserve(8);
+        }
+        let panic = std::panic::catch_unwind(|| {
+            let mut scratch = DecodeScratchGuard::take();
+            scratch.schema_yearfrom.reserve(16);
+            panic!("injected scratch user panic");
+        });
+        assert!(panic.is_err());
+        drop(outer);
+        let restored = DecodeScratchGuard::take();
+        assert!(restored.matched_patterns.capacity() >= 32);
+        assert!(restored.schema_yearfrom.capacity() >= 16);
+        assert!(restored.distinct_makeids.capacity() >= 8);
+    }
+
+    #[test]
+    fn scratch_reuse_preserves_duplicate_priority_and_output_order() {
+        let embedded = Db::embedded();
+        let artifact = std::fs::read(env!("ULTRAVIN_ARTIFACT")).expect("database artifact");
+        let loaded = Db::from_bytes(&artifact).expect("independently loaded database");
+        let now = 1_788_220_800_000_000;
+        for vin in [
+            "1FMAA50A91A111111",
+            "1HGCM82633A004352",
+            "5YJSA1E26HF000337",
+        ] {
+            let expected = embedded.decode_at(vin, None, now);
+            for db in [embedded, &loaded, embedded, &loaded] {
+                assert_eq!(db.decode_at(vin, None, now), expected);
+            }
+        }
+    }
+
+    #[test]
+    fn oversized_scratch_capacity_is_not_retained() {
+        {
+            let mut scratch = DecodeScratchGuard::take();
+            scratch
+                .matched_patterns
+                .reserve(MAX_RETAINED_MATCHED_PATTERNS + 1);
+            scratch
+                .schema_yearfrom
+                .reserve(MAX_RETAINED_SCHEMA_PRIORITIES + 1);
+            scratch.distinct_makeids.reserve(MAX_RETAINED_MAKE_IDS + 1);
+        }
+        let scratch = DecodeScratchGuard::take();
+        assert!(scratch.matched_patterns.capacity() <= MAX_RETAINED_MATCHED_PATTERNS);
+        assert!(scratch.schema_yearfrom.capacity() <= MAX_RETAINED_SCHEMA_PRIORITIES);
+        assert!(scratch.distinct_makeids.capacity() <= MAX_RETAINED_MAKE_IDS);
+    }
+
+    #[test]
+    fn pattern_scan_pool_is_reentrant_and_bounds_retained_hits() {
+        PATTERN_SCAN_SCRATCH.with(|slot| *slot.borrow_mut() = PatternScanStorage::default());
+        let outer = PatternScan::default();
+        {
+            let nested = PatternScan::default();
+            assert!(nested.storage.schema_slots.is_empty());
+            assert!(nested.storage.hit_vectors.is_empty());
+        }
+        drop(outer);
+        {
+            let mut oversized = PatternScan::default();
+            oversized
+                .storage
+                .schema_slots
+                .reserve(MAX_RETAINED_PATTERN_SCHEMAS + 1);
+            oversized.storage.hit_vectors.push(Vec::new());
+            oversized.storage.hit_vectors[0].reserve(MAX_RETAINED_PATTERN_HITS + 1);
+        }
+        let restored = PatternScan::default();
+        assert!(restored.storage.schema_slots.capacity() <= MAX_RETAINED_PATTERN_SCHEMAS);
+        assert!(
+            restored
+                .storage
+                .hit_vectors
+                .iter()
+                .map(Vec::capacity)
+                .sum::<usize>()
+                <= MAX_RETAINED_PATTERN_HITS
+        );
+    }
+
+    #[test]
+    fn core_into_returns_caller_storage_on_missing_wmi() {
+        let mut items = Vec::with_capacity(123);
+        items.push(DecodingItem {
+            created_on: 0,
+            pattern_id: 0,
+            keys: Cow::Borrowed("stale"),
+            vin_schema_id: 0,
+            wmi_id: 0,
+            element_id: 0,
+            attribute_id: Cow::Borrowed("stale"),
+            value: Cow::Borrowed("stale"),
+            source: Cow::Borrowed("stale"),
+            priority: 0,
+            to_be_qced: false,
+        });
+        let pointer = items.as_ptr();
+        let mut scan = PatternScan::default();
+        let result = decode_core_into(
+            Db::embedded(),
+            "___",
+            "",
+            None,
+            DEFAULT_MODEL_YEAR_SOURCE,
+            1_788_220_800_000_000,
+            &mut scan,
+            items,
+        );
+        assert!(!result.wmi_found);
+        assert!(result.items.is_empty());
+        assert_eq!(result.items.as_ptr(), pointer);
+        assert!(result.items.capacity() >= 123);
     }
 }
 

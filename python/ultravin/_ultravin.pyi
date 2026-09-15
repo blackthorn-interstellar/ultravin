@@ -17,8 +17,56 @@ class ArrowArraySource(Protocol):
 
     def __arrow_c_array__(self, requested_schema: object | None = None) -> tuple[object, object]: ...
 
-def decode(vin: str, *, year: int | None = None, full: bool = False) -> dict[str, Any]:
+class _BatchTuner:
+    """Internal adaptive chunk controller used by streaming entry points.
+
+    ``initial_rows`` and ``max_rows`` configure the non-predictive controller.
+    Predictive mode uses the JSONL model's calibration size and row ceiling.
+    """
+
+    def __init__(
+        self,
+        initial_rows: int = 1_000,
+        memory_bytes: int = 67_108_864,
+        max_rows: int = 65_536,
+        predictive: bool = False,
+    ) -> None: ...
+    def next_rows(self) -> int: ...
+    def observe(self, *, rows: int, seconds: float, output_bytes: int) -> None: ...
+    @property
+    def prediction(self) -> dict[str, Any] | None: ...
+    def decode_jsonl(
+        self, vins: list[str], *, years: list[int | None] | None = None, full: bool = False, now: datetime | None = None
+    ) -> str: ...
+
+def predict_batch_size(
+    *,
+    workers: int,
+    single_core_rows_per_second: float,
+    output: Literal["parquet", "arrow", "jsonl", "native"] = "parquet",
+    batch_memory_mb: int | None = None,
+    bytes_per_row: float | None = None,
+) -> dict[str, Any]:
+    """Predict an output batch or a native per-worker batch and slot plan.
+
+    Single-core speed means native decoding and output construction for this
+    format, excluding input reads and output writes. Defaults: 64 MiB for
+    columnar buffers, 8 MiB for JSONL, and 512 MiB for native worker slots.
+    Native output returns batch_size per worker, slots_per_worker, and
+    max_inflight_rows. Rust decode_native_stream uses this plan automatically;
+    Python decode_batch retains its owned-list behavior. bytes_per_row overrides
+    the reference width. estimated_working_bytes excludes input/database storage;
+    estimated_peak_rss_bytes is None for native output. Other formats retain
+    their historical RSS estimate and return None for worker-slot fields.
+    """
+
+def decode(vin: str, *, year: int | None = None, full: bool = False, now: datetime | None = None) -> dict[str, Any]:
     """Decode a VIN.
+
+    ``now`` freezes publication-date and year resolution for reproducible jobs.
+    Omit it for the system clock. Naive datetimes mean UTC; aware datetimes are
+    normalized to the same instant. Resolution is whole seconds. This clock is
+    separate from ``year``, the caller's vehicle model-year hint.
 
     ``year`` is the optional caller-supplied model year (vPIC's ``modelyear``
     parameter). When it lands in ``[1980, current_year + 2]`` and differs from
@@ -47,13 +95,15 @@ def decode_batch(
     *,
     years: list[int | None] | None = None,
     full: bool = False,
+    now: datetime | None = None,
 ) -> list[dict[str, Any]]:
     """Decode many VINs; ``years`` optionally supplies one caller model year per
     VIN (``None`` entries allowed), mirroring the vPIC batch API's per-line
     ``VIN,year`` format. Raises ``ValueError`` if the lengths differ.
+    ``now`` has the same meaning as in :func:`decode`; every row shares one clock.
     """
 
-def decode_json(vin: str, *, year: int | None = None, full: bool = False) -> str:
+def decode_json(vin: str, *, year: int | None = None, full: bool = False, now: datetime | None = None) -> str:
     """Decode a VIN to a JSON object string (same shape as :func:`decode`).
 
     Serialized in Rust; ``json.loads(decode_json(vin)) == decode(vin)``.
@@ -64,6 +114,7 @@ def decode_batch_json(
     *,
     years: list[int | None] | None = None,
     full: bool = False,
+    now: datetime | None = None,
 ) -> str:
     """Decode many VINs to a single JSON array string, serialized in Rust.
 
@@ -72,6 +123,16 @@ def decode_batch_json(
     dicts. Best when the consumer wants JSON bytes (files, DB, streams) rather
     than Python objects. ``years`` as in :func:`decode_batch`.
     """
+
+def _decode_batch_jsonl(
+    vins: list[str],
+    *,
+    years: list[int | None] | None = None,
+    full: bool = False,
+    now: datetime | None = None,
+) -> str: ...
+def provenance() -> dict[str, str]:
+    """Return ``data_month``, ``artifact_blake3``, and ``decoder_version``."""
 
 def multi_valued() -> list[str]:
     """Variable names whose ``attributes`` value is always a list.
@@ -203,10 +264,17 @@ def decode_stream(
     year_column: str | None = None,
     columns: Sequence[int | str] | None = None,
     column_names: Literal["variable", "id"] = "variable",
-    batch_size: int = 65_536,
+    batch_size: int | Literal["auto"] = "auto",
+    batch_memory_mb: int = 64,
     sample_rows: int = 100,
+    now: datetime | None = None,
 ) -> DecodeStream:
     """Decode a dataset into a stream of Arrow batches.
+
+    ``now`` freezes the job's clock, as in :func:`decode`. When omitted, one
+    system-clock reading is captured at stream creation for every batch/file.
+    Schema metadata records ``ultravin.data_month``, ``ultravin.artifact_blake3``,
+    ``ultravin.decoder_version`` and ``ultravin.now_micros`` (epoch microseconds).
 
     ``source`` is a parquet file, a directory of ``*.parquet`` read in sorted
     order, or any object exposing the Arrow C data interface — a pyarrow
@@ -238,10 +306,16 @@ def decode_stream(
     survive a parquet round-trip, so the label you did not pick is still readable
     off the schema.
 
-    For a parquet source, rows stream through in ``batch_size``-row chunks with
-    the GIL released, so peak memory is one chunk however large the source is. For
-    an Arrow source the producer decides the input chunking and ``batch_size``
-    only sets the parquet row-group size of :meth:`DecodeStream.to_parquet`.
+    ``batch_size="auto"`` adapts Parquet and Arrow work chunks to observed
+    throughput under ``batch_memory_mb`` (64 MiB by default). The budget covers
+    estimated working batch buffers; it is not a process-RSS limit and does not
+    include buffers retained by an upstream Arrow producer. The tuner respects
+    ``RAYON_NUM_THREADS`` and never changes the process-global worker pool.
+
+    An explicit integer keeps fixed-size Parquet chunks. For an Arrow source it
+    preserves the producer's input batches and only sets the parquet row-group
+    size of :meth:`DecodeStream.to_parquet`. In either mode the GIL is released
+    while Rust decodes, so memory remains bounded independently of source rows.
 
     Raises ``ValueError`` for a caller mistake (unknown column or element id,
     ambiguous autodetect) and ``OSError`` for an unreadable file.
@@ -254,6 +328,10 @@ class DecodeStream:
     rather than handing back a silently truncated result. Build another with
     :func:`decode_stream` to re-read.
     """
+
+    @property
+    def batch_prediction(self) -> dict[str, Any] | None:
+        """Initial model estimate after calibration; None for fixed sizes or short inputs."""
 
     def __arrow_c_stream__(self, requested_schema: object | None = None) -> object:
         """The Arrow C stream capsule — what ``pa.table(stream)``,

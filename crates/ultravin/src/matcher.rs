@@ -116,8 +116,8 @@ impl PatternIndex {
         }
     }
 
-    pub(crate) fn hits(&self, db: &Db, keys: &str) -> Vec<u32> {
-        let mut hits = Vec::new();
+    pub(crate) fn hits_into(&self, db: &Db, keys: &str, hits: &mut Vec<u32>) {
+        hits.clear();
         let candidates = self
             .positions
             .iter()
@@ -138,6 +138,39 @@ impl PatternIndex {
                 hits.extend_from_slice(&group.rows);
             }
         }
+    }
+
+    #[cfg(test)]
+    fn diagnostic_signature_layout(&self, db: &Db) -> (bool, Vec<usize>) {
+        let mut full = false;
+        let mut positions = Vec::new();
+        for group in &self.groups {
+            match &group.matcher {
+                Some(Matcher::Sets(sets)) => {
+                    for (position, set) in sets.iter().enumerate() {
+                        let accepts_every_corpus_byte = (0..=u8::MAX)
+                            .filter(|&byte| byte != b'\n')
+                            .all(|byte| set_contains(set, byte));
+                        if !accepts_every_corpus_byte {
+                            positions.push(position);
+                        }
+                    }
+                }
+                Some(Matcher::Fallback(_)) => full = true,
+                None => positions.extend(db.s(group.key).bytes().enumerate().filter_map(
+                    |(position, byte)| (!matches!(byte, b'*' | b'_')).then_some(position),
+                )),
+            }
+        }
+        positions.sort_unstable();
+        positions.dedup();
+        (full, positions)
+    }
+
+    #[cfg(test)]
+    fn hits(&self, db: &Db, keys: &str) -> Vec<u32> {
+        let mut hits = Vec::new();
+        self.hits_into(db, keys, &mut hits);
         hits
     }
 }
@@ -342,6 +375,39 @@ fn parse_class(body: &[u8], start: usize) -> Option<(Token, usize)> {
 mod tests {
     use super::*;
 
+    #[derive(Default)]
+    struct DirectCache {
+        slots: Vec<Option<(i32, usize, Vec<u8>)>>,
+        hits: usize,
+        probes: usize,
+    }
+
+    impl DirectCache {
+        fn with_slots(slots: usize) -> Self {
+            Self {
+                slots: (0..slots).map(|_| None).collect(),
+                ..Self::default()
+            }
+        }
+
+        fn probe(&mut self, schema: i32, key_len: usize, signature: &[u8]) {
+            use std::hash::{Hash, Hasher};
+            let mut hash = std::collections::hash_map::DefaultHasher::new();
+            schema.hash(&mut hash);
+            key_len.hash(&mut hash);
+            signature.hash(&mut hash);
+            let slot = hash.finish() as usize % self.slots.len();
+            self.probes += 1;
+            if self.slots[slot].as_ref().is_some_and(|entry| {
+                entry.0 == schema && entry.1 == key_len && entry.2 == signature
+            }) {
+                self.hits += 1;
+            } else {
+                self.slots[slot] = Some((schema, key_len, signature.to_vec()));
+            }
+        }
+    }
+
     fn indexed_db(definitions: &[(&str, Option<&str>, i32)]) -> Db {
         use crate::tables::{serialize_artifact, Element, Pattern, VinSchema, VpicData};
 
@@ -475,7 +541,8 @@ mod tests {
                     (eligible && matched).then_some(i as u32)
                 })
                 .collect();
-            let mut actual = index.hits(&db, &input);
+            let mut actual = vec![u32::MAX];
+            index.hits_into(&db, &input, &mut actual);
             actual.sort_unstable();
             assert_eq!(actual, expected, "input {input:?}");
         }
@@ -495,6 +562,77 @@ mod tests {
             }
         });
         assert!(a.pattern_index(999).is_none());
+    }
+
+    #[test]
+    #[ignore = "diagnostic over the benchmark corpus"]
+    fn report_exact_signature_reuse_on_benchmark_corpus() {
+        use std::collections::BTreeMap;
+        use std::io::BufRead;
+
+        let db = Db::embedded();
+        let input = std::fs::File::open(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../target/bench/independent-sink-corpus.txt"),
+        )
+        .expect("benchmark corpus");
+        let mut caches = [DirectCache::with_slots(1024), DirectCache::with_slots(4096)];
+        let mut masks: BTreeMap<(bool, usize), usize> = BTreeMap::new();
+        let mut layouts: BTreeMap<i32, (bool, Vec<usize>)> = BTreeMap::new();
+        let mut rows = 0usize;
+        for line in std::io::BufReader::new(input).lines().take(1_000_000) {
+            let vin = line.expect("corpus row");
+            if vin.len() < 3 {
+                continue;
+            }
+            rows += 1;
+            let wmi = crate::vin_wmi(&vin);
+            let keys = crate::decode::build_var_keys_stack(&vin);
+            let plan = crate::year::resolve_years(&vin, &wmi, db, 2026);
+            let Some(wmi_row) = db.wmi_by_str(&wmi, 1_788_220_800_000_000) else {
+                continue;
+            };
+            for link in db.wmi_vinschema_for(wmi_row.id.to_native()) {
+                let eligible = plan.rmy.is_none()
+                    || [plan.rmy, plan.omy].into_iter().flatten().any(|year| {
+                        year >= link.yearfrom.to_native() && year <= link.yearto_or(2999)
+                    });
+                let schema = link.vinschemaid.to_native();
+                if !eligible || db.vinschema_by_id(schema).is_none_or(|row| row.tobeqced) {
+                    continue;
+                }
+                let Some(index) = db.pattern_index(schema) else {
+                    continue;
+                };
+                let (full, positions) = layouts
+                    .entry(schema)
+                    .or_insert_with(|| index.diagnostic_signature_layout(db));
+                let signature: Vec<u8> = if *full {
+                    keys.as_str().as_bytes().to_vec()
+                } else {
+                    positions
+                        .iter()
+                        .map(|&position| {
+                            keys.as_str().as_bytes().get(position).copied().unwrap_or(0)
+                        })
+                        .collect()
+                };
+                *masks.entry((*full, positions.len())).or_default() += 1;
+                for cache in &mut caches {
+                    cache.probe(schema, keys.as_str().len(), &signature);
+                }
+            }
+        }
+        eprintln!("rows={rows} weighted_masks={masks:?}");
+        for cache in caches {
+            eprintln!(
+                "slots={} probes={} hits={} hit_rate={:.6}",
+                cache.slots.len(),
+                cache.probes,
+                cache.hits,
+                cache.hits as f64 / cache.probes.max(1) as f64
+            );
+        }
     }
 
     #[test]

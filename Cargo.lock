@@ -1535,6 +1535,7 @@ dependencies = [
  "arrow-select",
  "blake3",
  "criterion",
+ "libc",
  "memchr",
  "memmap2",
  "mimalloc",

@@ -7,6 +7,7 @@ use std::ffi::CStr;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use arrow_array::array::make_array;
 use arrow_array::ffi::{from_ffi, FFI_ArrowArray};
@@ -19,9 +20,12 @@ use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyCapsule, PyDateTime, PyDict, PyList, PyString};
 
+use ultravin::adaptive::{BatchFeedback, BatchRebatcher, BatchTuner};
 use ultravin::parquet_io::{
-    check_dst_outside_src, open_chunks, write_parquet, ParquetChunkIter, ParquetOpts,
+    check_dst_outside_src, open_chunks_at, open_chunks_auto_at, write_parquet,
+    write_parquet_adaptive, ParquetChunkIter, ParquetOpts,
 };
+use ultravin::predictor::{predict_batch, BatchFormat, BatchPrediction};
 use ultravin::{
     ArrowDecoder, ArrowError, ArrowOpts, ColumnNames, ColumnSpec, DecodeResult, DecodedElement,
     FlatResult, FlatValue,
@@ -135,8 +139,8 @@ fn source_to_python<'py>(py: Python<'py>, source: &str) -> Bound<'py, PyString> 
 
 fn elem_to_dict<'py>(py: Python<'py>, e: &DecodedElement<'_>) -> PyResult<Bound<'py, PyDict>> {
     let d = element_template(py, e)?;
-    d.set_item(intern!(py, "value"), &e.value)?;
-    d.set_item(intern!(py, "attribute_id"), &e.attribute_id)?;
+    d.set_item(intern!(py, "value"), e.value.as_ref())?;
+    d.set_item(intern!(py, "attribute_id"), e.attribute_id.as_ref())?;
     // Pattern is the common source and is already in the private template.
     if e.source != "Pattern" {
         d.set_item(
@@ -146,7 +150,7 @@ fn elem_to_dict<'py>(py: Python<'py>, e: &DecodedElement<'_>) -> PyResult<Bound<
     }
     d.set_item(intern!(py, "pattern_id"), e.pattern_id)?;
     d.set_item(intern!(py, "vin_schema_id"), e.vin_schema_id)?;
-    d.set_item(intern!(py, "keys"), &e.keys)?;
+    d.set_item(intern!(py, "keys"), e.keys.as_ref())?;
     d.set_item(intern!(py, "created_on"), e.created_on)?;
     d.set_item(intern!(py, "wmi_id"), e.wmi_id)?;
     d.set_item(intern!(py, "to_be_qced"), e.to_be_qced)?;
@@ -242,17 +246,19 @@ fn check_years(vins: &[String], years: &Option<Vec<Option<i32>>>) -> PyResult<()
 /// The default is the attributes shape; `full=True` swaps in the per-element
 /// provenance list, which costs ~615 dict stores per VIN instead of ~41.
 #[pyfunction]
-#[pyo3(signature = (vin, *, year = None, full = false))]
+#[pyo3(signature = (vin, *, year = None, full = false, now = None))]
 fn decode<'py>(
     py: Python<'py>,
     vin: &str,
     year: Option<i32>,
     full: bool,
+    now: Option<Bound<'py, PyDateTime>>,
 ) -> PyResult<Bound<'py, PyDict>> {
+    let (now_micros, _) = decode_clock(now.as_ref())?;
     if full {
-        result_to_dict(py, &ultravin::decode(vin, year))
+        result_to_dict(py, &ultravin::decode_at(vin, year, now_micros))
     } else {
-        flat_to_dict(py, &ultravin::decode_flat(vin, year))
+        flat_to_dict(py, &ultravin::decode_flat_at(vin, year, now_micros))
     }
 }
 
@@ -261,47 +267,85 @@ fn decode<'py>(
 /// The decode work runs in parallel with the GIL released; only the final
 /// marshalling of results into Python dicts holds the GIL.
 #[pyfunction]
-#[pyo3(signature = (vins, *, years = None, full = false))]
+#[pyo3(signature = (vins, *, years = None, full = false, now = None))]
 fn decode_batch<'py>(
     py: Python<'py>,
     vins: Vec<String>,
     years: Option<Vec<Option<i32>>>,
     full: bool,
+    now: Option<Bound<'py, PyDateTime>>,
 ) -> PyResult<Vec<Bound<'py, PyDict>>> {
     check_years(&vins, &years)?;
+    let (now_micros, _) = decode_clock(now.as_ref())?;
     let years = years.as_deref();
     // A singleton has no work to distribute. Use the existing single decoder
     // while retaining batch validation, the released GIL and the list shape.
     if let [vin] = vins.as_slice() {
         let year = years.and_then(|years| years.first()).copied().flatten();
         let result = if full {
-            let result = py.detach(|| ultravin::decode(vin, year));
+            let result = py.detach(|| ultravin::decode_at(vin, year, now_micros));
             result_to_dict(py, &result)?
         } else {
-            let result = py.detach(|| ultravin::decode_flat(vin, year));
+            let result = py.detach(|| ultravin::decode_flat_at(vin, year, now_micros));
             flat_to_dict(py, &result)?
         };
         return Ok(vec![result]);
     }
-    if full {
-        let results = py.detach(|| ultravin::decode_batch(&vins, years));
-        return results.iter().map(|r| result_to_dict(py, r)).collect();
+    // Bound native results retained beside the growing Python list. This matters
+    // most for `full=True`, where a 50k-row native batch can approach a GiB
+    // before any of its element dictionaries are built. Every chunk shares the
+    // clock captured above, and chunks plus their rows are appended in order.
+    const PYTHON_BATCH_ROWS: usize = 8_192;
+    let mut out = Vec::with_capacity(vins.len());
+    if !full {
+        let results =
+            py.detach(|| ultravin::Db::embedded().decode_batch_flat_at(&vins, years, now_micros));
+        for result in results {
+            out.push(flat_to_dict(py, &result)?);
+        }
+        return Ok(out);
     }
-    // Flattening happens inside the parallel region, so the GIL-held part is only
-    // the (much smaller) dict build.
-    let results = py.detach(|| ultravin::decode_batch_flat(&vins, years));
-    results.iter().map(|r| flat_to_dict(py, r)).collect()
+    for (chunk_index, vin_chunk) in vins.chunks(PYTHON_BATCH_ROWS).enumerate() {
+        let offset = chunk_index * PYTHON_BATCH_ROWS;
+        let year_chunk = years.and_then(|values| {
+            let end = (offset + vin_chunk.len()).min(values.len());
+            values.get(offset..end)
+        });
+        let results = py
+            .detach(|| ultravin::Db::embedded().decode_batch_at(vin_chunk, year_chunk, now_micros));
+        for result in results {
+            out.push(result_to_dict(py, &result)?);
+        }
+    }
+    Ok(out)
 }
 
 /// Decode a single VIN to a JSON object string (same shape as `decode`).
 #[pyfunction]
-#[pyo3(signature = (vin, *, year = None, full = false))]
-fn decode_json(vin: &str, year: Option<i32>, full: bool) -> String {
-    if full {
-        ultravin::decode_json(vin, year)
+#[pyo3(signature = (vin, *, year = None, full = false, now = None))]
+fn decode_json(
+    vin: &str,
+    year: Option<i32>,
+    full: bool,
+    now: Option<Bound<'_, PyDateTime>>,
+) -> PyResult<String> {
+    let (now_micros, _) = decode_clock(now.as_ref())?;
+    Ok(if full {
+        ultravin::decode_json_at(vin, year, now_micros)
     } else {
-        ultravin::decode_json_flat(vin, year)
-    }
+        ultravin::decode_json_flat_at(vin, year, now_micros)
+    })
+}
+
+/// Decoder and embedded-data release identity.
+#[pyfunction]
+fn provenance(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
+    let p = ultravin::provenance();
+    let out = PyDict::new(py);
+    out.set_item("data_month", p.data_month)?;
+    out.set_item("artifact_blake3", p.artifact_blake3)?;
+    out.set_item("decoder_version", p.decoder_version)?;
+    Ok(out)
 }
 
 /// The variable names whose `attributes` value is always a list.
@@ -341,31 +385,48 @@ fn elements(py: Python<'_>) -> PyResult<Vec<Bound<'_, PyDict>>> {
 /// `decode_batch`). For large batches this is several times faster than
 /// `decode_batch`, which must build a ~15-key dict per element under the GIL.
 #[pyfunction]
-#[pyo3(signature = (vins, *, years = None, full = false))]
+#[pyo3(signature = (vins, *, years = None, full = false, now = None))]
 fn decode_batch_json(
     py: Python<'_>,
     vins: Vec<String>,
     years: Option<Vec<Option<i32>>>,
     full: bool,
+    now: Option<Bound<'_, PyDateTime>>,
 ) -> PyResult<String> {
     check_years(&vins, &years)?;
+    let (now_micros, _) = decode_clock(now.as_ref())?;
     Ok(py.detach(|| {
         let years = years.as_deref();
         if let [vin] = vins.as_slice() {
             let year = years.and_then(|years| years.first()).copied().flatten();
             let json = if full {
-                ultravin::decode_json(vin, year)
+                ultravin::decode_json_at(vin, year, now_micros)
             } else {
-                ultravin::decode_json_flat(vin, year)
+                ultravin::decode_json_flat_at(vin, year, now_micros)
             };
             return format!("[{json}]");
         }
         if full {
-            ultravin::decode_batch_json(&vins, years)
+            ultravin::decode_batch_json_at(&vins, years, now_micros)
         } else {
-            ultravin::decode_batch_json_flat(&vins, years)
+            ultravin::decode_batch_json_flat_at(&vins, years, now_micros)
         }
     }))
+}
+
+/// Internal CLI path: decode and frame one compact JSON object per line.
+#[pyfunction]
+#[pyo3(signature = (vins, *, years = None, full = false, now = None))]
+fn _decode_batch_jsonl(
+    py: Python<'_>,
+    vins: Vec<String>,
+    years: Option<Vec<Option<i32>>>,
+    full: bool,
+    now: Option<Bound<'_, PyDateTime>>,
+) -> PyResult<String> {
+    check_years(&vins, &years)?;
+    let (now_micros, _) = decode_clock(now.as_ref())?;
+    Ok(py.detach(|| ultravin::decode_batch_jsonl_at(&vins, years.as_deref(), now_micros, full)))
 }
 
 /// Upper bound on a single `generate` request. A larger `n` is almost certainly a
@@ -403,6 +464,16 @@ fn clock_from(now: &Bound<'_, PyDateTime>) -> PyResult<(i64, i32)> {
     };
     let micros = (secs.floor() as i64).saturating_mul(1_000_000);
     Ok((micros, ultravin::current_year_at(micros)))
+}
+
+fn decode_clock(now: Option<&Bound<'_, PyDateTime>>) -> PyResult<(i64, i32)> {
+    match now {
+        Some(dt) => clock_from(dt),
+        None => {
+            let micros = ultravin::now_micros();
+            Ok((micros, ultravin::current_year_at(micros)))
+        }
+    }
 }
 
 /// Generate `n` valid VINs, deterministic for a given `seed`.
@@ -747,18 +818,84 @@ impl RecordBatchReader for ParquetReader {
 /// `next`, so once it is inside an `FFI_ArrowArrayStream` the consumer drives the
 /// whole decode from C.
 struct DecodingReader {
-    input: Box<dyn RecordBatchReader + Send>,
+    input: DecodingInput,
     decoder: ArrowDecoder,
+    feedback: Option<BatchFeedback>,
+}
+
+enum DecodingInput {
+    Fixed(Box<dyn RecordBatchReader + Send>),
+    Auto(BatchRebatcher),
+}
+
+/// Drop unused columns before adaptive concatenation can allocate copies of
+/// them. Projection itself only clones Arrow references.
+struct ProjectedReader {
+    input: Box<dyn RecordBatchReader + Send>,
+    columns: Vec<usize>,
+    schema: SchemaRef,
+}
+
+impl Iterator for ProjectedReader {
+    type Item = Result<RecordBatch, ArrowRsError>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.input
+            .next()
+            .map(|batch| batch.and_then(|batch| batch.project(&self.columns)))
+    }
+}
+
+impl RecordBatchReader for ProjectedReader {
+    fn schema(&self) -> SchemaRef {
+        self.schema.clone()
+    }
 }
 
 impl Iterator for DecodingReader {
     type Item = Result<RecordBatch, ArrowRsError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let DecodingReader { input, decoder } = self;
-        caught(move || match input.next()? {
-            Ok(batch) => Some(decoder.decode_batch(&batch).map_err(Into::into)),
-            Err(e) => Some(Err(e)),
+        let DecodingReader {
+            input,
+            decoder,
+            feedback,
+        } = self;
+        caught(move || {
+            let started = Instant::now();
+            let batch = match input {
+                DecodingInput::Fixed(reader) => match reader.next()? {
+                    Ok(batch) => batch,
+                    Err(error) => return Some(Err(error)),
+                },
+                DecodingInput::Auto(reader) => {
+                    let rows = feedback.as_ref().expect("adaptive feedback").next_rows();
+                    match reader.next_batch(rows) {
+                        Ok(Some(batch)) => batch,
+                        Ok(None) => return None,
+                        Err(error) => return Some(Err(error)),
+                    }
+                }
+            };
+            let decoded = if let Some(feedback) = feedback.as_ref() {
+                let decoded = feedback.decode(batch.num_rows(), || {
+                    let output = decoder.decode_batch(&batch)?;
+                    let bytes = decoder.batch_working_bytes(&output);
+                    Ok::<_, ArrowError>((output, bytes))
+                });
+                if let Ok(output) = &decoded {
+                    feedback.observe_total(
+                        output.num_rows(),
+                        started.elapsed(),
+                        decoder.batch_working_bytes(output),
+                    );
+                }
+                decoded
+            } else {
+                decoder.decode_batch(&batch)
+            }
+            .map_err(Into::into);
+            Some(decoded)
         })
     }
 }
@@ -784,6 +921,7 @@ struct DecodeStream {
     /// the file it is still reading.
     src: Option<PathBuf>,
     row_group: usize,
+    feedback: Option<BatchFeedback>,
 }
 
 impl DecodeStream {
@@ -806,6 +944,16 @@ impl DecodeStream {
 
 #[pymethods]
 impl DecodeStream {
+    /// The initial model estimate, available after the real calibration batches.
+    #[getter]
+    fn batch_prediction<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyDict>>> {
+        self.feedback
+            .as_ref()
+            .and_then(BatchFeedback::prediction)
+            .map(|prediction| prediction_dict(py, &prediction))
+            .transpose()
+    }
+
     /// The Arrow C stream export: hand the decode to pyarrow, polars, duckdb, …
     ///
     /// `requested_schema` is accepted and ignored, which the protocol allows —
@@ -841,7 +989,10 @@ impl DecodeStream {
         let schema = self.schema.clone();
         py.detach(|| {
             let batches = reader.map(|r| r.map_err(ArrowError::from));
-            write_parquet(batches, schema, &dst, self.row_group)
+            match &self.feedback {
+                Some(feedback) => write_parquet_adaptive(batches, schema, &dst, feedback.clone()),
+                None => write_parquet(batches, schema, &dst, self.row_group),
+            }
         })
         .map_err(arrow_err)
     }
@@ -863,6 +1014,188 @@ impl DecodeStream {
     }
 }
 
+#[derive(FromPyObject)]
+enum PyBatchSize {
+    Boolean(bool),
+    Rows(i64),
+    Mode(String),
+}
+
+impl PyBatchSize {
+    fn resolve(self) -> PyResult<Option<usize>> {
+        match self {
+            Self::Rows(rows) if rows > 0 => usize::try_from(rows)
+                .map(Some)
+                .map_err(|_| PyValueError::new_err("batch_size is too large")),
+            Self::Mode(mode) if mode == "auto" => Ok(None),
+            Self::Boolean(value) => Err(PyValueError::new_err(format!(
+                "batch_size must be 'auto' or a positive integer, got {value}"
+            ))),
+            _ => Err(PyValueError::new_err(
+                "batch_size must be 'auto' or a positive integer",
+            )),
+        }
+    }
+}
+
+/// Shared native policy for the Python JSONL loop. No decode or clock work is
+/// performed at construction; callers report only completed real batches.
+#[pyclass(name = "_BatchTuner", module = "ultravin._ultravin")]
+struct PyBatchTuner {
+    feedback: BatchFeedback,
+    predictive: bool,
+}
+
+#[pymethods]
+impl PyBatchTuner {
+    #[new]
+    #[pyo3(signature = (initial_rows = 1_000, memory_bytes = 67_108_864, max_rows = 65_536, predictive = false))]
+    fn new(
+        initial_rows: usize,
+        memory_bytes: usize,
+        max_rows: usize,
+        predictive: bool,
+    ) -> PyResult<Self> {
+        if initial_rows == 0 || memory_bytes == 0 || max_rows == 0 {
+            return Err(PyValueError::new_err(
+                "tuner sizes and memory budget must be positive",
+            ));
+        }
+        let feedback = if predictive {
+            BatchFeedback::new_predictive(
+                BatchFormat::Jsonl,
+                memory_bytes,
+                ultravin::predictor::worker_count(),
+            )
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?
+        } else {
+            BatchFeedback::new(BatchTuner::new(initial_rows, memory_bytes).with_max_rows(max_rows))
+        };
+        Ok(Self {
+            feedback,
+            predictive,
+        })
+    }
+
+    fn next_rows(&self) -> usize {
+        self.feedback.next_rows()
+    }
+
+    fn observe(&mut self, rows: usize, seconds: f64, output_bytes: usize) -> PyResult<()> {
+        let elapsed = Duration::try_from_secs_f64(seconds).map_err(|_| {
+            PyValueError::new_err("elapsed seconds must be finite and non-negative")
+        })?;
+        if self.predictive {
+            self.feedback.observe_total(rows, elapsed, output_bytes);
+        } else {
+            self.feedback.decoded(rows, elapsed, output_bytes);
+        }
+        Ok(())
+    }
+
+    #[getter]
+    fn prediction<'py>(&self, py: Python<'py>) -> PyResult<Option<Bound<'py, PyDict>>> {
+        self.feedback
+            .prediction()
+            .map(|prediction| prediction_dict(py, &prediction))
+            .transpose()
+    }
+
+    #[pyo3(signature = (vins, *, years = None, full = false, now = None))]
+    fn decode_jsonl(
+        &self,
+        py: Python<'_>,
+        vins: Vec<String>,
+        years: Option<Vec<Option<i32>>>,
+        full: bool,
+        now: Option<Bound<'_, PyDateTime>>,
+    ) -> PyResult<String> {
+        check_years(&vins, &years)?;
+        let (now_micros, _) = decode_clock(now.as_ref())?;
+        Ok(py.detach(|| {
+            self.feedback
+                .decode(vins.len(), || {
+                    let json =
+                        ultravin::decode_batch_jsonl_at(&vins, years.as_deref(), now_micros, full);
+                    let bytes = json.len();
+                    Ok::<_, std::convert::Infallible>((json, bytes))
+                })
+                .expect("infallible JSONL serialization")
+        }))
+    }
+}
+
+fn prediction_dict<'py>(
+    py: Python<'py>,
+    prediction: &BatchPrediction,
+) -> PyResult<Bound<'py, PyDict>> {
+    let result = PyDict::new(py);
+    result.set_item("model_version", prediction.model_version)?;
+    result.set_item("batch_size", prediction.batch_size)?;
+    result.set_item("workers", prediction.workers)?;
+    result.set_item("slots_per_worker", prediction.slots_per_worker)?;
+    result.set_item("max_inflight_rows", prediction.max_inflight_rows)?;
+    result.set_item(
+        "single_core_rows_per_second",
+        prediction.single_core_rows_per_second,
+    )?;
+    result.set_item(
+        "estimated_rows_per_second",
+        prediction.estimated_rows_per_second,
+    )?;
+    result.set_item(
+        "estimated_peak_rows_per_second",
+        prediction.estimated_peak_rows_per_second,
+    )?;
+    result.set_item("target_fraction", prediction.target_fraction)?;
+    result.set_item(
+        "estimated_peak_rss_bytes",
+        prediction.estimated_peak_rss_bytes,
+    )?;
+    result.set_item(
+        "estimated_working_bytes",
+        prediction.estimated_working_bytes,
+    )?;
+    result.set_item("memory_limited", prediction.memory_limited)?;
+    Ok(result)
+}
+
+/// Estimate an output batch or a native per-worker batch and slot plan.
+#[pyfunction]
+#[pyo3(signature = (*, workers, single_core_rows_per_second, output = "parquet", batch_memory_mb = None, bytes_per_row = None))]
+fn predict_batch_size<'py>(
+    py: Python<'py>,
+    workers: usize,
+    single_core_rows_per_second: f64,
+    output: &str,
+    batch_memory_mb: Option<usize>,
+    bytes_per_row: Option<f64>,
+) -> PyResult<Bound<'py, PyDict>> {
+    let (format, default_memory_mb) = match output {
+        "parquet" | "arrow" => (BatchFormat::Columnar, 64),
+        "jsonl" => (BatchFormat::Jsonl, 8),
+        "native" => (BatchFormat::Native, 512),
+        _ => {
+            return Err(PyValueError::new_err(
+                "output must be parquet, arrow, jsonl, or native",
+            ))
+        }
+    };
+    let memory_bytes = batch_memory_mb
+        .unwrap_or(default_memory_mb)
+        .checked_mul(1024 * 1024)
+        .ok_or_else(|| PyValueError::new_err("batch_memory_mb is too large"))?;
+    let prediction = predict_batch(
+        workers,
+        single_core_rows_per_second,
+        format,
+        memory_bytes,
+        bytes_per_row.unwrap_or_else(|| format.default_bytes_per_row()),
+    )
+    .map_err(|error| PyValueError::new_err(error.to_string()))?;
+    prediction_dict(py, &prediction)
+}
+
 /// Decode a dataset into a stream of Arrow batches.
 ///
 /// `source` is a parquet file, a directory of them, or any object exposing the
@@ -873,7 +1206,10 @@ impl DecodeStream {
 /// variable name, `"id"` uses `attr_<element_id>`, which does not move when NHTSA
 /// renames a variable. Either way both keys ride along as field metadata.
 #[pyfunction]
-#[pyo3(signature = (source, *, vin_column = None, year_column = None, columns = None, column_names = "variable", batch_size = 65_536, sample_rows = 100))]
+#[pyo3(signature = (source, *, vin_column = None, year_column = None, columns = None, column_names = "variable", batch_size = PyBatchSize::Mode("auto".to_owned()), batch_memory_mb = 64, sample_rows = 100, now = None))]
+#[pyo3(
+    text_signature = "(source, *, vin_column=None, year_column=None, columns=None, column_names='variable', batch_size='auto', batch_memory_mb=64, sample_rows=100, now=None)"
+)]
 // One parameter per documented keyword; collapsing them into a struct would only
 // move the argument list into Python.
 #[allow(clippy::too_many_arguments)]
@@ -884,9 +1220,19 @@ fn decode_stream(
     year_column: Option<String>,
     columns: Option<Vec<Bound<'_, PyAny>>>,
     column_names: &str,
-    batch_size: usize,
+    batch_size: PyBatchSize,
+    batch_memory_mb: usize,
     sample_rows: usize,
+    now: Option<Bound<'_, PyDateTime>>,
 ) -> PyResult<DecodeStream> {
+    let (now_micros, _) = decode_clock(now.as_ref())?;
+    let batch_size = batch_size.resolve()?;
+    let memory_bytes = batch_memory_mb
+        .checked_mul(1_048_576)
+        .filter(|bytes| *bytes > 0)
+        .ok_or_else(|| {
+            PyValueError::new_err("batch_memory_mb must be a positive, representable size")
+        })?;
     // A list of VINs is the one wrong argument worth naming outright: it is what
     // a reader of `decode_batch` would try first, and it is not a dataset. It is
     // checked before the projection is validated, so passing a list *and* a bad
@@ -908,13 +1254,52 @@ fn decode_stream(
             columns: specs,
             names,
         };
-        let decoder = ArrowDecoder::new(&input.schema(), &opts).map_err(arrow_err)?;
+        let decoder =
+            ArrowDecoder::new_at(&input.schema(), &opts, now_micros).map_err(arrow_err)?;
+        let feedback = batch_size
+            .is_none()
+            .then(|| {
+                BatchFeedback::new_predictive(
+                    BatchFormat::Columnar,
+                    memory_bytes,
+                    ultravin::predictor::worker_count(),
+                )
+            })
+            .transpose()
+            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+        let (input, decoder) = if feedback.is_some() {
+            let mut columns = vec![decoder.vin_index()];
+            columns.extend(decoder.year_index());
+            let schema = Arc::new(
+                input
+                    .schema()
+                    .project(&columns)
+                    .map_err(|error| arrow_err(error.into()))?,
+            );
+            let decoder = ArrowDecoder::new_at(&schema, &opts, now_micros).map_err(arrow_err)?;
+            let input = ProjectedReader {
+                input,
+                columns,
+                schema,
+            };
+            (
+                DecodingInput::Auto(BatchRebatcher::new(Box::new(input))),
+                decoder,
+            )
+        } else {
+            (DecodingInput::Fixed(input), decoder)
+        };
         let schema = decoder.out_schema().clone();
         return Ok(DecodeStream {
-            reader: Mutex::new(Some(Box::new(DecodingReader { input, decoder }))),
+            reader: Mutex::new(Some(Box::new(DecodingReader {
+                input,
+                decoder,
+                feedback: feedback.clone(),
+            }))),
             schema,
             src: None,
-            row_group: batch_size,
+            row_group: batch_size.unwrap_or(65_536),
+            feedback,
         });
     }
     let src: PathBuf = source.extract().map_err(|_| {
@@ -930,14 +1315,20 @@ fn decode_stream(
         year: year_column,
         columns: specs,
         names,
-        batch_size,
+        batch_size: batch_size.unwrap_or(8_192),
         sample_rows,
     };
-    let iter = py.detach(|| open_chunks(&src, opts)).map_err(arrow_err)?;
+    let iter = py
+        .detach(|| match batch_size {
+            Some(_) => open_chunks_at(&src, opts, now_micros),
+            None => open_chunks_auto_at(&src, opts, memory_bytes, now_micros),
+        })
+        .map_err(arrow_err)?;
     let schema = iter
         .out_schema
         .clone()
         .ok_or_else(|| PyValueError::new_err("source expanded to no parquet files"))?;
+    let feedback = iter.feedback();
     Ok(DecodeStream {
         reader: Mutex::new(Some(Box::new(ParquetReader {
             inner: iter,
@@ -945,16 +1336,21 @@ fn decode_stream(
         }))),
         schema,
         src: Some(src),
-        row_group: batch_size,
+        row_group: batch_size.unwrap_or(65_536),
+        feedback,
     })
 }
 
 #[pymodule]
 fn _ultravin(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add_class::<PyBatchTuner>()?;
     m.add_function(wrap_pyfunction!(decode, m)?)?;
     m.add_function(wrap_pyfunction!(decode_batch, m)?)?;
     m.add_function(wrap_pyfunction!(decode_json, m)?)?;
     m.add_function(wrap_pyfunction!(decode_batch_json, m)?)?;
+    m.add_function(wrap_pyfunction!(_decode_batch_jsonl, m)?)?;
+    m.add_function(wrap_pyfunction!(provenance, m)?)?;
+    m.add_function(wrap_pyfunction!(predict_batch_size, m)?)?;
     m.add_function(wrap_pyfunction!(multi_valued, m)?)?;
     m.add_function(wrap_pyfunction!(elements, m)?)?;
     m.add_function(wrap_pyfunction!(generate, m)?)?;

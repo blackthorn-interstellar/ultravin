@@ -1,12 +1,15 @@
 """Thin typer CLI over the ultravin core. No decode logic lives here."""
 
+import json
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 
 import typer
 
 import ultravin as uv
+from ultravin._batch_cli import BatchSize, collect, input_lines, parse_batch_size, rows, write_jsonl
 
 app = typer.Typer(add_completion=False, no_args_is_help=True, help="ultravin — NHTSA vPIC VIN decoder")
 
@@ -34,31 +37,38 @@ def decode(
 
 @app.command(name="decode-batch")
 def decode_batch(
-    file: Path,
+    file: str,
     full: bool = typer.Option(False, "--full", help=FULL_HELP),
+    jsonl: bool = typer.Option(False, "--jsonl", help="Stream one JSON object per line."),
+    batch_size: str = typer.Option(
+        "auto", "--batch-size", callback=parse_batch_size, help="VINs per JSONL chunk: 'auto' or a positive integer."
+    ),
+    batch_memory_mb: int = typer.Option(
+        8, "--batch-memory-mb", min=1, help="Working-buffer target in MiB for automatic batches."
+    ),
 ) -> None:
-    """Decode one VIN per line from FILE (JSON array on stdout).
+    """Decode one VIN per line from FILE, or from stdin when FILE is `-`.
 
     A line may be `VIN,year` to supply a caller model year for that VIN — the
-    same per-line format the vPIC batch API accepts.
+    same per-line format the vPIC batch API accepts. The default output remains
+    one JSON array; `--jsonl` bounds memory and emits each result immediately.
+    One clock is captured before reading input and used for the whole job.
     """
-    vins: list[str] = []
-    years: list[int | None] = []
-    for lineno, raw in enumerate(file.read_text().splitlines(), start=1):
-        line = raw.strip()
-        if not line:
-            continue
-        vin, _, year = line.partition(",")
-        vins.append(vin.strip())
-        try:
-            years.append(int(year) if year.strip() else None)
-        except ValueError:
-            msg = f"line {lineno}: model year {year.strip()!r} is not an integer"
-            raise typer.BadParameter(msg) from None
-    # decode_batch_json serializes the whole array in Rust (GIL released), the
-    # fast path for large files.
+    now = datetime.now(timezone.utc)
+    with input_lines(file) as lines:
+        parsed = rows(lines)
+        if jsonl:
+            write_jsonl(
+                parsed,
+                full=full,
+                batch_size=cast("BatchSize", batch_size),
+                now=now,
+                batch_memory_mb=batch_memory_mb,
+            )
+            return
+        vins, years = collect(parsed)
     hints = years if any(y is not None for y in years) else None
-    typer.echo(uv.decode_batch_json(vins, years=hints, full=full))
+    typer.echo(uv.decode_batch_json(vins, years=hints, full=full, now=now))
 
 
 @app.command(name="decode-parquet")
@@ -82,7 +92,15 @@ def decode_parquet(
             "(stable across data refreshes).",
         ),
     ] = ColumnNames.variable,
-    batch_size: int = typer.Option(65_536, "--batch-size", min=1, help="Rows per chunk — memory, not throughput."),
+    batch_size: str = typer.Option(
+        "auto",
+        "--batch-size",
+        callback=parse_batch_size,
+        help="Rows per chunk: 'auto' or a positive integer.",
+    ),
+    batch_memory_mb: int = typer.Option(
+        64, "--batch-memory-mb", min=1, help="Working-buffer target in MiB for automatic batches."
+    ),
     sample_rows: int = typer.Option(100, "--sample-rows", min=1, help="Rows sniffed when autodetecting columns."),
 ) -> None:
     """Decode SRC (a parquet file or directory of them) into projected parquet at DST.
@@ -104,7 +122,8 @@ def decode_parquet(
             year_column=year_column,
             columns=projection,
             column_names=column_names.value,
-            batch_size=batch_size,
+            batch_size=cast("BatchSize", batch_size),
+            batch_memory_mb=batch_memory_mb,
             sample_rows=sample_rows,
         ).to_parquet(dst)
     except ValueError as exc:
@@ -118,6 +137,12 @@ def decode_parquet(
 def version() -> None:
     """Print the ultravin version."""
     typer.echo(uv.__version__)
+
+
+@app.command()
+def info() -> None:
+    """Print decoder and embedded-data provenance as JSON."""
+    typer.echo(json.dumps(uv.provenance(), separators=(",", ":")))
 
 
 def main() -> None:

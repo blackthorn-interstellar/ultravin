@@ -619,6 +619,17 @@ pub fn artifact_blake3_hex(bytes: &[u8]) -> String {
     s
 }
 
+/// Compute the artifact digest from its body and builder version.
+pub fn compute_artifact_blake3_hex(bytes: &[u8]) -> String {
+    if bytes.len() < HEADER_LEN {
+        return String::new();
+    }
+    let mut h = blake3::Hasher::new();
+    h.update(&bytes[HEADER_LEN..]);
+    h.update(&bytes[10..14]);
+    h.finalize().to_hex().to_string()
+}
+
 impl VpicData {
     /// Resolve an arena string id to its `&str`.
     pub fn s(&self, id: u32) -> &str {
@@ -627,5 +638,47 @@ impl VpicData {
         let end = self.arena_offsets[i + 1] as usize;
         // Arena bytes are valid UTF-8 by construction (interned from &str).
         std::str::from_utf8(&self.arena_bytes[start..end]).unwrap_or("")
+    }
+}
+
+#[cfg(test)]
+mod provenance_tests {
+    use super::*;
+
+    #[test]
+    fn computed_digest_does_not_trust_a_stale_header() {
+        let data = VpicData {
+            cover: Vec::new(),
+            arena_bytes: vec![0],
+            arena_offsets: vec![0, 0],
+            wmi: Vec::new(),
+            wmi_vinschema: Vec::new(),
+            vinschema: Vec::new(),
+            pattern: Vec::new(),
+            element: Vec::new(),
+            make_model: Vec::new(),
+            wmi_make: Vec::new(),
+            enginemodel: Vec::new(),
+            enginemodelpattern: Vec::new(),
+            defaultvalue: Vec::new(),
+            vinexception: Vec::new(),
+            conversion: Vec::new(),
+            lookups: Vec::new(),
+            vspecschema: Vec::new(),
+            vspecschemapattern: Vec::new(),
+            vspecpattern: Vec::new(),
+            vspecschemamodel: Vec::new(),
+            vspecschemayear: Vec::new(),
+        };
+        let mut bytes = serialize_artifact(&data, 0);
+        assert_eq!(
+            artifact_blake3_hex(&bytes),
+            compute_artifact_blake3_hex(&bytes)
+        );
+        *bytes.last_mut().expect("serialized body") ^= 1;
+        assert_ne!(
+            artifact_blake3_hex(&bytes),
+            compute_artifact_blake3_hex(&bytes)
+        );
     }
 }

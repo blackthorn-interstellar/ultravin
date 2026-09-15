@@ -495,7 +495,7 @@ def test_rows_and_nulls_stay_aligned_across_internal_chunks(batch_size: int) -> 
     corpus = [CORPUS[i % len(CORPUS)] for i in range(777)]
     source = pa.table({"vin": text([v for v, _ in corpus]), "year": ints([y for _, y in corpus])})
     source_reader = pa.RecordBatchReader.from_batches(source.schema, source.to_batches(max_chunksize=batch_size))
-    reader = pa.RecordBatchReader.from_stream(uv.decode_stream(source_reader, columns=PROJECTED))
+    reader = pa.RecordBatchReader.from_stream(uv.decode_stream(source_reader, columns=PROJECTED, batch_size=batch_size))
     batches = list(reader)
     assert [batch.num_rows for batch in batches] == [
         min(batch_size, len(corpus) - start) for start in range(0, len(corpus), batch_size)
