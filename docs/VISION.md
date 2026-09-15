@@ -25,7 +25,7 @@ An unexplained difference is a decoder bug. A proven upstream defect gets a corr
 
 ## Why we win on numbers
 
-The published September 15 benchmark delivers **164,316 VIN/s on one core**, **521,234 VIN/s on four**, and **1,147,742 VIN/s on all twelve**. Single-core throughput exceeds the published corgi v3 rate by **over 1,900×** and the measured NHTSA SQL baselines by **over 7,300×**. The complete decoder runs in-process, with the database embedded and no service to host.
+The published September 15 benchmark delivers **164,316 VIN/s on one core**, **521,234 VIN/s on four**, and **1,147,742 VIN/s on all twelve**. Measured against the NHTSA MSSQL `spVinDecode` baseline of 22.5 VIN/s, that is **over 7,300×** on one core and **over 51,000×** on twelve. The complete decoder runs in-process, with the database embedded and no service to host.
 
 Speed and correctness advance together: preserve the full decoding algorithm, remove unnecessary work, and measure the result. [Benchmarks](BENCHMARKS.md) record the inputs, hardware, comparison sources, and reproduction commands.
 

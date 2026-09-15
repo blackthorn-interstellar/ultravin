@@ -3,11 +3,15 @@
 The README uses the [September 15 headline benchmark](#headline-throughput-september-15-2026):
 **1,147,742 VIN/s on twelve workers**, **521,234 VIN/s on four**, and
 **164,316 VIN/s on one**, all with automatic batching over twenty million unique
-VINs on an Apple M2 Max. The [September 14 multicore
+VINs on an Apple M2 Max. That section compares every engine against one
+baseline — NHTSA MSSQL `spVinDecode` at 22.5 VIN/s — so one ultravin core is
+**~7,303× the baseline** and twelve are **~51,011×**. The [September 14 multicore
 session](MULTICORE_OPTIMIZATION_2026_09_14.md) is the previous headline —
 400,843 VIN/s on four workers and 105,372 on one, with 656,900 at eight workers
-and 630,092 at twelve. The historical sessions below retain their original
-inputs, hardware, and engine builds.
+and 630,092 at twelve; its [coordination
+follow-up](COORDINATION_EXPERIMENTS_2026_09_14.md) added a further 3.3% at eight
+workers by writing decoded results into input-order slots. The historical
+sessions below retain their original inputs, hardware, and engine builds.
 
 The [September 13 consolidated report](PERFORMANCE_2026_09_13.md) measures the
 then-current Rust, Python dictionary, direct JSON, and Parquet output paths together,
@@ -33,16 +37,20 @@ Commit `66b5622`, Apple M2 Max (eight performance and four efficiency cores),
 **20,000,000 unique synthetic VINs**, automatic batching, decode clock frozen at
 `2026-09-01T00:00:00Z`.
 
-| engine | VIN/s | vs ultravin (1 core) |
+| engine | VIN/s | vs NHTSA MSSQL |
 |---|---:|---:|
-| **ultravin** — automatic batches, 12 cores | **1,147,742** | ~7.0× faster |
-| **ultravin** — automatic batches, 4 cores | **521,234** | ~3.2× faster |
-| **ultravin** — automatic batches, 1 core | **164,316** | 1× |
-| corgi v3 (binary index, published) | ~83 | ~1,980× slower |
-| corgi v2 (SQLite, published) | ~33 | ~4,979× slower |
-| NHTSA MSSQL (`spVinDecode`, SQL Server) | 22.5 | ~7,303× slower |
-| NHTSA Postgres (`spvindecode`) | 19.5 | ~8,426× slower |
-| NHTSA vPIC web API (public rate limit) | ~10 | ~16,432× slower |
+| **ultravin** — automatic batches, 12 cores | **1,147,742** | ~51,011× faster |
+| **ultravin** — automatic batches, 4 cores | **521,234** | ~23,166× faster |
+| **ultravin** — automatic batches, 1 core | **164,316** | ~7,303× faster |
+| corgi v3 (binary index, published) | ~83 | ~3.7× faster |
+| corgi v2 (SQLite, published) | ~33 | ~1.5× faster |
+| NHTSA MSSQL (`spVinDecode`, SQL Server) | 22.5 | 1× (baseline) |
+| NHTSA Postgres (`spvindecode`) | 19.5 | ~1.2× slower |
+| NHTSA vPIC web API (public rate limit) | ~10 | ~2.3× slower |
+
+The right-hand column divides each rate by the NHTSA MSSQL rate of 22.5 VIN/s.
+ultravin's core scaling is a separate fact about the same three rows: four cores
+reach ~3.2× and twelve cores ~7.0× of its single-core rate.
 
 Each ultravin figure is the median of two fresh-process trials, run 1/4/12 and
 then reversed to 12/4/1. Every process loads the corpus and completes one
@@ -56,16 +64,26 @@ trial started; the host is shared but was otherwise idle.
 The input is the hashed twenty-million-VIN corpus
 (`target/bench/independent-sink-corpus.txt`, SHA-256 `0d6224e9…bd9a`) and the
 timed binary is SHA-256 `0a1fd680…ec58`. Twenty million rows are required, not
-decorative: the corpus-size gate wants at least ten seconds of unique input at
-the fastest observed rate, and the previous ten-million corpus yields only
-8.6 seconds at 1,166,940 VIN/s.
+decorative: the [corpus-size
+gate](LARGE_CORPUS_BENCHMARK_2026_09_14.md#corpus-size-requirement) wants at
+least ten seconds of unique input at the fastest observed rate, and the previous
+ten-million corpus yields only 8.6 seconds at 1,166,940 VIN/s. The `throughput`
+example does not enforce that gate itself — given a corpus too small for the
+requested window it loops and repeats VINs — so size the corpus before timing.
 
 Twelve workers beat the September 14 session's 630,092 VIN/s by 82%. That gap is
 shipped native-stream work rather than a measurement artifact: this exact binary
 is the confirmed candidate in the [twelve-worker native
 report](NATIVE_MILLION_2026_09_15.md), which measured 1,037,755 VIN/s on a
-busier host. The corgi and NHTSA rows are their earlier published or measured
-figures, were not re-run here, and are compared against the one-core number.
+busier host. The single-core rise from the September 14 session's 105,372 VIN/s
+is corroborated independently: the [native worker
+auto](NATIVE_WORKER_AUTO_2026_09_15.md) session records a reference serial rate
+of 174,387 VIN/s — the median of four production calibration observations
+ranging from 158,408 to 181,678 VIN/s — so 164,316 sits inside an independently
+measured range.
+The corgi and NHTSA rows are their earlier published or measured figures, were
+not re-run here, and are compared against the NHTSA MSSQL baseline like every
+other row.
 
 These figures and their provenance live together in
 [`scripts/bench/results.json`](../scripts/bench/results.json); `make chart`
@@ -78,10 +96,22 @@ RAYON_NUM_THREADS=12 ULTRAVIN_NOW_MICROS=1788220800000000 \
   target/bench/independent-sink-corpus.txt 10 batch full auto
 ```
 
-Set `RAYON_NUM_THREADS` to 1 or 4 for the other ultravin rows. Regenerate the
-corpus with `UV_FROZEN=1 uv run python -m scripts.bench.large_corpus --count
-20000000 --out target/bench/independent-sink-corpus.txt --manifest
-target/bench/independent-sink-corpus.manifest.json`.
+Set `RAYON_NUM_THREADS` to 1 or 4 for the other ultravin rows. Regenerating the
+corpus needs the native extension, because `scripts/bench/large_corpus.py`
+imports `ultravin` to drive its VIN generator, so a fresh checkout builds first:
+
+```sh
+UV_FROZEN=1 uv run --frozen maturin develop --uv --release --locked
+UV_FROZEN=1 uv run python -m scripts.bench.large_corpus --count 20000000 \
+  --out target/bench/independent-sink-corpus.txt \
+  --manifest target/bench/independent-sink-corpus.manifest.json
+```
+
+The generated bytes depend on the embedded vPIC data month, which the manifest
+records as `data_month: 2026_08`; a different month regenerates a different
+corpus and a different hash. The manifest
+(`target/bench/independent-sink-corpus.manifest.json`) also carries the full
+SHA-256 abbreviated above, alongside the database identity and diversity counts.
 
 ## Earlier throughput (random corpus, September 9, 2026)
 
@@ -367,7 +397,8 @@ numbers cited**: ~30 ms (v2, SQLite) / ~12 ms (v3, binary index), ~21 MB gzip
 artifact (ISC, TypeScript).
 
 ### MS SQL
-Now measured — see [Throughput (random corpus)](#throughput-random-corpus).
+Now measured — see [Earlier throughput (random
+corpus)](#earlier-throughput-random-corpus-september-9-2026).
 The unmodified `dbo.spVinDecode` from `vPICList_lite_2026_06.bak` restored into
 SQL Server 2022 decodes **~22.5 VIN/s** (amd64 emulation on Apple Silicon).
 

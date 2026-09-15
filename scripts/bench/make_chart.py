@@ -56,8 +56,9 @@ def tick_label(value: int) -> str:
 
 
 def axis(peak: float) -> tuple[int, int]:
-    """Smallest round gridline step that keeps the axis under 13 labels."""
-    step = next(s for s in (50_000, 100_000, 250_000, 500_000, 1_000_000) if peak / s <= 12)
+    """Smallest round gridline step that keeps the axis to at most 13 labels."""
+    steps = (50_000, 100_000, 250_000, 500_000, 1_000_000)
+    step = next((s for s in steps if peak / s <= 12), 1_000_000)
     return step, max(step, math.ceil(peak / step) * step)
 
 
@@ -66,8 +67,8 @@ def x(value: float, axis_max: int) -> float:
     return X0 + frac * (X1 - X0)
 
 
-def main() -> int:
-    data = json.loads(RESULTS.read_text())
+def render(data: dict) -> str:
+    """Return the SVG text for one parsed results.json."""
     prov, engines = data["provenance"], data["engines"]
     rows = [(lbl, engines[key], hi) for lbl, key, hi in ROWS if key in engines]
     step, axis_max = axis(max(value for _, value, _ in rows))
@@ -126,7 +127,11 @@ def main() -> int:
         'text-anchor="middle">VINs decoded per second — higher is better</text>'
     )
     s.append("</svg>")
-    OUT.write_text("\n".join(s) + "\n")
+    return "\n".join(s) + "\n"
+
+
+def main() -> int:
+    OUT.write_text(render(json.loads(RESULTS.read_text())))
     print(f"wrote {OUT}")
     return 0
 

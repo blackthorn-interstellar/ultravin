@@ -13,22 +13,22 @@
   <sub>VINs decoded per second — ultravin uses automatic batching over twenty million unique VINs.</sub>
 </p>
 
-- ⚡️ ~164,000 VIN/s on one core with automatic batching — orders of magnitude faster than the NHTSA SQL procedures
+- ⚡️ ~164,000 VIN/s on one core with automatic batching — ~7,300× the NHTSA SQL Server baseline (22.5 VIN/s)
 - 🦀 Pure Rust core, shipped as a Python library and a Rust crate
 - 📦 The entire vPIC vehicle database baked into the wheel
 - 🔌 Fully offline — no network, no database, no data files at runtime
 - 🎯 Full-field vPIC parity, tested across decoding rules and their interactions — with documented upstream defects corrected ([accuracy policy](docs/ACCEPTANCE.md), [evidence](docs/KNOWN_DEVIATIONS.md))
 - 🐍 Installable via `pip`, with a CLI and a library API
-- 🧵 Batches in parallel to ~521,000 VIN/s on 4 cores and ~1.15 million VIN/s on all 12, with automatic batching
+- 🧵 Batches in parallel to ~521,000 VIN/s on 4 cores and ~1.15 million VIN/s on all 12 — ~23,166× and ~51,011× that same baseline
 - 🗃️ Parquet in, parquet out — decodes a dataset of any size in the memory of one chunk
 
 ultravin brings the complete `spVinDecode` algorithm into your process: vehicle
 attributes, model-year resolution, VIN correction, errors, and provenance.
 It checks every output field against NHTSA's unmodified Postgres procedure and
 corrects documented defects in the upstream data and procedures. You get vPIC
-fidelity with better answers on those defective cases, at **over 1,900× the
-published corgi throughput and over 7,300× the measured SQL baselines** on one
-core. [Benchmarks and reproduction](docs/BENCHMARKS.md).
+fidelity with better answers on those defective cases, at **over 7,300× the
+NHTSA SQL Server baseline** on one core.
+[Benchmarks and reproduction](docs/BENCHMARKS.md).
 
 The complete vehicle database ships inside the binary. No network, no database
 server, no runtime data files. Install it and decode.
@@ -297,66 +297,30 @@ ultravin decode-parquet registrations.parquet decoded.parquet --column-names id
 
 ## Benchmarks
 
-The native stream now clears a million VINs per second: the
-[twelve-worker report](docs/NATIVE_MILLION_2026_09_15.md) records **1,037,755
-VIN/s** over twenty million unique VINs, from worker-owned buffer reuse, cached
-projection metadata, and direct error-text assembly.
-The earlier [multicore optimization](docs/MULTICORE_OPTIMIZATION_2026_09_14.md)
-reached **656,900 VIN/s with eight workers** and **630,092 VIN/s with twelve**
-over ten million unique VINs. Its paired before/after runs improved throughput
-**35.9% at eight workers**, **24.1% at twelve**, and **23.1% at four**, while
-reducing peak process memory by 21–47%.
-The shipped native predictor selects batch sizes for the managed result path,
-and the live controller adapts them during the job.
-A [coordination follow-up](docs/COORDINATION_EXPERIMENTS_2026_09_14.md) improves
-eight-worker automatic throughput a further **3.3%** by writing decoded results
-into input-order slots.
+How many VINs each engine decodes **per second**, measured against the NHTSA
+MSSQL `spVinDecode` baseline of 22.5 VIN/s.
 
-For throughput, startup, and memory at each output boundary, see the
-[consolidated performance report](docs/PERFORMANCE_2026_09_13.md): native Rust
-results, Python dictionaries, direct JSON, and complete Parquet files, measured
-from the same checkout with a frozen decode clock.
+| engine | VIN/s | vs NHTSA MSSQL |
+|---|---:|---:|
+| **ultravin** — automatic batches, 12 cores | **1,147,742** | ~51,011× faster |
+| **ultravin** — automatic batches, 4 cores | **521,234** | ~23,166× faster |
+| **ultravin** — automatic batches, 1 core | **164,316** | ~7,303× faster |
+| corgi v3 — `@cardog/corgi` (binary index) | ~83 | ~3.7× faster |
+| corgi v2 — `@cardog/corgi` 2.0.1 (SQLite) | ~33 | ~1.5× faster |
+| NHTSA MSSQL — `spVinDecode` (SQL Server) | 22.5 | 1× (baseline) |
+| NHTSA Postgres — `spvindecode` | 19.5 | ~1.2× slower |
+| NHTSA vPIC web API — public rate limit | ~10 | ~2.3× slower |
 
-The [batch scaling guide](docs/PERFORMANCE_SCALING_2026_09_13.md) gives measured
-batch-size and worker-count recommendations, including JSONL. Full Python
-batches now use **27% less peak memory** in the paired 50,000-row benchmark,
-with unchanged throughput.
-The [adaptive sizing report](docs/ADAPTIVE_BATCHING_2026_09_13.md) compares the
-automatic defaults with fixed 1,000, 8,192, and 50,000-row batches over complete
-200,000-row Parquet and JSONL jobs.
-
-How many VINs each engine decodes **per second**. Measured September 15, 2026,
-on an Apple M2 Max (eight performance and four efficiency cores) using
-**20,000,000 unique synthetic VINs**, with automatic batching on one, four, or
-twelve workers. Each of two fresh-process trials warms the full corpus, then
-times a complete pass, including automatic calibration, tuning, full native
-results, and synchronous cleanup. The fastest twelve-worker pass takes
-**17.1 seconds without repeating a VIN**. The table reports medians;
-other engines retain their earlier comparison figures.
-[Inputs, raw results, and reproduction](docs/BENCHMARKS.md#headline-throughput-september-15-2026).
-
-| engine | VIN/s | vs ultravin (1 core) |
-|---|---|---|
-| **ultravin** — automatic batches, 12 cores | **1,147,742** | ~7.0× faster |
-| **ultravin** — automatic batches, 4 cores | **521,234** | ~3.2× faster |
-| **ultravin** — automatic batches, 1 core | **164,316** | 1× |
-| corgi v3 — `@cardog/corgi` (binary index) | ~83 | ~1,980× slower |
-| corgi v2 — `@cardog/corgi` 2.0.1 (SQLite) | ~33 | ~4,979× slower |
-| NHTSA MSSQL — `spVinDecode` (SQL Server) | 22.5 | ~7,303× slower |
-| NHTSA Postgres — `spvindecode` | 19.5 | ~8,426× slower |
-| NHTSA vPIC web API — public rate limit | ~10 | ~16,432× slower |
+Commit `66b5622`, September 15, 2026, Apple M2 Max (eight performance and four
+efficiency cores), 20,000,000 unique synthetic VINs, automatic batching on one,
+four, or twelve workers, medians of two fresh-process trials. Across worker
+counts ultravin scales to ~3.2× and ~7.0× its own single-core rate.
 
 ultravin runs in-process with the database embedded — no server, no round-trip.
-These measure the Rust engine on a shared host. The [consolidated performance report](docs/PERFORMANCE_2026_09_13.md)
-measures Python output construction and Parquet I/O end to end, alongside startup
-and memory. The corgi figures are derived from its project's
-published per-VIN latency (~12 ms v3 / ~30 ms v2, not re-measured here). The NHTSA
-Postgres and MSSQL oracles run the **unmodified** `spVinDecode` over localhost;
-MSSQL is SQL Server under amd64 emulation on Apple Silicon, so its number
-understates native hardware — ultravin is still ~7,303× faster. The NHTSA vPIC web API row is its
-[published](https://cardog.app/blog/corgi-vin-decoder) ~10 req/s rate limit, not
-a decode time — a hard ceiling regardless of hardware. Methodology and
-reproduction: [docs/BENCHMARKS.md](docs/BENCHMARKS.md).
+The corgi rows are derived from that project's published per-VIN latency, and
+the vPIC web API row is its published request rate limit rather than a decode
+time; neither was re-measured here.
+[Methodology, inputs, caveats, reproduction, and prior sessions](docs/BENCHMARKS.md).
 
 ## Documentation
 
