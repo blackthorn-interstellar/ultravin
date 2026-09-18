@@ -166,7 +166,7 @@
   ],
   [
    "3",
-   "Lithium-Ion/Li-Ion"
+   "Lithium-ion/Li-Ion"
   ],
   [
    "4",
@@ -312,7 +312,7 @@
   ],
   [
    "105",
-   "Off-Road Vehicle - Multipurpose Off-Highway Utility Vehicle [MOHUV] or Recreational Off-Highway Vehicle [ROV]"
+   "Off-road Vehicle - Multipurpose Off-Highway Utility Vehicle [MOHUV] or Recreational Off-Highway Vehicle [ROV]"
   ],
   [
    "107",
@@ -344,7 +344,7 @@
   ],
   [
    "113",
-   "Off-Road Vehicle - Motocross (Off-road short distance, closed track racing)"
+   "Off-road Vehicle - Motocross (Off-road short distance, closed track racing)"
   ],
   [
    "114",
@@ -368,7 +368,7 @@
   ],
   [
    "124",
-   "Off-Road Vehicle - Golf Cart"
+   "Off-road Vehicle - Golf Cart"
   ],
   [
    "125",
@@ -376,11 +376,11 @@
   ],
   [
    "126",
-   "Off-Road Vehicle - Farm Equipment"
+   "Off-road Vehicle - Farm Equipment"
   ],
   [
    "127",
-   "Off-Road Vehicle - Construction Equipment"
+   "Off-road Vehicle - Construction Equipment"
   ],
   [
    "128",
@@ -540,7 +540,7 @@
   ],
   [
    "86",
-   "Off-Road Vehicle - Enduro (Off-road long distance racing)"
+   "Off-road Vehicle - Enduro (Off-road long distance racing)"
   ],
   [
    "87",
@@ -568,7 +568,7 @@
   ],
   [
    "97",
-   "Off-Road Vehicle - Snowmobile"
+   "Off-road Vehicle - Snowmobile"
   ],
   [
    "98",
@@ -608,7 +608,7 @@
   ],
   [
    "3",
-   "Sleeper Coach"
+   "Sleeper coach"
   ],
   [
    "4",
@@ -662,7 +662,7 @@
  "chargerlevel": [
   [
    "1",
-   "Level 1 AC Charger (typically 16A 120V 1.9kW or 13-16A 240V 3kW) may incorporate standard domestic power cord."
+   "Level 1 AC Charger (typically 16A 120V 1.9KW or 13-16A 240V 3KW) may incorporate standard domestic power cord."
   ],
   [
    "2",
@@ -670,7 +670,7 @@
   ],
   [
    "3",
-   "Level 3 DC Charger or fast charger (up to 400A, up to 600V DC, up to 240kW)"
+   "Level 3 DC Charger or fast charger (up to 400A, up to 600V DC, up to 240KW)"
   ]
  ],
  "combinedbrakingsystem": [
@@ -5520,7 +5520,7 @@
  "destinationmarket": [
   [
    "1",
-   "49 States (Except California)"
+   "49 states (Except California)"
   ],
   [
    "10",
@@ -5564,7 +5564,7 @@
   ],
   [
    "2",
-   "50 States"
+   "50 states"
   ],
   [
    "20",
@@ -6229,7 +6229,7 @@
   ],
   [
    "128",
-   "Charger Power (kW)",
+   "Charger Power (KW)",
    "ChargerPowerKW",
    "\\N",
    "<p>Charger power stores the power of the charging circuit on board in kilowatts (kW).</p>",
@@ -6304,7 +6304,7 @@
   ],
   [
    "134",
-   "Battery Energy (kWh) To",
+   "Battery Energy (KWh) To",
    "BatteryKWh_to",
    "\\N",
    "<p>Battery Energy (kWh) To field stores the upper bound of battery energy range in the unit of kilowatt-hour (kWh).</p>",
@@ -6379,7 +6379,7 @@
   ],
   [
    "139",
-   "Top Speed (mph)",
+   "Top Speed (MPH)",
    "TopSpeedMPH",
    "\\N",
    "<p>This data element captures the top speed of the vehicle in miles per hour (mph).</p>",
@@ -6802,7 +6802,7 @@
    "Auto-Reverse System for Windows and Sunroofs",
    "AutoReverseSystem",
    "AutoReverseSystem",
-   "<p>An auto-reverse system enables power windows and sunroofs on motor vehicles to automatically reverse direction when such power windows and panels detect an obstruction. This feature can prevent children and others from being trapped, injured, or killed by the power windows and sunroofs.</p>",
+   "<p>An Auto-Reverse System enables power windows and sunroofs on motor vehicles to automatically reverse direction when such power windows and panels detect an obstruction. This feature can prevent children and others from being trapped, injured, or killed by the power windows and sunroofs.</p>",
    "\\N",
    "Active Safety System",
    "lookup",
@@ -6862,7 +6862,7 @@
    "Keyless Ignition",
    "KeylessIgnition",
    "KeylessIgnition",
-   "<p>A keyless ignition system permits starting a car without a physical key being inserted into an ignition. Instead, a small device known as a \"key fob\" transmits a code to a computer in the vehicle when the fob is within a certain close range. When the coded signal matches the code embedded in the vehicle's computer, a number of systems within the car are activated, including the starter system. This allows the car to be started by simply pressing a button on the dashboard while the key fob is left in a pocket or a purse. The vehicle is usually shut down by pushing the same button.</p>",
+   "<p>A Keyless Ignition system permits starting a car without a physical key being inserted into an ignition. Instead, a small device known as a \"key fob\" transmits a code to a computer in the vehicle when the fob is within a certain close range. When the coded signal matches the code embedded in the vehicle's computer, a number of systems within the car are activated, including the starter system. This allows the car to be started by simply pressing a button on the dashboard while the key fob is left in a pocket or a purse. The vehicle is usually shut down by pushing the same button.</p>",
    "\\N",
    "Active Safety System",
    "lookup",
@@ -6997,7 +6997,7 @@
    "Gross Combination Weight Rating From",
    "GCWR",
    "GrossVehicleWeightRating",
-   "<p>Gross combination weight rating (GCWR) is the maximum allowable combined mass of a road vehicle, the passengers and cargo in the tow vehicle, plus the mass of the trailer and cargo in the trailer. This rating is set by the vehicle manufacturer. This field captures the lower bound of GCWR range for the vehicle.</p>",
+   "<p>Gross Combination Weight Rating (GCWR) is the maximum allowable combined mass of a road vehicle, the passengers and cargo in the tow vehicle, plus the mass of the trailer and cargo in the trailer. This rating is set by the vehicle manufacturer. This field captures the lower bound of GCWR range for the vehicle.</p>",
    "f",
    "Exterior/Dimension",
    "lookup",
@@ -7012,7 +7012,7 @@
    "Gross Combination Weight Rating To",
    "GCWR_to",
    "GrossVehicleWeightRating",
-   "<p>Gross combination weight rating (GCWR) is the maximum allowable combined mass of a road vehicle, the passengers and cargo in the tow vehicle, plus the mass of the trailer and cargo in the trailer. This rating is set by the vehicle manufacturer. This field captures the higher bound of GCWR range for the vehicle.</p>",
+   "<p>Gross Combination Weight Rating (GCWR) is the maximum allowable combined mass of a road vehicle, the passengers and cargo in the tow vehicle, plus the mass of the trailer and cargo in the trailer. This rating is set by the vehicle manufacturer. This field captures the higher bound of GCWR range for the vehicle.</p>",
    "f",
    "Exterior/Dimension",
    "lookup",
@@ -7264,10 +7264,10 @@
   ],
   [
    "21",
-   "Engine Power (kW)",
+   "Engine Power (KW)",
    "EngineKW",
    "\\N",
-   "<p>This field stores engine power in kilowatts (kW).</p>",
+   "<p>This field stores engine power in kilowatts (KW).</p>",
    "f",
    "Engine",
    "decimal",
@@ -7312,7 +7312,7 @@
    "Gross Vehicle Weight Rating From",
    "GVWR",
    "GrossVehicleWeightRating",
-   "<p>Gross vehicle weight rating (GVWR) is the maximum operating weight of a vehicle including the vehicle's chassis, body, engine, engine fluids, fuel, accessories, driver, passengers and cargo, but excluding that of the trailers. Per 49 CFR 565.15, Class 1 is further broken down to Class A-D; Class 2 is further broken down to Class E-H. This field captures the lower bound of GVWR range for the vehicle.</p>",
+   "<p>Gross Vehicle Weight Rating (GVWR) is the maximum operating weight of a vehicle including the vehicle's chassis, body, engine, engine fluids, fuel, accessories, driver, passengers and cargo, but excluding that of the trailers. Per 49 CFR 565.15, Class 1 is further broken down to Class A-D; Class 2 is further broken down to Class E-H. This field captures the lower bound of GVWR range for the vehicle.</p>",
    "f",
    "Exterior/Dimension",
    "lookup",
@@ -7714,7 +7714,7 @@
   ],
   [
    "59",
-   "Battery Energy (kWh) From",
+   "Battery Energy (KWh) From",
    "BatteryKWh",
    "\\N",
    "<p>Battery Energy (kWh) From field stores the lower bound of battery energy range in the unit of kilowatt-hour (kWh).</p>",
@@ -7882,7 +7882,7 @@
    "EV Drive Unit",
    "EVDriveUnit",
    "EVDriveUnit",
-   "<p>EV Drive Unit field stores electric vehicle (EV) motor configuration for single or dual motor.</p>",
+   "<p>EV Drive Unit field stores Electric Vehicle (EV) motor configuration for single or dual motor.</p>",
    "f",
    "Mechanical/Battery",
    "lookup",
@@ -8242,7 +8242,7 @@
   ],
   [
    "5",
-   "Horizontally Opposed (boxer)"
+   "Horizontally opposed (boxer)"
   ]
  ],
  "enginemodel": [
@@ -9984,7 +9984,7 @@
   ],
   [
    "2",
-   "CD + Stereo"
+   "CD + stereo"
   ]
  ],
  "errorcode": [
@@ -10114,7 +10114,7 @@
  "fueldeliverytype": [
   [
    "1",
-   "Stoichiometric Gasoline Direct Injection (SGDI)"
+   "Stoichiometric gasoline direct injection (SGDI)"
   ],
   [
    "10",
@@ -10122,7 +10122,7 @@
   ],
   [
    "2",
-   "Lean-Burn Gasoline Direct Injection (LBGDI)"
+   "Lean-burn gasoline direct injection (LBGDI)"
   ],
   [
    "3",
@@ -10854,7 +10854,7 @@
   ],
   [
    "14",
-   "Dual-Clutch Transmission (DCT)"
+   "Dual-clutch Transmission (DCT)"
   ],
   [
    "15",

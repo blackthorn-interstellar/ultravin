@@ -169,9 +169,10 @@ not recognise — including everything they could not judge — is filed:
 1. the **registry**: a VIN already argued in `scripts/known_problems.json`
    (kind `deviation`) is dropped, read live. Refiling one asks an agent to
    re-derive a deviation a human already registered;
-2. the **regex-crash-7t0** predicate (`scripts/parity/regex_crash.py`), for
-   crash records carrying that defect's markers and a decode that selects the
-   dump's uncompilable pattern;
+2. the **regex-crash** predicate (`scripts/parity/regex_crash.py`), for
+   crash records carrying that defect's markers and a decode that selects an
+   uncompilable pattern (the 2026_09 dump healed the `[1-A-JT]` rows; the
+   predicate remains if they return);
 3. **containment** against `scripts/stale_cache_cells.json`
    (`stale_cache.is_expected_divergence`) — cheap, no oracle, and unchanged;
 4. the **counterfactual** (`stale_cache.counterfactual_verdicts`), for what

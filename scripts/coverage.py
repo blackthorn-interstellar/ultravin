@@ -47,10 +47,9 @@ DECODE_FILES = {
 app = typer.Typer(add_completion=False, help="Decode-path coverage gate.")
 
 
-def demangle(name: str) -> str:
-    """The bare function name out of a Rust symbol, e.g. `decode::decode_core`."""
-    tail = name.rsplit("13ultravin", 1)[-1]
-    out, i = [], 0
+def _length_prefixed(tail: str) -> list[str]:
+    out: list[str] = []
+    i = 0
     while i < len(tail):
         digits = ""
         while i < len(tail) and tail[i].isdigit():
@@ -60,9 +59,38 @@ def demangle(name: str) -> str:
             i += 1
             continue
         n = int(digits)
+        if n == 0 or i + n > len(tail):
+            break
         out.append(tail[i : i + n])
         i += n
-    return "::".join(out) if out else tail
+    return out
+
+
+def _after_crate(parts: list[str]) -> str:
+    if "ultravin" in parts:
+        rest = "::".join(p for p in parts[parts.index("ultravin") + 1 :] if p)
+        if rest:
+            return rest
+    return "::".join(p for p in parts if p)
+
+
+def demangle(name: str) -> str:
+    """The bare function name out of a Rust symbol, e.g. `decode::decode_core`.
+
+    llvm-cov on current rustc emits v0 mangling (`_RNvNtCs…_8ultravin10checkdigit11check_digit`).
+    Older reports used Itanium (`…13ultravin11checkdigit11check_digit`) or already-demangled
+    names with crate-disambiguator prefixes (`qzY::N4i::ultravin::checkdigit::check_digit`).
+    All three collapse to the same allowance key.
+    """
+    if "::" in name:
+        return _after_crate([p for p in name.split("::") if p]) or name
+    tail = name
+    for marker in ("8ultravin", "13ultravin"):
+        if marker in name:
+            tail = name.rsplit(marker, 1)[-1]
+            break
+    parts = _length_prefixed(tail)
+    return _after_crate(parts) or name
 
 
 def measure(vins: Path, json_out: Path) -> dict[str, Any]:
