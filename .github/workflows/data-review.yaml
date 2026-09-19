@@ -580,6 +580,10 @@ jobs:
       - name: Publish verdict
         env:
           GH_TOKEN: ${{ github.token }}
+          # This job checks out nothing, so `gh pr comment` has no git remote to
+          # infer the repo from — without this the rejection comment died with
+          # "not a git repository" and the PR sat blocked with no explanation.
+          GH_REPO: ${{ github.repository }}
           HEAD_SHA: ${{ needs.review-open.outputs.head_sha }}
           PR_NUM: ${{ needs.review-open.outputs.number }}
           SCOPE: ${{ needs.review-open.outputs.verdict }}
