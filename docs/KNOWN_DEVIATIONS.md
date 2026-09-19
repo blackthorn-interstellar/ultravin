@@ -40,9 +40,15 @@ the section here once its last VIN is gone.
 
 ---
 
-<a id="regex-crash-7t0"></a>
+## 1. Healed in 2026_09: oracle crashes on a malformed pattern regex — WMI `7T0`
 
-## 1. Oracle crashes on a malformed pattern regex — WMI `7T0`, MY 2023-2025
+**Healed in dump 2026_09.** The dump no longer carries the uncompilable
+`[1-A-JT]` pattern key, and every previously registered 7T0 crash VIN now
+decodes in exact field-for-field parity with the oracle. The intake predicate
+in `scripts/parity/regex_crash.py` remains so a return of the rows would still
+be recognised; there is no live registry class for this defect.
+
+The rest of this section is the 2026_08 evidence, kept as history.
 
 The oracle aborts with a Postgres error inside `vpic.fvalidcharsinregex`:
 
@@ -245,8 +251,8 @@ gate — control 3 further down — rejects the month when that counter is non-z
 (`crates/ultravin-build/src/stalecache.rs`) diffs every `(wmi, year)` cell of the
 dump's cache against the recompute from that same dump's pattern rows — the
 decoder's own `ultravin::recompute_valid_chars` — and **`scripts/stale_cache_cells.json`
-is the resulting `[wmi, year, positions]` list**: **4,967 stale cells in dump
-2026_08** (`summary.stale_cells`). That file is the authoritative membership list
+is the resulting `[wmi, year, positions]` list**: **5,519 stale cells in dump
+2026_09** (`summary.stale_cells`; 4,967 in 2026_08). That file is the authoritative membership list
 for this class. Every monthly refresh reruns the scan and rewrites the file from
 it — `scripts/refresh.py` invokes `vpic-import --stale-cache-report` and hands the
 report to `stale_cache.write_cells`, and the `stale-cache` gate then validates the
@@ -254,21 +260,23 @@ result — so the list is always this month's dump; the full report rides out as
 run's `data-refresh-report` artifact. A month-over-month change in the list is the
 expected signal, not a failure — it self-documents in the refresh PR diff.
 
-Two cells worked through, the ones the first two registered `clean-decode` VINs
-land on:
+Two cells worked through, the ones two still-registered `clean-decode` VINs
+land on. (Dump 2026_09 rebuilt the Honda `MLH`/`JH2` cache cells that this
+section originally walked through; those VINs now match the oracle and were
+retired.)
 
-| cell (`wmi`, `year`) | position | cache | recomputed from `pattern` | stale extras |
+| cell (`wmi`, `year`) | position | cache | recomputed from `pattern` | stale extras / missing |
 |---|---:|---|---|---|
-| `MLH`, 2019 | 11 | `1345ACDFKMRY` | `5KY` | `134ACDFMR` |
-| `JH2`, 2024 | 11 | `1345ACDEFJKMRY` | `345EJKRY` | `1ACDFM` |
+| `10T`, 2024 | 6, 8 | digits leftover | no digits | extra `0123456789` at 6, `12345` at 8 |
+| `JKA`, 2025 | 11 | `ABJT` | `ABDJT` | cache missing `D` |
 
 Both columns come out of the same loaded dump, one query apart:
 
 ```sql
 select position, string_agg("char", '' order by "char")
-  from vpic.wmiyearvalidchars where wmi = 'MLH' and year = 2019 group by position;
+  from vpic.wmiyearvalidchars where wmi = '10T' and year = 2024 group by position;
 select p, string_agg(distinct c, '' order by c)
-  from vpic.fextractvalidcharsperwmiyear('MLH', 2019::smallint) group by p;
+  from vpic.fextractvalidcharsperwmiyear('10T', 2024::smallint) group by p;
 ```
 
 **The cache is what makes the oracle's answer, demonstrably.** Deleting a stale
@@ -278,13 +286,13 @@ reproduces ultravin **byte-for-byte** on every probe VIN reaching that cell,
 including the two whose whole decode changes:
 
 ```
-MLHAE041XKA111111  delete 81 cache rows for (MLH,2019) -> oracle MY=1989 codes='0,14'  parity_now=True
-JH2RD1613RA111111  delete 80 cache rows for (JH2,2024) -> oracle MY=1994 codes='0,14'  parity_now=True
+10TAK8H20RSAA0000  delete cache rows for (10T,2024) -> oracle MY=1994  parity_now=True
+JKAAFCL12SDAA0000  delete cache rows for (JKA,2025) -> oracle MY=2025  parity_now=True
 10T2CE2A?LPY1111S  delete 111 cache rows for (10T,2020) -> oracle MY=1990 codes='5,14,400'  parity_now=True
 1HFTKS3B?RD1111I1  delete 80 cache rows for (1HF,2024) -> oracle MY=1994 codes='5,14,400'  parity_now=True
 ```
 
-Rolled back afterwards; the cache is left at its shipped 8,809,229 rows
+Rolled back afterwards; the cache is left at its shipped row count
 (`vpic/manifest.json`).
 
 **How far the defect reaches** depends on which position the stale characters sit
@@ -307,27 +315,23 @@ at, and the registry records it as each entry's `scope`:
    observation names no VIN position, so the cell list cannot excuse it; those
    VINs are registered individually (see §4).
 
-3. **The whole decode** (`clean-decode`, 185 VINs registered individually; the
-   two worked through here are `MLHAE041XKA111111` and
-   `JH2RD1613RA111111`). Same cells, but these VINs have an *inconclusive* model
-   year — `fVinModelYear2` cannot choose between the two halves of position 10's
-   30-year cycle, so both years get a decode pass and the best-of scoring picks
-   one. Running the oracle's own `spvindecode_errorcode` per candidate year shows
-   the cache deciding that race:
+3. **The whole decode** (`clean-decode`, 25 VINs still registered individually
+   after 2026_09 healed 160 Honda/Yamaha/JYA members; the two worked through
+   here are `10TAK8H20RSAA0000` and `JKAAFCL12SDAA0000`). Same cells, but these
+   VINs have an *inconclusive* model year — `fVinModelYear2` cannot choose
+   between the two halves of position 10's 30-year cycle, so both years get a
+   decode pass and the best-of scoring picks one. Running the oracle's own
+   `spvindecode_errorcode` per candidate year shows the cache deciding that race.
 
-   ```
-   MLHAE041XKA111111  year 2019: cache present -> codes='14'     bytes=''
-                      year 2019: cell removed  -> codes='4 14'   bytes='(11:5KY)'
-                      year 1989: either way    -> codes='14'     bytes=''
-   ```
+   `10TAK8H20RSAA0000` is the **permissive** shape on `(10T, 2024)`: leftover
+   digits at positions 6 and 8 make the oracle's 2024 pass look clean (codes
+   `0,14`), so it beats 1994; the pattern source flags those positions (code 4)
+   and the 1994-schema vehicle wins.
 
-   With the stale cache the 2019 pass carries no correction code, so it ties the
-   1989 pass on `ErrorValue` and takes the tiebreakers below it (elements weight,
-   matched patterns, then the higher model year): the oracle answers *2019 Honda
-   CRF50F*, schema 22155. With the pattern source's charset that same pass takes
-   code 4 — weight −200 against the 1989 pass's −30 — and loses outright, which
-   is why ultravin answers the 1989-schema vehicle (schema 4005).
-   `JH2RD1613RA111111` is the same story one cell over (code 3, 2024 → 1994).
+   `JKAAFCL12SDAA0000` is the **restrictive** shape on `(JKA, 2025)`: the cache
+   is missing `D` at position 11 (`ABJT` vs recomputed `ABDJT`), so the oracle
+   penalizes its own 2025 pass and falls back to 1995 while ultravin keeps 2025.
+
    Note what is *not* different: both engines consider exactly the same two
    candidate years and run a pass for each. Only the error code one of those
    passes earns differs, and that comes from the charset.
@@ -465,10 +469,13 @@ legitimately stale. Three controls stand against that, none of them this list:
    is and when it runs is `docs/ACCEPTANCE.md`.
 2. **The frozen unit tests in `crates/ultravin/src/errors.rs`** pin the charset
    extraction and the element-144 rendering directly, independent of any dump.
-3. **The refresh's `stale-cache` jump gate** fails a month whose newly-stale
-   cell count exceeds `refresh.STALE_CACHE_JUMP_LIMIT` (500). Upstream churn
-   moves tens of cells; a charset regression re-lists thousands, because every
-   cell whose recompute moved now contradicts a cache that did not.
+3. **The refresh's `stale-cache` jump gate** inspects a month whose newly-stale
+   cell count exceeds `refresh.STALE_CACHE_JUMP_LIMIT` (500). A charset
+   regression leaps `rows_only_in_recompute` (recompute contents moved on cells
+   that still have schema coverage) or doubles the stale-cell count (recompute
+   emptied globally). Schema-drop cache lag — 2026_09 added 900 newly stale
+   cells, 871 of them recompute-empty, while Honda `JH2`/`MLH` cells healed —
+   does not invent recompute-only characters and is reported, not rejected.
 
 What the list itself contributes is narrowness, not proof: the excuse it buys is
 bounded to the five elements the cache feeds, on the one cell that VIN's decode
@@ -524,7 +531,11 @@ from unnest(string_to_array('H,J,K,L,M,N,P,R,S,T,V,W,X,_', ',')) as c;
 `spvindecode_errorcode` builds the payload with `ORDER BY c` over
 `tbl_spVinDecode_ErrorCode` (`vpic/procs/spvindecode_errorcode.sql`), so the sort
 happens at decode time on the oracle host — it is not a stored string that came
-from NHTSA.
+from NHTSA. Dump 2026_09 changed that `ORDER BY` to
+`CASE WHEN c = '_' THEN 0 ELSE 1 END, c`, which is SQL Server's `_`-first order
+expressed in Postgres, so mixed charsets now print the same on both engines. The
+neutralization below still applies; the host-collation split is no longer the
+observation.
 
 **ultravin's print order is enforced by a type, not a call site.** `errors.rs`
 holds valid-character sets in `ValidChars`, whose inner `BTreeSet` is private and
@@ -546,9 +557,11 @@ diverges (`tests/test_normalize.py` pins exactly that boundary).
 
 ---
 
-<a id="stale-cache-code-2-vs-3"></a>
+## 4. Healed in 2026_09: stale cache picks the check-digit correction rung — WMI `ZDM`
 
-## 4. Stale cache picks the check-digit correction rung — WMI `ZDM`, MY 2018
+**Healed in dump 2026_09.** NHTSA rebuilt the `(ZDM, 2018)` cache cell; the
+registered VIN now decodes in exact parity and the class was retired. The rest
+of this section is the 2026_08 evidence, kept as history.
 
 The same defective artifact as §2 — the shipped `vpic.WMIYearValidChars` cell —
 can move the correction *rung* without moving Suggested VIN or Possible Values.
@@ -633,7 +646,7 @@ answer, and it is what the oracle itself produces once the stale cell is gone.
 
 <a id="stale-cache-code-3-vs-5"></a>
 
-## 5. Stale cache extra error takes the multi-position rung — WMI `1GD`/`1GT`/`2AP`/`ZDM`
+## 5. Stale cache extra error takes the multi-position rung — WMI `1GD`/`1GT`/`2AP`
 
 The same defective artifact as §2 — the shipped `vpic.WMIYearValidChars` cell —
 can add or hide a flagged position, which moves `spvindecode_errorcode` between
@@ -788,32 +801,8 @@ Values `(7:A)` and rewrites position 7 to `A`; ultravin never enters that
 rung and stamps `!` at 7, 8, and 11. Element 142 differs at `{7, 8, 11}`,
 which is not a subset of the cell's `{8, 11}`.
 
-`ZDMBAJAK6JB111111` is the restrictive shape on `(ZDM, 2018)`, already listed
-stale at positions 5, 6, and 7. Schema 20037 (*Ducati Motorcycle Schema for
-ZDM/ML0 (2018)*) is the only schema covering that cell. Keys `***A`, `***H`,
-`***J`, and `***[A-N]` contribute `A`, `H`, and `J` at key index 3 (VIN
-position 6); the extract is `ABCDEFGHJ` and the cache dropped `A`, `H`, and
-`J`, leaving `BCDEFG`. The VIN carries `J` there, so the oracle flags
-position 6 and ultravin does not. Position 8 (`K`, charset `MNPRSTVW` on both
-sides) is invalid either way. Oracle `cntErrors = 2` (code 5); ultravin
-`cntErrors = 1` (code 3). Substituting each candidate of charset `MNPRSTVW`
-into position 8 of `ZDMBAJAK6JB111111` and asking `vpic.fVINCheckDigit` keeps
-only `S` (matches the input's `6` at position 9). Ultravin therefore emits
-Possible Values `(8:S)` and rewrites position 8 to `S`; the oracle never
-enters that rung and stamps `!` at 6 and 8. Element 142 differs at `{6, 8}`,
-which is not a subset of the cell's `{5, 6, 7}`.
-
-**The 2026-09-07 member — same cell, same rung, the extra error at position 4.**
-`ZDMNAAJN7JB111111` is the same restrictive shape on `(ZDM, 2018)`. The VIN
-carries `A` at position 6, so the oracle flags position 6 and ultravin does
-not. Position 4 (`N`, charset `ABDGHKMV` on both sides — not a stale
-position) is invalid either way. Oracle `cntErrors = 2` (code 5); ultravin
-`cntErrors = 1` (code 3). Substituting each candidate of charset `ABDGHKMV`
-into position 4 of `ZDMNAAJN7JB111111` and asking `vpic.fVINCheckDigit` keeps
-only `V` (matches the input's `7` at position 9). Ultravin therefore emits
-Possible Values `(4:V)` and rewrites position 4 to `V`; the oracle never
-enters that rung and stamps `!` at 4 and 6. Element 142 differs at `{4, 6}`,
-which is not a subset of the cell's `{5, 6, 7}`.
+The 2026_08 `(ZDM, 2018)` restrictive members of this class healed in dump
+2026_09 when NHTSA rebuilt that cache cell; they were retired.
 
 **The 2026-09-08 member — same cell as `1GTW7NFH5PA077131`, leftover `F`
 instead of `H`.** `1GT289EF0P9P77111` is the same permissive shape on
@@ -835,9 +824,8 @@ afterwards; the cache is left at its shipped 8,809,229 rows.
 Deleting each cell inside a transaction takes `tmpRowCount` to 0, so the proc
 runs its own `fExtractValidCharsPerWmiYear` fallback — and the oracle then
 returns codes `1,5,14` with the three-`!` Suggested VIN on the `2AP` VIN (78
-rows) and codes `3,14` with Possible Values `(8:S)` / `(4:V)` on the two `ZDM`
-VINs (50 rows), byte-for-byte with ultravin. Rolled back afterwards; the cache
-is left at its shipped 8,809,229 rows.
+rows), byte-for-byte with ultravin. Rolled back afterwards; the cache is left
+at its shipped row count.
 
 **Why this is not §2's enumerated class.** `scripts/parity/stale_cache.py`
 excuses a divergence only when **every** VIN position the difference points at

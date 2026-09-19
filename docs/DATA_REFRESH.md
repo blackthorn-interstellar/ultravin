@@ -217,12 +217,15 @@ immediately). Run it after changing the settings above or rotating the key.
 - **stale-cache gate fails** — read the detail. `INCONSISTENT` means the
   committed list disagrees with the summary printed beside it: it was
   hand-edited or its halves came from different scans, so regenerate it rather
-  than patch it. `REJECTED` names either a jump past 500 newly stale cells —
-  confirm `answerkey verify` is green and read `target/refresh/stale_cache.json`
-  before accepting a month that big, because that is the shape a decoder charset
-  regression takes — or a non-empty `vpic.wmiyearvalidchars_cacheexceptions`,
-  which is upstream changing how the proc reads the cache and needs a human to
-  re-derive the scan's assumptions against `vpic/procs/spvindecode_errorcode.sql`.
+  than patch it. `REJECTED` names either a jump past 500 newly stale cells *in
+  the charset-regression shape* (recompute-only rows leapt, or the stale-cell
+  count doubled — confirm `answerkey verify` is green and read
+  `target/refresh/stale_cache.json`) or a non-empty
+  `vpic.wmiyearvalidchars_cacheexceptions`, which is upstream changing how the
+  proc reads the cache and needs a human to re-derive the scan's assumptions
+  against `vpic/procs/spvindecode_errorcode.sql`. A large newly-stale count that
+  is cache-lag after schemas dropped (`rows_only_in_recompute` flat or down) is
+  reported, not rejected.
 - **known-problems gate names a healed VIN** — upstream fixed the defect (or the
   dump stopped carrying it). Confirm against §-evidence in
   `docs/KNOWN_DEVIATIONS.md`, retire the entry from
