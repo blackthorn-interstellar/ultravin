@@ -97,7 +97,8 @@ rather than something the VIN encodes — or the raw vPIC `attribute_id`, pass
 ```python
 r = ultravin.decode("1HGCM82633A004352", full=True)
 
-r["elements"][0]  # {'variable': 'Make', 'value': 'HONDA', 'source': 'Manu. Name', …}
+next(e for e in r["elements"] if e["variable"] == "Make")
+# {'group_name': 'General', 'variable': 'Make', 'value': 'HONDA', 'source': 'pattern - model', …}
 ```
 
 `full=True` replaces `attributes` with `elements`, a list of per-attribute dicts

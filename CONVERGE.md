@@ -22,8 +22,14 @@ Test:
 ## Done
 
 - 2026-09-20 bug: `ultravin decode-batch` on a non-UTF-8 file dumped a traceback (exit 1); now a one-line error, exit 2.
+- 2026-09-20 docs: README `full=True` example showed the wrong element and a source Make never has; now selects Make and shows real output.
 
 ## Rejected
+
+- delete `reusable_slots_probe.rs` / `slot_coordination_probe.rs` and their runners: hashed, documented experiment records, and reusable slots shipped (772ee9d).
+- delete `examples/allocation_probe.rs`: its command is the recorded recipe behind two allocation result files.
+- delete six unreferenced `scripts/bench/*_2026_09_14.json` results: inert experiment records, nothing measurable gained, fails the reversal test.
+- delete unused `pub` `ArrowBatchRebatcher::buffered_rows` / `ArrowDecoder::with_columns`: public crate API, removal is a compatibility call.
 
 ## Consecutive empty iterations
 
@@ -38,11 +44,6 @@ Test:
 Scout findings not yet through the skeptic. Re-verify before acting.
 
 - delete: rejected `batch-slab` / Storage V2 experiment (~1,430 lines: `experimental_batch.rs`, `examples/storage_probe.rs`, `examples/support/allocation_counter.rs`, `scripts/bench/batch_storage*.py` + JSON). Its own doc (`docs/REUSABLE_SLOTS_AND_STORAGE_V2_2026_09_14.md:52`) says it regresses. Blocked while another agent has uncommitted edits in `lib.rs` and `crates/ultravin/Cargo.toml`.
-- delete: six `scripts/bench/*_2026_09_14.json` result files (2,756 lines) referenced by nothing: `batch_storage_allocations`, `batch_storage_screen`, `large_native_12cores`, `native_managed_fit_..._rejected_unweighted_per_worker`, `worker_scaling_cache`, `worker_scaling_single_corrections`.
-- delete: `crates/ultravin/examples/allocation_probe.rs` (161 lines), no run command anywhere.
-- delete: `reusable_slots_probe.rs` + `slot_coordination_probe.rs` (2,025 lines) feed only unlinked docs that end "no production default changed".
-- delete: unused `pub` items in `arrow_io.rs`: `ArrowBatchRebatcher::buffered_rows`, `ArrowDecoder::with_columns`.
-- docs: README.md:100 `full=True` example — `elements[0]` is `Suggested VIN`, not Make, and Make's source is never `'Manu. Name'`.
 - docs: docs/NIGHTLY.md:47 says the exposed secret is the "Anthropic key"; the only secret in `nightly.yaml` is `XAI_API_KEY`.
 - docs: docs/CORPUS.md:222 `coverage sweep` does not exist; the command is `coverage emit sweep`.
 - docs: README.md:69 says note fields are "always `list[str]`", but the Arrow/Parquet path keeps only the first note (`ids.rs:317`, deliberate).
