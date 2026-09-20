@@ -671,6 +671,8 @@ mod tests {
             "0",
         ];
         let mut checked = 0usize;
+        // Schemas repeat across WMIs and years; a regex string needs checking once.
+        let mut seen = std::collections::HashSet::new();
         for wmi in ["1HG", "5UX", "JH4", "1FT", "WBA", "3VW", "KMH"] {
             for wmiid in db.wmi_ids_for_str(wmi) {
                 for wvs in db.wmi_vinschema_for(wmiid) {
@@ -679,6 +681,9 @@ mod tests {
                             continue;
                         }
                         let rs = db.s(p.keys_regex.to_native());
+                        if !seen.insert(rs) {
+                            continue;
+                        }
                         let m = Matcher::compile(rs);
                         let re = Regex::new(rs).ok();
                         for inp in inputs {
