@@ -219,10 +219,11 @@ makes every corpus look identical.
 
 ## The sweep corpus: brute force, explainable
 
-`coverage sweep` emits one VIN per row of every dimension that can change a
+`coverage emit sweep` emits one VIN per row of every dimension that can change a
 decode: every WMI, every distinct (schema, keys) pattern, every engine model,
-every vehicle-spec schema, every error code. No cleverness — it is the list you
-hand someone who asks whether every make is covered.
+every vehicle-spec schema, every VinException VIN, every vehicle type with
+default values. No cleverness — it is the list you hand someone who asks whether
+every make is covered.
 
 Check any list, either corpus or someone else's, by decoding it:
 

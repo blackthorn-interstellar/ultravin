@@ -24,6 +24,7 @@ Test:
 - 2026-09-20 bug: `ultravin decode-batch` on a non-UTF-8 file dumped a traceback (exit 1); now a one-line error, exit 2.
 - 2026-09-20 docs: README `full=True` example showed the wrong element and a source Make never has; now selects Make and shows real output.
 - 2026-09-20 docs: NIGHTLY.md named a nonexistent Anthropic key as the agents' only reachable secret; it is `XAI_API_KEY` plus a read-only `GITHUB_TOKEN`.
+- 2026-09-20 docs: CORPUS.md named a nonexistent `coverage sweep` command and listed "every error code" as a sweep dimension; now `coverage emit sweep` with the six real dimensions.
 
 ## Rejected
 
@@ -39,12 +40,11 @@ Test:
 ## Open questions
 
 - Local `master` is 1 commit ahead of and 6 behind `origin/master` (nightly dependency bumps, the 2026_09 vPIC data update, a CI coverage-gate change), and the working tree holds another agent's uncommitted native-architecture work (`crates/ultravin/src/lib.rs`, `native_stream.rs`, `crates/ultravin/Cargo.toml`, `uv.lock`, `scripts/bench/native_trials.py`). The loop does not pull, merge, or push. Options: (A) human merges origin/master once that work is committed — recommended, keeps the loop working on current data; (B) leave it, and loop commits pile up on a stale base with a larger merge later.
+- The Arrow/Parquet path (`decode_stream`, `decode-parquet`) silently keeps only the first note of each multi-valued free-text field (the names in `ultravin.MULTI_VALUED`, e.g. "Other Trailer Info"), while `decode()` returns all of them as `list[str]`. About 5% of corpus VINs (391 of 7,162) lose notes this way. It is deliberate (`crates/ultravin/src/ids.rs:321` "the first note wins", pinned by `tests/test_parquet.py`), but nothing user-facing says so, and the vision asks for full-field spVinDecode parity. Options: (A) add one README sentence under "Columns and layout" saying columnar output keeps the first note and `decode()` returns all — recommended, cheap and honest, no schema change; (B) emit those fields as `List<Utf8>` columns — faithful, but changes the output schema for existing users; (C) leave it undocumented.
 
 ## Leads
 
 Scout findings not yet through the skeptic. Re-verify before acting.
 
 - delete: rejected `batch-slab` / Storage V2 experiment (~1,430 lines: `experimental_batch.rs`, `examples/storage_probe.rs`, `examples/support/allocation_counter.rs`, `scripts/bench/batch_storage*.py` + JSON). Its own doc (`docs/REUSABLE_SLOTS_AND_STORAGE_V2_2026_09_14.md:52`) says it regresses. Blocked while another agent has uncommitted edits in `lib.rs` and `crates/ultravin/Cargo.toml`.
-- docs: docs/CORPUS.md:222 `coverage sweep` does not exist; the command is `coverage emit sweep`.
-- docs: README.md:69 says note fields are "always `list[str]`", but the Arrow/Parquet path keeps only the first note (`ids.rs:317`, deliberate).
 - docs: docs/DATA_REFRESH.md:99 says 63 crash VINs; `scripts/known_problems.json` has 66.
