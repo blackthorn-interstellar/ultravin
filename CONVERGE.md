@@ -23,6 +23,7 @@ Test:
 
 - 2026-09-20 bug: `ultravin decode-batch` on a non-UTF-8 file dumped a traceback (exit 1); now a one-line error, exit 2.
 - 2026-09-20 docs: README `full=True` example showed the wrong element and a source Make never has; now selects Make and shows real output.
+- 2026-09-20 docs: NIGHTLY.md named a nonexistent Anthropic key as the agents' only reachable secret; it is `XAI_API_KEY` plus a read-only `GITHUB_TOKEN`.
 
 ## Rejected
 
@@ -44,7 +45,6 @@ Test:
 Scout findings not yet through the skeptic. Re-verify before acting.
 
 - delete: rejected `batch-slab` / Storage V2 experiment (~1,430 lines: `experimental_batch.rs`, `examples/storage_probe.rs`, `examples/support/allocation_counter.rs`, `scripts/bench/batch_storage*.py` + JSON). Its own doc (`docs/REUSABLE_SLOTS_AND_STORAGE_V2_2026_09_14.md:52`) says it regresses. Blocked while another agent has uncommitted edits in `lib.rs` and `crates/ultravin/Cargo.toml`.
-- docs: docs/NIGHTLY.md:47 says the exposed secret is the "Anthropic key"; the only secret in `nightly.yaml` is `XAI_API_KEY`.
 - docs: docs/CORPUS.md:222 `coverage sweep` does not exist; the command is `coverage emit sweep`.
 - docs: README.md:69 says note fields are "always `list[str]`", but the Arrow/Parquet path keeps only the first note (`ids.rs:317`, deliberate).
 - docs: docs/DATA_REFRESH.md:99 says 63 crash VINs; `scripts/known_problems.json` has 66.

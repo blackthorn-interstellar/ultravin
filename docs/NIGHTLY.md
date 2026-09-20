@@ -44,8 +44,8 @@ patch. Before pushing, every publish job refuses a staged path under
 `.github/` or `Makefile` (`--no-renames`, so a rename cannot hide a deletion):
 the machinery is not self-editable, and that refusal is what lets a later
 privileged job check the branch out safely. The agents' transcripts are still
-uploaded as 30-day artifacts — with the write token gone, the only secret in
-reach is the Anthropic key.
+uploaded as 30-day artifacts — with the write token gone, the only secrets in
+reach are `XAI_API_KEY` and a read-only `GITHUB_TOKEN`.
 
 ## The deps lane
 
