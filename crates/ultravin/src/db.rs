@@ -142,42 +142,16 @@ impl Db {
         // hot-path `from_utf8_unchecked` in `s()` relies on, then the element-id
         // cap that bounds the dense `element_index` — see `tables::validate_body`.
         validate_body(backing.body())?;
-        // SAFETY: just validated above; the borrow is converted to a raw pointer
-        // into the buffer owned by `backing` (stable across the move below).
-        let archive = unsafe {
-            rkyv::access_unchecked::<ArchivedVpicData>(backing.body()) as *const ArchivedVpicData
-        };
-        let artifact_blake3 = backing.artifact_blake3();
-        Ok(Db {
-            _backing: backing,
-            artifact_blake3,
-            archive,
-            element_index: OnceLock::new(),
-            wmi_strings: OnceLock::new(),
-            output_order: OnceLock::new(),
-            projection_meta: OnceLock::new(),
-            json_elements: OnceLock::new(),
-            correction_text: OnceLock::new(),
-            lookup_index: OnceLock::new(),
-            pattern_element_ok: OnceLock::new(),
-            pattern_indexes: OnceLock::new(),
-            schema_positions: OnceLock::new(),
-            wmi_schema_ranges: OnceLock::new(),
-            model_make_ranges: OnceLock::new(),
-            model_from_conversion: OnceLock::new(),
-            unique_public_variables: OnceLock::new(),
-            wmi_index: OnceLock::new(),
-            spec_model_index: OnceLock::new(),
-            engine_name_index: OnceLock::new(),
-            valid_charset_cache: OnceLock::new(),
-        })
+        // SAFETY: just validated above, and every `Backing` holds its body at
+        // 16-byte alignment.
+        Ok(unsafe { Db::build_trusted(backing) })
     }
 
     /// Hold the archived body of a *trusted* artifact without the O(n) full
-    /// validation pass. Used only for the embedded blob, whose integrity is
-    /// identical to the binary's own (built deterministically by our importer and
-    /// gated by the frozen-corpus + parity tests); skipping the ~75 MB validation
-    /// walk is what brings cold-start under target.
+    /// validation pass. Called directly only for the embedded blob, whose integrity
+    /// is identical to the binary's own (built deterministically by our importer
+    /// and gated by the frozen-corpus + parity tests); skipping the ~75 MB
+    /// validation walk is what brings cold-start under target.
     ///
     /// # Safety
     /// `backing.body()` must be a valid rkyv archive of `ArchivedVpicData` at
