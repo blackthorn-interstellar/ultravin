@@ -29,6 +29,7 @@ Test:
 - 2026-09-20 simplify: `Db::build` duplicated `Db::build_trusted`'s 21-field initializer; it now validates and calls it (-26 lines).
 - 2026-09-20 performance: matcher archive-keys test recompiled 56k regexes, 5.8k distinct; checking each string once takes it 15.0s -> 1.6s and warm `make check` ~57s -> ~41s. Break test still fails it.
 - 2026-09-20 simplify: `generate` in the Python bindings re-inlined `decode_clock`; it now calls it (-6 lines).
+- 2026-09-20 bug: the importer accepted a dump that ends inside a `COPY` block (exit 0, partial artifact + fresh manifests); it now fails naming the table, before the artifact and manifests are written.
 
 ## Rejected
 
@@ -50,7 +51,7 @@ Test:
 
 ## Consecutive empty iterations
 
-2
+0
 
 ## Open questions
 
@@ -64,3 +65,5 @@ Test:
 Scout findings not yet through the skeptic. Re-verify before acting.
 
 - delete: rejected `batch-slab` / Storage V2 experiment (~1,430 lines: `experimental_batch.rs`, `examples/storage_probe.rs`, `examples/support/allocation_counter.rs`, `scripts/bench/batch_storage*.py` + JSON). Its own doc (`docs/REUSABLE_SLOTS_AND_STORAGE_V2_2026_09_14.md:52`) says it regresses. Blocked while another agent has uncommitted edits in `lib.rs` and `crates/ultravin/Cargo.toml`.
+- simplify: derive `Default` on `VpicData` (`crates/ultravin/src/tables.rs:446`, all 21 fields are `Vec`) and replace the 17-19 empty-`Vec` field lines in `crates/ultravin/build.rs:152`, `tables.rs:650`, `db.rs:1198`, `json.rs:179` with `..Default::default()` (about -68 lines, 50 of them test lines); `artifact.rs:568`, `matcher.rs:443`, `errors.rs:1365` keep exhaustive literals so a new table still breaks the build.
+- bug (build.rs): the local `crates/ultravin/data/vpic.rkyv` route in `crates/ultravin/build.rs:59` checks only `is_file()` and never calls `validate`, unlike the `ULTRAVIN_DATA` route; a truncated local artifact is embedded and later read through the unchecked `build_trusted` path. The importer writes the artifact with a plain `fs::write` (`artifact.rs:637`), so an interrupted write can leave that state. Code-traced only, no repro yet.

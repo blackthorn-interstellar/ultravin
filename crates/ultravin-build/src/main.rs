@@ -308,6 +308,13 @@ fn run(cli: &Cli) -> Result<(), Box<dyn Error>> {
             preamble.push(line);
         }
     }
+    // Rows reach the builder as they stream, so a dump cut off before a block's
+    // `\.` would otherwise ship a partial table behind a fresh manifest.
+    if let Some((table, _)) = data_mode {
+        return Err(
+            format!("dump ended inside the COPY block for {table} — truncated file?").into(),
+        );
+    }
     if let Some((ptyp, pbase)) = cur.take() {
         imp.finalize(&ptyp, &pbase, &body)?;
     }
