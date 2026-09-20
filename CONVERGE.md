@@ -28,6 +28,7 @@ Test:
 - 2026-09-20 bug: `ultravin decode-parquet` dumped a traceback (exit 1) for a missing/non-parquet source or unwritable destination; now a one-line error, exit 2.
 - 2026-09-20 simplify: `Db::build` duplicated `Db::build_trusted`'s 21-field initializer; it now validates and calls it (-26 lines).
 - 2026-09-20 performance: matcher archive-keys test recompiled 56k regexes, 5.8k distinct; checking each string once takes it 15.0s -> 1.6s and warm `make check` ~57s -> ~41s. Break test still fails it.
+- 2026-09-20 simplify: `generate` in the Python bindings re-inlined `decode_clock`; it now calls it (-6 lines).
 
 ## Rejected
 
@@ -37,6 +38,7 @@ Test:
 - delete unused `pub` `ArrowBatchRebatcher::buffered_rows` / `ArrowDecoder::with_columns`: public crate API, removal is a compatibility call.
 - docs DATA_REFRESH.md:99 "the 63 crash VINs" (now 66): historical rationale, true when written, and any count there drifts with each data refresh.
 - bug: `columns=[2**31]` gives `TypeError ... got int` instead of `ValueError: unknown element_id`: skeptic — contrived boundary input, element ids are in the hundreds, speculative hardening.
+- drop the `--no-default-features` clippy row (`Makefile:33`, `release.yaml:87`): redundant for today's code but 0.1s warm, and the row guards future feature-gated code — fails the reversal test.
 
 ## Consecutive empty iterations
 
@@ -53,6 +55,4 @@ Scout findings not yet through the skeptic. Re-verify before acting.
 
 - delete: rejected `batch-slab` / Storage V2 experiment (~1,430 lines: `experimental_batch.rs`, `examples/storage_probe.rs`, `examples/support/allocation_counter.rs`, `scripts/bench/batch_storage*.py` + JSON). Its own doc (`docs/REUSABLE_SLOTS_AND_STORAGE_V2_2026_09_14.md:52`) says it regresses. Blocked while another agent has uncommitted edits in `lib.rs` and `crates/ultravin/Cargo.toml`.
 - missing capability: vision line "Decode individual VINs in under one millisecond" has no guard — `benches/decode.rs` asserts nothing, no workflow runs a bench, no timing assertion in any test. A 100x single-VIN regression merges green.
-- simplify/performance: `Makefile:33` clippy `--no-default-features` compiles nothing the default-features and `--no-default-features --features arrow` runs do not already cover (`download-data` is only referenced in `build.rs`; no `not(feature = "arrow")` anywhere); 16s cold. Twin at `.github/workflows/release.yaml:87`.
-- simplify: `generate` in `crates/ultravin-py/src/lib.rs:521-530` re-inlines `decode_clock` (lib.rs:469-477) (-9 lines).
 - simplify: `check_digit_kernel`'s `pos3` parameter (`crates/ultravin/src/checkdigit.rs:109`) is always `b[2]` of the same slice (-3 lines, -1 param).

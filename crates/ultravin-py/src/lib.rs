@@ -470,6 +470,9 @@ fn decode_clock(now: Option<&Bound<'_, PyDateTime>>) -> PyResult<(i64, i32)> {
     match now {
         Some(dt) => clock_from(dt),
         None => {
+            // One reading, derived twice. Calling `now_micros` and `current_year`
+            // separately reads the clock twice, and the two can straddle a second
+            // — or, once a year, the model-year boundary itself.
             let micros = ultravin::now_micros();
             Ok((micros, ultravin::current_year_at(micros)))
         }
@@ -518,16 +521,7 @@ fn generate<'py>(
             "n={n} is too large; generate at most {GENERATE_MAX} VINs per call"
         )));
     }
-    let (now_micros, current_year) = match &now {
-        Some(dt) => clock_from(dt)?,
-        None => {
-            // One reading, derived twice. Calling `now_micros` and `current_year`
-            // separately reads the clock twice, and the two can straddle a second
-            // — or, once a year, the model-year boundary itself.
-            let micros = ultravin::now_micros();
-            (micros, ultravin::current_year_at(micros))
-        }
-    };
+    let (now_micros, current_year) = decode_clock(now.as_ref())?;
     let filter = ultravin::Filter {
         wmi,
         make,
