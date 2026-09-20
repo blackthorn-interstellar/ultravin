@@ -37,16 +37,20 @@ Test:
 - delete six unreferenced `scripts/bench/*_2026_09_14.json` results: inert experiment records, nothing measurable gained, fails the reversal test.
 - drop `check_digit_kernel`'s redundant `pos3` parameter (-5 lines; skeptic accepted): `checkdigit.rs` is under the `make coverage` region gate, which cannot run locally (no `cargo-llvm-cov`); not worth an unverifiable CI risk.
 - add a test asserting single-VIN decode < 1 ms: the capability exists (warm median 118 us, p99 226 us through Python on the dev build); a guard is test coverage, and a wall-clock assertion in the unit suite would flake on a shared machine. See open questions.
+- make `answerkey verify` fail on an empty key directory (today: "every answer matches", exit 0): skeptic — CI's fetch checks status + checksum and publication rejects empty keys, so the path is already closed; `test_an_unpinned_registered_vin_is_still_skipped` expects success with zero comparable entries.
+- `_BatchTuner.observe` stub marks params keyword-only while PyO3 accepts them positionally: private class, stub errs strict, nothing breaks.
 - delete unused `pub` `ArrowBatchRebatcher::buffered_rows` / `ArrowDecoder::with_columns`: public crate API, removal is a compatibility call.
 - docs DATA_REFRESH.md:99 "the 63 crash VINs" (now 66): historical rationale, true when written, and any count there drifts with each data refresh.
 - bug: `columns=[2**31]` gives `TypeError ... got int` instead of `ValueError: unknown element_id`: skeptic — contrived boundary input, element ids are in the hundreds, speculative hardening.
 - drop the `--no-default-features` clippy row (`Makefile:33`, `release.yaml:87`): redundant for today's code but 0.1s warm, and the row guards future feature-gated code — fails the reversal test.
 - drop `check_digit_kernel`'s redundant `pos3` parameter (-5 lines; skeptic accepted): `checkdigit.rs` is under the `make coverage` region gate, which cannot run locally (no `cargo-llvm-cov`); not worth an unverifiable CI risk.
 - add a test asserting single-VIN decode < 1 ms: the capability exists (warm median 118 us, p99 226 us through Python on the dev build); a guard is test coverage, and a wall-clock assertion in the unit suite would flake on a shared machine. See open questions.
+- make `answerkey verify` fail on an empty key directory (today: "every answer matches", exit 0): skeptic — CI's fetch checks status + checksum and publication rejects empty keys, so the path is already closed; `test_an_unpinned_registered_vin_is_still_skipped` expects success with zero comparable entries.
+- `_BatchTuner.observe` stub marks params keyword-only while PyO3 accepts them positionally: private class, stub errs strict, nothing breaks.
 
 ## Consecutive empty iterations
 
-1
+2
 
 ## Open questions
 
