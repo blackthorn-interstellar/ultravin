@@ -264,6 +264,13 @@ def test_decode_parquet_passes_batch_controls(
     assert received["batch_memory_mb"] == 9
 
 
+def test_decode_parquet_reports_a_missing_source_without_a_traceback(tmp_path: Path) -> None:
+    result = cli("decode-parquet", str(tmp_path / "missing.parquet"), str(tmp_path / "out.parquet"))
+    assert result.exit_code == 2
+    assert "missing.parquet" in result.output
+    assert "Invalid value" in result.output
+
+
 def test_decode_batch_jsonl_reports_a_late_bad_year_after_complete_chunks() -> None:
     listing = f"{HONDA}\n{HONDA}\n{HONDA},bad-year\n"
     result = cli("decode-batch", "-", "--jsonl", "--batch-size", "2", stdin=listing)

@@ -126,9 +126,10 @@ def decode_parquet(
             batch_memory_mb=batch_memory_mb,
             sample_rows=sample_rows,
         ).to_parquet(dst)
-    except ValueError as exc:
+    except (ValueError, OSError) as exc:
         # Every ValueError out of the dataset door is a caller mistake (unknown
-        # column, bad element id, ambiguous autodetect) — say so, don't traceback.
+        # column, bad element id, ambiguous autodetect), and an OSError is a path
+        # that cannot be read or written — say so, don't traceback.
         raise typer.BadParameter(str(exc)) from None
     typer.echo(f"wrote {rows} rows to {dst}", err=True)
 

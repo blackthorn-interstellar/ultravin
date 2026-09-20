@@ -25,6 +25,7 @@ Test:
 - 2026-09-20 docs: README `full=True` example showed the wrong element and a source Make never has; now selects Make and shows real output.
 - 2026-09-20 docs: NIGHTLY.md named a nonexistent Anthropic key as the agents' only reachable secret; it is `XAI_API_KEY` plus a read-only `GITHUB_TOKEN`.
 - 2026-09-20 docs: CORPUS.md named a nonexistent `coverage sweep` command and listed "every error code" as a sweep dimension; now `coverage emit sweep` with the six real dimensions.
+- 2026-09-20 bug: `ultravin decode-parquet` dumped a traceback (exit 1) for a missing/non-parquet source or unwritable destination; now a one-line error, exit 2.
 
 ## Rejected
 
@@ -32,6 +33,7 @@ Test:
 - delete `examples/allocation_probe.rs`: its command is the recorded recipe behind two allocation result files.
 - delete six unreferenced `scripts/bench/*_2026_09_14.json` results: inert experiment records, nothing measurable gained, fails the reversal test.
 - delete unused `pub` `ArrowBatchRebatcher::buffered_rows` / `ArrowDecoder::with_columns`: public crate API, removal is a compatibility call.
+- docs DATA_REFRESH.md:99 "the 63 crash VINs" (now 66): historical rationale, true when written, and any count there drifts with each data refresh.
 
 ## Consecutive empty iterations
 
@@ -47,4 +49,5 @@ Test:
 Scout findings not yet through the skeptic. Re-verify before acting.
 
 - delete: rejected `batch-slab` / Storage V2 experiment (~1,430 lines: `experimental_batch.rs`, `examples/storage_probe.rs`, `examples/support/allocation_counter.rs`, `scripts/bench/batch_storage*.py` + JSON). Its own doc (`docs/REUSABLE_SLOTS_AND_STORAGE_V2_2026_09_14.md:52`) says it regresses. Blocked while another agent has uncommitted edits in `lib.rs` and `crates/ultravin/Cargo.toml`.
-- docs: docs/DATA_REFRESH.md:99 says 63 crash VINs; `scripts/known_problems.json` has 66.
+- bug: `ultravin.decode_stream(src, columns=[10**30])` raises `TypeError: columns entries are element ids (int) or variable names (str); got int` — self-contradictory; `columns=[999999]` correctly gives `ValueError: unknown element_id`. i32 extraction falls into the catch-all at `crates/ultravin-py/src/lib.rs:653-659`. Via the CLI (`--columns 99999999999`) it is a traceback.
+- missing capability: vision line "Decode individual VINs in under one millisecond" has no guard — `benches/decode.rs` asserts nothing, no workflow runs a bench, no timing assertion in any test. A 100x single-VIN regression merges green.
