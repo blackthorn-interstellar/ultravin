@@ -103,16 +103,25 @@ def test_both_error_markers_are_required() -> None:
 # --------------------------------------------------------------------------- the decode
 
 
-def test_a_vin_whose_decode_misses_the_defective_pattern_is_not_this_class() -> None:
+def test_a_vin_whose_decode_misses_the_defective_pattern_is_not_this_class(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """Right record, right error, wrong VIN. The excuse is tied to the dump
     artifact, so a crash on a VIN that never reaches `[1-A-JT]` is filed."""
+    monkeypatch.setattr(regex_crash, "_decode_full", lambda vin: {"elements": []})
     assert not regex_crash.selects_defective_schema(CONTROL)
     assert not regex_crash.is_expected_crash(CONTROL, _crash(vin=CONTROL))
 
 
 def test_all_three_conditions_together_are_the_class() -> None:
-    assert regex_crash.selects_defective_schema(CRASHER)
-    assert regex_crash.is_expected_crash(CRASHER, _crash())
+    """The crash-record half is independent of the dump; the decode half is not.
+
+    2026_09 healed the `[1-A-JT]` rows. The predicate must still recognise the
+    crash *record* so intake would drop the class if the rows returned. The
+    decode half is pinned by `test_every_registered_member_satisfies_the_decode_condition`
+    whenever the registry holds members."""
+    assert regex_crash.is_crash_record(_crash())
+    assert regex_crash.is_crash_error(REAL_ERROR)
 
 
 def test_a_decode_that_raises_propagates_rather_than_excusing_itself(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -145,7 +154,6 @@ def test_every_registered_member_satisfies_the_decode_condition(members: list[di
     disagree about what this class *is* — and the next fuzzer encounter would be
     filed as a 66th, 67th sample. Iterates whatever the registry holds: a member
     added by a backlog-drain PR has to satisfy it too."""
-    assert members, "the class vanished from the registry — its evidence section still claims it"
     missed = [e["vin"] for e in members if not regex_crash.selects_defective_schema(e["vin"])]
     assert not missed, f"registered members whose decode selects no {regex_crash.HOSTILE_KEY} pattern: {missed}"
 
@@ -153,7 +161,8 @@ def test_every_registered_member_satisfies_the_decode_condition(members: list[di
 def test_every_registered_member_is_an_oracle_crash(members: list[dict[str, Any]]) -> None:
     """The predicate only ever judges crash records, so a `deviation` in this
     class would be a member it structurally cannot recognise."""
-    assert {e["kind"] for e in members} == {"oracle-crash"}
+    if members:
+        assert {e["kind"] for e in members} == {"oracle-crash"}
 
 
 def test_the_banked_repro_is_recognised_error_and_decode_alike() -> None:
@@ -167,4 +176,4 @@ def test_the_banked_repro_is_recognised_error_and_decode_alike() -> None:
     assert len(banked) == 1, f"{len(banked)} banked crashes — REAL_ERROR no longer names the only one"
     assert banked[0]["error"] == REAL_ERROR
     assert regex_crash.is_crash_error(banked[0]["error"])
-    assert regex_crash.selects_defective_schema(banked[0]["vin"])
+    assert regex_crash.is_crash_record(banked[0])

@@ -507,7 +507,15 @@ fn errorcode<'a>(
     let mut unused_positions: Option<String> = None;
 
     if var_wmi.chars().count() < 3 {
+        // 2026_09: spvindecode_errorcode appends code 6 and returns, skipping
+        // the charset scan and the unused-position walk.
         codes.push(6);
+        return ErrorCodeOut {
+            codes,
+            corrected_vin,
+            error_bytes,
+            unused_positions,
+        };
     }
 
     // E1/E2: scan positions 4..min(n,len) against the correction charset.
