@@ -149,12 +149,6 @@ def test_decode_batch_jsonl_full_matches_the_library() -> None:
     assert [json.loads(line) for line in result.stdout.splitlines()] == uv.decode_batch(list(VINS), full=True)
 
 
-def test_decode_batch_jsonl_rejects_a_zero_batch_size() -> None:
-    result = cli("decode-batch", "-", "--jsonl", "--batch-size", "0", stdin=HONDA)
-    assert result.exit_code == 2
-    assert "must be 'auto' or a positive integer" in result.output
-
-
 @pytest.mark.parametrize("value", ["0", "-1", "quickly"])
 def test_batch_size_rejects_invalid_values(value: str) -> None:
     result = cli("decode-batch", "-", "--jsonl", "--batch-size", value, stdin=HONDA)

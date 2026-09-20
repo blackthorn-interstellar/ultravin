@@ -30,6 +30,7 @@ Test:
 - 2026-09-20 performance: matcher archive-keys test recompiled 56k regexes, 5.8k distinct; checking each string once takes it 15.0s -> 1.6s and warm `make check` ~57s -> ~41s. Break test still fails it.
 - 2026-09-20 simplify: `generate` in the Python bindings re-inlined `decode_clock`; it now calls it (-6 lines).
 - 2026-09-20 bug: the importer accepted a dump that ends inside a `COPY` block (exit 0, partial artifact + fresh manifests); it now fails naming the table, before the artifact and manifests are written.
+- 2026-09-20 delete: `test_decode_batch_jsonl_rejects_a_zero_batch_size` was character-for-character the `[0]` case of `test_batch_size_rejects_invalid_values`; break test confirms the parametrized case still fails.
 
 ## Rejected
 
@@ -55,7 +56,7 @@ Test:
 
 ## Consecutive empty iterations
 
-1
+0
 
 ## Open questions
 
@@ -69,3 +70,6 @@ Test:
 Scout findings not yet through the skeptic. Re-verify before acting.
 
 - delete: rejected `batch-slab` / Storage V2 experiment (~1,430 lines: `experimental_batch.rs`, `examples/storage_probe.rs`, `examples/support/allocation_counter.rs`, `scripts/bench/batch_storage*.py` + JSON). Its own doc (`docs/REUSABLE_SLOTS_AND_STORAGE_V2_2026_09_14.md:52`) says it regresses. Blocked while another agent has uncommitted edits in `lib.rs` and `crates/ultravin/Cargo.toml`.
+- delete test: `tests/test_regex_crash.py::test_the_real_sample_error_matches` (5 lines) — its second assertion inlines `is_crash_error`'s body; scout injected both breaks and `test_the_banked_repro_is_recognised_error_and_decode_alike` and `test_all_three_conditions_together_are_the_class` fail for each.
+- delete test: `tests/test_answerkey.py::test_a_hash_is_stable_for_the_same_vin` (4 lines) — an unstable hash fails 11 other tests, including `test_batched_hashing_matches_one_at_a_time`.
+- delete test (low confidence): `tests/test_caller_year.py::test_divergent_year_runs_its_own_pass_and_can_win` (5 lines) — same two literals asserted in `tests/test_cli.py::test_decode_passes_the_caller_year_through` and in `crates/ultravin/tests/decode.rs::caller_year_pass_can_win_best_of`.
