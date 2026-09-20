@@ -40,6 +40,8 @@ Test:
 - add a test asserting single-VIN decode < 1 ms: the capability exists (warm median 118 us, p99 226 us through Python on the dev build); a guard is test coverage, and a wall-clock assertion in the unit suite would flake on a shared machine. See open questions.
 - make `answerkey verify` fail on an empty key directory (today: "every answer matches", exit 0): skeptic — CI's fetch checks status + checksum and publication rejects empty keys, so the path is already closed; `test_an_unpinned_registered_vin_is_still_skipped` expects success with zero comparable entries.
 - `_BatchTuner.observe` stub marks params keyword-only while PyO3 accepts them positionally: private class, stub errs strict, nothing breaks.
+- validate the local `data/vpic.rkyv` in `crates/ultravin/build.rs` like the `ULTRAVIN_DATA` route: trusting the in-checkout artifact is the documented design, and `crates/ultravin/tests/decode.rs::artifact_blake3_matches_manifest` already fails `make check` on a corrupt one.
+- derive `Default` on `VpicData` to drop ~68 lines of empty-`Vec` literals: skeptic — `VpicData` is public and `default()` would be an archive that fails `validate_arena` (arena needs sentinel vectors); exhaustive literal in `build.rs` forces a decision when a table is added. Fails the reversal test.
 - delete unused `pub` `ArrowBatchRebatcher::buffered_rows` / `ArrowDecoder::with_columns`: public crate API, removal is a compatibility call.
 - docs DATA_REFRESH.md:99 "the 63 crash VINs" (now 66): historical rationale, true when written, and any count there drifts with each data refresh.
 - bug: `columns=[2**31]` gives `TypeError ... got int` instead of `ValueError: unknown element_id`: skeptic — contrived boundary input, element ids are in the hundreds, speculative hardening.
@@ -48,10 +50,12 @@ Test:
 - add a test asserting single-VIN decode < 1 ms: the capability exists (warm median 118 us, p99 226 us through Python on the dev build); a guard is test coverage, and a wall-clock assertion in the unit suite would flake on a shared machine. See open questions.
 - make `answerkey verify` fail on an empty key directory (today: "every answer matches", exit 0): skeptic — CI's fetch checks status + checksum and publication rejects empty keys, so the path is already closed; `test_an_unpinned_registered_vin_is_still_skipped` expects success with zero comparable entries.
 - `_BatchTuner.observe` stub marks params keyword-only while PyO3 accepts them positionally: private class, stub errs strict, nothing breaks.
+- validate the local `data/vpic.rkyv` in `crates/ultravin/build.rs` like the `ULTRAVIN_DATA` route: trusting the in-checkout artifact is the documented design, and `crates/ultravin/tests/decode.rs::artifact_blake3_matches_manifest` already fails `make check` on a corrupt one.
+- derive `Default` on `VpicData` to drop ~68 lines of empty-`Vec` literals: skeptic — `VpicData` is public and `default()` would be an archive that fails `validate_arena` (arena needs sentinel vectors); exhaustive literal in `build.rs` forces a decision when a table is added. Fails the reversal test.
 
 ## Consecutive empty iterations
 
-0
+1
 
 ## Open questions
 
@@ -65,5 +69,3 @@ Test:
 Scout findings not yet through the skeptic. Re-verify before acting.
 
 - delete: rejected `batch-slab` / Storage V2 experiment (~1,430 lines: `experimental_batch.rs`, `examples/storage_probe.rs`, `examples/support/allocation_counter.rs`, `scripts/bench/batch_storage*.py` + JSON). Its own doc (`docs/REUSABLE_SLOTS_AND_STORAGE_V2_2026_09_14.md:52`) says it regresses. Blocked while another agent has uncommitted edits in `lib.rs` and `crates/ultravin/Cargo.toml`.
-- simplify: derive `Default` on `VpicData` (`crates/ultravin/src/tables.rs:446`, all 21 fields are `Vec`) and replace the 17-19 empty-`Vec` field lines in `crates/ultravin/build.rs:152`, `tables.rs:650`, `db.rs:1198`, `json.rs:179` with `..Default::default()` (about -68 lines, 50 of them test lines); `artifact.rs:568`, `matcher.rs:443`, `errors.rs:1365` keep exhaustive literals so a new table still breaks the build.
-- bug (build.rs): the local `crates/ultravin/data/vpic.rkyv` route in `crates/ultravin/build.rs:59` checks only `is_file()` and never calls `validate`, unlike the `ULTRAVIN_DATA` route; a truncated local artifact is embedded and later read through the unchecked `build_trusted` path. The importer writes the artifact with a plain `fs::write` (`artifact.rs:637`), so an interrupted write can leave that state. Code-traced only, no repro yet.
