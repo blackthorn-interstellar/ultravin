@@ -91,6 +91,14 @@ def test_decode_batch_rejects_a_year_that_is_not_a_number(tmp_path: Path) -> Non
     assert "is not an integer" in result.output
 
 
+def test_decode_batch_reports_non_utf8_input_without_a_traceback(tmp_path: Path) -> None:
+    listing = tmp_path / "latin1.txt"
+    listing.write_bytes(f"{HONDA}\nCAF\xe9".encode("latin-1"))
+    result = cli("decode-batch", str(listing))
+    assert result.exit_code == 2
+    assert "not valid UTF-8" in result.output
+
+
 def test_decode_batch_reports_a_missing_file_without_a_traceback(tmp_path: Path) -> None:
     result = cli("decode-batch", str(tmp_path / "missing.txt"))
     assert result.exit_code == 2

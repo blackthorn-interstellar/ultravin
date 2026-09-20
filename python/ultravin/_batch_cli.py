@@ -43,16 +43,20 @@ def input_lines(file: str) -> Iterator[TextIO]:
 
 
 def rows(lines: TextIO) -> Iterator[tuple[str, int | None]]:
-    for lineno, raw in enumerate(lines, start=1):
-        line = raw.strip()
-        if not line:
-            continue
-        vin, _, year = line.partition(",")
-        try:
-            yield vin.strip(), int(year) if year.strip() else None
-        except ValueError:
-            msg = f"line {lineno}: model year {year.strip()!r} is not an integer"
-            raise typer.BadParameter(msg) from None
+    try:
+        for lineno, raw in enumerate(lines, start=1):
+            line = raw.strip()
+            if not line:
+                continue
+            vin, _, year = line.partition(",")
+            try:
+                yield vin.strip(), int(year) if year.strip() else None
+            except ValueError:
+                msg = f"line {lineno}: model year {year.strip()!r} is not an integer"
+                raise typer.BadParameter(msg) from None
+    except UnicodeDecodeError:
+        msg = "input is not valid UTF-8"
+        raise typer.BadParameter(msg) from None
 
 
 def collect(parsed: Iterator[tuple[str, int | None]]) -> tuple[list[str], list[int | None]]:
