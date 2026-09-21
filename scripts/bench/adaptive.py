@@ -20,7 +20,6 @@ from scripts.bench.end_to_end import ROOT, _capture, _sha256, _version
 CORPUS = ROOT / "scripts/bench/corpus.txt"
 DEFAULT_OUTPUT = ROOT / "target/bench/adaptive.json"
 MODES = ("parquet", "jsonl")
-SETTINGS: tuple[int | str, ...] = ("auto", 1_000, 8_192, 50_000)
 
 
 def _build() -> Path:
