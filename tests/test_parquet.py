@@ -763,12 +763,13 @@ def test_cli_columns_take_ids_and_names_together(tmp_path: Path) -> None:
     assert pq.read_table(dst).schema.names[-2:] == ["Make", "Engine Number of Cylinders"]
 
 
-def test_cli_rejects_an_unknown_column(tmp_path: Path) -> None:
+@pytest.mark.parametrize("token", ["Nope", "²"])  # ² is a digit to str.isdigit() but not to int()
+def test_cli_rejects_an_unknown_column(tmp_path: Path, token: str) -> None:
     src = corpus_file(tmp_path / "in.parquet")
-    result = cli(str(src), str(tmp_path / "out.parquet"), "--columns", "Nope")
+    result = cli(str(src), str(tmp_path / "out.parquet"), "--columns", token)
 
     assert result.exit_code == 2
-    assert 'unknown column "Nope"' in plain(result.stderr)
+    assert f'unknown column "{token}"' in plain(result.stderr)
 
 
 def test_cli_column_names_id_labels_by_element_id(tmp_path: Path) -> None:

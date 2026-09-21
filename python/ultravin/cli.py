@@ -110,10 +110,12 @@ def decode_parquet(
     """
     # A token that parses as an integer is an element id; anything else is a
     # variable name. Both reach the same resolver, so mixing them is fine.
+    # `isdecimal` is the decimal-digit characters `int()` accepts; `isdigit`
+    # also takes superscripts and circled digits, which `int()` refuses.
     projection: list[int | str] | None = None
     if columns:
         projection = [
-            int(tok) if tok.lstrip("-").isdigit() else tok for tok in (t.strip() for t in columns.split(",")) if tok
+            int(tok) if tok.lstrip("-").isdecimal() else tok for tok in (t.strip() for t in columns.split(",")) if tok
         ]
     try:
         rows = uv.decode_stream(
