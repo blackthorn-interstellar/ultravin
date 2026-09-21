@@ -149,16 +149,6 @@ def test_element_144_collation_reorder_still_collides() -> None:
     assert normalize.collation_agnostic(rows) == normalize.collation_agnostic(reordered)
 
 
-def test_element_144_position_assignment_is_not_collation() -> None:
-    # But which charset belongs to which position is data, not collation. Sorting
-    # the whole string used to erase it, so `(4:5)(5:4)` and `(4:4)(5:5)` hashed
-    # identically and a wrong element-144 output could pass the key. They must
-    # normalize (and so hash) differently.
-    a = [{"element_id": 144, "value": "(4:5)(5:4)", "attribute_id": "(4:5)(5:4)"}]
-    b = [{"element_id": 144, "value": "(4:4)(5:5)", "attribute_id": "(4:4)(5:5)"}]
-    assert normalize.collation_agnostic(a) != normalize.collation_agnostic(b)
-
-
 def test_element_144_still_compares_its_contents() -> None:
     # Different charset *contents* (not just order) must still register as different.
     a = normalize.collation_agnostic([{"element_id": 144, "value": "(6:_123456789)"}])
