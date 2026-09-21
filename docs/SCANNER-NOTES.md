@@ -117,7 +117,7 @@ shipped Python wheel and has no in-repo caller.
 
 ## g. Piping a remote script to a shell
 
-`Makefile:117` — `wget -qO- https://astral.sh/uv/install.sh | sh`, inside the
+`Makefile:136` — `curl -LsSf https://astral.sh/uv/install.sh | sh`, inside the
 `install-uv` convenience target. Flagged as remote code execution / unpinned
 supply chain. It is a developer convenience for bootstrapping `uv` on a fresh
 checkout and runs only when someone invokes it interactively without `uv`
@@ -125,9 +125,6 @@ already installed. No workflow shells out to `make install-uv`, so it never runs
 in CI: the five workflows that need `uv` (`ci`, `security`, `answer-key`,
 `data-refresh`, `nightly`) install it through `astral-sh/setup-uv`, pinned to a
 commit SHA.
-
-*(Note: earlier internal notes described this line as `curl`-to-shell; the
-Makefile uses `wget`. Same finding, same reasoning.)*
 
 ## h. CVEs in `psycopg[binary]`'s bundled libpq
 

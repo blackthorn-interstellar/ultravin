@@ -202,8 +202,8 @@ immediately). Run it after changing the settings above or rotating the key.
 
 - **build-data sha256 mismatch on an old PR/branch** — NHTSA re-touched the
   pinned month's file. The daily `detect` also catches this (`reason=reissue`,
-  via URL `Last-Modified` vs the manifest's commit time) and opens a refresh PR
-  for the *same* month with the new hash.
+  via the URL's `Content-Length` vs the manifest's `dump_bytes`) and opens a
+  refresh PR for the *same* month with the new hash.
 - **corpus/sweep gate names an unknown VIN** — either the decoder no longer
   matches the new data (fix Rust) or the dump itself is defective (oracle
   crash, stale cache table — precedent in `docs/KNOWN_DEVIATIONS.md`). The
