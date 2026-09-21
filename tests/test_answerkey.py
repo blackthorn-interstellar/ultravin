@@ -15,11 +15,6 @@ import ultravin
 from scripts.parity import answerkey, normalize, stale_cache
 
 
-def test_a_hash_is_stable_for_the_same_vin() -> None:
-    vin = "1HGCM82633A004352"
-    assert answerkey.ultravin_hashes([vin]) == answerkey.ultravin_hashes([vin])
-
-
 def test_different_vins_hash_differently() -> None:
     a, b = ultravin.generate(2, seed=5)
     assert answerkey.ultravin_hashes([a]) != answerkey.ultravin_hashes([b])

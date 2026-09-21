@@ -80,12 +80,6 @@ def test_a_record_with_no_error_at_all_is_refused() -> None:
 # --------------------------------------------------------------------------- the error
 
 
-def test_the_real_sample_error_matches() -> None:
-    """The exact string the campaign banked for this class, truncation and all."""
-    assert regex_crash.is_crash_error(REAL_ERROR)
-    assert all(marker in REAL_ERROR for marker in regex_crash.ERROR_MARKERS)
-
-
 def test_some_other_oracle_crash_is_not_this_class() -> None:
     """Right VIN, wrong error: a crash this section does not explain stays work."""
     assert not regex_crash.is_expected_crash(CRASHER, _crash(error="DivisionByZero('division by zero')"))

@@ -31,6 +31,7 @@ Test:
 - 2026-09-20 simplify: `generate` in the Python bindings re-inlined `decode_clock`; it now calls it (-6 lines).
 - 2026-09-20 bug: the importer accepted a dump that ends inside a `COPY` block (exit 0, partial artifact + fresh manifests); it now fails naming the table, before the artifact and manifests are written.
 - 2026-09-20 delete: `test_decode_batch_jsonl_rejects_a_zero_batch_size` was character-for-character the `[0]` case of `test_batch_size_rejects_invalid_values`; break test confirms the parametrized case still fails.
+- 2026-09-21 delete: three tests that guarded nothing (-17 test lines; skeptic accepted all three). `test_regex_crash.py::test_the_real_sample_error_matches` — every break (predicate always false, extra marker, misspelled marker) also fails the banked-repro test and two others. `test_answerkey.py::test_a_hash_is_stable_for_the_same_vin` — an unstable hash fails 11 other tests. `test_caller_year.py::test_divergent_year_runs_its_own_pass_and_can_win` — `test_cli.py::test_decode_passes_the_caller_year_through` asserts equality with `uv.decode(VIN, year=1995)` plus the same literals, and `decode.rs::caller_year_pass_can_win_best_of` pins the Rust core.
 
 ## Rejected
 
@@ -47,12 +48,6 @@ Test:
 - docs DATA_REFRESH.md:99 "the 63 crash VINs" (now 66): historical rationale, true when written, and any count there drifts with each data refresh.
 - bug: `columns=[2**31]` gives `TypeError ... got int` instead of `ValueError: unknown element_id`: skeptic — contrived boundary input, element ids are in the hundreds, speculative hardening.
 - drop the `--no-default-features` clippy row (`Makefile:33`, `release.yaml:87`): redundant for today's code but 0.1s warm, and the row guards future feature-gated code — fails the reversal test.
-- drop `check_digit_kernel`'s redundant `pos3` parameter (-5 lines; skeptic accepted): `checkdigit.rs` is under the `make coverage` region gate, which cannot run locally (no `cargo-llvm-cov`); not worth an unverifiable CI risk.
-- add a test asserting single-VIN decode < 1 ms: the capability exists (warm median 118 us, p99 226 us through Python on the dev build); a guard is test coverage, and a wall-clock assertion in the unit suite would flake on a shared machine. See open questions.
-- make `answerkey verify` fail on an empty key directory (today: "every answer matches", exit 0): skeptic — CI's fetch checks status + checksum and publication rejects empty keys, so the path is already closed; `test_an_unpinned_registered_vin_is_still_skipped` expects success with zero comparable entries.
-- `_BatchTuner.observe` stub marks params keyword-only while PyO3 accepts them positionally: private class, stub errs strict, nothing breaks.
-- validate the local `data/vpic.rkyv` in `crates/ultravin/build.rs` like the `ULTRAVIN_DATA` route: trusting the in-checkout artifact is the documented design, and `crates/ultravin/tests/decode.rs::artifact_blake3_matches_manifest` already fails `make check` on a corrupt one.
-- derive `Default` on `VpicData` to drop ~68 lines of empty-`Vec` literals: skeptic — `VpicData` is public and `default()` would be an archive that fails `validate_arena` (arena needs sentinel vectors); exhaustive literal in `build.rs` forces a decision when a table is added. Fails the reversal test.
 
 ## Consecutive empty iterations
 
@@ -70,6 +65,3 @@ Test:
 Scout findings not yet through the skeptic. Re-verify before acting.
 
 - delete: rejected `batch-slab` / Storage V2 experiment (~1,430 lines: `experimental_batch.rs`, `examples/storage_probe.rs`, `examples/support/allocation_counter.rs`, `scripts/bench/batch_storage*.py` + JSON). Its own doc (`docs/REUSABLE_SLOTS_AND_STORAGE_V2_2026_09_14.md:52`) says it regresses. Blocked while another agent has uncommitted edits in `lib.rs` and `crates/ultravin/Cargo.toml`.
-- delete test: `tests/test_regex_crash.py::test_the_real_sample_error_matches` (5 lines) — its second assertion inlines `is_crash_error`'s body; scout injected both breaks and `test_the_banked_repro_is_recognised_error_and_decode_alike` and `test_all_three_conditions_together_are_the_class` fail for each.
-- delete test: `tests/test_answerkey.py::test_a_hash_is_stable_for_the_same_vin` (4 lines) — an unstable hash fails 11 other tests, including `test_batched_hashing_matches_one_at_a_time`.
-- delete test (low confidence): `tests/test_caller_year.py::test_divergent_year_runs_its_own_pass_and_can_win` (5 lines) — same two literals asserted in `tests/test_cli.py::test_decode_passes_the_caller_year_through` and in `crates/ultravin/tests/decode.rs::caller_year_pass_can_win_best_of`.

@@ -20,12 +20,6 @@ def test_matching_year_changes_nothing() -> None:
     assert uv.decode(VIN, year=2003) == uv.decode(VIN)
 
 
-def test_divergent_year_runs_its_own_pass_and_can_win() -> None:
-    r = uv.decode(VIN, year=1995)
-    assert r["model_year"] == 1995
-    assert r["error_codes"] == [3, 12, 14]
-
-
 def test_out_of_window_year_still_flags_error_12() -> None:
     r = uv.decode(VIN, year=1979)
     assert r["model_year"] == 2003
