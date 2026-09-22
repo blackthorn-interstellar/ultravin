@@ -30,14 +30,6 @@ impl BatchFormat {
             Self::Columnar => 65_536,
         }
     }
-
-    pub const fn adaptive_max_rows(self) -> usize {
-        match self {
-            Self::Native => 400,
-            Self::Jsonl => 16_384,
-            Self::Columnar => 65_536,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, serde::Serialize)]
@@ -153,17 +145,15 @@ pub fn predict_batch(
         return Err(BatchPredictError("memory_bytes must be positive".into()));
     }
 
-    if format == BatchFormat::Native {
-        return predict_native_slots(
-            workers,
-            single_core_rows_per_second,
-            memory_bytes,
-            bytes_per_row,
-        );
-    }
-
     let c = match format {
-        BatchFormat::Native => unreachable!("native slot plans return above"),
+        BatchFormat::Native => {
+            return predict_native_slots(
+                workers,
+                single_core_rows_per_second,
+                memory_bytes,
+                bytes_per_row,
+            )
+        }
         BatchFormat::Jsonl => JSONL,
         BatchFormat::Columnar => COLUMNAR,
     };
@@ -191,10 +181,7 @@ pub fn predict_batch(
     for rows in min_rows..=max_rows {
         peak_rate = peak_rate.max(rate(rows));
     }
-    let target_fraction = match format {
-        BatchFormat::Native => 1.0,
-        BatchFormat::Jsonl | BatchFormat::Columnar => 0.99,
-    };
+    let target_fraction = 0.99;
     let threshold = peak_rate * target_fraction;
     let batch_size = (min_rows..=max_rows)
         .find(|&rows| rate(rows) >= threshold)
@@ -209,10 +196,7 @@ pub fn predict_batch(
         + c.rss_worker_row * worker_extra * rss_rows)
         .max(c.rss_floor);
     Ok(BatchPrediction {
-        model_version: match format {
-            BatchFormat::Native => "ultravin-native-batch-v2",
-            BatchFormat::Jsonl | BatchFormat::Columnar => "ultravin-batch-v1",
-        },
+        model_version: "ultravin-batch-v1",
         batch_size,
         workers,
         single_core_rows_per_second,
@@ -415,7 +399,6 @@ mod tests {
         assert!(capped.batch_size <= 500);
         assert!(capped.estimated_working_bytes <= 10_000);
         assert_eq!(BatchFormat::Native.max_rows(), 400);
-        assert_eq!(BatchFormat::Native.adaptive_max_rows(), 400);
         let native = predict_batch(
             12,
             174_387.694_628_043_04,

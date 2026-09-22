@@ -213,7 +213,7 @@ impl BatchFeedback {
             };
             if let Ok(prediction) = predict_batch(workers, speed, format, memory_bytes, width) {
                 state.tuner = BatchTuner::new(prediction.batch_size, memory_bytes)
-                    .with_max_rows(format.adaptive_max_rows());
+                    .with_max_rows(format.max_rows());
                 // Use the shipped estimate directly while the job warms up.
                 // Periodic tuning starts after the normal settled interval,
                 // rather than immediately comparing cold candidate batches.
@@ -902,7 +902,7 @@ mod tests {
         assert!(!state.tuner.probing);
         let rows = state.tuner.next_rows();
         assert!(rows > 5_000);
-        assert!(rows <= BatchFormat::Columnar.adaptive_max_rows());
+        assert!(rows <= BatchFormat::Columnar.max_rows());
     }
 
     #[test]
@@ -915,8 +915,8 @@ mod tests {
 
     #[test]
     fn columnar_runtime_exploration_obeys_memory_and_runtime_caps() {
-        let mut memory_limited = BatchTuner::new(5_000, 120_000)
-            .with_max_rows(BatchFormat::Columnar.adaptive_max_rows());
+        let mut memory_limited =
+            BatchTuner::new(5_000, 120_000).with_max_rows(BatchFormat::Columnar.max_rows());
         memory_limited.bytes_per_row = 10.;
         memory_limited.memory_measured = true;
         memory_limited.candidates = vec![5_000];
@@ -937,11 +937,11 @@ mod tests {
         }
         assert_eq!(memory_limited.next_rows(), 6_000);
 
-        let runtime_limited = BatchTuner::new(usize::MAX, usize::MAX)
-            .with_max_rows(BatchFormat::Columnar.adaptive_max_rows());
+        let runtime_limited =
+            BatchTuner::new(usize::MAX, usize::MAX).with_max_rows(BatchFormat::Columnar.max_rows());
         assert_eq!(
             runtime_limited.next_rows(),
-            BatchFormat::Columnar.adaptive_max_rows()
+            BatchFormat::Columnar.max_rows()
         );
     }
 
