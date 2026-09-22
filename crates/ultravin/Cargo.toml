@@ -17,7 +17,6 @@ exclude = ["data/*.rkyv"]
 
 [features]
 default = ["download-data"]
-batch-slab = []
 stage-trace = []
 # build.rs fetches this version's vpic.rkyv from its GitHub release when no
 # artifact is supplied — once per machine, blake3-verified against
@@ -93,7 +92,3 @@ libc = "0.2.189"
 [[bench]]
 name = "decode"
 harness = false
-
-[[example]]
-name = "storage_probe"
-required-features = ["batch-slab"]

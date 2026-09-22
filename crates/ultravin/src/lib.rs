@@ -20,8 +20,6 @@ pub mod cover;
 pub mod db;
 mod decode;
 mod errors;
-#[cfg(feature = "batch-slab")]
-mod experimental_batch;
 pub mod generate;
 mod hash;
 mod ids;
@@ -54,11 +52,6 @@ pub use checkdigit::check_digit;
 pub use db::Db;
 #[doc(hidden)] // build-tooling hook (`vpic-import --stale-cache-report`), not API
 pub use errors::recompute_valid_chars;
-#[cfg(feature = "batch-slab")]
-pub use experimental_batch::{
-    decode_batch_slab, decode_batch_slab_at, decode_batch_slab_with_options_at, SlabBatch,
-    SlabOptions, SlabResultRef,
-};
 pub use generate::{generate, pairwise, seeded, sweep, Dimension, Filter};
 pub use ids::{
     all_public_ids, decode_batch_ids, decode_batch_ids_at, resolve_columns, resolve_ids,
@@ -1785,24 +1778,6 @@ fn project_reusing<'a>(
     fill_projection_order(&mut order, db, items);
     elements.reserve_exact(order.len());
     append_projected(db, items, &order, elements);
-}
-
-/// Append projected elements directly to caller-owned storage and return their range.
-///
-/// Unlike [`project`], this does not create an output `Vec` for the VIN. The
-/// experimental slab batch path owns the destination.
-#[cfg(feature = "batch-slab")]
-fn project_into<'a>(
-    db: &'a Db,
-    mut items: Vec<decode::DecodingItem<'a>>,
-    elements: &mut Vec<DecodedElement<'a>>,
-) -> std::ops::Range<usize> {
-    let mut order = ProjectionOrderScratch::take();
-    fill_projection_order(&mut order, db, &items);
-    let start = elements.len();
-    elements.reserve(order.len());
-    append_projected(db, &mut items, &order, elements);
-    start..elements.len()
 }
 
 fn error_codes_csv(codes: &[i32]) -> String {

@@ -43,6 +43,8 @@ The 1m-row allocation diagnostic counted 36.80 allocations/VIN for owned, 35.84 
 
 Shard 64 has a small throughput gain with slightly higher RSS and instruction count. Shard 256 and compatibility conversion regress. This does not support production activation or a broader eight-worker matrix.
 
+The slab implementation (`experimental_batch.rs` behind a `batch-slab` feature, the `storage_probe` example, and the `batch_storage*.py` runners) was removed from the tree on 2026-09-21; the per-file hashes in the JSON below identify the measured sources.
+
 ## Reproduction artifacts
 
 All throughput measurements used the canonical 20m unique corpus (SHA-256 `0d6224e99d0a7f241e3dcd052ce973c8baea774feb0831db0071423de726bd9a`), frozen clock `1788220800000000`, year 2026, mimalloc, a full warm pass, and one timed full pass longer than ten seconds. Runs were serial.
