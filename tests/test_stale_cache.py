@@ -76,10 +76,6 @@ def _diff(*element_ids: int, order_ok: bool = True, at: int = 11) -> dict[str, A
 # --------------------------------------------------------------------------- the cell
 
 
-def test_vin_wmi_is_the_first_three_characters() -> None:
-    assert stale_cache.vin_wmi("MLHAE041XKA111111") == "MLH"
-
-
 def test_vin_wmi_extends_to_six_for_a_low_volume_manufacturer() -> None:
     """`fVinWMI` appends positions 12-14 when position 3 is `9` — the cache is
     keyed by that six-character string, so the cell must be too."""

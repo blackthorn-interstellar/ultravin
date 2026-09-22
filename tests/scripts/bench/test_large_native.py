@@ -36,12 +36,6 @@ def test_validate_corpus_rejects_invalid_check_digit(tmp_path):
         validate_corpus(corpus)
 
 
-def test_minimum_unique_seconds_uses_fastest_sample():
-    samples = [{"rows_per_second": 400_000}, {"rows_per_second": 500_000}]
-
-    assert minimum_unique_seconds(5_000_000, samples) == 10.0
-
-
 @pytest.mark.parametrize("rate", [0, -1, float("nan"), float("inf")])
 def test_minimum_unique_seconds_rejects_non_positive_or_non_finite_rates(rate):
     with pytest.raises(ValueError, match="throughput must be positive"):

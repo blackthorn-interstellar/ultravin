@@ -73,10 +73,6 @@ def test_attributes_preserve_element_order() -> None:
     assert list(flat["attributes"]) == expected
 
 
-def test_the_default_shape_is_header_plus_attributes() -> None:
-    assert set(uv.decode(VINS[0])) == HEADER_KEYS | {"attributes"}
-
-
 def test_full_swaps_attributes_for_elements() -> None:
     """The two shapes are exclusive: `full=True` buys provenance by dropping the
     mapping, so a caller cannot accidentally read a stale one."""

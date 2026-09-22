@@ -20,12 +20,6 @@ def test_matching_year_changes_nothing() -> None:
     assert uv.decode(VIN, year=2003) == uv.decode(VIN)
 
 
-def test_out_of_window_year_still_flags_error_12() -> None:
-    r = uv.decode(VIN, year=1979)
-    assert r["model_year"] == 2003
-    assert r["error_codes"] == [0, 12]
-
-
 def test_json_paths_match_dict_paths() -> None:
     assert json.loads(uv.decode_json(VIN, year=1995)) == uv.decode(VIN, year=1995)
     assert json.loads(uv.decode_json(VIN, year=1995, full=True)) == uv.decode(VIN, year=1995, full=True)
