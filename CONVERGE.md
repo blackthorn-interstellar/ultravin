@@ -64,7 +64,9 @@ Test:
 
 ## Consecutive empty iterations
 
-2
+3
+
+Converged at 98127a3 on 2026-09-21.
 
 ## Open questions
 
@@ -83,6 +85,7 @@ Scout findings not yet through the skeptic. Re-verify before acting.
 - checked, not a contradiction: `generate(-1)`, `seeded(limit=-1)`, `decode_stream(sample_rows=-1)` etc. raise `OverflowError` from the unsigned conversion; the stub promises `ValueError` only for `n > 10,000,000` and for unknown column / element id / ambiguous autodetect, never for negatives. Changing the exception type would be speculative hardening.
 - delete test (coverage-gated file, skip unless the human installs `cargo-llvm-cov`): `checkdigit.rs::short_vin_returns_none` — the mutation test's inline reference already hard-codes `len != 17 → None` for 0/16/18-char inputs.
 - clean (do not re-run, 2026-09-21): every fenced example with shown output in README.md, crates/ultravin/README.md, docs/CORPUS.md, docs/BATCH_PREDICTOR.md, docs/KNOWN_DEVIATIONS.md and the `_ultravin.pyi` docstrings was executed and matches (keys, values, exception types, exit codes; only "~" counts moved with 2026_08). `ruff --select ARG,B007,ERA001,PLW0602,PLW0603,F841,F811,PIE790,PIE794,PIE810,SIM102,SIM108,SIM110,SIM118,RET504,RET505` finds only test fakes' unused params and two `nosemgrep` comments. The shipped package uses no 3.11+ syntax, so `requires-python = ">=3.10"` is honest and CI tests 3.10–3.15. No `#[allow(dead_code)]` outside `build.rs`'s `#[path] mod tables`.
+- clean (2026-09-21, iteration 21): `ultravin.__all__` matches the stub's public surface (the stub-only names are the `ArrowArraySource`/`ArrowStreamSource` typing aliases and the extension-level `elements()`/`multi_valued()` behind the `ELEMENTS`/`MULTI_VALUED` constants); AGENTS.md's commands and SECURITY.md's scope statements match the Makefile and code; conftest fixtures and `vin_samples` symbols are all used. Considered and dropped: an importer guard for a dump missing a core table — the refresh parity gates already fail an empty decoder, so it is speculative hardening.
 - clean (do not re-probe): all six decode entry points agree on 3,562 VINs × 13 year hints, plain and full; empty/blank/CRLF stdin, zero-row parquet, dst-inside-src, duplicate columns, second use of a stream, generate filters and determinism all behave.
 
 - delete: rejected `batch-slab` / Storage V2 experiment (~1,430 lines: `experimental_batch.rs`, `examples/storage_probe.rs`, `examples/support/allocation_counter.rs`, `scripts/bench/batch_storage*.py` + JSON). Its own doc (`docs/REUSABLE_SLOTS_AND_STORAGE_V2_2026_09_14.md:52`) says it regresses. Blocked while another agent has uncommitted edits in `lib.rs` and `crates/ultravin/Cargo.toml`.
