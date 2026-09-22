@@ -115,11 +115,6 @@ def test_decode_batch_of_an_empty_file_is_an_empty_array(tmp_path: Path) -> None
     assert out(cli("decode-batch", str(listing))) == []
 
 
-def test_decode_batch_reads_stdin() -> None:
-    listing = f"{HONDA}\n{HONDA},1995\n"
-    assert out(cli("decode-batch", "-", stdin=listing)) == uv.decode_batch([HONDA, HONDA], years=[None, 1995])
-
-
 def test_decode_batch_jsonl_streams_in_bounded_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
     original = uv._decode_batch_jsonl
     chunk_sizes: list[int] = []

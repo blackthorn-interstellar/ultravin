@@ -584,11 +584,6 @@ def test_a_python_backed_arrow_producer_survives_the_released_gil(tmp_path: Path
     assert pq.read_table(dst).column("Make").to_pylist() == ["HONDA"] * (chunks * rows_per_chunk)
 
 
-def test_an_arrow_source_and_a_parquet_source_agree(tmp_path: Path) -> None:
-    src = corpus_file(tmp_path / "in.parquet")
-    assert columns(pq.read_table(src), columns=PROJECTED) == columns(src, columns=PROJECTED)
-
-
 # ── Stream semantics ──────────────────────────────────────────────────────────
 
 

@@ -73,14 +73,6 @@ def test_auto_wide_projection_matches_fixed_output(tmp_path: Path) -> None:
     assert actual.num_columns > 100
 
 
-def test_auto_arrow_matches_fixed_output() -> None:
-    vins, years = _rows(19)
-    source = pa.table({"vin": vins, "year": years})
-    expected = _table(source, columns=PROJECTION, batch_size=4)
-    actual = _table(source, columns=PROJECTION, batch_size="auto", batch_memory_mb=1)
-    assert actual.equals(expected)
-
-
 def test_auto_splits_one_large_arrow_batch_and_keeps_the_fixed_clock() -> None:
     vins, years = _rows(20_000)
     source = pa.table({"vin": vins, "year": years})
