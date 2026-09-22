@@ -39,6 +39,7 @@ Test:
 - 2026-09-21 delete: five more tests whose every break another test catches (-24 test lines; skeptic accepted all): `test_large_native.py::test_minimum_unique_seconds_uses_fastest_sample` (three arithmetic breaks each also fail `test_multicore.py`'s `duration_gate` pin), `test_stale_cache.py::test_vin_wmi_is_the_first_three_characters` (three slice breaks each fail 18 others), `test_flat.py::test_the_default_shape_is_header_plus_attributes` (an extra flat-dict key fails 16 others incl. both survivors), `test_caller_year.py::test_out_of_window_year_still_flags_error_12` (identical pin in `decode.rs`; a bindings break dropping `year` fails 5 others), `test_json_api.py::test_decode_batch_json_empty` (byte-exact twin in `test_provenance_clock.py`).
 - 2026-09-21 simplify: `adaptive.rs` `BatchTuner::observe` inlined the body of its own private `learn_width`; it now calls it, and `BatchFeedback::decoded` drops the `output_bytes > 0 && rows > 0` guard the callee re-checks (-8 lines). Skeptic accepted; breaking the shared method fails `memory_estimate_reacts_immediately_to_a_sharp_increase`.
 - 2026-09-21 delete (human waived compatibility): dead public crate API — `parquet_io::open_chunks_auto`, `ArrowDecoder::with_columns`, `ArrowBatchRebatcher::buffered_rows`, `Db::vspecschemas_for_make` (its one test now filters `vspecschemas()` directly); `BatchFeedback::calibration_needed` and `DEFAULT_MEMORY_BYTES` became test-only; `check_digit_kernel` reads position 3 itself instead of taking the redundant `pos3` (-36 lines). `decode_parquet_to_file` stays for its 15 round-trip tests.
+- 2026-09-22 bug (red CI): `tests/test_cli.py::test_decode_parquet_reports_a_missing_source_without_a_traceback` was flaky on the runner — `CliRunner()` had no width, so rich wrapped the 80-column error panel through `missing.parqu|et` depending on test order (Python Checks on 362b5e0 and 1e713f2, Nightly deps). Reproduced locally with `--basetemp=/tmp/pytest-of-runner/pytest-0` at `COLUMNS=80`; fix is `CliRunner(env={"COLUMNS": "200"})` as `test_parquet.py` already does. The nightly agent landed the identical fix in d786933 first; the loop's copy was dropped.
 - 2026-09-21 delete (human waived compatibility): the rejected `batch-slab` / Storage V2 experiment's code — `experimental_batch.rs`, `examples/storage_probe.rs`, `examples/support/allocation_counter.rs`, `scripts/bench/batch_storage*.py`, the `batch-slab` feature and `project_into` (-1,045 lines). Its JSON results and `docs/REUSABLE_SLOTS_AND_STORAGE_V2_2026_09_14.md` stay as the record (the JSON carries per-file hashes of the measured sources); the doc now says the code is gone. Unblocked by parking the orphaned 2026-09-15 native-architecture work on `experiments/native-architecture-2026-09-15`.
 - 2026-09-21 simplify: `parquet_io.rs` hand-rolled `arrow_io::names` (join column names for an ambiguity error) twice; `names` is now `pub(crate)` and both sites call it (-7 lines, byte-identical messages; the three ambiguity-message unit tests still pass). Skeptic accepted.
 
@@ -64,9 +65,9 @@ Test:
 
 ## Consecutive empty iterations
 
-3
+0
 
-Converged at 98127a3 on 2026-09-21.
+Converged at 98127a3 on 2026-09-21 — reset 2026-09-22: the human waived backward compatibility (1,081 lines of previously compat-blocked deletions landed the same evening), the orphaned 2026-09-15 experiment left the tree, and CI went red on a flaky test, so the verdict no longer holds. Resume the loop.
 
 ## Open questions
 
