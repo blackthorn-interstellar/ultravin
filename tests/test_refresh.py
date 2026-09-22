@@ -7,6 +7,8 @@ import json
 import subprocess
 import zipfile
 
+import pytest
+
 from scripts import refresh
 from scripts.refresh import LookupDiff, Probe
 
@@ -161,13 +163,14 @@ def test_sweep_gate_fails_when_a_crash_listed_vin_diverges() -> None:
         "examples": [{"vin": "7T0AAAAA0SA111111"}],
         "oracle_errors": [],
     }
-    gate = refresh.sweep_gate(diverged)
+    gate = refresh.sweep_gate(diverged, crash_vins=frozenset({"7T0AAAAA0SA111111"}))
     assert not gate.ok
     assert "7T0AAAAA0SA111111" in gate.detail
 
 
-def test_corpus_gate_fails_when_a_crash_listed_vin_diverges() -> None:
+def test_corpus_gate_fails_when_a_crash_listed_vin_diverges(monkeypatch: pytest.MonkeyPatch) -> None:
     """Same split in the corpus gate: crash VINs are not documented deviations."""
+    monkeypatch.setattr(refresh, "ORACLE_CRASH_VINS", frozenset({"7T0AAAAA0SA111111"}))
     corpus = {"entries": [{"vin": "7T0AAAAA0SA111111", "expected_diff": _fp(exact=False)}]}
     gate = refresh.corpus_gate(corpus)
     assert not gate.ok
