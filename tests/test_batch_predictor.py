@@ -68,7 +68,7 @@ def test_prediction_rejects_invalid_inputs(kwargs: dict[str, object], message: s
 
 
 def test_jsonl_uses_prediction_after_real_serial_batches() -> None:
-    tuner = uv._BatchTuner(memory_bytes=8 * 1024**2, predictive=True)
+    tuner = uv._BatchTuner(memory_bytes=8 * 1024**2)
     assert tuner.prediction is None
     chunks = []
     for _ in range(2):
@@ -83,7 +83,7 @@ def test_jsonl_uses_prediction_after_real_serial_batches() -> None:
 
 
 def test_empty_and_partial_batches_do_not_finish_calibration_early() -> None:
-    tuner = uv._BatchTuner(memory_bytes=8 * 1024**2, predictive=True)
+    tuner = uv._BatchTuner(memory_bytes=8 * 1024**2)
     tuner.decode_jsonl([], now=NOW)
     tuner.decode_jsonl([], now=NOW)
     assert tuner.prediction is None

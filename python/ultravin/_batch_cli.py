@@ -76,11 +76,7 @@ def write_jsonl(
     now: datetime,
     batch_memory_mb: int = 8,
 ) -> None:
-    tuner = (
-        uv._BatchTuner(initial_rows=1_000, memory_bytes=batch_memory_mb * 1024 * 1024, max_rows=16_384, predictive=True)
-        if batch_size == "auto"
-        else None
-    )
+    tuner = uv._BatchTuner(memory_bytes=batch_memory_mb * 1024 * 1024) if batch_size == "auto" else None
     while True:
         if tuner is None:
             started = 0.0

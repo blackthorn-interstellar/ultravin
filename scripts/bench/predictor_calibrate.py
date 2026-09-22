@@ -32,7 +32,7 @@ def main(output: Path = ROOT / "scripts/bench/predictor_reference.json", rounds:
             vins = [corpus[(offset + index) % len(corpus)] for index in range(512)]
             for format_name in ("jsonl", "parquet"):
                 if format_name == "jsonl":
-                    tuner = uv._BatchTuner(memory_bytes=8 * 1024**2, predictive=True)
+                    tuner = uv._BatchTuner(memory_bytes=8 * 1024**2)
                     for start in (0, 256):
                         tuner.decode_jsonl(vins[start : start + 256], now=now)
                     prediction = tuner.prediction

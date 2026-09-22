@@ -167,14 +167,13 @@ def test_batch_memory_rejects_zero() -> None:
 def test_decode_batch_jsonl_auto_adapts_between_real_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
     choices = iter([2, 1, 4])
     observations: list[tuple[int, float, int]] = []
-    constructor: list[tuple[int, int, int]] = []
+    constructor: list[int] = []
     clock = iter([10.0, 11.0, 20.0, 22.5, 30.0, 34.0])
     calls: list[tuple[list[str], list[int | None] | None]] = []
 
     class Tuner:
-        def __init__(self, *, initial_rows: int, memory_bytes: int, max_rows: int, predictive: bool) -> None:
-            assert predictive
-            constructor.append((initial_rows, memory_bytes, max_rows))
+        def __init__(self, *, memory_bytes: int) -> None:
+            constructor.append(memory_bytes)
 
         def next_rows(self) -> int:
             return next(choices)
@@ -198,7 +197,7 @@ def test_decode_batch_jsonl_auto_adapts_between_real_chunks(monkeypatch: pytest.
     result = cli("decode-batch", "-", "--jsonl", "--batch-memory-mb", "7", stdin=listing)
 
     assert result.exit_code == 0, result.output
-    assert constructor == [(1_000, 7 * 1024 * 1024, 16_384)]
+    assert constructor == [7 * 1024 * 1024]
     assert [len(vins) for vins, _ in calls] == [2, 1, 2]
     assert [years for _, years in calls] == [[None, 1995], None, [2001, None]]
     encoded = ['{"row":1}\n' * 2, '{"row":2}\n', '{"row":3}\n' * 2]

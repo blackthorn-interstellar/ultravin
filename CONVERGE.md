@@ -44,6 +44,7 @@ Test:
 - 2026-09-21 simplify: `parquet_io.rs` hand-rolled `arrow_io::names` (join column names for an ambiguity error) twice; `names` is now `pub(crate)` and both sites call it (-7 lines, byte-identical messages; the three ambiguity-message unit tests still pass). Skeptic accepted.
 - 2026-09-22 delete: `stale_cache.is_known_stale_cell` was `bool(stale_positions(...))` with only test callers; the five assertions now call `stale_positions` (-9 lines). Skeptic accepted.
 - 2026-09-22 simplify: `lib.rs` dropped private pass-through wrappers (`batch`, `batch_json`, `batch_json_at`, `decode_items_with_buffers_and_workspace`) and `decode_flat`/`decode_json`/non-`_at` batch-json now delegate to their `_at` siblings with `now_micros()` instead of re-inlining the clock (-65 lines, one clock read each, same year). Skeptic accepted.
+- 2026-09-22 simplify: private `_BatchTuner` is always predictive — every constructor passed `predictive=True`, so the flag, the non-predictive arm and the ignored `initial_rows`/`max_rows` knobs went (-37 lines over 6 files). `new_predictive` errors map to ValueError (pool-build was RuntimeError; no handler cares). Skeptic accepted.
 
 ## Rejected
 
@@ -92,7 +93,6 @@ Scout findings not yet through the skeptic. Re-verify before acting.
 - clean (2026-09-21, iteration 21): `ultravin.__all__` matches the stub's public surface (the stub-only names are the `ArrowArraySource`/`ArrowStreamSource` typing aliases and the extension-level `elements()`/`multi_valued()` behind the `ELEMENTS`/`MULTI_VALUED` constants); AGENTS.md's commands and SECURITY.md's scope statements match the Makefile and code; conftest fixtures and `vin_samples` symbols are all used. Considered and dropped: an importer guard for a dump missing a core table — the refresh parity gates already fail an empty decoder, so it is speculative hardening.
 - clean (do not re-probe): all six decode entry points agree on 3,562 VINs × 13 year hints, plain and full; empty/blank/CRLF stdin, zero-row parquet, dst-inside-src, duplicate columns, second use of a stream, generate filters and determinism all behave.
 
-- simplify (2026-09-22 scout, diff in session scratchpad, re-derive): `_BatchTuner` always predictive — every constructor passes `predictive=True`; drop the flag, the non-predictive arm in `crates/ultravin-py/src/lib.rs` ~1037-1087, and the CLI's ignored `initial_rows`/`max_rows` (net -37 over 6 files). Wrinkle: thread-pool build failure changes RuntimeError -> ValueError unless mapped.
 - simplify (2026-09-22 scout): `_batch_cli.py` `write_jsonl` manual next()/StopIteration chunk loop -> `list(islice(parsed, n))` (net -10).
 - simplify (2026-09-22 scout): `crates/ultravin-build/src/main.rs` — `sha256_file` via `io::copy`, TABLE/VIEW/TYPE branch collapse in `finalize`, grouped-output loop (net -26); guard is a real-dump `diff -r` of importer output (identical, rkyv byte-identical).
 - delete test (2026-09-22 scout, break-tested): `test_caller_year.py::test_json_paths_match_dict_paths` — full/flat None-year and shape-swap breaks in the binding each fail `test_provenance_clock.py::test_every_decode_shape_uses_the_same_frozen_clock` and others.

@@ -18,19 +18,9 @@ class ArrowArraySource(Protocol):
     def __arrow_c_array__(self, requested_schema: object | None = None) -> tuple[object, object]: ...
 
 class _BatchTuner:
-    """Internal adaptive chunk controller used by streaming entry points.
+    """Internal predictive JSONL chunk controller for ``decode-batch --jsonl``."""
 
-    ``initial_rows`` and ``max_rows`` configure the non-predictive controller.
-    Predictive mode uses the JSONL model's calibration size and row ceiling.
-    """
-
-    def __init__(
-        self,
-        initial_rows: int = 1_000,
-        memory_bytes: int = 67_108_864,
-        max_rows: int = 65_536,
-        predictive: bool = False,
-    ) -> None: ...
+    def __init__(self, *, memory_bytes: int) -> None: ...
     def next_rows(self) -> int: ...
     def observe(self, *, rows: int, seconds: float, output_bytes: int) -> None: ...
     @property

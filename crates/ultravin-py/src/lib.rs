@@ -20,7 +20,7 @@ use pyo3::intern;
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyCapsule, PyDateTime, PyDict, PyList, PyString};
 
-use ultravin::adaptive::{BatchFeedback, BatchRebatcher, BatchTuner};
+use ultravin::adaptive::{BatchFeedback, BatchRebatcher};
 use ultravin::parquet_io::{
     check_dst_outside_src, open_chunks_at, open_chunks_auto_at, write_parquet,
     write_parquet_adaptive, ParquetChunkIter, ParquetOpts,
@@ -1037,38 +1037,20 @@ impl PyBatchSize {
 #[pyclass(name = "_BatchTuner", module = "ultravin._ultravin")]
 struct PyBatchTuner {
     feedback: BatchFeedback,
-    predictive: bool,
 }
 
 #[pymethods]
 impl PyBatchTuner {
     #[new]
-    #[pyo3(signature = (initial_rows = 1_000, memory_bytes = 67_108_864, max_rows = 65_536, predictive = false))]
-    fn new(
-        initial_rows: usize,
-        memory_bytes: usize,
-        max_rows: usize,
-        predictive: bool,
-    ) -> PyResult<Self> {
-        if initial_rows == 0 || memory_bytes == 0 || max_rows == 0 {
-            return Err(PyValueError::new_err(
-                "tuner sizes and memory budget must be positive",
-            ));
-        }
-        let feedback = if predictive {
-            BatchFeedback::new_predictive(
-                BatchFormat::Jsonl,
-                memory_bytes,
-                ultravin::predictor::worker_count(),
-            )
-            .map_err(|error| PyRuntimeError::new_err(error.to_string()))?
-        } else {
-            BatchFeedback::new(BatchTuner::new(initial_rows, memory_bytes).with_max_rows(max_rows))
-        };
-        Ok(Self {
-            feedback,
-            predictive,
-        })
+    #[pyo3(signature = (*, memory_bytes))]
+    fn new(memory_bytes: usize) -> PyResult<Self> {
+        let feedback = BatchFeedback::new_predictive(
+            BatchFormat::Jsonl,
+            memory_bytes,
+            ultravin::predictor::worker_count(),
+        )
+        .map_err(|error| PyValueError::new_err(error.to_string()))?;
+        Ok(Self { feedback })
     }
 
     fn next_rows(&self) -> usize {
@@ -1079,11 +1061,7 @@ impl PyBatchTuner {
         let elapsed = Duration::try_from_secs_f64(seconds).map_err(|_| {
             PyValueError::new_err("elapsed seconds must be finite and non-negative")
         })?;
-        if self.predictive {
-            self.feedback.observe_total(rows, elapsed, output_bytes);
-        } else {
-            self.feedback.decoded(rows, elapsed, output_bytes);
-        }
+        self.feedback.observe_total(rows, elapsed, output_bytes);
         Ok(())
     }
 
