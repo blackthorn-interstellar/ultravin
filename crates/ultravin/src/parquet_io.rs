@@ -29,7 +29,7 @@ use parquet::file::properties::WriterProperties;
 
 use crate::adaptive::BatchFeedback;
 use crate::arrow_io::{
-    is_intish, is_stringish, vin_by_name, year_by_name, ArrowBatchRebatcher, ArrowDecoder,
+    is_intish, is_stringish, names, vin_by_name, year_by_name, ArrowBatchRebatcher, ArrowDecoder,
     ColumnNames,
 };
 use crate::db::Db;
@@ -245,11 +245,7 @@ impl FileState {
                 if cands.len() > 1 {
                     return Err(ParquetError::Config(format!(
                         "ambiguous caller-year column: {}",
-                        cands
-                            .iter()
-                            .map(|&i| schema.field(i).name().clone())
-                            .collect::<Vec<_>>()
-                            .join(", ")
+                        names(&schema, &cands)
                     )));
                 }
                 cands.first().copied()
@@ -351,10 +347,7 @@ fn one_candidate(cands: &[usize], schema: &SchemaRef, what: &str) -> Result<usiz
         ))),
         many => Err(ParquetError::Config(format!(
             "ambiguous {what} column candidates: {}",
-            many.iter()
-                .map(|&i| schema.field(i).name().clone())
-                .collect::<Vec<_>>()
-                .join(", ")
+            names(schema, many)
         ))),
     }
 }

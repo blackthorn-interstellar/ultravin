@@ -545,7 +545,7 @@ pub(crate) fn indices(schema: &SchemaRef, pred: impl Fn(&str) -> bool) -> Vec<us
         .collect()
 }
 
-fn names(schema: &SchemaRef, idx: &[usize]) -> String {
+pub(crate) fn names(schema: &SchemaRef, idx: &[usize]) -> String {
     idx.iter()
         .map(|&i| schema.field(i).name().as_str())
         .collect::<Vec<_>>()
