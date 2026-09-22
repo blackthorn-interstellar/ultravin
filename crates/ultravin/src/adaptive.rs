@@ -193,7 +193,7 @@ impl BatchFeedback {
                 _ => None,
             }
         });
-        if calibrating && output_bytes > 0 && rows > 0 {
+        if calibrating {
             state.tuner.learn_width(rows, output_bytes);
         }
         if let Some((
@@ -406,15 +406,7 @@ impl BatchTuner {
         // Snapshot the request against the estimate that produced this batch,
         // before learning its new width below.
         let requested = self.next_rows();
-        if output_bytes > 0 {
-            let measured = output_bytes as f64 / rows as f64;
-            self.bytes_per_row = if !self.memory_measured || measured > self.bytes_per_row {
-                measured
-            } else {
-                self.bytes_per_row * 0.75 + measured * 0.25
-            };
-            self.memory_measured = true;
-        }
+        self.learn_width(rows, output_bytes);
         if self.next_rows() != requested {
             self.cap_changed(rows == requested, elapsed);
             return;
