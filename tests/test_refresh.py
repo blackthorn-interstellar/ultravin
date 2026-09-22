@@ -141,7 +141,7 @@ def test_sweep_gate_fails_on_an_undocumented_oracle_crash() -> None:
 
 
 def test_sweep_gate_allows_a_documented_oracle_crash() -> None:
-    """The 7T0 malformed-class crash is documented (KNOWN_DEVIATIONS.md #1)."""
+    """A registered crash VIN is excused; the live registry may be empty."""
     crashed = {
         "total": 500,
         "exact_parity": 499,
@@ -149,7 +149,7 @@ def test_sweep_gate_allows_a_documented_oracle_crash() -> None:
         "examples": [],
         "oracle_errors": [{"vin": "7T0AAAAA0SA111111", "error": "InvalidRegularExpression(...)"}],
     }
-    assert refresh.sweep_gate(crashed).ok
+    assert refresh.sweep_gate(crashed, crash_vins=frozenset({"7T0AAAAA0SA111111"})).ok
 
 
 def test_sweep_gate_fails_when_a_crash_listed_vin_diverges() -> None:
@@ -234,16 +234,18 @@ def test_gates_excuse_nothing_when_the_classification_did_not_run() -> None:
     assert not refresh.corpus_gate(corpus).ok
 
 
-def _cells(*cells: tuple[str, int], exceptions: int = 0) -> dict:
+def _cells(*cells: tuple[str, int], exceptions: int = 0, **summary: int) -> dict:
+    counts = {
+        "stale_cells": len(cells),
+        "rows_only_in_cache": len(cells),
+        "rows_only_in_recompute": 0,
+        "cells_recompute_empty": 0,
+        "cache_exception_wmis": exceptions,
+    }
+    counts.update(summary)
     return {
         "dump": "2026_08",
-        "summary": {
-            "stale_cells": len(cells),
-            "rows_only_in_cache": len(cells),
-            "rows_only_in_recompute": 0,
-            "cells_recompute_empty": 0,
-            "cache_exception_wmis": exceptions,
-        },
+        "summary": counts,
         "cells": [[w, y, [11]] for w, y in cells],
     }
 
@@ -269,19 +271,36 @@ def test_stale_cache_gate_survives_a_first_refresh_with_no_baseline() -> None:
 
 
 def test_stale_cache_gate_fails_on_an_implausible_jump() -> None:
-    """Upstream churn moves tens of cells; a decoder charset regression re-lists
-    thousands, because every cell whose recompute moved now contradicts a cache
-    that did not. The gate cannot tell the two apart, so it stops and asks."""
+    """A large newly-stale count fails only in the charset-regression shape.
+
+    Schema-drop cache lag adds recompute-empty cells without inventing
+    recompute-only characters. A charset regression leaps
+    `rows_only_in_recompute`, or makes the whole cache look stale."""
     limit = refresh.STALE_CACHE_JUMP_LIMIT
-    head = _cells(("AAA", 2020))
+    head = _cells(("AAA", 2020), rows_only_in_recompute=10)
     just_under = _cells(("AAA", 2020), *((f"W{i:04d}", 2020) for i in range(limit)))
     assert refresh.stale_cache_gate(just_under, head, []).ok
-    over = _cells(("AAA", 2020), *((f"W{i:04d}", 2020) for i in range(limit + 1)))
-    gate = refresh.stale_cache_gate(over, head, [])
+    # Same cell count as a jump past the limit, but recompute-only rows did not
+    # leap — cache lag after schemas dropped, the 2026_09 shape.
+    schema_drop = _cells(
+        ("AAA", 2020),
+        *((f"W{i:04d}", 2020) for i in range(limit + 1)),
+        rows_only_in_recompute=8,
+        cells_recompute_empty=limit,
+    )
+    gate = refresh.stale_cache_gate(schema_drop, head, [])
+    assert gate.ok, gate.detail
+    assert "cache-lag/schema-drop" in gate.detail
+    charset = _cells(
+        ("AAA", 2020),
+        *((f"W{i:04d}", 2020) for i in range(limit + 1)),
+        rows_only_in_recompute=10 + limit + 1,
+    )
+    gate = refresh.stale_cache_gate(charset, head, [])
     assert not gate.ok
     assert "jump limit" in gate.detail
     # Healing is never suspicious: the cache catching up is the good outcome.
-    assert refresh.stale_cache_gate(head, over, []).ok
+    assert refresh.stale_cache_gate(head, charset, []).ok
 
 
 def test_stale_cache_gate_fails_when_the_proc_stops_reading_the_cache() -> None:

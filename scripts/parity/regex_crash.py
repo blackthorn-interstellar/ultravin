@@ -7,7 +7,8 @@ hands that character class straight to the Postgres regex engine, which rejects
 `InvalidRegularExpression` and returns no rows at all. ultravin's own
 `errors.rs::valid_chars_in_regex` compiles it — as SQL Server, the engine vPIC is
 authored on, also does — and decodes normally. Argued in full at
-docs/KNOWN_DEVIATIONS.md#regex-crash-7t0.
+docs/KNOWN_DEVIATIONS.md (the 2026_09 dump healed the rows; this predicate
+remains so intake would drop the class if they returned).
 
 The class is unbounded: every VIN whose decode reaches that schema crashes the
 oracle the same way, and exact-VIN dedupe cannot see that two of them are one

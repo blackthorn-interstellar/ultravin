@@ -86,15 +86,14 @@ LOOKUP_REPORT_CAP = 20
 # re-probed each refresh (known_problems_gate): an excuse that stopped
 # reproducing is stale and fails too.
 #
-# The 65 crash VINs are the original 2026_06 report, the 62 more the 2026_07
-# campaign hit, and the two the 2026-08-16 backlog probe hit; all 65 are WMI
-# 7T0. They are a *sample* of an unbounded class —
-# any 7T0 VIN of model year 2023-2025 whose decode matches vinschema 24522 aborts
-# the same way — so a future sweep may find a 7T0 VIN that is not registered and
-# fail the gate. That failure is correct: it should be re-verified against the
-# entry's evidence and then added, not assumed.
-# freeze.py needs none of this: it skips oracle-erroring VINs before they ever
-# reach the corpus, and surfaces new skips in the report as follow-ups.
+# oracle-crash entries are a *sample* of an unbounded class (a dump defect that
+# aborts spvindecode on every VIN that reaches it). A future sweep may find a
+# member that is not registered and fail the gate — that failure is correct: it
+# should be re-verified against the evidence and then added, not assumed. The
+# 2026_09 dump healed the `[1-A-JT]` / WMI 7T0 class that used to fill this
+# set; `scripts/parity/regex_crash.py` still recognises the record shape if it
+# returns. freeze.py needs none of this: it skips oracle-erroring VINs before
+# they ever reach the corpus, and surfaces new skips in the report as follow-ups.
 KNOWN_PROBLEMS = ROOT / "scripts" / "known_problems.json"
 PROBLEM_KINDS = ("oracle-crash", "deviation")
 PROBLEM_SCOPES = ("error-fields", "clean-decode")
@@ -308,14 +307,32 @@ def corpus_gate(corpus: dict, stale_cache_vins: frozenset[str] = frozenset()) ->
     return Gate("corpus", not unexpected, detail)
 
 
-# Legitimate month-over-month churn in the stale-cell list is tens of cells: a
-# rebuild drops some pattern rows and the cache lags on the handful of WMI-years
-# they covered. A charset regression in the decoder looks nothing like that — it
-# re-lists thousands at once, because every cell whose recompute moved now
-# contradicts a cache that did not. So a jump this large stops the refresh: the
-# answer key must be green and a human must read the scan report before a month
-# that big is accepted.
+# A newly-stale count past this is large enough to inspect the *shape* of the
+# jump. Schema-drop churn (NHTSA drops covering schemas, cache lags) empties
+# the recompute on a cluster of WMI-years: `cells_recompute_empty` up,
+# `rows_only_in_recompute` flat or down. A decoder charset regression moves
+# recompute *contents* on cells that still have coverage: `rows_only_in_recompute`
+# leaps, or the whole cache suddenly looks stale. The gate rejects only those.
 STALE_CACHE_JUMP_LIMIT = 500
+
+
+def _charset_regression_shape(doc: dict, head_doc: dict) -> bool:
+    """True when a large newly-stale jump looks like recompute contents moved.
+
+    Schema-drop cache lag (2026_09: 900 newly stale, 871 recompute-empty, Honda
+    cells healed) does not invent recompute-only characters. Emptying every
+    recompute would also explode `stale_cells` toward the whole cache — that
+    is the other reject, so a charset bug cannot hide behind the schema-drop
+    shape.
+    """
+    now = doc.get("summary") or {}
+    was = head_doc.get("summary") or {}
+    recompute_jump = int(now.get("rows_only_in_recompute") or 0) - int(was.get("rows_only_in_recompute") or 0)
+    if recompute_jump > STALE_CACHE_JUMP_LIMIT:
+        return True
+    stale_now = int(now.get("stale_cells") or 0)
+    stale_was = int(was.get("stale_cells") or 0)
+    return bool(stale_was) and stale_now > max(stale_was * 2, stale_was + 5 * STALE_CACHE_JUMP_LIMIT)
 
 
 def stale_cache_gate(doc: dict, head_doc: dict | None, problems: list[str]) -> Gate:
@@ -327,10 +344,10 @@ def stale_cache_gate(doc: dict, head_doc: dict | None, problems: list[str]) -> G
     Three things do fail. An internally inconsistent list means the file was
     hand-edited or its two halves came from different scans, and every divergence
     excused on the strength of it is then unfounded. A newly-stale count past
-    `STALE_CACHE_JUMP_LIMIT` is the shape a decoder charset regression takes, not
-    the shape upstream churn takes. And a non-empty
-    `wmiyearvalidchars_cacheexceptions` means the proc no longer reads the cache
-    the way this whole scan assumes it does."""
+    `STALE_CACHE_JUMP_LIMIT` *in the charset-regression shape* (recompute-only
+    rows leaping, or the whole cache going stale) is not upstream churn. And a
+    non-empty `wmiyearvalidchars_cacheexceptions` means the proc no longer reads
+    the cache the way this whole scan assumes it does."""
     cells = {(wmi, year) for wmi, year, *_ in doc["cells"]}
     detail = f"{len(cells):,} stale cells in {doc['dump']}"
     implausible: list[str] = []
@@ -339,11 +356,20 @@ def stale_cache_gate(doc: dict, head_doc: dict | None, problems: list[str]) -> G
         newly, healed = cells - was, was - cells
         detail += f"; vs {head_doc.get('dump')}: {len(newly):+,} newly stale, {len(healed):,} healed"
         if len(newly) > STALE_CACHE_JUMP_LIMIT:
-            implausible.append(
-                f"{len(newly):,} newly stale cells exceeds the {STALE_CACHE_JUMP_LIMIT:,} jump limit — "
-                "upstream churn is tens of cells, a decoder charset regression re-lists thousands; "
-                "confirm `answerkey verify` is green and read target/refresh/stale_cache.json before accepting"
-            )
+            if _charset_regression_shape(doc, head_doc):
+                implausible.append(
+                    f"{len(newly):,} newly stale cells exceeds the {STALE_CACHE_JUMP_LIMIT:,} jump limit "
+                    "in the charset-regression shape (rows_only_in_recompute leapt, or stale_cells "
+                    "doubled) — confirm `answerkey verify` is green and read "
+                    "target/refresh/stale_cache.json before accepting"
+                )
+            else:
+                now_r = (doc.get("summary") or {}).get("rows_only_in_recompute")
+                was_r = (head_doc.get("summary") or {}).get("rows_only_in_recompute")
+                detail += (
+                    f"; {len(newly):,} newly stale is cache-lag/schema-drop "
+                    f"(rows_only_in_recompute {was_r} → {now_r}), not a charset shift"
+                )
     exceptions = doc.get("summary", {}).get("cache_exception_wmis", 0)
     if exceptions:
         implausible.append(
@@ -357,13 +383,17 @@ def stale_cache_gate(doc: dict, head_doc: dict | None, problems: list[str]) -> G
     return Gate("stale-cache", not problems and not implausible, detail)
 
 
-def sweep_gate(report: dict, stale_cache_vins: frozenset[str] = frozenset()) -> Gate:
+def sweep_gate(
+    report: dict,
+    stale_cache_vins: frozenset[str] = frozenset(),
+    crash_vins: frozenset[str] = ORACLE_CRASH_VINS,
+) -> Gate:
     total, exact = report["total"], report["exact_parity"]
     # A VIN the oracle crashed on produced no answer, so it is neither parity nor
     # a diff. sweep.py used to die on the first one; now it reports them and the
     # verdict happens here, so an *undocumented* crash can never pass unnoticed.
     crashed = sorted({e["vin"] for e in report.get("oracle_errors", [])})
-    undocumented_crashes = [v for v in crashed if v not in ORACLE_CRASH_VINS]
+    undocumented_crashes = [v for v in crashed if v not in crash_vins]
     crash_detail = ""
     if crashed:
         crash_detail = f"; oracle crashed on {len(crashed)} VIN(s) (documented: {not undocumented_crashes})"
