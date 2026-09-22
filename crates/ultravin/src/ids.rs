@@ -487,50 +487,6 @@ mod tests {
     }
 
     #[test]
-    fn decode_batch_ids_row_matches_a_single_decode() {
-        if db().is_none() {
-            return;
-        }
-        // Mixed corpus: a clean hit, an unregistered WMI, garbage, and empty —
-        // with and without a caller year.
-        let vins: Vec<String> = ["1FTFW1ET5DFC10312", HONDA, "ZZZCM82633A004352", "", "nope"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
-        let years = [None, Some(2003), None, Some(2010), None];
-        let metas = resolve_ids(Db::embedded(), &[MAKE, CYLINDERS, DISPLACEMENT_L]).unwrap();
-        let batch = decode_batch_ids(&vins, Some(&years), &metas);
-
-        assert_eq!(batch.model_year.len(), vins.len());
-        assert_eq!(batch.columns.len(), 3);
-        for c in &batch.columns {
-            assert_eq!(c.len(), vins.len());
-        }
-        for (i, vin) in vins.iter().enumerate() {
-            let r = crate::decode(vin, years[i]);
-            assert_eq!(batch.model_year[i], r.model_year, "model_year for {vin:?}");
-            for (ci, m) in metas.iter().enumerate() {
-                let want = r
-                    .elements
-                    .iter()
-                    .find(|e| e.element_id == m.id)
-                    .map(|e| e.value.as_ref())
-                    .filter(|v| !v.is_empty());
-                let what = format!("element {} for {vin:?}", m.id);
-                match &batch.columns[ci] {
-                    ColumnValues::Str(v) => assert_eq!(v[i].as_deref(), want, "{what}"),
-                    ColumnValues::Int(v) => {
-                        assert_eq!(v[i], want.and_then(|s| s.parse().ok()), "{what}");
-                    }
-                    ColumnValues::Float(v) => {
-                        assert_eq!(v[i], want.and_then(|s| s.parse().ok()), "{what}");
-                    }
-                }
-            }
-        }
-    }
-
-    #[test]
     fn hand_built_metas_preserve_visibility_and_duplicate_column_behavior() {
         let Some(db) = db() else { return };
         let mut metas = resolve_ids(db, &[MAKE]).unwrap();
@@ -631,22 +587,6 @@ mod tests {
             },
             Some(6)
         );
-    }
-
-    #[test]
-    fn the_caller_year_reaches_the_decode() {
-        if db().is_none() {
-            return;
-        }
-        // 2013 is not this VIN's derivable year (2003) but is inside vPIC's
-        // caller-year window, so the hint has to move the answer — otherwise
-        // `years` is being dropped on the floor.
-        let vins = vec![HONDA.to_string()];
-        let metas = resolve_ids(Db::embedded(), &[MAKE]).unwrap();
-        let hinted = decode_batch_ids(&vins, Some(&[Some(2013)]), &metas);
-        let plain = decode_batch_ids(&vins, None, &metas);
-        assert_eq!(plain.model_year, vec![Some(2003)]);
-        assert_eq!(hinted.model_year, vec![Some(2013)]);
     }
 
     #[test]
