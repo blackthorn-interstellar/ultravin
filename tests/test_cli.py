@@ -26,7 +26,9 @@ from tests.vin_samples import VINS
 
 HONDA = "1HGCM82633A004352"  # decodes to model year 2003 with no hint
 
-runner = CliRunner()
+# typer/rich wrap parameter errors to the console width; a long tmp_path
+# otherwise splits filenames like `missing.parquet` across lines.
+runner = CliRunner(env={"COLUMNS": "200"})
 
 
 def cli(*args: str, stdin: str | None = None) -> Result:
