@@ -55,11 +55,14 @@ Test:
 - docs DATA_REFRESH.md:99 "the 63 crash VINs" (now 66): historical rationale, true when written, and any count there drifts with each data refresh.
 - bug: `columns=[2**31]` gives `TypeError ... got int` instead of `ValueError: unknown element_id`: skeptic — contrived boundary input, element ids are in the hundreds, speculative hardening.
 - drop the `--no-default-features` clippy row (`Makefile:33`, `release.yaml:87`): redundant for today's code but 0.1s warm, and the row guards future feature-gated code — fails the reversal test.
+- share `arrow_io::tests`' seven helpers (`loaded`, `batch`, `utf8`, `i32s`, `out_names`, `col_utf8`, `col_i32`) with `parquet_io::tests` via `pub(crate)` (-46 lines, compiled and green under both feature sets): skeptic — fails the reversal test; restoring self-contained sibling test modules is equally defensible, so it trades duplication for coupling.
+- hoist `ids.rs`'s duplicated 3-arm `IdsDType → ColumnValues::with_capacity` match into a helper, and the bindings' repeated full/flat `decode_json_at` fork into `one_json`: each removes two 5-line blocks but adds a 7-line fn — net −1/0 lines for a new name. Not measurably less.
+- `scripts/refresh.py` `UV_RUN`/`UV_PY` constants for the eight `["uv", "run", "--frozen", "--", "python", "-m", ...]` prefixes: ruff still wraps the three long argv lists vertically, so it saves ~13 lines by adding splats and two module constants; explicit argv is an equally defensible undo. Fails the reversal test.
 - delete `test_answerkey.py::test_element_144_collation_reorder_still_collides`, `::test_element_144_still_compares_its_contents`, `::test_other_elements_keep_their_order` as twins of `test_normalize.py`: skeptic — the answerkey literals are digit charsets `(6:_123456789)` where the normalize ones are letters, so a regex narrowed to `[A-Z_]` or a lost `9` fails only them; and `== rows` is the only check that the normalizer returns non-144 rows unchanged (a copied row with an added key would pass the diff-based twin).
 
 ## Consecutive empty iterations
 
-0
+1
 
 ## Open questions
 
@@ -76,7 +79,7 @@ Scout findings not yet through the skeptic. Re-verify before acting.
 
 - bug (boundary inputs, same shape as the rejected `columns=[2**31]`; probably reject): `--year 2147483648` (`decode`, `decode-batch`) → `OverflowError` traceback exit 1 while `--year 99999` is a clean error-12 decode; `decode_stream` with an int64 year column value ≥ 2³¹ silently nulls both the passthrough and the hint (`arrow_io.rs:373` safe cast) where `decode(year=2**31)` raises; `--columns 2147483648` → TypeError "got int"; `--batch-size 2**63` → pyo3 enum TypeError instead of the unreachable "too large" ValueError at `ultravin-py/src/lib.rs:1021`; `--batch-memory-mb`/`--sample-rows` ≥ 2⁶⁴ → OverflowError. Note spVinDecode's `@modelyear` is SQL `int`, so the i32 bound itself is oracle-faithful.
 - checked, not a contradiction: `generate(-1)`, `seeded(limit=-1)`, `decode_stream(sample_rows=-1)` etc. raise `OverflowError` from the unsigned conversion; the stub promises `ValueError` only for `n > 10,000,000` and for unknown column / element id / ambiguous autodetect, never for negatives. Changing the exception type would be speculative hardening.
-- simplify (scouted 2026-09-21, not yet through the skeptic; none in a coverage-gated file): `ultravin-py/src/lib.rs:333-337,402-406` repeat the full/flat `decode_json_at` fork (-4, same move as `decode_clock`); `parquet_io.rs` test module duplicates seven `arrow_io` test helpers byte-for-byte (-40, test-only); `ids.rs:235-239,254-258` same 3-arm dtype match twice (-4); `arrow_io.rs:558-601` `vin_by_name`/`year_by_name` differ only in candidates + error label (-14, but the VIN message has a tail the year one lacks); `generate.rs:1064-1078,1237-1249` `pairwise`/`seeded` share a 12-line per-schema prologue (-11); `scripts/refresh.py` spells `["uv","run","--frozen","--","python","-m"]` eight times (-40, only one site is tested).
+- simplify (scouted 2026-09-21, uninspected; count the helper's own lines before acting — the scout's other estimates were off by the size of the new fn): `arrow_io.rs:558-601` `vin_by_name`/`year_by_name` differ in candidate list and error label (the VIN message has an " all match by name" tail the year one lacks) (-14 claimed); `generate.rs:1064-1078,1237-1249` `pairwise`/`seeded` share a 12-line per-schema prologue (-11 claimed, needs a 4-tuple-returning helper).
 - delete test (coverage-gated file, skip unless the human installs `cargo-llvm-cov`): `checkdigit.rs::short_vin_returns_none` — the mutation test's inline reference already hard-codes `len != 17 → None` for 0/16/18-char inputs.
 - clean (do not re-probe): all six decode entry points agree on 3,562 VINs × 13 year hints, plain and full; empty/blank/CRLF stdin, zero-row parquet, dst-inside-src, duplicate columns, second use of a stream, generate filters and determinism all behave.
 
