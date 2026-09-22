@@ -45,6 +45,7 @@ Test:
 - 2026-09-22 delete: `stale_cache.is_known_stale_cell` was `bool(stale_positions(...))` with only test callers; the five assertions now call `stale_positions` (-9 lines). Skeptic accepted.
 - 2026-09-22 simplify: `lib.rs` dropped private pass-through wrappers (`batch`, `batch_json`, `batch_json_at`, `decode_items_with_buffers_and_workspace`) and `decode_flat`/`decode_json`/non-`_at` batch-json now delegate to their `_at` siblings with `now_micros()` instead of re-inlining the clock (-65 lines, one clock read each, same year). Skeptic accepted.
 - 2026-09-22 simplify: private `_BatchTuner` is always predictive — every constructor passed `predictive=True`, so the flag, the non-predictive arm and the ignored `initial_rows`/`max_rows` knobs went (-37 lines over 6 files). `new_predictive` errors map to ValueError (pool-build was RuntimeError; no handler cares). Skeptic accepted.
+- 2026-09-22 simplify: importer `run` writes sequences/constraints/_misc through one loop instead of three copy-pasted blocks (-6 lines); September dump re-imported: rkyv + manifest byte-identical, `vpic/` tree identical. Skeptic accepted this hunk only.
 
 ## Rejected
 
@@ -68,6 +69,8 @@ Test:
 - delete `test_answerkey.py::test_element_144_collation_reorder_still_collides`, `::test_element_144_still_compares_its_contents`, `::test_other_elements_keep_their_order` as twins of `test_normalize.py`: skeptic — the answerkey literals are digit charsets `(6:_123456789)` where the normalize ones are letters, so a regex narrowed to `[A-Z_]` or a lost `9` fails only them; and `== rows` is the only check that the normalizer returns non-144 rows unchanged (a copied row with an added key would pass the diff-based twin).
 - delete `BatchTunerStatus` + both `status()` methods in `adaptive.rs` as callerless: skeptic — `feedback_includes_output_time_and_jobs_are_independent` (adaptive.rs ~796-804) calls `.status()` three times; the `git grep -E '\bstatus\(\)'` evidence missed them.
 - delete `decode_batch_managed` / `decode_batch_flat_managed(_at)` free fns + `Db` methods (no in-repo callers but one test): documented public crate API (crates/ultravin/README.md "managed batches" section); zero in-repo callers is no evidence for a library, and the compat waiver covered undocumented dead items. Fails the reversal test.
+- importer `sha256_file` via `std::io::copy`: skeptic — `io::copy` retries `Interrupted` where the loop propagates it; not strictly equivalent.
+- importer TABLE/VIEW/TYPE branches collapsed via `format!("schema/{}s", ...)`: skeptic — computed pluralized paths hide the literal output dirs from grep; restoring them is equally defensible.
 
 ## Consecutive empty iterations
 
@@ -94,7 +97,6 @@ Scout findings not yet through the skeptic. Re-verify before acting.
 - clean (do not re-probe): all six decode entry points agree on 3,562 VINs × 13 year hints, plain and full; empty/blank/CRLF stdin, zero-row parquet, dst-inside-src, duplicate columns, second use of a stream, generate filters and determinism all behave.
 
 - simplify (2026-09-22 scout): `_batch_cli.py` `write_jsonl` manual next()/StopIteration chunk loop -> `list(islice(parsed, n))` (net -10).
-- simplify (2026-09-22 scout): `crates/ultravin-build/src/main.rs` — `sha256_file` via `io::copy`, TABLE/VIEW/TYPE branch collapse in `finalize`, grouped-output loop (net -26); guard is a real-dump `diff -r` of importer output (identical, rkyv byte-identical).
 - delete test (2026-09-22 scout, break-tested): `test_caller_year.py::test_json_paths_match_dict_paths` — full/flat None-year and shape-swap breaks in the binding each fail `test_provenance_clock.py::test_every_decode_shape_uses_the_same_frozen_clock` and others.
 - perf (needs human, new dev dep): `pytest -n auto` (pytest-xdist) cut pytest ~26s -> ~10.5s warm, 6 runs no flakes; also pyo3 recompiles twice per warm run because maturin sets `PYO3_CONFIG_FILE` and clippy does not (~4s, no clean fix found).
 - docs (low value, counts drift): `docs/CORPUS.md:143,155,162,164` allowance counts (39/138/26/16) vs `scripts/coverage_allowances.json` today (38/136/29/11); `docs/RELEASE.md:27` "~82MB" for an 83.4 MB artifact the same doc calls 83MB at :39; `docs/SCANNER-NOTES.md` cites `db.rs` unsafe-site line numbers, `.gitignore:120`, `BENCHMARKS.md:202`, `data-review.yaml:14` that have all moved.

@@ -323,20 +323,14 @@ fn run(cli: &Cli) -> Result<(), Box<dyn Error>> {
     if let Some(text) = trim_block(&preamble) {
         write_file(&cli.out.join("schema/_preamble.sql"), &text)?;
     }
-    if !imp.sequences.is_empty() {
-        write_file(
-            &cli.out.join("schema/sequences.sql"),
-            &imp.sequences.join("\n\n"),
-        )?;
-    }
-    if !imp.constraints.is_empty() {
-        write_file(
-            &cli.out.join("schema/constraints.sql"),
-            &imp.constraints.join("\n\n"),
-        )?;
-    }
-    if !imp.misc.is_empty() {
-        write_file(&cli.out.join("schema/_misc.sql"), &imp.misc.join("\n\n"))?;
+    for (name, parts) in [
+        ("sequences.sql", &imp.sequences),
+        ("constraints.sql", &imp.constraints),
+        ("_misc.sql", &imp.misc),
+    ] {
+        if !parts.is_empty() {
+            write_file(&cli.out.join("schema").join(name), &parts.join("\n\n"))?;
+        }
     }
 
     // Build the embedded artifact (deterministic content-addressed product).
