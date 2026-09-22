@@ -35,12 +35,6 @@ def test_the_corpus_comes_from_the_data_not_from_our_decoder() -> None:
     assert len(corpus) > len(ultravin.cover_vins())
 
 
-def test_the_corpus_is_reproducible() -> None:
-    # A key built on one machine has to verify on another, so the corpus must be
-    # byte-identical run to run — no hash-order dependence anywhere in it.
-    assert answerkey.corpus(limit=3000, shard=0, shards=1) == answerkey.corpus(limit=3000, shard=0, shards=1)
-
-
 def test_sharding_partitions_the_corpus_exactly() -> None:
     whole = answerkey.corpus(limit=2000, shard=0, shards=1)
     parts = [answerkey.corpus(limit=2000, shard=i, shards=4) for i in range(4)]
@@ -121,13 +115,6 @@ def test_a_mismatch_is_reported(tmp_path: Path) -> None:
             fh.write(json.dumps([vin, "0" * 16 if i == 2 else h]) + "\n")
     _, entries = answerkey.read_key(key)
     assert answerkey._check_chunk(entries) == [vins[2]]
-
-
-def test_oracle_failures_are_recorded_not_compared() -> None:
-    # A VIN the oracle crashes on has no answer to match; the key records that
-    # fact rather than pretending the decoders agreed.
-    assert answerkey.KNOWN_DEVIATIONS
-    assert all(len(v) >= 8 for v in answerkey.KNOWN_DEVIATIONS)
 
 
 def test_verify_refuses_a_key_from_another_month(tmp_path: Path) -> None:

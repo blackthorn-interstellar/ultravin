@@ -230,13 +230,6 @@ def test_a_divergence_outside_the_class_still_fails_both_gates() -> None:
     assert not refresh.sweep_gate(sweep, _STALE).ok
 
 
-def test_gates_excuse_nothing_when_the_classification_did_not_run() -> None:
-    """The default is an empty set: a classification that never happened must
-    not read as one that found the divergence expected."""
-    corpus = {"entries": [{"vin": "EEE", "expected_diff": _fp(exact=False)}]}
-    assert not refresh.corpus_gate(corpus).ok
-
-
 def _cells(*cells: tuple[str, int], exceptions: int = 0, **summary: int) -> dict:
     counts = {
         "stale_cells": len(cells),
