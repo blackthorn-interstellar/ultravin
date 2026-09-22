@@ -390,15 +390,7 @@ pub fn decode_at(input: &str, year: Option<i32>, now_micros: i64) -> DecodeResul
 /// [`decode`] with the [`FlatResult`] shape: elements collapsed to
 /// `variable -> value`, the 13 per-element provenance columns dropped.
 pub fn decode_flat(input: &str, year: Option<i32>) -> FlatResult<'static> {
-    let secs = now_secs();
-    decode_items(
-        Db::embedded(),
-        input,
-        secs * 1_000_000,
-        epoch_to_year(secs),
-        year,
-    )
-    .flat()
+    decode_flat_at(input, year, now_micros())
 }
 
 /// [`decode_flat`] at an explicit instant.
@@ -521,7 +513,7 @@ impl Db {
         inputs: &[String],
         years: Option<&[Option<i32>]>,
     ) -> Vec<DecodeResult<'_>> {
-        batch(self, inputs, years, RawResult::full)
+        batch_at(self, inputs, years, now_micros(), RawResult::full)
     }
 
     /// [`Db::decode_batch`] at an explicit instant.
@@ -559,7 +551,7 @@ impl Db {
         inputs: &[String],
         years: Option<&[Option<i32>]>,
     ) -> Vec<FlatResult<'_>> {
-        batch(self, inputs, years, RawResult::flat)
+        batch_at(self, inputs, years, now_micros(), RawResult::flat)
     }
 
     /// [`Db::decode_batch_flat`] at an explicit instant.
@@ -767,15 +759,6 @@ fn collect_in_input_order<T: Send>(
 
 /// Shared body of the batch paths: decode every input in parallel over the shared
 /// archive, mapped through `shape`. Output order matches `inputs`.
-fn batch<'a, T: Send>(
-    db: &'a Db,
-    inputs: &[String],
-    years: Option<&[Option<i32>]>,
-    shape: impl Fn(RawResult<'a>) -> T + Sync,
-) -> Vec<T> {
-    batch_at(db, inputs, years, now_micros(), shape)
-}
-
 fn batch_at<'a, T: Send>(
     db: &'a Db,
     inputs: &[String],
@@ -811,14 +794,7 @@ fn restore_input_order<T>(order: &mut [u32], values: &mut [T]) {
 /// Decode one VIN to a compact JSON object string (same shape as the [`decode`]
 /// dict). Serializing in Rust avoids the per-field Python dict construction.
 pub fn decode_json(input: &str, year: Option<i32>) -> String {
-    let secs = now_secs();
-    json::encode(decode_items(
-        Db::embedded(),
-        input,
-        secs * 1_000_000,
-        epoch_to_year(secs),
-        year,
-    ))
+    decode_json_at(input, year, now_micros())
 }
 
 /// [`decode_json`] at an explicit instant.
@@ -852,7 +828,7 @@ pub fn decode_json_flat_at(input: &str, year: Option<i32>, now_micros: i64) -> S
 /// otherwise caps `decode_batch`. `json.loads` of the output equals
 /// `decode_batch` element-for-element.
 pub fn decode_batch_json(inputs: &[String], years: Option<&[Option<i32>]>) -> String {
-    batch_json(inputs, years, json::encode)
+    decode_batch_json_at(inputs, years, now_micros())
 }
 
 /// [`decode_batch_json`] at an explicit instant.
@@ -861,14 +837,12 @@ pub fn decode_batch_json_at(
     years: Option<&[Option<i32>]>,
     now_micros: i64,
 ) -> String {
-    batch_json_at(inputs, years, now_micros, json::encode)
+    batch_json_framed(inputs, years, now_micros, json::encode, false)
 }
 
 /// [`decode_batch_json`] with the [`FlatResult`] shape.
 pub fn decode_batch_json_flat(inputs: &[String], years: Option<&[Option<i32>]>) -> String {
-    batch_json(inputs, years, |r| {
-        serde_json::to_string(&r.flat()).expect("FlatResult is infallibly serializable")
-    })
+    decode_batch_json_flat_at(inputs, years, now_micros())
 }
 
 /// [`decode_batch_json_flat`] at an explicit instant.
@@ -877,28 +851,13 @@ pub fn decode_batch_json_flat_at(
     years: Option<&[Option<i32>]>,
     now_micros: i64,
 ) -> String {
-    batch_json_at(inputs, years, now_micros, |r| {
-        serde_json::to_string(&r.flat()).expect("FlatResult is infallibly serializable")
-    })
-}
-
-/// Shared body of the batch-JSON paths: decode + encode in parallel,
-/// then stitch one array serially.
-fn batch_json(
-    inputs: &[String],
-    years: Option<&[Option<i32>]>,
-    encode: impl Fn(RawResult<'static>) -> String + Sync,
-) -> String {
-    batch_json_at(inputs, years, now_micros(), encode)
-}
-
-fn batch_json_at(
-    inputs: &[String],
-    years: Option<&[Option<i32>]>,
-    now_micros: i64,
-    encode: impl Fn(RawResult<'static>) -> String + Sync,
-) -> String {
-    batch_json_framed(inputs, years, now_micros, encode, false)
+    batch_json_framed(
+        inputs,
+        years,
+        now_micros,
+        |r| serde_json::to_string(&r.flat()).expect("FlatResult is infallibly serializable"),
+        false,
+    )
 }
 
 /// Decode a batch as newline-delimited JSON, including a trailing newline.
@@ -1092,12 +1051,13 @@ pub(crate) fn decode_full_reusing<'a>(
     } = previous;
     drop((error_codes, corrected_vin));
     elements.clear();
-    decode_items_with_buffers_and_workspace(
+    decode_items_with_pruning_and_buffers_workspace(
         db,
         input,
         now_micros,
         current_year,
         caller_year,
+        true,
         vin,
         wmi,
         descriptor,
@@ -1114,12 +1074,13 @@ pub(crate) fn decode_full_with_workspace<'a>(
     caller_year: Option<i32>,
     workspace: &mut DecodeWorkspace<'a>,
 ) -> DecodeResult<'a> {
-    decode_items_with_buffers_and_workspace(
+    decode_items_with_pruning_and_buffers_workspace(
         db,
         input,
         now_micros,
         current_year,
         caller_year,
+        true,
         String::new(),
         String::new(),
         String::new(),
@@ -1298,32 +1259,6 @@ fn decode_items<'a>(
     caller_year: Option<i32>,
 ) -> RawResult<'a> {
     decode_items_with_pruning(db, input, now_micros, current_year, caller_year, true)
-}
-
-#[allow(clippy::too_many_arguments)]
-fn decode_items_with_buffers_and_workspace<'a>(
-    db: &'a Db,
-    input: &str,
-    now_micros: i64,
-    current_year: i32,
-    caller_year: Option<i32>,
-    vin: String,
-    wmi: String,
-    descriptor: String,
-    workspace: &mut DecodeWorkspace<'a>,
-) -> RawResult<'a> {
-    decode_items_with_pruning_and_buffers_workspace(
-        db,
-        input,
-        now_micros,
-        current_year,
-        caller_year,
-        true,
-        vin,
-        wmi,
-        descriptor,
-        workspace,
-    )
 }
 
 fn decode_items_with_pruning<'a>(
