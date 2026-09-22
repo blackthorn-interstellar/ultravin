@@ -1,0 +1,540 @@
+diff --git a/crates/ultravin/src/decode.rs b/crates/ultravin/src/decode.rs
+index 0416851..7f57044 100644
+--- a/crates/ultravin/src/decode.rs
++++ b/crates/ultravin/src/decode.rs
+@@ -406,32 +406,18 @@ pub(crate) fn decode_core_into<'a>(
+     // Pattern ids are unique, so the order is total — no need for a stable sort
+     // (which allocates a scratch buffer).
+     scratch.matched_patterns.sort_unstable_by_key(|&(id, _)| id);
+-    for &(_, index) in &scratch.matched_patterns {
+-        let p = &db.patterns()[index as usize];
+-        items.push(DecodingItem {
+-            created_on: p.createdon_key.to_native(),
+-            pattern_id: p.id.to_native(),
+-            keys: uppercase_key(db.s(p.keys.to_native())),
+-            vin_schema_id: p.vinschemaid.to_native(),
+-            wmi_id: wmiid,
+-            element_id: p.elementid.to_native(),
+-            attribute_id: Cow::Borrowed(db.s(p.attributeid.to_native())),
+-            value: Cow::Borrowed("XXX"),
+-            source: Cow::Borrowed("Pattern"),
+-            priority: *scratch
+-                .schema_yearfrom
+-                .get(&p.vinschemaid.to_native())
+-                .unwrap_or(&0),
+-            to_be_qced: false,
+-        });
+-    }
+-
+     // --- (a) EngineModelPattern (priority 50).
+-    if let Some(idx) = pick_element18(&items) {
+-        let em_name = items[idx].attribute_id.trim().to_ascii_lowercase();
+-        let keys = items[idx].keys.clone();
+-        let pattern_id = items[idx].pattern_id;
+-        let vin_schema_id = items[idx].vin_schema_id;
++    if let Some(index) =
++        pick_pattern_element18(db, &scratch.matched_patterns, &scratch.schema_yearfrom)
++    {
++        let pattern = &db.patterns()[index as usize];
++        let em_name = db
++            .s(pattern.attributeid.to_native())
++            .trim()
++            .to_ascii_lowercase();
++        let keys = uppercase_key(db.s(pattern.keys.to_native()));
++        let pattern_id = pattern.id.to_native();
++        let vin_schema_id = pattern.vinschemaid.to_native();
+         if let Some(em) = db.enginemodel_by_norm(&em_name) {
+             for child in db.enginemodelpatterns_for(em.id.to_native()) {
+                 items.push(DecodingItem {
+@@ -527,8 +513,15 @@ pub(crate) fn decode_core_into<'a>(
+     // placeholders; the matched VIN digits become the value directly.
+     append_formula_patterns(db, &mut items, wmiid, var_keys, model_year);
+ 
+-    // --- Dedup (once).
+-    dedup_per_element(&mut items);
++    // --- Dedup (once). Ordinary Pattern rows remain compact archive indices
++    // until this point, so losing matches never construct DecodingItems.
++    dedup_patterns_and_items(
++        db,
++        wmiid,
++        &scratch.matched_patterns,
++        &scratch.schema_yearfrom,
++        &mut items,
++    );
+ 
+     // --- Make 26 (post-dedup, never re-deduped).
+     append_make(
+@@ -658,29 +651,62 @@ fn formula_value(var_keys: &str, keys: &str) -> String {
+     String::from_utf8_lossy(&vb[first..end]).into_owned()
+ }
+ 
+-/// Pick the element-18 item by (Priority DESC, CreatedOn DESC, id DESC).
+-fn pick_element18(items: &[DecodingItem]) -> Option<usize> {
+-    let mut best: Option<usize> = None;
+-    for (i, it) in items.iter().enumerate() {
+-        if it.element_id != 18 {
++/// Pick the element-18 Pattern by (Priority DESC, CreatedOn DESC, id DESC).
++/// This occurs before EngineModelPattern insertion and before dedup.
++fn pick_pattern_element18(
++    db: &Db,
++    patterns: &[(i32, u32)],
++    schema_yearfrom: &IntMap<i32, i32>,
++) -> Option<u32> {
++    let mut best: Option<(usize, u32)> = None;
++    for (i, &(_, index)) in patterns.iter().enumerate() {
++        let pattern = &db.patterns()[index as usize];
++        if pattern.elementid.to_native() != 18 {
+             continue;
+         }
++        let priority = *schema_yearfrom
++            .get(&pattern.vinschemaid.to_native())
++            .unwrap_or(&0);
+         match best {
+-            None => best = Some(i),
+-            Some(b) => {
+-                let cur = &items[b];
+-                let better = it.priority > cur.priority
+-                    || (it.priority == cur.priority
+-                        && created_desc_nulls_first(it.created_on, cur.created_on)
+-                            == Ordering::Less)
+-                    || (it.priority == cur.priority && it.created_on == cur.created_on && i > b);
++            None => best = Some((i, index)),
++            Some((best_i, best_index)) => {
++                let current = &db.patterns()[best_index as usize];
++                let current_priority = *schema_yearfrom
++                    .get(&current.vinschemaid.to_native())
++                    .unwrap_or(&0);
++                let created_on = pattern.createdon_key.to_native();
++                let current_created_on = current.createdon_key.to_native();
++                let better = engine_pattern_better(
++                    priority,
++                    created_on,
++                    i,
++                    current_priority,
++                    current_created_on,
++                    best_i,
++                );
+                 if better {
+-                    best = Some(i);
++                    best = Some((i, index));
+                 }
+             }
+         }
+     }
+-    best
++    best.map(|(_, index)| index)
++}
++
++fn engine_pattern_better(
++    priority: i32,
++    created_on: i64,
++    insertion: usize,
++    current_priority: i32,
++    current_created_on: i64,
++    current_insertion: usize,
++) -> bool {
++    priority > current_priority
++        || (priority == current_priority
++            && created_desc_nulls_first(created_on, current_created_on) == Ordering::Less)
++        || (priority == current_priority
++            && created_on == current_created_on
++            && insertion > current_insertion)
+ }
+ 
+ /// CreatedOn DESC with NULLs first (i.e. `Less` == ranks earlier / wins).
+@@ -693,72 +719,186 @@ fn created_desc_nulls_first(a: i64, b: i64) -> Ordering {
+     }
+ }
+ 
+-/// Key length ignoring `*`, the third rung of [`dedup_cmp`]. `cover` reproduces
++/// Key length ignoring `*`, the third rung of the dedup rank. `cover` reproduces
+ /// the same grouping, so both must count identically — hence one function.
+ pub(crate) fn len_no_star(keys: &str) -> usize {
+     keys.chars().filter(|c| *c != '*').count()
+ }
+ 
+-/// Compare two keys as if their `[`/`]` were stripped, without allocating.
+-/// Keys are ASCII, so byte order matches `str`'s lexicographic ordering — this
+-/// is equivalent to `keys_no_brackets(a).cmp(&keys_no_brackets(b))`.
+-fn cmp_keys_no_brackets(a: &str, b: &str) -> Ordering {
+-    let mut ai = a.bytes().filter(|&c| c != b'[' && c != b']');
+-    let mut bi = b.bytes().filter(|&c| c != b'[' && c != b']');
+-    loop {
+-        match (ai.next(), bi.next()) {
+-            (Some(x), Some(y)) => match x.cmp(&y) {
+-                Ordering::Equal => continue,
+-                other => return other,
+-            },
+-            (None, None) => return Ordering::Equal,
+-            (None, Some(_)) => return Ordering::Less,
+-            (Some(_), None) => return Ordering::Greater,
++/// RANK dedup across compact ordinary Pattern rows and expanded later sources.
++fn dedup_patterns_and_items<'a>(
++    db: &'a Db,
++    wmiid: i32,
++    patterns: &[(i32, u32)],
++    schema_yearfrom: &IntMap<i32, i32>,
++    items: &mut Vec<DecodingItem<'a>>,
++) {
++    let pattern_count = patterns.len();
++    let mut best = ElementIndex::default();
++    for (i, &(_, index)) in patterns.iter().enumerate() {
++        let pattern = &db.patterns()[index as usize];
++        let element_id = pattern.elementid.to_native();
++        if is_exempt(element_id) {
++            continue;
++        }
++        match best.get(&element_id) {
++            None => {
++                best.insert(element_id, i);
++            }
++            Some(&b) => {
++                if candidate_cmp(db, patterns, schema_yearfrom, items, i, b) == Ordering::Less {
++                    best.insert(element_id, i);
++                }
++            }
+         }
+     }
+-}
+-
+-/// RANK dedup: keep the best item per non-exempt element id.
+-fn dedup_per_element(items: &mut Vec<DecodingItem>) {
+-    // best index per element id (lowest under the comparator).
+-    let mut best = ElementIndex::default();
+     for (i, it) in items.iter().enumerate() {
+         if is_exempt(it.element_id) {
+             continue;
+         }
++        let candidate = pattern_count + i;
+         match best.get(&it.element_id) {
+             None => {
+-                best.insert(it.element_id, i);
++                best.insert(it.element_id, candidate);
+             }
+             Some(&b) => {
+-                if dedup_cmp(it, i, &items[b], b) == Ordering::Less {
+-                    best.insert(it.element_id, i);
++                if candidate_cmp(db, patterns, schema_yearfrom, items, candidate, b)
++                    == Ordering::Less
++                {
++                    best.insert(it.element_id, candidate);
+                 }
+             }
+         }
+     }
+-    // Keep an item iff it is exempt or the chosen best for its element. `best`
+-    // stores original indices, so comparing the running original index needs no
+-    // separate keep-bitmap.
+     let mut idx = 0;
+     items.retain(|it| {
+-        let i = idx;
++        let candidate = pattern_count + idx;
+         idx += 1;
+-        is_exempt(it.element_id) || best.get(&it.element_id) == Some(&i)
++        is_exempt(it.element_id) || best.get(&it.element_id) == Some(&candidate)
+     });
++
++    let first_winner = items.len();
++    for (i, &(_, index)) in patterns.iter().enumerate() {
++        let p = &db.patterns()[index as usize];
++        let element_id = p.elementid.to_native();
++        if !is_exempt(element_id) && best.get(&element_id) != Some(&i) {
++            continue;
++        }
++        items.push(DecodingItem {
++            created_on: p.createdon_key.to_native(),
++            pattern_id: p.id.to_native(),
++            keys: uppercase_key(db.s(p.keys.to_native())),
++            vin_schema_id: p.vinschemaid.to_native(),
++            wmi_id: wmiid,
++            element_id,
++            attribute_id: Cow::Borrowed(db.s(p.attributeid.to_native())),
++            value: Cow::Borrowed("XXX"),
++            source: Cow::Borrowed("Pattern"),
++            priority: *schema_yearfrom
++                .get(&p.vinschemaid.to_native())
++                .unwrap_or(&0),
++            to_be_qced: false,
++        });
++    }
++    let winner_count = items.len() - first_winner;
++    items.rotate_right(winner_count);
+ }
+ 
+-/// Dedup comparator: Priority DESC, CreatedOn DESC (NULLS FIRST), len_no_star
+-/// ASC, keys_no_brackets ASC, synthetic id (insertion order) ASC.
+-fn dedup_cmp(a: &DecodingItem, ai: usize, b: &DecodingItem, bi: usize) -> Ordering {
+-    b.priority
+-        .cmp(&a.priority)
+-        .then_with(|| created_desc_nulls_first(a.created_on, b.created_on))
+-        .then_with(|| len_no_star(&a.keys).cmp(&len_no_star(&b.keys)))
+-        .then_with(|| cmp_keys_no_brackets(&a.keys, &b.keys))
++fn candidate_cmp(
++    db: &Db,
++    patterns: &[(i32, u32)],
++    schema_yearfrom: &IntMap<i32, i32>,
++    items: &[DecodingItem],
++    a: usize,
++    b: usize,
++) -> Ordering {
++    let pattern_count = patterns.len();
++    let numeric = |index: usize| {
++        if index < pattern_count {
++            let p = &db.patterns()[patterns[index].1 as usize];
++            (
++                *schema_yearfrom
++                    .get(&p.vinschemaid.to_native())
++                    .unwrap_or(&0),
++                p.createdon_key.to_native(),
++            )
++        } else {
++            let item = &items[index - pattern_count];
++            (item.priority, item.created_on)
++        }
++    };
++    let keys = |index: usize| {
++        if index < pattern_count {
++            (
++                db.s(db.patterns()[patterns[index].1 as usize].keys.to_native()),
++                true,
++            )
++        } else {
++            (items[index - pattern_count].keys.as_ref(), false)
++        }
++    };
++    let (ap, ac) = numeric(a);
++    let (bp, bc) = numeric(b);
++    let (ak, normalize_a) = keys(a);
++    let (bk, normalize_b) = keys(b);
++    rank_cmp(ap, ac, ak, normalize_a, a, bp, bc, bk, normalize_b, b)
++}
++
++#[allow(clippy::too_many_arguments)]
++fn rank_cmp(
++    ap: i32,
++    ac: i64,
++    ak: &str,
++    normalize_a: bool,
++    ai: usize,
++    bp: i32,
++    bc: i64,
++    bk: &str,
++    normalize_b: bool,
++    bi: usize,
++) -> Ordering {
++    bp.cmp(&ap)
++        .then_with(|| created_desc_nulls_first(ac, bc))
++        .then_with(|| len_no_star(ak).cmp(&len_no_star(bk)))
++        .then_with(|| cmp_rank_keys(ak, normalize_a, bk, normalize_b))
+         .then_with(|| ai.cmp(&bi))
+ }
+ 
++/// Compare the stored key representation used by dedup. Compact Pattern keys
++/// apply `uppercase_key` bytewise without allocating; expanded keys already
++/// carry their final spelling.
++fn cmp_rank_keys(a: &str, normalize_a: bool, b: &str, normalize_b: bool) -> Ordering {
++    let mut ai = a.bytes().filter_map(|byte| {
++        if matches!(byte, b'[' | b']') {
++            None
++        } else if normalize_a {
++            Some(byte.to_ascii_uppercase())
++        } else {
++            Some(byte)
++        }
++    });
++    let mut bi = b.bytes().filter_map(|byte| {
++        if matches!(byte, b'[' | b']') {
++            None
++        } else if normalize_b {
++            Some(byte.to_ascii_uppercase())
++        } else {
++            Some(byte)
++        }
++    });
++    loop {
++        match (ai.next(), bi.next()) {
++            (Some(x), Some(y)) => match x.cmp(&y) {
++                Ordering::Equal => continue,
++                other => return other,
++            },
++            (None, None) => return Ordering::Equal,
++            (None, Some(_)) => return Ordering::Less,
++            (Some(_), None) => return Ordering::Greater,
++        }
++    }
++}
++
+ /// Make (element 26): pattern-model join (priority 1000), else single-WMI make.
+ fn append_make<'a>(
+     db: &'a Db,
+@@ -1131,6 +1271,170 @@ fn append_default_values<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
+ mod tests {
+     use super::*;
+ 
++    #[derive(Clone, Copy)]
++    struct SyntheticCandidate {
++        element_id: i32,
++        exempt: bool,
++        pattern: bool,
++        priority: i32,
++        created_on: i64,
++        keys: &'static str,
++    }
++
++    fn old_materialized_cmp(candidates: &[SyntheticCandidate], a: usize, b: usize) -> Ordering {
++        let a = candidates[a];
++        let b = candidates[b];
++        let ak = if a.pattern {
++            uppercase_key(a.keys).into_owned()
++        } else {
++            a.keys.to_owned()
++        };
++        let bk = if b.pattern {
++            uppercase_key(b.keys).into_owned()
++        } else {
++            b.keys.to_owned()
++        };
++        let strip = |key: &str| key.replace(['[', ']'], "");
++        b.priority
++            .cmp(&a.priority)
++            .then_with(|| created_desc_nulls_first(a.created_on, b.created_on))
++            .then_with(|| len_no_star(&ak).cmp(&len_no_star(&bk)))
++            .then_with(|| strip(&ak).cmp(&strip(&bk)))
++    }
++
++    fn synthetic_survivors(candidates: &[SyntheticCandidate], compact: bool) -> Vec<usize> {
++        let mut best: std::collections::BTreeMap<i32, usize> = std::collections::BTreeMap::new();
++        for (i, candidate) in candidates.iter().enumerate() {
++            if candidate.exempt {
++                continue;
++            }
++            let replace = best.get(&candidate.element_id).is_some_and(|&current| {
++                if compact {
++                    let other = candidates[current];
++                    rank_cmp(
++                        candidate.priority,
++                        candidate.created_on,
++                        candidate.keys,
++                        candidate.pattern,
++                        i,
++                        other.priority,
++                        other.created_on,
++                        other.keys,
++                        other.pattern,
++                        current,
++                    ) == Ordering::Less
++                } else {
++                    old_materialized_cmp(candidates, i, current).then_with(|| i.cmp(&current))
++                        == Ordering::Less
++                }
++            });
++            if !best.contains_key(&candidate.element_id) || replace {
++                best.insert(candidate.element_id, i);
++            }
++        }
++        candidates
++            .iter()
++            .enumerate()
++            .filter_map(|(i, candidate)| {
++                (candidate.exempt || best.get(&candidate.element_id) == Some(&i)).then_some(i)
++            })
++            .collect()
++    }
++
++    #[test]
++    fn compact_rank_matches_materialized_rank_for_mixed_sources() {
++        let candidates = [
++            // Pattern vs Formula Pattern, including NULL-created precedence.
++            SyntheticCandidate {
++                element_id: 10,
++                exempt: false,
++                pattern: true,
++                priority: 100,
++                created_on: 50,
++                keys: "a[ß]*",
++            },
++            SyntheticCandidate {
++                element_id: 10,
++                exempt: false,
++                pattern: false,
++                priority: 100,
++                created_on: NULL_I64,
++                keys: "Aß*",
++            },
++            // Pattern vs EngineModelPattern with ASCII lowercase, Unicode and
++            // bracket stripping all participating in the key rung.
++            SyntheticCandidate {
++                element_id: 11,
++                exempt: false,
++                pattern: true,
++                priority: 50,
++                created_on: 10,
++                keys: "b[é]**",
++            },
++            SyntheticCandidate {
++                element_id: 11,
++                exempt: false,
++                pattern: false,
++                priority: 50,
++                created_on: 10,
++                keys: "Bé**",
++            },
++            // Exempt rows survive regardless of rank.
++            SyntheticCandidate {
++                element_id: 114,
++                exempt: true,
++                pattern: true,
++                priority: -100,
++                created_on: 1,
++                keys: "z",
++            },
++            SyntheticCandidate {
++                element_id: 114,
++                exempt: true,
++                pattern: false,
++                priority: 100,
++                created_on: NULL_I64,
++                keys: "a",
++            },
++            // Represents two duplicate schema links after first-YearFrom wins.
++            SyntheticCandidate {
++                element_id: 12,
++                exempt: false,
++                pattern: true,
++                priority: 1980,
++                created_on: 2,
++                keys: "X",
++            },
++            SyntheticCandidate {
++                element_id: 12,
++                exempt: false,
++                pattern: true,
++                priority: 1970,
++                created_on: 3,
++                keys: "A",
++            },
++        ];
++        assert_eq!(
++            synthetic_survivors(&candidates, true),
++            synthetic_survivors(&candidates, false)
++        );
++        assert_eq!(synthetic_survivors(&candidates, true), vec![1, 3, 4, 5, 6]);
++    }
++
++    #[test]
++    fn engine_pick_and_dedup_intentionally_break_insertion_ties_differently() {
++        assert!(engine_pattern_better(50, 10, 1, 50, 10, 0));
++        assert_eq!(
++            rank_cmp(50, 10, "A", true, 1, 50, 10, "A", true, 0),
++            Ordering::Greater
++        );
++
++        let mut priorities = IntMap::default();
++        priorities.entry(7).or_insert(1980);
++        priorities.entry(7).or_insert(1990);
++        assert_eq!(priorities.get(&7), Some(&1980));
++    }
++
+     #[test]
+     fn borrowed_keys_preserve_ascii_uppercase_semantics() {
+         for key in ["", "ABC*|12", "abc[De]", "éaŁ", "日本語"] {

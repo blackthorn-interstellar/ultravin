@@ -1,0 +1,23 @@
+{
+  "status": "complete",
+  "kind": "event counts; not a throughput measurement",
+  "source_commit": "23d4f923809018ea7873fb91ece77b04f1b2c1ff",
+  "source_patch": "scripts/bench/native_arch_trials_2026_09_15/compact_passes.patch",
+  "patch_sha256": "0a560c5930cc22c2ea44afbb618d0d7f23b7e93b066dc7ce329a44fb613b274a",
+  "corpus_sha256": "0d6224e99d0a7f241e3dcd052ce973c8baea774feb0831db0071423de726bd9a",
+  "now_micros": 1788220800000000,
+  "sampling": "100000 evenly spaced VINs across the full corpus",
+  "counts": {
+    "sample_rows": 100000,
+    "corpus_rows": 20000000,
+    "core_passes": 109530,
+    "dedup_passes": 109530,
+    "pattern_candidates": 383058,
+    "surviving_patterns": 380782,
+    "later_rows_before_dedup": 476625,
+    "later_rows_after_dedup": 473709,
+    "decoding_item_bytes": 128,
+    "compact_pattern_tuple_bytes": 12
+  },
+  "raw_log": "   Compiling ultravin v0.0.0 (/private/tmp/ultravin-arch-compact-pass/crates/ultravin)\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.30s\n     Running unittests src/lib.rs (/Volumes/fast-4tb/projects/ultravin/target/debug/deps/ultravin-6af48f148ad1057b)\n\nrunning 1 test\ntest decode::tests::report_compact_pattern_candidate_scope ... sample_rows=100000 corpus_rows=20000000 core_passes=109530 dedup_passes=109530 pattern_candidates=383058 surviving_patterns=380782 later_rows_before_dedup=476625 later_rows_after_dedup=473709 decoding_item_bytes=128 compact_pattern_tuple_bytes=12\nok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 250 filtered out; finished in 18.62s\n\n"
+}

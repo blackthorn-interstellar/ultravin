@@ -1,0 +1,523 @@
+diff --git a/crates/ultravin/src/decode.rs b/crates/ultravin/src/decode.rs
+index 7f57044..0082a50 100644
+--- a/crates/ultravin/src/decode.rs
++++ b/crates/ultravin/src/decode.rs
+@@ -196,6 +196,22 @@ thread_local! {
+     static DECODE_SCRATCH: RefCell<DecodeScratch> = RefCell::new(DecodeScratch::default());
+ }
+ 
++#[cfg(test)]
++#[derive(Clone, Copy, Default)]
++struct CompactDiagnostic {
++    core_passes: u64,
++    dedup_passes: u64,
++    pattern_candidates: u64,
++    surviving_patterns: u64,
++    later_rows_before_dedup: u64,
++    later_rows_after_dedup: u64,
++}
++
++#[cfg(test)]
++thread_local! {
++    static COMPACT_DIAGNOSTIC: RefCell<CompactDiagnostic> = RefCell::new(CompactDiagnostic::default());
++}
++
+ struct DecodeScratchGuard {
+     scratch: DecodeScratch,
+ }
+@@ -356,6 +372,8 @@ pub(crate) fn decode_core_into<'a>(
+     scan: &mut PatternScan,
+     mut items: Vec<DecodingItem<'a>>,
+ ) -> CoreResult<'a> {
++    #[cfg(test)]
++    COMPACT_DIAGNOSTIC.with(|diagnostic| diagnostic.borrow_mut().core_passes += 1);
+     items.clear();
+     let Some(wmi) = wmi else {
+         return CoreResult {
+@@ -734,6 +752,8 @@ fn dedup_patterns_and_items<'a>(
+     items: &mut Vec<DecodingItem<'a>>,
+ ) {
+     let pattern_count = patterns.len();
++    #[cfg(test)]
++    let later_rows_before_dedup = items.len();
+     let mut best = ElementIndex::default();
+     for (i, &(_, index)) in patterns.iter().enumerate() {
+         let pattern = &db.patterns()[index as usize];
+@@ -802,6 +822,15 @@ fn dedup_patterns_and_items<'a>(
+     }
+     let winner_count = items.len() - first_winner;
+     items.rotate_right(winner_count);
++    #[cfg(test)]
++    COMPACT_DIAGNOSTIC.with(|diagnostic| {
++        let mut diagnostic = diagnostic.borrow_mut();
++        diagnostic.dedup_passes += 1;
++        diagnostic.pattern_candidates += pattern_count as u64;
++        diagnostic.surviving_patterns += winner_count as u64;
++        diagnostic.later_rows_before_dedup += later_rows_before_dedup as u64;
++        diagnostic.later_rows_after_dedup += (items.len() - winner_count) as u64;
++    });
+ }
+ 
+ fn candidate_cmp(
+@@ -1270,169 +1299,331 @@ fn append_default_values<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    use crate::tables::{
++        serialize_artifact, Element, Pattern, VinSchema, VpicData, Wmi, WmiVinSchema,
++    };
+ 
+-    #[derive(Clone, Copy)]
+-    struct SyntheticCandidate {
+-        element_id: i32,
+-        exempt: bool,
+-        pattern: bool,
+-        priority: i32,
+-        created_on: i64,
+-        keys: &'static str,
++    const STRINGS: &[&str] = &["", "a[ß]*", "b[é]**", "z", "same", "attr", "*", "ABC"];
++
++    fn sid(value: &str) -> u32 {
++        STRINGS.iter().position(|s| *s == value).unwrap() as u32
+     }
+ 
+-    fn old_materialized_cmp(candidates: &[SyntheticCandidate], a: usize, b: usize) -> Ordering {
+-        let a = candidates[a];
+-        let b = candidates[b];
+-        let ak = if a.pattern {
+-            uppercase_key(a.keys).into_owned()
+-        } else {
+-            a.keys.to_owned()
+-        };
+-        let bk = if b.pattern {
+-            uppercase_key(b.keys).into_owned()
+-        } else {
+-            b.keys.to_owned()
++    fn compact_fixture() -> Db {
++        let mut arena_bytes = Vec::new();
++        let mut arena_offsets = vec![0];
++        for value in STRINGS {
++            arena_bytes.extend_from_slice(value.as_bytes());
++            arena_offsets.push(arena_bytes.len() as u32);
++        }
++        let pattern = [
++            (1, 1, "a[ß]*", 10, 50),
++            (2, 2, "b[é]**", 11, 10),
++            (5, 2, "same", 18, 10),
++            (6, 2, "same", 18, 10),
++            (3, 3, "z", 114, 1),
++            (4, 4, "same", 12, NULL_I64),
++            (100, 9, "*", 13, 7),
++        ]
++        .into_iter()
++        .map(
++            |(id, vinschemaid, keys, elementid, createdon_key)| Pattern {
++                id,
++                vinschemaid,
++                keys: sid(keys),
++                keys_regex: sid(""),
++                elementid,
++                attributeid: sid("attr"),
++                createdon_key,
++                specificity: 0,
++                has_bracket: keys.contains('['),
++            },
++        )
++        .collect();
++        let data = VpicData {
++            arena_bytes,
++            arena_offsets,
++            wmi: vec![Wmi {
++                id: 1,
++                wmi: sid("ABC"),
++                manufacturerid: NULL_I32,
++                makeid: NULL_I32,
++                vehicletypeid: NULL_I32,
++                trucktypeid: NULL_I32,
++                publicavailabilitydate: 0,
++                createdon_key: 0,
++            }],
++            wmi_vinschema: vec![
++                WmiVinSchema {
++                    id: 1,
++                    wmiid: 1,
++                    vinschemaid: 9,
++                    yearfrom: 1980,
++                    yearto: NULL_I32,
++                },
++                WmiVinSchema {
++                    id: 2,
++                    wmiid: 1,
++                    vinschemaid: 9,
++                    yearfrom: 1990,
++                    yearto: NULL_I32,
++                },
++            ],
++            vinschema: [1, 2, 3, 4, 9]
++                .into_iter()
++                .map(|id| VinSchema {
++                    id,
++                    tobeqced: false,
++                })
++                .collect(),
++            pattern,
++            element: [10, 11, 12, 13, 18, 114]
++                .into_iter()
++                .map(|id| Element {
++                    id,
++                    name: sid(""),
++                    code: sid(""),
++                    isprivate: false,
++                    groupname: sid(""),
++                    datatype: sid(""),
++                    decode: sid(""),
++                    decode_present: true,
++                    weight: 0,
++                })
++                .collect(),
++            make_model: vec![],
++            wmi_make: vec![],
++            enginemodel: vec![],
++            enginemodelpattern: vec![],
++            defaultvalue: vec![],
++            vinexception: vec![],
++            conversion: vec![],
++            lookups: vec![],
++            cover: vec![],
++            vspecschema: vec![],
++            vspecschemapattern: vec![],
++            vspecpattern: vec![],
++            vspecschemamodel: vec![],
++            vspecschemayear: vec![],
+         };
+-        let strip = |key: &str| key.replace(['[', ']'], "");
+-        b.priority
+-            .cmp(&a.priority)
+-            .then_with(|| created_desc_nulls_first(a.created_on, b.created_on))
+-            .then_with(|| len_no_star(&ak).cmp(&len_no_star(&bk)))
+-            .then_with(|| strip(&ak).cmp(&strip(&bk)))
++        Db::from_bytes(&serialize_artifact(&data, 1)).unwrap()
+     }
+ 
+-    fn synthetic_survivors(candidates: &[SyntheticCandidate], compact: bool) -> Vec<usize> {
+-        let mut best: std::collections::BTreeMap<i32, usize> = std::collections::BTreeMap::new();
+-        for (i, candidate) in candidates.iter().enumerate() {
+-            if candidate.exempt {
++    fn old_dedup(items: &mut Vec<DecodingItem<'_>>) {
++        let mut best = ElementIndex::default();
++        for (i, item) in items.iter().enumerate() {
++            if is_exempt(item.element_id) {
+                 continue;
+             }
+-            let replace = best.get(&candidate.element_id).is_some_and(|&current| {
+-                if compact {
+-                    let other = candidates[current];
+-                    rank_cmp(
+-                        candidate.priority,
+-                        candidate.created_on,
+-                        candidate.keys,
+-                        candidate.pattern,
++            match best.get(&item.element_id) {
++                None => {
++                    best.insert(item.element_id, i);
++                }
++                Some(&b)
++                    if rank_cmp(
++                        item.priority,
++                        item.created_on,
++                        &item.keys,
++                        false,
+                         i,
+-                        other.priority,
+-                        other.created_on,
+-                        other.keys,
+-                        other.pattern,
+-                        current,
+-                    ) == Ordering::Less
+-                } else {
+-                    old_materialized_cmp(candidates, i, current).then_with(|| i.cmp(&current))
+-                        == Ordering::Less
++                        items[b].priority,
++                        items[b].created_on,
++                        &items[b].keys,
++                        false,
++                        b,
++                    ) == Ordering::Less =>
++                {
++                    best.insert(item.element_id, i);
+                 }
+-            });
+-            if !best.contains_key(&candidate.element_id) || replace {
+-                best.insert(candidate.element_id, i);
++                Some(_) => {}
+             }
+         }
+-        candidates
+-            .iter()
+-            .enumerate()
+-            .filter_map(|(i, candidate)| {
+-                (candidate.exempt || best.get(&candidate.element_id) == Some(&i)).then_some(i)
+-            })
+-            .collect()
++        let mut i = 0;
++        items.retain(|item| {
++            let current = i;
++            i += 1;
++            is_exempt(item.element_id) || best.get(&item.element_id) == Some(&current)
++        });
++    }
++
++    fn item_signature(item: &DecodingItem<'_>) -> (i32, i32, String, String, String, i64, i32) {
++        (
++            item.element_id,
++            item.pattern_id,
++            item.keys.to_string(),
++            item.attribute_id.to_string(),
++            item.source.to_string(),
++            item.created_on,
++            item.priority,
++        )
+     }
+ 
+     #[test]
+-    fn compact_rank_matches_materialized_rank_for_mixed_sources() {
+-        let candidates = [
+-            // Pattern vs Formula Pattern, including NULL-created precedence.
+-            SyntheticCandidate {
+-                element_id: 10,
+-                exempt: false,
+-                pattern: true,
+-                priority: 100,
+-                created_on: 50,
+-                keys: "a[ß]*",
+-            },
+-            SyntheticCandidate {
++    fn real_compact_dedup_matches_old_materialized_path_and_order() {
++        let db = compact_fixture();
++        let patterns = [(1, 0), (2, 1), (3, 4), (4, 5), (5, 2), (6, 3)];
++        let priorities: IntMap<i32, i32> = [(1, 100), (2, 50), (3, -100), (4, 1980)]
++            .into_iter()
++            .collect();
++        let expanded = vec![
++            DecodingItem {
++                created_on: NULL_I64,
++                pattern_id: 90,
++                keys: Cow::Borrowed("Aß*"),
++                vin_schema_id: 1,
++                wmi_id: NULL_I32,
+                 element_id: 10,
+-                exempt: false,
+-                pattern: false,
++                attribute_id: Cow::Borrowed("formula"),
++                value: Cow::Borrowed("1"),
++                source: Cow::Borrowed("Formula Pattern"),
+                 priority: 100,
+-                created_on: NULL_I64,
+-                keys: "Aß*",
++                to_be_qced: false,
+             },
+-            // Pattern vs EngineModelPattern with ASCII lowercase, Unicode and
+-            // bracket stripping all participating in the key rung.
+-            SyntheticCandidate {
+-                element_id: 11,
+-                exempt: false,
+-                pattern: true,
+-                priority: 50,
++            DecodingItem {
+                 created_on: 10,
+-                keys: "b[é]**",
+-            },
+-            SyntheticCandidate {
++                pattern_id: 2,
++                keys: Cow::Borrowed("Bé**"),
++                vin_schema_id: 2,
++                wmi_id: 1,
+                 element_id: 11,
+-                exempt: false,
+-                pattern: false,
++                attribute_id: Cow::Borrowed("engine"),
++                value: Cow::Borrowed("XXX"),
++                source: Cow::Borrowed("EngineModelPattern"),
+                 priority: 50,
+-                created_on: 10,
+-                keys: "Bé**",
+-            },
+-            // Exempt rows survive regardless of rank.
+-            SyntheticCandidate {
+-                element_id: 114,
+-                exempt: true,
+-                pattern: true,
+-                priority: -100,
+-                created_on: 1,
+-                keys: "z",
++                to_be_qced: false,
+             },
+-            SyntheticCandidate {
++            DecodingItem {
++                created_on: NULL_I64,
++                pattern_id: 91,
++                keys: Cow::Borrowed("a"),
++                vin_schema_id: 3,
++                wmi_id: NULL_I32,
+                 element_id: 114,
+-                exempt: true,
+-                pattern: false,
++                attribute_id: Cow::Borrowed("note"),
++                value: Cow::Borrowed("1"),
++                source: Cow::Borrowed("Formula Pattern"),
+                 priority: 100,
+-                created_on: NULL_I64,
+-                keys: "a",
+-            },
+-            // Represents two duplicate schema links after first-YearFrom wins.
+-            SyntheticCandidate {
+-                element_id: 12,
+-                exempt: false,
+-                pattern: true,
+-                priority: 1980,
+-                created_on: 2,
+-                keys: "X",
+-            },
+-            SyntheticCandidate {
+-                element_id: 12,
+-                exempt: false,
+-                pattern: true,
+-                priority: 1970,
+-                created_on: 3,
+-                keys: "A",
++                to_be_qced: false,
+             },
+         ];
++        let mut compact = expanded.clone();
++        dedup_patterns_and_items(&db, 1, &patterns, &priorities, &mut compact);
++        let mut old: Vec<_> = patterns
++            .iter()
++            .map(|&(_, index)| {
++                let p = &db.patterns()[index as usize];
++                DecodingItem {
++                    created_on: p.createdon_key.to_native(),
++                    pattern_id: p.id.to_native(),
++                    keys: uppercase_key(db.s(p.keys.to_native())),
++                    vin_schema_id: p.vinschemaid.to_native(),
++                    wmi_id: 1,
++                    element_id: p.elementid.to_native(),
++                    attribute_id: Cow::Borrowed(db.s(p.attributeid.to_native())),
++                    value: Cow::Borrowed("XXX"),
++                    source: Cow::Borrowed("Pattern"),
++                    priority: *priorities.get(&p.vinschemaid.to_native()).unwrap_or(&0),
++                    to_be_qced: false,
++                }
++            })
++            .collect();
++        old.extend(expanded);
++        old_dedup(&mut old);
+         assert_eq!(
+-            synthetic_survivors(&candidates, true),
+-            synthetic_survivors(&candidates, false)
++            compact.iter().map(item_signature).collect::<Vec<_>>(),
++            old.iter().map(item_signature).collect::<Vec<_>>()
+         );
+-        assert_eq!(synthetic_survivors(&candidates, true), vec![1, 3, 4, 5, 6]);
+     }
+ 
+     #[test]
+-    fn engine_pick_and_dedup_intentionally_break_insertion_ties_differently() {
+-        assert!(engine_pattern_better(50, 10, 1, 50, 10, 0));
+-        assert_eq!(
+-            rank_cmp(50, 10, "A", true, 1, 50, 10, "A", true, 0),
+-            Ordering::Greater
++    fn real_engine_picker_keeps_its_pre_dedup_latest_insertion_tie() {
++        let db = compact_fixture();
++        let patterns = [(5, 2), (6, 3)];
++        let priorities: IntMap<i32, i32> = [(2, 50)].into_iter().collect();
++        assert_eq!(pick_pattern_element18(&db, &patterns, &priorities), Some(3));
++        let mut items = Vec::new();
++        dedup_patterns_and_items(&db, 1, &patterns, &priorities, &mut items);
++        assert_eq!(items[0].pattern_id, 5);
++    }
++
++    #[test]
++    fn real_core_uses_first_duplicate_schema_link_priority() {
++        let db = compact_fixture();
++        let wmi = db.wmi_by_str("ABC", 1).unwrap();
++        let mut scan = PatternScan::default();
++        let result = decode_core_into(
++            &db,
++            "ABC",
++            Some(wmi),
++            "X",
++            None,
++            DEFAULT_MODEL_YEAR_SOURCE,
++            &mut scan,
++            Vec::new(),
++        );
++        let item = result
++            .items
++            .iter()
++            .find(|item| item.pattern_id == 100)
++            .unwrap();
++        assert_eq!(item.priority, 1980);
++    }
++
++    #[test]
++    #[ignore = "diagnostic over an external 20m-line corpus"]
++    fn report_compact_pattern_candidate_scope() {
++        use std::io::BufRead;
++
++        const SAMPLE_ROWS: usize = 100_000;
++        const NOW_MICROS: i64 = 1_788_220_800_000_000;
++        let path = std::env::var("ULTRAVIN_DIAGNOSTIC_CORPUS")
++            .expect("ULTRAVIN_DIAGNOSTIC_CORPUS must name the canonical corpus");
++        let count_reader = std::io::BufReader::new(std::fs::File::open(&path).unwrap());
++        let corpus_rows = count_reader
++            .lines()
++            .map_while(Result::ok)
++            .filter(|line| line.len() == 17)
++            .count();
++        assert!(
++            corpus_rows >= SAMPLE_ROWS,
++            "corpus has only {corpus_rows} VINs"
+         );
+ 
+-        let mut priorities = IntMap::default();
+-        priorities.entry(7).or_insert(1980);
+-        priorities.entry(7).or_insert(1990);
+-        assert_eq!(priorities.get(&7), Some(&1980));
++        COMPACT_DIAGNOSTIC
++            .with(|diagnostic| *diagnostic.borrow_mut() = CompactDiagnostic::default());
++        let db = Db::embedded();
++        let reader = std::io::BufReader::new(std::fs::File::open(&path).unwrap());
++        let mut valid_index = 0usize;
++        let mut sample_index = 0usize;
++        for line in reader.lines() {
++            let vin = line.unwrap();
++            if vin.len() != 17 {
++                continue;
++            }
++            let target = sample_index * (corpus_rows - 1) / (SAMPLE_ROWS - 1);
++            if valid_index == target {
++                std::hint::black_box(db.decode_at(&vin, None, NOW_MICROS));
++                sample_index += 1;
++                if sample_index == SAMPLE_ROWS {
++                    break;
++                }
++            }
++            valid_index += 1;
++        }
++        assert_eq!(sample_index, SAMPLE_ROWS);
++
++        let diagnostic = COMPACT_DIAGNOSTIC.with(|diagnostic| *diagnostic.borrow());
++        eprintln!(
++            "sample_rows={SAMPLE_ROWS} corpus_rows={corpus_rows} core_passes={} dedup_passes={} pattern_candidates={} surviving_patterns={} later_rows_before_dedup={} later_rows_after_dedup={} decoding_item_bytes={} compact_pattern_tuple_bytes={}",
++            diagnostic.core_passes,
++            diagnostic.dedup_passes,
++            diagnostic.pattern_candidates,
++            diagnostic.surviving_patterns,
++            diagnostic.later_rows_before_dedup,
++            diagnostic.later_rows_after_dedup,
++            std::mem::size_of::<DecodingItem<'static>>(),
++            std::mem::size_of::<(i32, u32)>(),
++        );
+     }
+ 
+     #[test]

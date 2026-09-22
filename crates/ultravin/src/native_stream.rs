@@ -296,18 +296,22 @@ fn clear_slot(slot: &mut Slot<'_>, len: usize) {
 
 fn prepare_slot_reuse(slot: &mut Slot<'_>, len: usize) {
     for result in slot.results[..len].iter_mut().flatten() {
-        result.vin.clear();
-        if result.vin.capacity() > MAX_RETAINED_VIN_BYTES {
-            result.vin = String::new();
-        }
-        result.wmi.clear();
-        result.descriptor.clear();
-        result.error_codes = Vec::new();
-        result.corrected_vin = String::new();
-        result.elements.clear();
-        if result.elements.capacity() > MAX_RETAINED_ELEMENTS {
-            result.elements = Vec::new();
-        }
+        prepare_result_reuse(result);
+    }
+}
+
+pub(crate) fn prepare_result_reuse(result: &mut DecodeResult<'_>) {
+    result.vin.clear();
+    if result.vin.capacity() > MAX_RETAINED_VIN_BYTES {
+        result.vin = String::new();
+    }
+    result.wmi.clear();
+    result.descriptor.clear();
+    result.error_codes = Vec::new();
+    result.corrected_vin = String::new();
+    result.elements.clear();
+    if result.elements.capacity() > MAX_RETAINED_ELEMENTS {
+        result.elements = Vec::new();
     }
 }
 

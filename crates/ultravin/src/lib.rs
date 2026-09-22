@@ -19,6 +19,8 @@ mod conversion;
 pub mod cover;
 pub mod db;
 mod decode;
+#[cfg(feature = "diagnostic-ceilings")]
+pub mod diagnostic_ceiling;
 mod errors;
 #[cfg(feature = "batch-slab")]
 mod experimental_batch;

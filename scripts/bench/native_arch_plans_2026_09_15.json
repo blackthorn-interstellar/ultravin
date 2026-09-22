@@ -1,0 +1,337 @@
+{
+  "schema_version": 1,
+  "status": "complete",
+  "screen": false,
+  "measured_at_utc": "2026-09-15T22:26:32+00:00",
+  "configuration": {
+    "sequence": [
+      "candidate",
+      "baseline",
+      "baseline",
+      "candidate"
+    ],
+    "workers": 12,
+    "full_warm_pass": true,
+    "timed_full_pass": true,
+    "minimum_timed_seconds": 10,
+    "now_micros": 1788220800000000,
+    "full_output_materialized": true,
+    "ordered_delivery": true,
+    "allocator": "mimalloc via throughput example"
+  },
+  "corpus": {
+    "path": "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+    "rows": 20000000,
+    "unique": true,
+    "sha256": "0d6224e99d0a7f241e3dcd052ce973c8baea774feb0831db0071423de726bd9a"
+  },
+  "baseline": {
+    "evidence": "/Volumes/fast-4tb/projects/ultravin/scripts/bench/native_arch_baseline_2026_09_15.json",
+    "archive": "/Volumes/fast-4tb/projects/ultravin/target/bench/native-trial-20260915T220330Z",
+    "binary": "/Volumes/fast-4tb/projects/ultravin/target/bench/native-trial-20260915T220330Z/throughput",
+    "binary_sha256": "05f6baa4703789dee982f11df65035db581ecd59584a1800ea839d5505ab2174"
+  },
+  "candidate": {
+    "archive": "/Volumes/fast-4tb/projects/ultravin/target/bench/native-trial-20260915T222632Z",
+    "binary": "/Volumes/fast-4tb/projects/ultravin/target/bench/native-trial-20260915T222632Z/throughput",
+    "binary_sha256": "9190c5e10b49bab323bdb0b520d8620867baca8df4a747491e68b0904301891b",
+    "source_hashes": {
+      "crates/ultravin/examples/throughput.rs": "e538dbefff86853eae5d12c0c9e2003aa889c1c55cce667ba434b5fd3105fb86",
+      "crates/ultravin/Cargo.toml": "995bd1828fdc371d7b5bc389dd60fe2dd43b5b95caf2bef46b5bc3807edb009e",
+      "crates/ultravin/build.rs": "a7bb3fd6497464e096caea0112a267fe852142ec31ec20b5fc71f7b639fb248e",
+      "crates/ultravin/data/manifest.json": "57e423e2c0f3b78a1c85fa9cb6961377c0ee7d1ab2c9c48a0b65c8f798ca5109",
+      "Cargo.toml": "a85692348ace983f4e8dba935f913f4bb2edf7181194ce554d9290afb454cfb2",
+      "Cargo.lock": "9f0c0a83de09c13c0e89bf4fccca78bdcde7f5ffb499830f9eab8b592cb11f69",
+      "crates/ultravin/src/adaptive.rs": "755daec2ef8331220f2ed8754f5bc39a02c36e02e9f368bcd8a5363755d6b429",
+      "crates/ultravin/src/arrow_io.rs": "e21581520794aa515ac8b44968d26068f79f00fd5bb74965abdd755b606d4ad9",
+      "crates/ultravin/src/batch_results.rs": "aeb3cea7ace266a1660cac41e919bd0b1f4f6cf5bdbe8dc8f2f376f373852028",
+      "crates/ultravin/src/checkdigit.rs": "7781bbc5b1bacd13e57ffc2962ca149d33d865ebc2672f693d17e5e0dcdffe8d",
+      "crates/ultravin/src/clock_tests.rs": "6452909cf2c48650def8951be1b1d115c54ee3a39c05f36dabf504a0cb20d576",
+      "crates/ultravin/src/conversion.rs": "d3c43d380a23349b8b3a6c29243ee85ed7f40eeef82f2bf65ac8f2ec1f3df89a",
+      "crates/ultravin/src/cover.rs": "e2c1eae344e74864aa86e5683349a2aa3ad73c8177a8bfde20d4567c921c7a91",
+      "crates/ultravin/src/db.rs": "30d782e334bba23ebfecc6d080144ffb33e4aed251509ae3fcb741594900e1e2",
+      "crates/ultravin/src/decode.rs": "08571c0189543a87ad0e64a14dbe7ccad0e5efeb458ff082d24a16ff60158192",
+      "crates/ultravin/src/errors.rs": "9c6ea0cc715fcba69e4841474e90e9c7fb8a15a688e58d975a453de25c9b6ead",
+      "crates/ultravin/src/experimental_batch.rs": "e70888fa056620d3ec2e1a7d568fed2a30813408b250b79f00b9dab99739870e",
+      "crates/ultravin/src/generate.rs": "3da67b6b45af7982fa13217140ae51ad3587fed37d8b6f9a181ec2fcf9d88e38",
+      "crates/ultravin/src/hash.rs": "c6cbe2360a1b17095a70d4c4a58657bdfd963fea6e5d7539e290ce018e0d562e",
+      "crates/ultravin/src/ids.rs": "8e0a624c4f0f7bbaa9017f0c9fb9087ee135e9ea21d922d0dd059337ea9db339",
+      "crates/ultravin/src/json.rs": "0b987c71ed88b9f16f1c4615bb4bae890b09106e5ddcdf3408e32d9878ddf853",
+      "crates/ultravin/src/keyspec.rs": "5ff20b7bbeed8d1cc9c9a879e1d07f0c727a50d45dda7cb6520ab8dfa2d3eebd",
+      "crates/ultravin/src/lib.rs": "42dea4b93057dde2da3a4182946f1054a6637a9d1a9c4c7b53d58df6ddb49c29",
+      "crates/ultravin/src/matcher.rs": "10af75b96a26e3f961f3618eac3e68e3736f67c450a159a2fff9754702346934",
+      "crates/ultravin/src/native_auto.rs": "9107f37ffdd85eab2cc28fca47eaf181805a8243ca394c5be216a6c1027e6133",
+      "crates/ultravin/src/native_stream.rs": "c85a4de875e269708cfe9d111edcdd24c1292983157b57b5552c299c09d0f1a7",
+      "crates/ultravin/src/parquet_io.rs": "0c7138bdc74ae346c34ec429d35b1e33b6b47de2b68d4bba9175a3919a5ca2d7",
+      "crates/ultravin/src/predictor.rs": "bafbbea06923b6c828a00c64d51a8ca1e14843bbc41c5c25b582a65393b10441",
+      "crates/ultravin/src/resolve.rs": "f8d3f62c832c28f966c0ba720e2e48821b2be0a24253217839e3ffc538ac3321",
+      "crates/ultravin/src/stage_trace.rs": "a54e25e0f65da6a9c19988b770d7cfc3fbc534e5cb6662b5c6aeb0e77f3c3044",
+      "crates/ultravin/src/tables.rs": "2b8ffb68468cfcfe52bb2d46a022d3baa4edd25a02eb9894dca8056153d3fb4e",
+      "crates/ultravin/src/wmi.rs": "27ba20c7aa0732e00f79e425ac4e46491cd21e75a8e5ccf051f432dc1eb42559",
+      "crates/ultravin/src/year.rs": "a0d1398885792559cd1777341c14d8d3a8c9847e2058035bd42572263a66f2b2",
+      "crates/ultravin/examples/support/allocation_counter.rs": "39580681c98d62066dd5e0798706ae52ccd086f0387753301c0dd63d4e526a97",
+      "crates/ultravin/examples/support/counters.rs": "b1db2cb48609acfb613fe7ce15ebec889de400b89cb5a902dbd3ea939ccc65dc",
+      "crates/ultravin/examples/support/cpu.rs": "4e1f57582372716d041ba5403a00d8135e6127e41d51539ebdd295eeb743eff5",
+      "crates/ultravin/examples/support/mod.rs": "210b3b14df1884e26d8003d27508f93461e0d022346ba4e2f6b57b422b3a3b0b",
+      "scripts/bench/native_trials.py": "7742e012bad8aaaf44dddb354663230f1a5c669ba53851064d5fd57c2675ca18"
+    },
+    "source_root": "/private/tmp/ultravin-arch-plans",
+    "build_environment": {
+      "CARGO_TARGET_DIR": "/Volumes/fast-4tb/projects/ultravin/target",
+      "ULTRAVIN_DATA": "/Volumes/fast-4tb/projects/ultravin/crates/ultravin/data/vpic.rkyv"
+    }
+  },
+  "environment": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "python": "3.13.12 (main, Feb 12 2026, 01:06:02) [Clang 21.1.4 ]",
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "cpu_model": "Apple M2 Max"
+  },
+  "samples": [
+    {
+      "label": "candidate",
+      "workers": 12,
+      "rows_per_second": 1117589.7192328956,
+      "peak_rss_bytes": 2109112320,
+      "process_user_cpu_seconds": 197.594982,
+      "process_system_cpu_seconds": 0.9107459999999998,
+      "cpu_seconds_per_row": 9.9252864e-06,
+      "instructions_per_row": 61615.4460729,
+      "process_wall_seconds": 37.248544875001244,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/native-trial-20260915T222632Z/throughput",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "10",
+        "batch",
+        "full",
+        "auto"
+      ],
+      "measurement": {
+        "actual_rows_per_second": 1117589.7192328956,
+        "average_busy_cores": 11.092398041082077,
+        "batch_size": "auto",
+        "benchmark": "batch",
+        "elapsed_seconds": 17.895654958,
+        "format": "full",
+        "memory_bytes": 536870912,
+        "predictor": {
+          "batch_size": 100,
+          "estimated_peak_rows_per_second": 1130061.541294527,
+          "estimated_peak_rss_bytes": null,
+          "estimated_rows_per_second": 1130061.541294527,
+          "estimated_working_bytes": 104604000,
+          "max_inflight_rows": 6000,
+          "memory_limited": false,
+          "model_version": "ultravin-native-slots-v1",
+          "single_core_rows_per_second": 204970.8637119903,
+          "slots_per_worker": 5,
+          "target_fraction": 0.99,
+          "workers": 12
+        },
+        "process_counters": {
+          "cycles": 595624618652,
+          "instructions": 1232308921458
+        },
+        "process_system_cpu_seconds": 0.9107459999999998,
+        "process_user_cpu_seconds": 197.594982,
+        "result_owner": "worker_slots",
+        "rows": 20000000,
+        "selected_size_batches": {
+          "100": 200000
+        },
+        "selected_size_rows": {
+          "100": 20000000
+        },
+        "workers": 12
+      },
+      "raw": {
+        "stdout": "{\"actual_rows_per_second\":1117589.7192328956,\"average_busy_cores\":11.092398041082077,\"batch_size\":\"auto\",\"benchmark\":\"batch\",\"elapsed_seconds\":17.895654958,\"format\":\"full\",\"memory_bytes\":536870912,\"predictor\":{\"batch_size\":100,\"estimated_peak_rows_per_second\":1130061.541294527,\"estimated_peak_rss_bytes\":null,\"estimated_rows_per_second\":1130061.541294527,\"estimated_working_bytes\":104604000,\"max_inflight_rows\":6000,\"memory_limited\":false,\"model_version\":\"ultravin-native-slots-v1\",\"single_core_rows_per_second\":204970.8637119903,\"slots_per_worker\":5,\"target_fraction\":0.99,\"workers\":12},\"process_counters\":{\"cycles\":595624618652,\"instructions\":1232308921458},\"process_system_cpu_seconds\":0.9107459999999998,\"process_user_cpu_seconds\":197.594982,\"result_owner\":\"worker_slots\",\"rows\":20000000,\"selected_size_batches\":{\"100\":200000},\"selected_size_rows\":{\"100\":20000000},\"workers\":12}\n",
+        "stderr": "native auto: warmup complete; starting timed passes\nbatch: 20000000 VINs in 17.9s = 1117590 VIN/s (67055383 in 60s, 12 core(s))\n"
+      }
+    },
+    {
+      "label": "baseline",
+      "workers": 12,
+      "rows_per_second": 1183267.036254868,
+      "peak_rss_bytes": 2084044800,
+      "process_user_cpu_seconds": 190.43459900000002,
+      "process_system_cpu_seconds": 1.637829,
+      "cpu_seconds_per_row": 9.603621400000001e-06,
+      "instructions_per_row": 62515.90014475,
+      "process_wall_seconds": 34.548193582999374,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/native-trial-20260915T220330Z/throughput",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "10",
+        "batch",
+        "full",
+        "auto"
+      ],
+      "measurement": {
+        "actual_rows_per_second": 1183267.036254868,
+        "average_busy_cores": 11.363648631291827,
+        "batch_size": "auto",
+        "benchmark": "batch",
+        "elapsed_seconds": 16.902355417,
+        "format": "full",
+        "memory_bytes": 536870912,
+        "predictor": {
+          "batch_size": 100,
+          "estimated_peak_rows_per_second": 1055285.0276361054,
+          "estimated_peak_rss_bytes": null,
+          "estimated_rows_per_second": 1055285.0276361054,
+          "estimated_working_bytes": 104604000,
+          "max_inflight_rows": 6000,
+          "memory_limited": false,
+          "model_version": "ultravin-native-slots-v1",
+          "single_core_rows_per_second": 191407.8797240736,
+          "slots_per_worker": 5,
+          "target_fraction": 0.99,
+          "workers": 12
+        },
+        "process_counters": {
+          "cycles": 575633459339,
+          "instructions": 1250318002895
+        },
+        "process_system_cpu_seconds": 1.637829,
+        "process_user_cpu_seconds": 190.43459900000002,
+        "result_owner": "worker_slots",
+        "rows": 20000000,
+        "selected_size_batches": {
+          "100": 200000
+        },
+        "selected_size_rows": {
+          "100": 20000000
+        },
+        "workers": 12
+      },
+      "raw": {
+        "stdout": "{\"actual_rows_per_second\":1183267.036254868,\"average_busy_cores\":11.363648631291827,\"batch_size\":\"auto\",\"benchmark\":\"batch\",\"elapsed_seconds\":16.902355417,\"format\":\"full\",\"memory_bytes\":536870912,\"predictor\":{\"batch_size\":100,\"estimated_peak_rows_per_second\":1055285.0276361054,\"estimated_peak_rss_bytes\":null,\"estimated_rows_per_second\":1055285.0276361054,\"estimated_working_bytes\":104604000,\"max_inflight_rows\":6000,\"memory_limited\":false,\"model_version\":\"ultravin-native-slots-v1\",\"single_core_rows_per_second\":191407.8797240736,\"slots_per_worker\":5,\"target_fraction\":0.99,\"workers\":12},\"process_counters\":{\"cycles\":575633459339,\"instructions\":1250318002895},\"process_system_cpu_seconds\":1.637829,\"process_user_cpu_seconds\":190.43459900000002,\"result_owner\":\"worker_slots\",\"rows\":20000000,\"selected_size_batches\":{\"100\":200000},\"selected_size_rows\":{\"100\":20000000},\"workers\":12}\n",
+        "stderr": "native auto: warmup complete; starting timed passes\nbatch: 20000000 VINs in 16.9s = 1183267 VIN/s (70996022 in 60s, 12 core(s))\n"
+      }
+    },
+    {
+      "label": "baseline",
+      "workers": 12,
+      "rows_per_second": 1175499.4901973617,
+      "peak_rss_bytes": 2094743552,
+      "process_user_cpu_seconds": 194.55491300000003,
+      "process_system_cpu_seconds": 0.792856,
+      "cpu_seconds_per_row": 9.767388450000002e-06,
+      "instructions_per_row": 62391.1920283,
+      "process_wall_seconds": 34.77238712500184,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/native-trial-20260915T220330Z/throughput",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "10",
+        "batch",
+        "full",
+        "auto"
+      ],
+      "measurement": {
+        "actual_rows_per_second": 1175499.4901973617,
+        "average_busy_cores": 11.481560143534601,
+        "batch_size": "auto",
+        "benchmark": "batch",
+        "elapsed_seconds": 17.014043959,
+        "format": "full",
+        "memory_bytes": 536870912,
+        "predictor": {
+          "batch_size": 100,
+          "estimated_peak_rows_per_second": 1177515.4051451704,
+          "estimated_peak_rss_bytes": null,
+          "estimated_rows_per_second": 1177515.4051451704,
+          "estimated_working_bytes": 104604000,
+          "max_inflight_rows": 6000,
+          "memory_limited": false,
+          "model_version": "ultravin-native-slots-v1",
+          "single_core_rows_per_second": 213578.05819167796,
+          "slots_per_worker": 5,
+          "target_fraction": 0.99,
+          "workers": 12
+        },
+        "process_counters": {
+          "cycles": 586178812214,
+          "instructions": 1247823840566
+        },
+        "process_system_cpu_seconds": 0.792856,
+        "process_user_cpu_seconds": 194.55491300000003,
+        "result_owner": "worker_slots",
+        "rows": 20000000,
+        "selected_size_batches": {
+          "100": 200000
+        },
+        "selected_size_rows": {
+          "100": 20000000
+        },
+        "workers": 12
+      },
+      "raw": {
+        "stdout": "{\"actual_rows_per_second\":1175499.4901973617,\"average_busy_cores\":11.481560143534601,\"batch_size\":\"auto\",\"benchmark\":\"batch\",\"elapsed_seconds\":17.014043959,\"format\":\"full\",\"memory_bytes\":536870912,\"predictor\":{\"batch_size\":100,\"estimated_peak_rows_per_second\":1177515.4051451704,\"estimated_peak_rss_bytes\":null,\"estimated_rows_per_second\":1177515.4051451704,\"estimated_working_bytes\":104604000,\"max_inflight_rows\":6000,\"memory_limited\":false,\"model_version\":\"ultravin-native-slots-v1\",\"single_core_rows_per_second\":213578.05819167796,\"slots_per_worker\":5,\"target_fraction\":0.99,\"workers\":12},\"process_counters\":{\"cycles\":586178812214,\"instructions\":1247823840566},\"process_system_cpu_seconds\":0.792856,\"process_user_cpu_seconds\":194.55491300000003,\"result_owner\":\"worker_slots\",\"rows\":20000000,\"selected_size_batches\":{\"100\":200000},\"selected_size_rows\":{\"100\":20000000},\"workers\":12}\n",
+        "stderr": "native auto: warmup complete; starting timed passes\nbatch: 20000000 VINs in 17.0s = 1175499 VIN/s (70529969 in 60s, 12 core(s))\n"
+      }
+    },
+    {
+      "label": "candidate",
+      "workers": 12,
+      "rows_per_second": 1150719.209934602,
+      "peak_rss_bytes": 2093416448,
+      "process_user_cpu_seconds": 196.52713599999998,
+      "process_system_cpu_seconds": 0.9352309999999999,
+      "cpu_seconds_per_row": 9.873118349999999e-06,
+      "instructions_per_row": 61630.7124766,
+      "process_wall_seconds": 35.45988766699884,
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/native-trial-20260915T222632Z/throughput",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "10",
+        "batch",
+        "full",
+        "auto"
+      ],
+      "measurement": {
+        "actual_rows_per_second": 1150719.209934602,
+        "average_busy_cores": 11.36118694730282,
+        "batch_size": "auto",
+        "benchmark": "batch",
+        "elapsed_seconds": 17.380434625,
+        "format": "full",
+        "memory_bytes": 536870912,
+        "predictor": {
+          "batch_size": 100,
+          "estimated_peak_rows_per_second": 1114446.2765382903,
+          "estimated_peak_rss_bytes": null,
+          "estimated_rows_per_second": 1114446.2765382903,
+          "estimated_working_bytes": 104604000,
+          "max_inflight_rows": 6000,
+          "memory_limited": false,
+          "model_version": "ultravin-native-slots-v1",
+          "single_core_rows_per_second": 202138.56282640246,
+          "slots_per_worker": 5,
+          "target_fraction": 0.99,
+          "workers": 12
+        },
+        "process_counters": {
+          "cycles": 593913909924,
+          "instructions": 1232614249532
+        },
+        "process_system_cpu_seconds": 0.9352309999999999,
+        "process_user_cpu_seconds": 196.52713599999998,
+        "result_owner": "worker_slots",
+        "rows": 20000000,
+        "selected_size_batches": {
+          "100": 200000
+        },
+        "selected_size_rows": {
+          "100": 20000000
+        },
+        "workers": 12
+      },
+      "raw": {
+        "stdout": "{\"actual_rows_per_second\":1150719.209934602,\"average_busy_cores\":11.36118694730282,\"batch_size\":\"auto\",\"benchmark\":\"batch\",\"elapsed_seconds\":17.380434625,\"format\":\"full\",\"memory_bytes\":536870912,\"predictor\":{\"batch_size\":100,\"estimated_peak_rows_per_second\":1114446.2765382903,\"estimated_peak_rss_bytes\":null,\"estimated_rows_per_second\":1114446.2765382903,\"estimated_working_bytes\":104604000,\"max_inflight_rows\":6000,\"memory_limited\":false,\"model_version\":\"ultravin-native-slots-v1\",\"single_core_rows_per_second\":202138.56282640246,\"slots_per_worker\":5,\"target_fraction\":0.99,\"workers\":12},\"process_counters\":{\"cycles\":593913909924,\"instructions\":1232614249532},\"process_system_cpu_seconds\":0.9352309999999999,\"process_user_cpu_seconds\":196.52713599999998,\"result_owner\":\"worker_slots\",\"rows\":20000000,\"selected_size_batches\":{\"100\":200000},\"selected_size_rows\":{\"100\":20000000},\"workers\":12}\n",
+        "stderr": "native auto: warmup complete; starting timed passes\nbatch: 20000000 VINs in 17.4s = 1150719 VIN/s (69043153 in 60s, 12 core(s))\n"
+      }
+    }
+  ],
+  "completed_at_utc": "2026-09-15T22:28:55+00:00"
+}

@@ -1,0 +1,1710 @@
+diff --git a/crates/ultravin/src/decode.rs b/crates/ultravin/src/decode.rs
+index 0416851..b66ccbb 100644
+--- a/crates/ultravin/src/decode.rs
++++ b/crates/ultravin/src/decode.rs
+@@ -9,7 +9,9 @@ use std::cmp::Ordering;
+ use crate::db::Db;
+ use crate::hash::{ElementIndex, ElementSet, IntMap, IntSet};
+ use crate::matcher::like_match;
+-use crate::tables::{element_lookup_tag, is_exempt, ArchivedWmi, NULL_I32, NULL_I64};
++use crate::tables::{
++    element_lookup_tag, is_exempt, ArchivedPattern, ArchivedWmi, NULL_I32, NULL_I64,
++};
+ 
+ /// A single decoding item (the `tblDecodingItem` ROW), pre-resolution.
+ ///
+@@ -157,10 +159,117 @@ impl Drop for PatternScan {
+ 
+ /// Output of the core pass.
+ pub struct CoreResult<'a> {
++    pub patterns: Vec<CompactPattern>,
+     pub items: Vec<DecodingItem<'a>>,
+     pub wmi_found: bool,
+ }
+ 
++#[derive(Debug, Clone, Copy)]
++pub struct CompactPattern {
++    row: u32,
++    priority: i32,
++    wmi_id: i32,
++}
++
++#[derive(Clone, Copy)]
++pub(crate) enum ItemView<'v, 'db> {
++    Pattern(&'db ArchivedPattern),
++    Expanded(&'v DecodingItem<'db>),
++}
++
++impl<'v, 'db> ItemView<'v, 'db> {
++    pub(crate) fn element_id(self) -> i32 {
++        match self {
++            Self::Pattern(p) => p.elementid.to_native(),
++            Self::Expanded(i) => i.element_id,
++        }
++    }
++    pub(crate) fn pattern_id(self) -> i32 {
++        match self {
++            Self::Pattern(p) => p.id.to_native(),
++            Self::Expanded(i) => i.pattern_id,
++        }
++    }
++    pub(crate) fn attribute_id(self, db: &'db Db) -> &'v str
++    where
++        'db: 'v,
++    {
++        match self {
++            Self::Pattern(p) => db.s(p.attributeid.to_native()),
++            Self::Expanded(i) => i.attribute_id.as_ref(),
++        }
++    }
++    pub(crate) fn value(self) -> &'v str
++    where
++        'db: 'v,
++    {
++        match self {
++            Self::Pattern(_) => "XXX",
++            Self::Expanded(i) => i.value.as_ref(),
++        }
++    }
++    pub(crate) fn source(self) -> &'v str
++    where
++        'db: 'v,
++    {
++        match self {
++            Self::Pattern(_) => "Pattern",
++            Self::Expanded(i) => i.source.as_ref(),
++        }
++    }
++    pub(crate) fn keys(self, db: &'db Db) -> Cow<'v, str>
++    where
++        'db: 'v,
++    {
++        match self {
++            Self::Pattern(p) => uppercase_key(db.s(p.keys.to_native())),
++            Self::Expanded(i) => Cow::Borrowed(i.keys.as_ref()),
++        }
++    }
++}
++
++impl<'db> CoreResult<'db> {
++    pub(crate) fn views<'v>(&'v self, db: &'db Db) -> impl Iterator<Item = ItemView<'v, 'db>> + 'v
++    where
++        'db: 'v,
++    {
++        self.patterns
++            .iter()
++            .map(move |compact| ItemView::Pattern(&db.patterns()[compact.row as usize]))
++            .chain(self.items.iter().map(ItemView::Expanded))
++    }
++
++    pub(crate) fn materialize_patterns(&mut self, db: &'db Db) {
++        let first = self.items.len();
++        self.items.extend(
++            self.patterns
++                .drain(..)
++                .map(|pattern| pattern.materialize(db)),
++        );
++        let count = self.items.len() - first;
++        self.items.rotate_right(count);
++    }
++}
++
++impl CompactPattern {
++    pub(crate) fn materialize<'a>(self, db: &'a Db) -> DecodingItem<'a> {
++        let pattern = &db.patterns()[self.row as usize];
++        DecodingItem {
++            created_on: pattern.createdon_key.to_native(),
++            pattern_id: pattern.id.to_native(),
++            keys: uppercase_key(db.s(pattern.keys.to_native())),
++            vin_schema_id: pattern.vinschemaid.to_native(),
++            wmi_id: self.wmi_id,
++            element_id: pattern.elementid.to_native(),
++            attribute_id: Cow::Borrowed(db.s(pattern.attributeid.to_native())),
++            value: Cow::Borrowed("XXX"),
++            source: Cow::Borrowed("Pattern"),
++            priority: self.priority,
++            to_be_qced: false,
++        }
++    }
++}
++
+ const MAX_RETAINED_MATCHED_PATTERNS: usize = 256;
+ const MAX_RETAINED_SCHEMA_PRIORITIES: usize = 128;
+ const MAX_RETAINED_MAKE_IDS: usize = 64;
+@@ -196,6 +305,22 @@ thread_local! {
+     static DECODE_SCRATCH: RefCell<DecodeScratch> = RefCell::new(DecodeScratch::default());
+ }
+ 
++#[cfg(test)]
++#[derive(Clone, Copy, Default)]
++struct CompactDiagnostic {
++    core_passes: u64,
++    dedup_passes: u64,
++    pattern_candidates: u64,
++    surviving_patterns: u64,
++    later_rows_before_dedup: u64,
++    later_rows_after_dedup: u64,
++}
++
++#[cfg(test)]
++thread_local! {
++    static COMPACT_DIAGNOSTIC: RefCell<CompactDiagnostic> = RefCell::new(CompactDiagnostic::default());
++}
++
+ struct DecodeScratchGuard {
+     scratch: DecodeScratch,
+ }
+@@ -355,10 +480,15 @@ pub(crate) fn decode_core_into<'a>(
+     model_year_source: &str,
+     scan: &mut PatternScan,
+     mut items: Vec<DecodingItem<'a>>,
++    mut compact_patterns: Vec<CompactPattern>,
+ ) -> CoreResult<'a> {
++    #[cfg(test)]
++    COMPACT_DIAGNOSTIC.with(|diagnostic| diagnostic.borrow_mut().core_passes += 1);
+     items.clear();
++    compact_patterns.clear();
+     let Some(wmi) = wmi else {
+         return CoreResult {
++            patterns: compact_patterns,
+             items,
+             wmi_found: false,
+         };
+@@ -406,32 +536,18 @@ pub(crate) fn decode_core_into<'a>(
+     // Pattern ids are unique, so the order is total — no need for a stable sort
+     // (which allocates a scratch buffer).
+     scratch.matched_patterns.sort_unstable_by_key(|&(id, _)| id);
+-    for &(_, index) in &scratch.matched_patterns {
+-        let p = &db.patterns()[index as usize];
+-        items.push(DecodingItem {
+-            created_on: p.createdon_key.to_native(),
+-            pattern_id: p.id.to_native(),
+-            keys: uppercase_key(db.s(p.keys.to_native())),
+-            vin_schema_id: p.vinschemaid.to_native(),
+-            wmi_id: wmiid,
+-            element_id: p.elementid.to_native(),
+-            attribute_id: Cow::Borrowed(db.s(p.attributeid.to_native())),
+-            value: Cow::Borrowed("XXX"),
+-            source: Cow::Borrowed("Pattern"),
+-            priority: *scratch
+-                .schema_yearfrom
+-                .get(&p.vinschemaid.to_native())
+-                .unwrap_or(&0),
+-            to_be_qced: false,
+-        });
+-    }
+-
+     // --- (a) EngineModelPattern (priority 50).
+-    if let Some(idx) = pick_element18(&items) {
+-        let em_name = items[idx].attribute_id.trim().to_ascii_lowercase();
+-        let keys = items[idx].keys.clone();
+-        let pattern_id = items[idx].pattern_id;
+-        let vin_schema_id = items[idx].vin_schema_id;
++    if let Some(index) =
++        pick_pattern_element18(db, &scratch.matched_patterns, &scratch.schema_yearfrom)
++    {
++        let pattern = &db.patterns()[index as usize];
++        let em_name = db
++            .s(pattern.attributeid.to_native())
++            .trim()
++            .to_ascii_lowercase();
++        let keys = uppercase_key(db.s(pattern.keys.to_native()));
++        let pattern_id = pattern.id.to_native();
++        let vin_schema_id = pattern.vinschemaid.to_native();
+         if let Some(em) = db.enginemodel_by_norm(&em_name) {
+             for child in db.enginemodelpatterns_for(em.id.to_native()) {
+                 items.push(DecodingItem {
+@@ -527,12 +643,21 @@ pub(crate) fn decode_core_into<'a>(
+     // placeholders; the matched VIN digits become the value directly.
+     append_formula_patterns(db, &mut items, wmiid, var_keys, model_year);
+ 
+-    // --- Dedup (once).
+-    dedup_per_element(&mut items);
++    // --- Dedup (once). Ordinary Pattern rows remain compact archive indices
++    // until this point, so losing matches never construct DecodingItems.
++    dedup_patterns_and_items(
++        db,
++        wmiid,
++        &scratch.matched_patterns,
++        &scratch.schema_yearfrom,
++        &mut items,
++        &mut compact_patterns,
++    );
+ 
+     // --- Make 26 (post-dedup, never re-deduped).
+     append_make(
+         db,
++        &compact_patterns,
+         &mut items,
+         wmiid,
+         db.s(wmi.wmi.to_native()),
+@@ -541,15 +666,16 @@ pub(crate) fn decode_core_into<'a>(
+     );
+ 
+     // --- Conversion (priority 100): derive sibling elements via vpic.conversion.
+-    append_conversions(db, &mut items);
++    append_conversions(db, &compact_patterns, &mut items);
+ 
+     // --- Vehicle Specs (priority -100): make/model/year/vehicletype matching.
+-    append_vehicle_specs(db, &mut items, var_wmi, model_year);
++    append_vehicle_specs(db, &compact_patterns, &mut items, var_wmi, model_year);
+ 
+     // --- DefaultValue (priority 10).
+-    append_default_values(db, &mut items);
++    append_default_values(db, &compact_patterns, &mut items);
+ 
+     CoreResult {
++        patterns: compact_patterns,
+         items,
+         wmi_found: true,
+     }
+@@ -658,29 +784,62 @@ fn formula_value(var_keys: &str, keys: &str) -> String {
+     String::from_utf8_lossy(&vb[first..end]).into_owned()
+ }
+ 
+-/// Pick the element-18 item by (Priority DESC, CreatedOn DESC, id DESC).
+-fn pick_element18(items: &[DecodingItem]) -> Option<usize> {
+-    let mut best: Option<usize> = None;
+-    for (i, it) in items.iter().enumerate() {
+-        if it.element_id != 18 {
++/// Pick the element-18 Pattern by (Priority DESC, CreatedOn DESC, id DESC).
++/// This occurs before EngineModelPattern insertion and before dedup.
++fn pick_pattern_element18(
++    db: &Db,
++    patterns: &[(i32, u32)],
++    schema_yearfrom: &IntMap<i32, i32>,
++) -> Option<u32> {
++    let mut best: Option<(usize, u32)> = None;
++    for (i, &(_, index)) in patterns.iter().enumerate() {
++        let pattern = &db.patterns()[index as usize];
++        if pattern.elementid.to_native() != 18 {
+             continue;
+         }
++        let priority = *schema_yearfrom
++            .get(&pattern.vinschemaid.to_native())
++            .unwrap_or(&0);
+         match best {
+-            None => best = Some(i),
+-            Some(b) => {
+-                let cur = &items[b];
+-                let better = it.priority > cur.priority
+-                    || (it.priority == cur.priority
+-                        && created_desc_nulls_first(it.created_on, cur.created_on)
+-                            == Ordering::Less)
+-                    || (it.priority == cur.priority && it.created_on == cur.created_on && i > b);
++            None => best = Some((i, index)),
++            Some((best_i, best_index)) => {
++                let current = &db.patterns()[best_index as usize];
++                let current_priority = *schema_yearfrom
++                    .get(&current.vinschemaid.to_native())
++                    .unwrap_or(&0);
++                let created_on = pattern.createdon_key.to_native();
++                let current_created_on = current.createdon_key.to_native();
++                let better = engine_pattern_better(
++                    priority,
++                    created_on,
++                    i,
++                    current_priority,
++                    current_created_on,
++                    best_i,
++                );
+                 if better {
+-                    best = Some(i);
++                    best = Some((i, index));
+                 }
+             }
+         }
+     }
+-    best
++    best.map(|(_, index)| index)
++}
++
++fn engine_pattern_better(
++    priority: i32,
++    created_on: i64,
++    insertion: usize,
++    current_priority: i32,
++    current_created_on: i64,
++    current_insertion: usize,
++) -> bool {
++    priority > current_priority
++        || (priority == current_priority
++            && created_desc_nulls_first(created_on, current_created_on) == Ordering::Less)
++        || (priority == current_priority
++            && created_on == current_created_on
++            && insertion > current_insertion)
+ }
+ 
+ /// CreatedOn DESC with NULLs first (i.e. `Less` == ranks earlier / wins).
+@@ -693,88 +852,218 @@ fn created_desc_nulls_first(a: i64, b: i64) -> Ordering {
+     }
+ }
+ 
+-/// Key length ignoring `*`, the third rung of [`dedup_cmp`]. `cover` reproduces
++/// Key length ignoring `*`, the third rung of the dedup rank. `cover` reproduces
+ /// the same grouping, so both must count identically — hence one function.
+ pub(crate) fn len_no_star(keys: &str) -> usize {
+     keys.chars().filter(|c| *c != '*').count()
+ }
+ 
+-/// Compare two keys as if their `[`/`]` were stripped, without allocating.
+-/// Keys are ASCII, so byte order matches `str`'s lexicographic ordering — this
+-/// is equivalent to `keys_no_brackets(a).cmp(&keys_no_brackets(b))`.
+-fn cmp_keys_no_brackets(a: &str, b: &str) -> Ordering {
+-    let mut ai = a.bytes().filter(|&c| c != b'[' && c != b']');
+-    let mut bi = b.bytes().filter(|&c| c != b'[' && c != b']');
+-    loop {
+-        match (ai.next(), bi.next()) {
+-            (Some(x), Some(y)) => match x.cmp(&y) {
+-                Ordering::Equal => continue,
+-                other => return other,
+-            },
+-            (None, None) => return Ordering::Equal,
+-            (None, Some(_)) => return Ordering::Less,
+-            (Some(_), None) => return Ordering::Greater,
++/// RANK dedup across compact ordinary Pattern rows and expanded later sources.
++fn dedup_patterns_and_items<'a>(
++    db: &'a Db,
++    wmiid: i32,
++    patterns: &[(i32, u32)],
++    schema_yearfrom: &IntMap<i32, i32>,
++    items: &mut Vec<DecodingItem<'a>>,
++    winners: &mut Vec<CompactPattern>,
++) {
++    let pattern_count = patterns.len();
++    #[cfg(test)]
++    let later_rows_before_dedup = items.len();
++    let mut best = ElementIndex::default();
++    for (i, &(_, index)) in patterns.iter().enumerate() {
++        let pattern = &db.patterns()[index as usize];
++        let element_id = pattern.elementid.to_native();
++        if is_exempt(element_id) {
++            continue;
++        }
++        match best.get(&element_id) {
++            None => {
++                best.insert(element_id, i);
++            }
++            Some(&b) => {
++                if candidate_cmp(db, patterns, schema_yearfrom, items, i, b) == Ordering::Less {
++                    best.insert(element_id, i);
++                }
++            }
+         }
+     }
+-}
+-
+-/// RANK dedup: keep the best item per non-exempt element id.
+-fn dedup_per_element(items: &mut Vec<DecodingItem>) {
+-    // best index per element id (lowest under the comparator).
+-    let mut best = ElementIndex::default();
+     for (i, it) in items.iter().enumerate() {
+         if is_exempt(it.element_id) {
+             continue;
+         }
++        let candidate = pattern_count + i;
+         match best.get(&it.element_id) {
+             None => {
+-                best.insert(it.element_id, i);
++                best.insert(it.element_id, candidate);
+             }
+             Some(&b) => {
+-                if dedup_cmp(it, i, &items[b], b) == Ordering::Less {
+-                    best.insert(it.element_id, i);
++                if candidate_cmp(db, patterns, schema_yearfrom, items, candidate, b)
++                    == Ordering::Less
++                {
++                    best.insert(it.element_id, candidate);
+                 }
+             }
+         }
+     }
+-    // Keep an item iff it is exempt or the chosen best for its element. `best`
+-    // stores original indices, so comparing the running original index needs no
+-    // separate keep-bitmap.
+     let mut idx = 0;
+     items.retain(|it| {
+-        let i = idx;
++        let candidate = pattern_count + idx;
+         idx += 1;
+-        is_exempt(it.element_id) || best.get(&it.element_id) == Some(&i)
++        is_exempt(it.element_id) || best.get(&it.element_id) == Some(&candidate)
+     });
++
++    winners.reserve(patterns.len().min(64));
++    for (i, &(_, index)) in patterns.iter().enumerate() {
++        let p = &db.patterns()[index as usize];
++        let element_id = p.elementid.to_native();
++        if !is_exempt(element_id) && best.get(&element_id) != Some(&i) {
++            continue;
++        }
++        winners.push(CompactPattern {
++            row: index,
++            priority: *schema_yearfrom
++                .get(&p.vinschemaid.to_native())
++                .unwrap_or(&0),
++            wmi_id: wmiid,
++        });
++    }
++    #[cfg(test)]
++    COMPACT_DIAGNOSTIC.with(|diagnostic| {
++        let mut diagnostic = diagnostic.borrow_mut();
++        diagnostic.dedup_passes += 1;
++        diagnostic.pattern_candidates += pattern_count as u64;
++        diagnostic.surviving_patterns += winners.len() as u64;
++        diagnostic.later_rows_before_dedup += later_rows_before_dedup as u64;
++        diagnostic.later_rows_after_dedup += items.len() as u64;
++    });
++}
++
++fn candidate_cmp(
++    db: &Db,
++    patterns: &[(i32, u32)],
++    schema_yearfrom: &IntMap<i32, i32>,
++    items: &[DecodingItem],
++    a: usize,
++    b: usize,
++) -> Ordering {
++    let pattern_count = patterns.len();
++    let numeric = |index: usize| {
++        if index < pattern_count {
++            let p = &db.patterns()[patterns[index].1 as usize];
++            (
++                *schema_yearfrom
++                    .get(&p.vinschemaid.to_native())
++                    .unwrap_or(&0),
++                p.createdon_key.to_native(),
++            )
++        } else {
++            let item = &items[index - pattern_count];
++            (item.priority, item.created_on)
++        }
++    };
++    let keys = |index: usize| {
++        if index < pattern_count {
++            (
++                db.s(db.patterns()[patterns[index].1 as usize].keys.to_native()),
++                true,
++            )
++        } else {
++            (items[index - pattern_count].keys.as_ref(), false)
++        }
++    };
++    let (ap, ac) = numeric(a);
++    let (bp, bc) = numeric(b);
++    let (ak, normalize_a) = keys(a);
++    let (bk, normalize_b) = keys(b);
++    rank_cmp(ap, ac, ak, normalize_a, a, bp, bc, bk, normalize_b, b)
+ }
+ 
+-/// Dedup comparator: Priority DESC, CreatedOn DESC (NULLS FIRST), len_no_star
+-/// ASC, keys_no_brackets ASC, synthetic id (insertion order) ASC.
+-fn dedup_cmp(a: &DecodingItem, ai: usize, b: &DecodingItem, bi: usize) -> Ordering {
+-    b.priority
+-        .cmp(&a.priority)
+-        .then_with(|| created_desc_nulls_first(a.created_on, b.created_on))
+-        .then_with(|| len_no_star(&a.keys).cmp(&len_no_star(&b.keys)))
+-        .then_with(|| cmp_keys_no_brackets(&a.keys, &b.keys))
++#[allow(clippy::too_many_arguments)]
++fn rank_cmp(
++    ap: i32,
++    ac: i64,
++    ak: &str,
++    normalize_a: bool,
++    ai: usize,
++    bp: i32,
++    bc: i64,
++    bk: &str,
++    normalize_b: bool,
++    bi: usize,
++) -> Ordering {
++    bp.cmp(&ap)
++        .then_with(|| created_desc_nulls_first(ac, bc))
++        .then_with(|| len_no_star(ak).cmp(&len_no_star(bk)))
++        .then_with(|| cmp_rank_keys(ak, normalize_a, bk, normalize_b))
+         .then_with(|| ai.cmp(&bi))
+ }
+ 
++/// Compare the stored key representation used by dedup. Compact Pattern keys
++/// apply `uppercase_key` bytewise without allocating; expanded keys already
++/// carry their final spelling.
++fn cmp_rank_keys(a: &str, normalize_a: bool, b: &str, normalize_b: bool) -> Ordering {
++    let mut ai = a.bytes().filter_map(|byte| {
++        if matches!(byte, b'[' | b']') {
++            None
++        } else if normalize_a {
++            Some(byte.to_ascii_uppercase())
++        } else {
++            Some(byte)
++        }
++    });
++    let mut bi = b.bytes().filter_map(|byte| {
++        if matches!(byte, b'[' | b']') {
++            None
++        } else if normalize_b {
++            Some(byte.to_ascii_uppercase())
++        } else {
++            Some(byte)
++        }
++    });
++    loop {
++        match (ai.next(), bi.next()) {
++            (Some(x), Some(y)) => match x.cmp(&y) {
++                Ordering::Equal => continue,
++                other => return other,
++            },
++            (None, None) => return Ordering::Equal,
++            (None, Some(_)) => return Ordering::Less,
++            (Some(_), None) => return Ordering::Greater,
++        }
++    }
++}
++
+ /// Make (element 26): pattern-model join (priority 1000), else single-WMI make.
+ fn append_make<'a>(
+     db: &'a Db,
++    patterns: &[CompactPattern],
+     items: &mut Vec<DecodingItem<'a>>,
+     wmiid: i32,
+     var_wmi: &'a str,
+     wmi_created: i64,
+     distinct_makeids: &mut Vec<i32>,
+ ) {
+-    let model_item = items.iter().find(|it| it.element_id == 28).map(|it| {
+-        (
+-            it.attribute_id.clone(),
+-            it.pattern_id,
+-            it.keys.clone(),
+-            it.vin_schema_id,
+-        )
++    let pattern_model = patterns.iter().find_map(|compact| {
++        let p = &db.patterns()[compact.row as usize];
++        (p.elementid.to_native() == 28).then(|| {
++            (
++                Cow::Borrowed(db.s(p.attributeid.to_native())),
++                p.id.to_native(),
++                uppercase_key(db.s(p.keys.to_native())),
++                p.vinschemaid.to_native(),
++            )
++        })
++    });
++    let model_item = pattern_model.or_else(|| {
++        items.iter().find(|it| it.element_id == 28).map(|it| {
++            (
++                it.attribute_id.clone(),
++                it.pattern_id,
++                it.keys.clone(),
++                it.vin_schema_id,
++            )
++        })
+     });
+ 
+     if let Some((model_attr, pattern_id, keys, vin_schema_id)) = model_item {
+@@ -835,7 +1124,11 @@ fn append_make<'a>(
+ /// that target is not already present for this pass. The cursor order
+ /// (Priority DESC, CreatedOn DESC NULLS FIRST, conversion id ASC) decides which
+ /// source wins when several would produce the same target.
+-fn append_conversions<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
++fn append_conversions<'a>(
++    db: &'a Db,
++    patterns: &[CompactPattern],
++    items: &mut Vec<DecodingItem<'a>>,
++) {
+     struct Row<'a> {
+         priority: i32,
+         created_on: i64,
+@@ -852,6 +1145,23 @@ fn append_conversions<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
+     // Snapshot the cursor rows before any insert (PostgreSQL evaluates the FOR
+     // query once, so conversion-derived items never spawn further conversions).
+     let mut rows: Vec<Row> = Vec::new();
++    for compact in patterns {
++        let p = &db.patterns()[compact.row as usize];
++        for c in db.conversions_from(p.elementid.to_native()) {
++            rows.push(Row {
++                priority: compact.priority,
++                created_on: p.createdon_key.to_native(),
++                conv_id: c.id.to_native(),
++                to_elem: c.toelementid.to_native(),
++                formula: db.s(c.formula.to_native()),
++                value: Cow::Borrowed(db.s(p.attributeid.to_native())),
++                keys: uppercase_key(db.s(p.keys.to_native())),
++                pattern_id: p.id.to_native(),
++                vin_schema_id: p.vinschemaid.to_native(),
++                wmi_id: compact.wmi_id,
++            });
++        }
++    }
+     for it in items.iter() {
+         for c in db.conversions_from(it.element_id) {
+             rows.push(Row {
+@@ -878,7 +1188,11 @@ fn append_conversions<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
+             .then(a.conv_id.cmp(&b.conv_id))
+     });
+ 
+-    let mut present: ElementSet = items.iter().map(|it| it.element_id).collect();
++    let mut present: ElementSet = patterns
++        .iter()
++        .map(|p| db.patterns()[p.row as usize].elementid.to_native())
++        .chain(items.iter().map(|it| it.element_id))
++        .collect();
+     for r in rows {
+         if !present.insert(r.to_elem) {
+             continue;
+@@ -912,6 +1226,26 @@ fn conversion_source(conv_id: i32, formula: &str, value: &str) -> String {
+ /// includes element 1, unlike the dedup-exempt list).
+ const SPEC_EXEMPT: [i32; 9] = [1, 114, 121, 129, 150, 154, 155, 169, 186];
+ 
++fn find_attribute<'v, 'db: 'v>(
++    db: &'db Db,
++    patterns: &'v [CompactPattern],
++    items: &'v [DecodingItem<'db>],
++    element_id: i32,
++) -> Option<&'v str> {
++    patterns
++        .iter()
++        .find_map(|compact| {
++            let p = &db.patterns()[compact.row as usize];
++            (p.elementid.to_native() == element_id).then(|| db.s(p.attributeid.to_native()))
++        })
++        .or_else(|| {
++            items
++                .iter()
++                .find(|item| item.element_id == element_id)
++                .map(|item| item.attribute_id.as_ref())
++        })
++}
++
+ /// Vehicle Specs (priority -100): the `spvindecode_core` spec sub-pass.
+ ///
+ /// Runs once per pass after Conversion (only when a WMI was found). Selects
+@@ -921,23 +1255,20 @@ const SPEC_EXEMPT: [i32; 9] = [1, 114, 121, 129, 150, 154, 155, 169, 186];
+ /// (modulo [`SPEC_EXEMPT`]), deduped to one row per element by latest ChangedOn.
+ fn append_vehicle_specs<'a>(
+     db: &'a Db,
++    patterns: &[CompactPattern],
+     items: &mut Vec<DecodingItem<'a>>,
+     var_wmi: &str,
+     model_year: Option<i32>,
+ ) {
+     // STEP 0: tVehicleType (element 39) and var_modelId (element 28). Either NULL
+     // => the candidate join matches nothing, so no specs are produced.
+-    let Some(veh_type) = items
+-        .iter()
+-        .find(|it| it.element_id == 39)
+-        .and_then(|it| it.attribute_id.parse::<i32>().ok())
++    let Some(veh_type) =
++        find_attribute(db, patterns, items, 39).and_then(|value| value.parse::<i32>().ok())
+     else {
+         return;
+     };
+-    let Some(model_id) = items
+-        .iter()
+-        .find(|it| it.element_id == 28)
+-        .and_then(|it| it.attribute_id.parse::<i32>().ok())
++    let Some(model_id) =
++        find_attribute(db, patterns, items, 28).and_then(|value| value.parse::<i32>().ok())
+     else {
+         return;
+     };
+@@ -998,11 +1329,20 @@ fn append_vehicle_specs<'a>(
+             // lowercased copy of it (or of each candidate item) per comparison.
+             let attr = db.s(p.attributeid.to_native());
+             let mut n = 0usize;
++            for (i, compact) in patterns.iter().enumerate() {
++                let row = &db.patterns()[compact.row as usize];
++                if row.elementid.to_native() == p.elementid.to_native()
++                    && db.s(row.attributeid.to_native()).eq_ignore_ascii_case(attr)
++                {
++                    matched.insert(i);
++                    n += 1;
++                }
++            }
+             for (i, it) in items.iter().enumerate() {
+                 if it.element_id == p.elementid.to_native()
+                     && it.attribute_id.eq_ignore_ascii_case(attr)
+                 {
+-                    matched.insert(i);
++                    matched.insert(patterns.len() + i);
+                     n += 1;
+                 }
+             }
+@@ -1016,9 +1356,10 @@ fn append_vehicle_specs<'a>(
+ 
+     // STEP 3: non-key attributes for elements not already decoded (exempt set
+     // never blocks). Emit one tbl1 row per surviving non-key pattern.
+-    let decoded_nonexempt: ElementSet = items
++    let decoded_nonexempt: ElementSet = patterns
+         .iter()
+-        .map(|it| it.element_id)
++        .map(|compact| db.patterns()[compact.row as usize].elementid.to_native())
++        .chain(items.iter().map(|it| it.element_id))
+         .filter(|e| !SPEC_EXEMPT.contains(e))
+         .collect();
+     struct Tbl1<'a> {
+@@ -1087,15 +1428,21 @@ fn append_vehicle_specs<'a>(
+ }
+ 
+ /// DefaultValue (priority 10) for the decoded vehicle type, for absent elements.
+-fn append_default_values<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
+-    let Some(veh) = items
+-        .iter()
+-        .find(|it| it.element_id == 39)
+-        .and_then(|it| it.attribute_id.parse::<i32>().ok())
++fn append_default_values<'a>(
++    db: &'a Db,
++    patterns: &[CompactPattern],
++    items: &mut Vec<DecodingItem<'a>>,
++) {
++    let Some(veh) =
++        find_attribute(db, patterns, items, 39).and_then(|value| value.parse::<i32>().ok())
+     else {
+         return;
+     };
+-    let present: ElementSet = items.iter().map(|it| it.element_id).collect();
++    let present: ElementSet = patterns
++        .iter()
++        .map(|compact| db.patterns()[compact.row as usize].elementid.to_native())
++        .chain(items.iter().map(|it| it.element_id))
++        .collect();
+     for dv in db.defaultvalues_for(veh) {
+         let element_id = dv.elementid.to_native();
+         if !dv.defaultvalue_present || present.contains(&element_id) {
+@@ -1130,6 +1477,352 @@ fn append_default_values<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    use crate::tables::{
++        serialize_artifact, Element, Pattern, VinSchema, VpicData, Wmi, WmiVinSchema,
++    };
++
++    const STRINGS: &[&str] = &["", "a[ß]*", "b[é]**", "z", "same", "attr", "*", "ABC"];
++
++    fn sid(value: &str) -> u32 {
++        STRINGS.iter().position(|s| *s == value).unwrap() as u32
++    }
++
++    fn compact_fixture() -> Db {
++        let mut arena_bytes = Vec::new();
++        let mut arena_offsets = vec![0];
++        for value in STRINGS {
++            arena_bytes.extend_from_slice(value.as_bytes());
++            arena_offsets.push(arena_bytes.len() as u32);
++        }
++        let pattern = [
++            (1, 1, "a[ß]*", 10, 50),
++            (2, 2, "b[é]**", 11, 10),
++            (5, 2, "same", 18, 10),
++            (6, 2, "same", 18, 10),
++            (3, 3, "z", 114, 1),
++            (4, 4, "same", 12, NULL_I64),
++            (100, 9, "*", 13, 7),
++        ]
++        .into_iter()
++        .map(
++            |(id, vinschemaid, keys, elementid, createdon_key)| Pattern {
++                id,
++                vinschemaid,
++                keys: sid(keys),
++                keys_regex: sid(""),
++                elementid,
++                attributeid: sid("attr"),
++                createdon_key,
++                specificity: 0,
++                has_bracket: keys.contains('['),
++            },
++        )
++        .collect();
++        let data = VpicData {
++            arena_bytes,
++            arena_offsets,
++            wmi: vec![Wmi {
++                id: 1,
++                wmi: sid("ABC"),
++                manufacturerid: NULL_I32,
++                makeid: NULL_I32,
++                vehicletypeid: NULL_I32,
++                trucktypeid: NULL_I32,
++                publicavailabilitydate: 0,
++                createdon_key: 0,
++            }],
++            wmi_vinschema: vec![
++                WmiVinSchema {
++                    id: 1,
++                    wmiid: 1,
++                    vinschemaid: 9,
++                    yearfrom: 1980,
++                    yearto: NULL_I32,
++                },
++                WmiVinSchema {
++                    id: 2,
++                    wmiid: 1,
++                    vinschemaid: 9,
++                    yearfrom: 1990,
++                    yearto: NULL_I32,
++                },
++            ],
++            vinschema: [1, 2, 3, 4, 9]
++                .into_iter()
++                .map(|id| VinSchema {
++                    id,
++                    tobeqced: false,
++                })
++                .collect(),
++            pattern,
++            element: [10, 11, 12, 13, 18, 114]
++                .into_iter()
++                .map(|id| Element {
++                    id,
++                    name: sid(""),
++                    code: sid(""),
++                    isprivate: false,
++                    groupname: sid(""),
++                    datatype: sid(""),
++                    decode: sid(""),
++                    decode_present: true,
++                    weight: 0,
++                })
++                .collect(),
++            make_model: vec![],
++            wmi_make: vec![],
++            enginemodel: vec![],
++            enginemodelpattern: vec![],
++            defaultvalue: vec![],
++            vinexception: vec![],
++            conversion: vec![],
++            lookups: vec![],
++            cover: vec![],
++            vspecschema: vec![],
++            vspecschemapattern: vec![],
++            vspecpattern: vec![],
++            vspecschemamodel: vec![],
++            vspecschemayear: vec![],
++        };
++        Db::from_bytes(&serialize_artifact(&data, 1)).unwrap()
++    }
++
++    fn old_dedup(items: &mut Vec<DecodingItem<'_>>) {
++        let mut best = ElementIndex::default();
++        for (i, item) in items.iter().enumerate() {
++            if is_exempt(item.element_id) {
++                continue;
++            }
++            match best.get(&item.element_id) {
++                None => {
++                    best.insert(item.element_id, i);
++                }
++                Some(&b)
++                    if rank_cmp(
++                        item.priority,
++                        item.created_on,
++                        &item.keys,
++                        false,
++                        i,
++                        items[b].priority,
++                        items[b].created_on,
++                        &items[b].keys,
++                        false,
++                        b,
++                    ) == Ordering::Less =>
++                {
++                    best.insert(item.element_id, i);
++                }
++                Some(_) => {}
++            }
++        }
++        let mut i = 0;
++        items.retain(|item| {
++            let current = i;
++            i += 1;
++            is_exempt(item.element_id) || best.get(&item.element_id) == Some(&current)
++        });
++    }
++
++    fn item_signature(item: &DecodingItem<'_>) -> (i32, i32, String, String, String, i64, i32) {
++        (
++            item.element_id,
++            item.pattern_id,
++            item.keys.to_string(),
++            item.attribute_id.to_string(),
++            item.source.to_string(),
++            item.created_on,
++            item.priority,
++        )
++    }
++
++    #[test]
++    fn real_compact_dedup_matches_old_materialized_path_and_order() {
++        let db = compact_fixture();
++        let patterns = [(1, 0), (2, 1), (3, 4), (4, 5), (5, 2), (6, 3)];
++        let priorities: IntMap<i32, i32> = [(1, 100), (2, 50), (3, -100), (4, 1980)]
++            .into_iter()
++            .collect();
++        let expanded = vec![
++            DecodingItem {
++                created_on: NULL_I64,
++                pattern_id: 90,
++                keys: Cow::Borrowed("Aß*"),
++                vin_schema_id: 1,
++                wmi_id: NULL_I32,
++                element_id: 10,
++                attribute_id: Cow::Borrowed("formula"),
++                value: Cow::Borrowed("1"),
++                source: Cow::Borrowed("Formula Pattern"),
++                priority: 100,
++                to_be_qced: false,
++            },
++            DecodingItem {
++                created_on: 10,
++                pattern_id: 2,
++                keys: Cow::Borrowed("Bé**"),
++                vin_schema_id: 2,
++                wmi_id: 1,
++                element_id: 11,
++                attribute_id: Cow::Borrowed("engine"),
++                value: Cow::Borrowed("XXX"),
++                source: Cow::Borrowed("EngineModelPattern"),
++                priority: 50,
++                to_be_qced: false,
++            },
++            DecodingItem {
++                created_on: NULL_I64,
++                pattern_id: 91,
++                keys: Cow::Borrowed("a"),
++                vin_schema_id: 3,
++                wmi_id: NULL_I32,
++                element_id: 114,
++                attribute_id: Cow::Borrowed("note"),
++                value: Cow::Borrowed("1"),
++                source: Cow::Borrowed("Formula Pattern"),
++                priority: 100,
++                to_be_qced: false,
++            },
++        ];
++        let mut compact = expanded.clone();
++        let mut compact_patterns = Vec::new();
++        dedup_patterns_and_items(
++            &db,
++            1,
++            &patterns,
++            &priorities,
++            &mut compact,
++            &mut compact_patterns,
++        );
++        let mut compact_core = CoreResult {
++            patterns: compact_patterns,
++            items: compact,
++            wmi_found: true,
++        };
++        compact_core.materialize_patterns(&db);
++        let mut old: Vec<_> = patterns
++            .iter()
++            .map(|&(_, index)| {
++                let p = &db.patterns()[index as usize];
++                DecodingItem {
++                    created_on: p.createdon_key.to_native(),
++                    pattern_id: p.id.to_native(),
++                    keys: uppercase_key(db.s(p.keys.to_native())),
++                    vin_schema_id: p.vinschemaid.to_native(),
++                    wmi_id: 1,
++                    element_id: p.elementid.to_native(),
++                    attribute_id: Cow::Borrowed(db.s(p.attributeid.to_native())),
++                    value: Cow::Borrowed("XXX"),
++                    source: Cow::Borrowed("Pattern"),
++                    priority: *priorities.get(&p.vinschemaid.to_native()).unwrap_or(&0),
++                    to_be_qced: false,
++                }
++            })
++            .collect();
++        old.extend(expanded);
++        old_dedup(&mut old);
++        assert_eq!(
++            compact_core
++                .items
++                .iter()
++                .map(item_signature)
++                .collect::<Vec<_>>(),
++            old.iter().map(item_signature).collect::<Vec<_>>()
++        );
++    }
++
++    #[test]
++    fn real_engine_picker_keeps_its_pre_dedup_latest_insertion_tie() {
++        let db = compact_fixture();
++        let patterns = [(5, 2), (6, 3)];
++        let priorities: IntMap<i32, i32> = [(2, 50)].into_iter().collect();
++        assert_eq!(pick_pattern_element18(&db, &patterns, &priorities), Some(3));
++        let mut items = Vec::new();
++        let mut winners = Vec::new();
++        dedup_patterns_and_items(&db, 1, &patterns, &priorities, &mut items, &mut winners);
++        assert_eq!(db.patterns()[winners[0].row as usize].id.to_native(), 5);
++    }
++
++    #[test]
++    fn real_core_uses_first_duplicate_schema_link_priority() {
++        let db = compact_fixture();
++        let wmi = db.wmi_by_str("ABC", 1).unwrap();
++        let mut scan = PatternScan::default();
++        let result = decode_core_into(
++            &db,
++            "ABC",
++            Some(wmi),
++            "X",
++            None,
++            DEFAULT_MODEL_YEAR_SOURCE,
++            &mut scan,
++            Vec::new(),
++            Vec::new(),
++        );
++        let item = result
++            .patterns
++            .iter()
++            .find(|item| db.patterns()[item.row as usize].id.to_native() == 100)
++            .unwrap();
++        assert_eq!(item.priority, 1980);
++    }
++
++    #[test]
++    #[ignore = "diagnostic over an external 20m-line corpus"]
++    fn report_compact_pattern_candidate_scope() {
++        use std::io::BufRead;
++
++        const SAMPLE_ROWS: usize = 100_000;
++        const NOW_MICROS: i64 = 1_788_220_800_000_000;
++        let path = std::env::var("ULTRAVIN_DIAGNOSTIC_CORPUS")
++            .expect("ULTRAVIN_DIAGNOSTIC_CORPUS must name the canonical corpus");
++        let count_reader = std::io::BufReader::new(std::fs::File::open(&path).unwrap());
++        let corpus_rows = count_reader
++            .lines()
++            .map_while(Result::ok)
++            .filter(|line| line.len() == 17)
++            .count();
++        assert!(
++            corpus_rows >= SAMPLE_ROWS,
++            "corpus has only {corpus_rows} VINs"
++        );
++
++        COMPACT_DIAGNOSTIC
++            .with(|diagnostic| *diagnostic.borrow_mut() = CompactDiagnostic::default());
++        let db = Db::embedded();
++        let reader = std::io::BufReader::new(std::fs::File::open(&path).unwrap());
++        let mut valid_index = 0usize;
++        let mut sample_index = 0usize;
++        for line in reader.lines() {
++            let vin = line.unwrap();
++            if vin.len() != 17 {
++                continue;
++            }
++            let target = sample_index * (corpus_rows - 1) / (SAMPLE_ROWS - 1);
++            if valid_index == target {
++                std::hint::black_box(db.decode_at(&vin, None, NOW_MICROS));
++                sample_index += 1;
++                if sample_index == SAMPLE_ROWS {
++                    break;
++                }
++            }
++            valid_index += 1;
++        }
++        assert_eq!(sample_index, SAMPLE_ROWS);
++
++        let diagnostic = COMPACT_DIAGNOSTIC.with(|diagnostic| *diagnostic.borrow());
++        eprintln!(
++            "sample_rows={SAMPLE_ROWS} corpus_rows={corpus_rows} core_passes={} dedup_passes={} pattern_candidates={} surviving_patterns={} later_rows_before_dedup={} later_rows_after_dedup={} decoding_item_bytes={} compact_pattern_tuple_bytes={}",
++            diagnostic.core_passes,
++            diagnostic.dedup_passes,
++            diagnostic.pattern_candidates,
++            diagnostic.surviving_patterns,
++            diagnostic.later_rows_before_dedup,
++            diagnostic.later_rows_after_dedup,
++            std::mem::size_of::<DecodingItem<'static>>(),
++            std::mem::size_of::<CompactPattern>(),
++        );
++    }
+ 
+     #[test]
+     fn borrowed_keys_preserve_ascii_uppercase_semantics() {
+@@ -1296,12 +1989,71 @@ mod tests {
+             DEFAULT_MODEL_YEAR_SOURCE,
+             &mut scan,
+             items,
++            Vec::new(),
+         );
+         assert!(!result.wmi_found);
+         assert!(result.items.is_empty());
+         assert_eq!(result.items.as_ptr(), pointer);
+         assert!(result.items.capacity() >= 123);
+     }
++
++    #[test]
++    fn winner_materialization_preserves_pattern_then_computed_order_and_fields() {
++        let db = Db::embedded();
++        if db.patterns().len() < 2 {
++            return;
++        }
++        let patterns = vec![
++            CompactPattern {
++                row: 0,
++                priority: 17,
++                wmi_id: 31,
++            },
++            CompactPattern {
++                row: 1,
++                priority: 19,
++                wmi_id: 31,
++            },
++        ];
++        let expected: Vec<_> = patterns
++            .iter()
++            .copied()
++            .map(|pattern| pattern.materialize(db))
++            .collect();
++        let computed = DecodingItem {
++            created_on: NULL_I64,
++            pattern_id: NULL_I32,
++            keys: Cow::Borrowed("computed"),
++            vin_schema_id: NULL_I32,
++            wmi_id: NULL_I32,
++            element_id: 999,
++            attribute_id: Cow::Borrowed("computed"),
++            value: Cow::Borrowed("computed"),
++            source: Cow::Borrowed("Corrections"),
++            priority: 0,
++            to_be_qced: false,
++        };
++        let mut core = CoreResult {
++            patterns,
++            items: vec![computed],
++            wmi_found: true,
++        };
++        core.materialize_patterns(db);
++        assert!(core.patterns.is_empty());
++        for (actual, expected) in core.items[..2].iter().zip(expected) {
++            assert_eq!(actual.created_on, expected.created_on);
++            assert_eq!(actual.pattern_id, expected.pattern_id);
++            assert_eq!(actual.keys, expected.keys);
++            assert_eq!(actual.vin_schema_id, expected.vin_schema_id);
++            assert_eq!(actual.wmi_id, expected.wmi_id);
++            assert_eq!(actual.element_id, expected.element_id);
++            assert_eq!(actual.attribute_id, expected.attribute_id);
++            assert_eq!(actual.value, expected.value);
++            assert_eq!(actual.source, expected.source);
++            assert_eq!(actual.priority, expected.priority);
++        }
++        assert_eq!(core.items[2].source, "Corrections");
++    }
+ }
+ 
+ #[cfg(test)]
+diff --git a/crates/ultravin/src/errors.rs b/crates/ultravin/src/errors.rs
+index c2aaaea..1f2fe87 100644
+--- a/crates/ultravin/src/errors.rs
++++ b/crates/ultravin/src/errors.rs
+@@ -491,12 +491,12 @@ fn push_replacement(out: &mut String, position: i32, replacements: &str) {
+ 
+ /// Port of `vpic.spvindecode_errorcode` (E0-E6). `matched_keys` are the
+ /// non-empty `Keys` of the pass's pattern rows (Source ILIKE '%pattern%').
+-fn errorcode<'a>(
++fn errorcode<K: AsRef<str>>(
+     db: &Db,
+     vin: &str,
+     var_wmi: &str,
+     model_year: Option<i32>,
+-    matched_keys: impl Iterator<Item = &'a str>,
++    matched_keys: impl Iterator<Item = K>,
+ ) -> ErrorCodeOut {
+     let vb = VinChars::new(vin);
+     let vb = vb.as_slice();
+@@ -638,7 +638,10 @@ fn errorcode<'a>(
+ 
+ /// E6 examines VIN positions 4..8 and 11. Stop visiting pattern rows once
+ /// all of those positions present in this VIN have a matching character.
+-fn used_key_positions<'a>(vin: &[char], matched_keys: impl Iterator<Item = &'a str>) -> [bool; 8] {
++fn used_key_positions<K: AsRef<str>>(
++    vin: &[char],
++    matched_keys: impl Iterator<Item = K>,
++) -> [bool; 8] {
+     let mut used = [false; 8];
+     let mut remaining = 0u8;
+     for i in [0, 1, 2, 3, 4, 7] {
+@@ -650,6 +653,7 @@ fn used_key_positions<'a>(vin: &[char], matched_keys: impl Iterator<Item = &'a s
+         return used;
+     }
+     for key in matched_keys {
++        let key = key.as_ref();
+         // A key cannot cover more positions than its byte length. In
+         // particular, common five-position keys cannot fill VIN position 11.
+         if key.len() <= remaining.trailing_zeros() as usize {
+@@ -898,11 +902,11 @@ impl ErrorCodes {
+ /// assembly C1-C11). `var_wmi`/`model_year`/`error12`/`conclusive` are the
+ /// pass's inputs.
+ #[cfg(test)]
+-pub(crate) fn compute_errors(
+-    db: &Db,
++pub(crate) fn compute_errors<'a>(
++    db: &'a Db,
+     vin: &str,
+     var_wmi: &str,
+-    core: &CoreResult,
++    core: &CoreResult<'a>,
+     model_year: Option<i32>,
+     error12: bool,
+     conclusive: bool,
+@@ -922,18 +926,17 @@ pub(crate) fn compute_errors(
+ }
+ 
+ #[allow(clippy::too_many_arguments)]
+-pub(crate) fn compute_errors_with_context(
+-    db: &Db,
++pub(crate) fn compute_errors_with_context<'a>(
++    db: &'a Db,
+     vin: &str,
+     var_wmi: &str,
+-    core: &CoreResult,
++    core: &CoreResult<'a>,
+     model_year: Option<i32>,
+     error12: bool,
+     conclusive: bool,
+     is_car_mpv_lt: bool,
+     is_vin_exception: bool,
+ ) -> ErrorState {
+-    let items = &core.items;
+     let mut raw = ErrorCodes::default();
+     let mut corrected_vin = String::new();
+     let mut error_bytes = String::new();
+@@ -946,13 +949,14 @@ pub(crate) fn compute_errors_with_context(
+     // regular Pattern matches.
+     if !core.wmi_found {
+         raw.insert(7);
+-    } else if !items.iter().any(|it| it.pattern_id != NULL_I32) {
++    } else if !core.views(db).any(|it| it.pattern_id() != NULL_I32) {
+         raw.insert(8);
+     } else {
+-        let matched_keys = items
+-            .iter()
+-            .filter(|it| !it.keys.is_empty() && pattern_source(it.source.as_ref()))
+-            .map(|it| it.keys.as_ref());
++        let matched_keys = core
++            .views(db)
++            .filter(|it| pattern_source(it.source()))
++            .map(|it| it.keys(db))
++            .filter(|keys| !keys.is_empty());
+         let ec = errorcode(db, vin, var_wmi, model_year, matched_keys);
+         for c in ec.codes {
+             raw.insert(c);
+@@ -963,15 +967,15 @@ pub(crate) fn compute_errors_with_context(
+     }
+ 
+     // C2: glider (9), off-road (10), missing model year (11).
+-    let is_engine_off_road = items
+-        .iter()
+-        .any(|it| it.element_id == 5 && it.attribute_id == "64");
++    let is_engine_off_road = core
++        .views(db)
++        .any(|it| it.element_id() == 5 && it.attribute_id(db) == "64");
+     if is_engine_off_road {
+         raw.insert(9);
+     }
+-    let is_off_road = items
+-        .iter()
+-        .any(|it| it.element_id == 5 && OFF_ROAD.contains(&it.attribute_id.as_ref()));
++    let is_off_road = core
++        .views(db)
++        .any(|it| it.element_id() == 5 && OFF_ROAD.contains(&it.attribute_id(db)));
+     if is_off_road {
+         raw.insert(10);
+     }
+@@ -979,10 +983,10 @@ pub(crate) fn compute_errors_with_context(
+         raw.insert(11);
+     }
+ 
+-    let vehicle_type: Option<&str> = items
+-        .iter()
+-        .find(|it| it.element_id == 39)
+-        .map(|it| it.attribute_id.as_ref());
++    let vehicle_type: Option<&str> = core
++        .views(db)
++        .find(|it| it.element_id() == 39)
++        .map(|it| it.attribute_id(db));
+     let (start_pos, is_car_mpv_lt) = start_context(vin, is_car_mpv_lt);
+ 
+     // C5: invalid-char scan; stamps `!` into the corrected VIN AFTER the helper.
+@@ -1075,7 +1079,7 @@ pub(crate) fn compute_errors_with_context(
+     if non_special == 0 || (non_special == 1 && has_14) {
+         raw.insert(0);
+     }
+-    let has_model = items.iter().any(|it| it.element_id == 28);
++    let has_model = core.views(db).any(|it| it.element_id() == 28);
+     if raw.contains(&0) && !has_model {
+         raw.insert(14);
+     }
+@@ -1107,9 +1111,9 @@ pub(crate) fn compute_errors_with_context(
+         ));
+     }
+     let incomplete = vehicle_type == Some("10")
+-        || items
+-            .iter()
+-            .any(|it| it.element_id == 5 && INCOMPLETE.contains(&it.attribute_id.as_ref()));
++        || core
++            .views(db)
++            .any(|it| it.element_id() == 5 && INCOMPLETE.contains(&it.attribute_id(db)));
+     if incomplete {
+         info = Some(append_info(
+             info,
+diff --git a/crates/ultravin/src/lib.rs b/crates/ultravin/src/lib.rs
+index 2bc11e1..9127510 100644
+--- a/crates/ultravin/src/lib.rs
++++ b/crates/ultravin/src/lib.rs
+@@ -979,13 +979,13 @@ fn batch_json_framed(
+     out
+ }
+ 
+-/// One decode pass (a single `spvindecode_core` invocation): its items (with the
+-/// 142/143/144/156/191/196 corrections appended, values still pre-resolution) and
+-/// the metadata the scorer and result need.
++/// One decode pass (a single `spvindecode_core` invocation): its compact Pattern
++/// survivors, expanded computed items (including the six corrections), and the
++/// metadata the scorer and result need. Patterns materialize only for the winner.
+ struct Pass<'a> {
+     id: i32,
+     model_year: Option<i32>,
+-    items: Vec<decode::DecodingItem<'a>>,
++    core: decode::CoreResult<'a>,
+     codes: Vec<i32>,
+     corrected_vin: String,
+     check_digit_valid: bool,
+@@ -1138,6 +1138,8 @@ pub(crate) fn decode_full_with_workspace<'a>(
+ pub(crate) struct DecodeWorkspace<'a> {
+     item_vectors: [Vec<decode::DecodingItem<'a>>; 3],
+     item_vectors_len: usize,
++    pattern_vectors: [Vec<decode::CompactPattern>; 3],
++    pattern_vectors_len: usize,
+     passes: Vec<Pass<'a>>,
+ }
+ 
+@@ -1146,6 +1148,8 @@ impl Default for DecodeWorkspace<'_> {
+         Self {
+             item_vectors: std::array::from_fn(|_| Vec::new()),
+             item_vectors_len: 0,
++            pattern_vectors: std::array::from_fn(|_| Vec::new()),
++            pattern_vectors_len: 0,
+             passes: Vec::new(),
+         }
+     }
+@@ -1171,6 +1175,26 @@ impl<'a> DecodeWorkspace<'a> {
+         }
+     }
+ 
++    fn take_patterns(&mut self) -> Vec<decode::CompactPattern> {
++        if self.pattern_vectors_len == 0 {
++            Vec::new()
++        } else {
++            self.pattern_vectors_len -= 1;
++            std::mem::take(&mut self.pattern_vectors[self.pattern_vectors_len])
++        }
++    }
++
++    fn put_patterns(&mut self, mut patterns: Vec<decode::CompactPattern>) {
++        const MAX_RETAINED_PATTERNS: usize = 128;
++        patterns.clear();
++        if patterns.capacity() <= MAX_RETAINED_PATTERNS
++            && self.pattern_vectors_len < self.pattern_vectors.len()
++        {
++            self.pattern_vectors[self.pattern_vectors_len] = patterns;
++            self.pattern_vectors_len += 1;
++        }
++    }
++
+     fn take_passes(&mut self) -> Vec<Pass<'a>> {
+         std::mem::take(&mut self.passes)
+     }
+@@ -1474,24 +1498,36 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
+         .expect("at least one pass ran");
+     let best = passes.swap_remove(best_index);
+     for pass in passes.drain(..) {
+-        workspace.put_items(pass.items);
++        workspace.put_patterns(pass.core.patterns);
++        workspace.put_items(pass.core.items);
+     }
+     workspace.put_passes(passes);
+ 
+-    let mut items = best.items;
++    let Pass {
++        model_year,
++        mut core,
++        codes,
++        corrected_vin,
++        check_digit_valid,
++        ..
++    } = best;
+     // QC filtering belongs after scoring, before every output shape.
+-    items.retain(|it| !it.to_be_qced);
++    core.items.retain(|it| !it.to_be_qced);
++    // Compact patterns are never QC rows. Materialize the winning survivors once,
++    // ahead of the computed rows, restoring the core's logical source order.
++    core.materialize_patterns(db);
++    workspace.put_patterns(core.patterns);
+ 
+     RawResult {
+         db,
+         vin,
+         wmi: var_wmi,
+         descriptor,
+-        model_year: best.model_year,
+-        error_codes: best.codes,
+-        check_digit_valid: best.check_digit_valid,
+-        corrected_vin: best.corrected_vin,
+-        items,
++        model_year,
++        error_codes: codes,
++        check_digit_valid,
++        corrected_vin,
++        items: core.items,
+     }
+ }
+ 
+@@ -1529,7 +1565,7 @@ fn run_pass<'a>(
+     if error_floor > ceiling && !db.may_have_pattern_rows_for(context.public_wmi, model_year) {
+         return None;
+     }
+-    let core = decode::decode_core_into(
++    let mut core = decode::decode_core_into(
+         db,
+         var_wmi,
+         context.public_wmi,
+@@ -1538,13 +1574,10 @@ fn run_pass<'a>(
+         model_year_source,
+         scan,
+         workspace.take_items(),
++        workspace.take_patterns(),
+     );
+-    if error_floor > ceiling
+-        && !core
+-            .items
+-            .iter()
+-            .any(|it| it.pattern_id != tables::NULL_I32)
+-    {
++    if error_floor > ceiling && !core.views(db).any(|it| it.pattern_id() != tables::NULL_I32) {
++        workspace.put_patterns(core.patterns);
+         workspace.put_items(core.items);
+         return None;
+     }
+@@ -1560,19 +1593,18 @@ fn run_pass<'a>(
+         context.is_vin_exception,
+     );
+ 
+-    let mut items = core.items;
+     let (codes_csv, error_text) = correction_text(db, &err);
+-    append_correction(&mut items, 142, err.corrected_vin.clone());
+-    append_correction(&mut items, 143, codes_csv);
+-    append_correction(&mut items, 144, err.error_bytes);
+-    append_correction(&mut items, 156, err.additional_info);
+-    append_correction(&mut items, 191, error_text);
+-    append_correction(&mut items, 196, descriptor.to_string());
++    append_correction(&mut core.items, 142, err.corrected_vin.clone());
++    append_correction(&mut core.items, 143, codes_csv);
++    append_correction(&mut core.items, 144, err.error_bytes);
++    append_correction(&mut core.items, 156, err.additional_info);
++    append_correction(&mut core.items, 191, error_text);
++    append_correction(&mut core.items, 196, descriptor.to_string());
+ 
+     Some(Pass {
+         id,
+         model_year,
+-        items,
++        core,
+         codes: err.codes,
+         corrected_vin: err.corrected_vin,
+         check_digit_valid: err.check_digit_valid,
+@@ -1581,7 +1613,7 @@ fn run_pass<'a>(
+ 
+ /// Pick the best pass by the `x` scoring table: ErrorValue desc, ElementsWeight
+ /// desc, Patterns desc, ModelYear desc (NULLs last), then lowest pass id.
+-fn best_pass(passes: &[Pass], db: &Db, caller_year: Option<i32>) -> i32 {
++fn best_pass<'a>(passes: &[Pass<'a>], db: &'a Db, caller_year: Option<i32>) -> i32 {
+     if let [pass] = passes {
+         return pass.id;
+     }
+@@ -1604,7 +1636,7 @@ fn best_pass(passes: &[Pass], db: &Db, caller_year: Option<i32>) -> i32 {
+ /// (ErrorValue, ElementsWeight, Patterns, ModelYear+bonus) for a pass.
+ type Score = (i32, i32, i32, Option<i32>);
+ 
+-fn score(pass: &Pass, db: &Db, caller_year: Option<i32>) -> Score {
++fn score<'a>(pass: &Pass<'a>, db: &'a Db, caller_year: Option<i32>) -> Score {
+     let error_value: i32 = pass
+         .codes
+         .iter()
+@@ -1613,31 +1645,31 @@ fn score(pass: &Pass, db: &Db, caller_year: Option<i32>) -> Score {
+ 
+     let mut weighted = hash::ElementSet::default();
+     let elements_weight: i32 = pass
+-        .items
+-        .iter()
+-        .filter(|it| !it.value.is_empty() && weighted.insert(it.element_id))
+-        .filter_map(|it| db.element_by_id(it.element_id))
++        .core
++        .views(db)
++        .filter(|it| !it.value().is_empty() && weighted.insert(it.element_id()))
++        .filter_map(|it| db.element_by_id(it.element_id()))
+         .map(|e| e.weight.to_native())
+         .filter(|w| *w != tables::NULL_I32)
+         .sum();
+ 
+     let patterns = pass
+-        .items
+-        .iter()
++        .core
++        .views(db)
+         .filter(|it| {
+             matches!(
+-                it.source.as_ref(),
++                it.source(),
+                 "Pattern" | "EngineModelPattern" | "Formula Pattern"
+-            ) && !it.value.is_empty()
+-                && it.value != "Not Applicable"
++            ) && !it.value().is_empty()
++                && it.value() != "Not Applicable"
+         })
+         .count() as i32;
+ 
+     let model_year = pass
+-        .items
+-        .iter()
+-        .find(|it| it.element_id == 29)
+-        .and_then(|it| it.value.parse::<i32>().ok())
++        .core
++        .views(db)
++        .find(|it| it.element_id() == 29)
++        .and_then(|it| it.value().parse::<i32>().ok())
+         .map(|y| y + if caller_year == Some(y) { 10000 } else { 0 });
+ 
+     (error_value, elements_weight, patterns, model_year)
+@@ -2327,6 +2359,122 @@ mod tests {
+         }
+     }
+ 
++    #[test]
++    fn compact_and_materialized_passes_keep_scores_and_error_weight_winner() {
++        let Some(db) = Db::try_embedded() else { return };
++        let vin = sanitize("1HGCM82633A004352");
++        let var_wmi = sanitized_wmi_into(&vin, String::new());
++        let descriptor = sanitized_descriptor(&vin);
++        let var_keys = decode::build_var_keys_stack(&vin);
++        let now = 1_788_739_200_000_000;
++        let context = VinPassContext::new(db, &vin, &var_wmi, now);
++        let plan = year::resolve_years_with_wmi(&vin, db, context.any_wmi, 2026);
++        let model_year = plan.rmy;
++        let mut workspace = DecodeWorkspace::default();
++
++        // Give the error-12 pass the lower id, so it would win a complete tie.
++        // Both passes otherwise travel through the same production core and
++        // correction path.
++        let penalized = run_pass(
++            db,
++            &vin,
++            &var_wmi,
++            var_keys.as_str(),
++            &descriptor,
++            3,
++            model_year,
++            decode::DEFAULT_MODEL_YEAR_SOURCE,
++            plan.conclusive,
++            true,
++            &mut decode::PatternScan::default(),
++            i32::MIN,
++            &context,
++            &mut workspace,
++        )
++        .expect("unpruned error-12 pass");
++        let unpenalized = run_pass(
++            db,
++            &vin,
++            &var_wmi,
++            var_keys.as_str(),
++            &descriptor,
++            4,
++            model_year,
++            decode::DEFAULT_MODEL_YEAR_SOURCE,
++            plan.conclusive,
++            false,
++            &mut decode::PatternScan::default(),
++            i32::MIN,
++            &context,
++            &mut workspace,
++        )
++        .expect("unpruned comparison pass");
++        assert!(!penalized.core.patterns.is_empty());
++        assert_eq!(
++            penalized.codes.iter().filter(|&&code| code == 12).count(),
++            1
++        );
++        assert!(!unpenalized.codes.contains(&12));
++
++        let mut passes = vec![penalized, unpenalized];
++        let compact_scores: Vec<_> = passes.iter().map(|pass| score(pass, db, None)).collect();
++        assert_eq!(
++            compact_scores[0].0,
++            compact_scores[1].0 + tables::errorcode_weight(12)
++        );
++        assert_eq!(best_pass(&passes, db, None), 4);
++
++        let pattern_counts: Vec<_> = passes.iter().map(|pass| pass.core.patterns.len()).collect();
++        for pass in &mut passes {
++            pass.core.materialize_patterns(db);
++        }
++        for (pass, &pattern_count) in passes.iter().zip(&pattern_counts) {
++            assert!(pass.core.patterns.is_empty());
++            assert!(pass.core.items[..pattern_count]
++                .iter()
++                .all(|item| item.source == "Pattern"));
++        }
++        let materialized_scores: Vec<_> = passes.iter().map(|pass| score(pass, db, None)).collect();
++        assert_eq!(materialized_scores, compact_scores);
++        assert_eq!(best_pass(&passes, db, None), 4);
++    }
++
++    #[test]
++    fn compact_pattern_workspace_reuses_normal_vectors_and_drops_outliers() {
++        let Some(db) = Db::try_embedded() else { return };
++        let mut workspace = DecodeWorkspace::default();
++        for vin in ["1HGCM82633A004352", "1FTFW1ET5DFC10312"] {
++            drop(decode_full_with_workspace(
++                db,
++                vin,
++                1_788_739_200_000_000,
++                2026,
++                None,
++                &mut workspace,
++            ));
++        }
++
++        assert!((1..=3).contains(&workspace.pattern_vectors_len));
++        assert!(workspace.pattern_vectors[..workspace.pattern_vectors_len]
++            .iter()
++            .all(|patterns| patterns.capacity() <= 128));
++        let recycled = workspace.take_patterns();
++        assert!(recycled.capacity() > 0);
++        let allocation = recycled.as_ptr();
++        workspace.put_patterns(recycled);
++        let reused = workspace.take_patterns();
++        assert_eq!(reused.as_ptr(), allocation);
++        workspace.put_patterns(reused);
++
++        while workspace.pattern_vectors_len != 0 {
++            drop(workspace.take_patterns());
++        }
++        let oversized = Vec::<decode::CompactPattern>::with_capacity(129);
++        assert!(oversized.capacity() > 128);
++        workspace.put_patterns(oversized);
++        assert_eq!(workspace.pattern_vectors_len, 0);
++    }
++
+     #[test]
+     fn per_vin_context_preserves_lookup_and_year_semantics() {
+         let Some(db) = Db::try_embedded() else { return };
+@@ -2373,6 +2521,7 @@ mod tests {
+                     decode::DEFAULT_MODEL_YEAR_SOURCE,
+                     &mut decode::PatternScan::default(),
+                     Vec::new(),
++                    Vec::new(),
+                 );
+                 for error12 in [false, true] {
+                     assert_eq!(

@@ -1,0 +1,71 @@
+{
+  "status": "complete",
+  "base_commit": "8733917c66cb3ad11988863ece023a9434b29bef",
+  "fingerprints": {
+    "target/bench/native-trial-fingerprint-cases.jsonl": {
+      "sha256": "e83a8dc137a2a7e731b285dd3de418681dba078872da73500feb6e98b4d6850c",
+      "lines": 162403
+    },
+    "target/bench/native-arch-baseline-fingerprints.txt": {
+      "sha256": "a82a52056247e8b0b7af52c9fbbe989738fd12d7d043a19ab5092d8b989a391d",
+      "lines": 162403
+    },
+    "target/bench/native-arch-plans-fingerprints.txt": {
+      "sha256": "a82a52056247e8b0b7af52c9fbbe989738fd12d7d043a19ab5092d8b989a391d",
+      "lines": 162403
+    },
+    "target/bench/native-arch-compact-fingerprints.txt": {
+      "sha256": "a82a52056247e8b0b7af52c9fbbe989738fd12d7d043a19ab5092d8b989a391d",
+      "lines": 162403
+    },
+    "target/bench/native-arch-compact-pass-fingerprints.txt": {
+      "sha256": "a82a52056247e8b0b7af52c9fbbe989738fd12d7d043a19ab5092d8b989a391d",
+      "lines": 162403
+    }
+  },
+  "initial_compact": {
+    "commit": "acac46ad14e0444586bbd8478a84f9b02fdfd428",
+    "rust_library_tests": 245,
+    "ignored": 1,
+    "full_result_fingerprint_match": true
+  },
+  "prepared_plans": {
+    "commit": "ef2a14a2aaf0e5170adc8aff35824eecd8fccffb",
+    "rust_library_tests": 248,
+    "ignored": 1,
+    "full_result_fingerprint_match": true
+  },
+  "note": "All optimization candidates matched the fixed-clock full-result fingerprints. No candidate decoder was promoted; retained changes are the feature-gated diagnostics, shared cleanup helper, runners, plots, and trial evidence.",
+  "compact_passes": {
+    "commit": "23d4f923809018ea7873fb91ece77b04f1b2c1ff",
+    "rust_library_tests": 249,
+    "ignored": 2,
+    "strict_clippy_passed": true,
+    "full_result_fingerprint_match": true,
+    "counting_diagnostic_passed": true
+  },
+  "initial_compact_fixture_followup": {
+    "commit": "a2300f61bb3c3beda62db002cb40622fe9d619fc",
+    "rust_library_tests": 246,
+    "ignored": 2
+  },
+  "integrated_checks": {
+    "command": "UV_FROZEN=1 make checku",
+    "exit_code": 0,
+    "rust_library_passed": 245,
+    "rust_library_ignored": 1,
+    "rust_integration_passed": 14,
+    "python_passed": 951,
+    "format_lint_typecheck_and_feature_configurations_passed": true,
+    "uv_lock_unchanged": true,
+    "cargo_lock_unchanged": true,
+    "log_sha256": "3600eb6b56a7dc8da26aeebeb3d451d41c351fd69ddef1eadff8f4023cc4b631"
+  },
+  "plot": {
+    "command": "UV_FROZEN=1 uv run --with matplotlib -- python -m scripts.bench.plot_native_architecture --preview /tmp/ultravin-native-architecture.png",
+    "exit_code": 0,
+    "svg": "docs/figures/native-architecture-diagnostics.svg",
+    "svg_sha256": "bc575491b01813fe261fd2afdb3d37b9b42665dd13ef8c307a644e8a4b2607a4",
+    "preview_visually_reviewed": true
+  }
+}

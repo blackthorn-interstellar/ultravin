@@ -1,0 +1,1045 @@
+diff --git a/crates/ultravin/src/db.rs b/crates/ultravin/src/db.rs
+index ce7a5b8..7720184 100644
+--- a/crates/ultravin/src/db.rs
++++ b/crates/ultravin/src/db.rs
+@@ -12,7 +12,7 @@
+ 
+ use std::sync::OnceLock;
+ 
+-use crate::hash::IntMap;
++use crate::hash::{IntMap, IntSet};
+ use crate::matcher::PatternIndex;
+ use crate::tables::{check_header, validate_body};
+ use crate::tables::{
+@@ -81,6 +81,54 @@ pub(crate) struct ProjectionMeta {
+     pub decode: Box<str>,
+ }
+ 
++/// One regular-pattern schema visit prepared for a decode pass. Duplicate
++/// WMI/schema links remain duplicate visits; `priority` is the first eligible
++/// link's YearFrom for this schema, matching the core's INSERT/ON-CONFLICT setup.
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub(crate) struct PreparedRegularSchema {
++    pub schema_id: i32,
++    pub priority: i32,
++}
++
++/// The two deliberately different schema views used by one decode pass.
++/// Regular matching requires a non-QC VinSchema and preserves duplicate links;
++/// formula matching permits QC/orphan schemas and visits each schema once.
++#[derive(Debug, PartialEq, Eq)]
++pub(crate) struct PreparedDecodePlan {
++    pub regular_schemas: Box<[PreparedRegularSchema]>,
++    pub formula_schemas: Box<[i32]>,
++}
++
++#[derive(Debug)]
++struct PreparedYearInterval {
++    first: i32,
++    last: i32,
++    plan: PreparedDecodePlan,
++}
++
++#[derive(Debug)]
++enum PreparedWmiPlans {
++    Cached {
++        any_year: PreparedDecodePlan,
++        empty: PreparedDecodePlan,
++        intervals: Box<[PreparedYearInterval]>,
++    },
++    /// A pathological custom artifact can make interval count x eligible links
++    /// quadratic. Preserve exact behavior through the reference loops instead of
++    /// retaining an oversized per-WMI expansion.
++    Reference,
++}
++
++#[derive(Clone, Copy)]
++pub(crate) enum PreparedPlanLookup<'a> {
++    Cached(&'a PreparedDecodePlan),
++    Reference,
++}
++
++/// Limits expanded schema visits, not source links or model-year values. The
++/// fallback is exact and uncached, so this is only a retained-memory bound.
++const MAX_PREPARED_DECODE_PLAN_ENTRIES: usize = 4_096;
++
+ /// The decode database: validated archived bytes plus a pointer to the root.
+ ///
+ /// The pointer references the heap/static buffer owned by `_backing`; that buffer
+@@ -95,6 +143,9 @@ pub struct Db {
+     /// an O(1) index avoids searching the element table for every output row.
+     element_index: OnceLock<Box<[i32]>>,
+     wmi_strings: OnceLock<Box<[OnceLock<Box<WmiStrings>>]>>,
++    /// Finite decode setup by exact WMI row. Each slot contains one all-years
++    /// plan plus plans for the disjoint intervals induced by archive year bounds.
++    decode_plans: OnceLock<Box<[OnceLock<PreparedWmiPlans>]>>,
+     output_order: OnceLock<Box<[u32]>>,
+     projection_meta: OnceLock<Box<[Option<ProjectionMeta>]>>,
+     json_elements: OnceLock<Box<[OnceLock<crate::json::ElementJson>]>>,
+@@ -154,6 +205,7 @@ impl Db {
+             archive,
+             element_index: OnceLock::new(),
+             wmi_strings: OnceLock::new(),
++            decode_plans: OnceLock::new(),
+             output_order: OnceLock::new(),
+             projection_meta: OnceLock::new(),
+             json_elements: OnceLock::new(),
+@@ -192,6 +244,7 @@ impl Db {
+             archive,
+             element_index: OnceLock::new(),
+             wmi_strings: OnceLock::new(),
++            decode_plans: OnceLock::new(),
+             output_order: OnceLock::new(),
+             projection_meta: OnceLock::new(),
+             json_elements: OnceLock::new(),
+@@ -398,6 +451,152 @@ impl Db {
+         }
+     }
+ 
++    fn wmi_row_position(&self, wmi: &ArchivedWmi) -> usize {
++        let rows = self.wmis();
++        let base = rows.as_ptr() as usize;
++        let address = std::ptr::from_ref(wmi) as usize;
++        debug_assert!(address >= base);
++        debug_assert!(address < base + std::mem::size_of_val(rows));
++        debug_assert_eq!((address - base) % std::mem::size_of::<ArchivedWmi>(), 0);
++        (address - base) / std::mem::size_of::<ArchivedWmi>()
++    }
++
++    /// Reusable schema setup for the exact WMI row selected by publication time.
++    /// `None` has its own all-links plan; real years use only the finite intervals
++    /// induced by this WMI's link bounds.
++    pub(crate) fn prepared_decode_plan<'a>(
++        &'a self,
++        wmi: &ArchivedWmi,
++        model_year: Option<i32>,
++    ) -> PreparedPlanLookup<'a> {
++        let slots = self
++            .decode_plans
++            .get_or_init(|| (0..self.wmis().len()).map(|_| OnceLock::new()).collect());
++        let plans = slots[self.wmi_row_position(wmi)]
++            .get_or_init(|| self.build_prepared_wmi_plans(wmi.id.to_native()));
++        let PreparedWmiPlans::Cached {
++            any_year,
++            empty,
++            intervals,
++        } = plans
++        else {
++            return PreparedPlanLookup::Reference;
++        };
++        let Some(year) = model_year else {
++            return PreparedPlanLookup::Cached(any_year);
++        };
++        let index = intervals.partition_point(|interval| interval.last < year);
++        let plan = intervals
++            .get(index)
++            .filter(|interval| interval.first <= year)
++            .map_or(empty, |interval| &interval.plan);
++        PreparedPlanLookup::Cached(plan)
++    }
++
++    fn build_prepared_wmi_plans(&self, wmi_id: i32) -> PreparedWmiPlans {
++        let links = self.wmi_vinschema_for(wmi_id);
++        let mut remaining = MAX_PREPARED_DECODE_PLAN_ENTRIES;
++        let Some(any_year) = self.compose_prepared_decode_plan(links, None, &mut remaining) else {
++            return PreparedWmiPlans::Reference;
++        };
++
++        // i64 admits the half-open endpoint after i32::MAX without overflow.
++        let mut boundaries = Vec::with_capacity(links.len().saturating_mul(2));
++        for link in links {
++            let first = link.yearfrom.to_native();
++            let last = link.yearto_or(2999);
++            if first <= last {
++                boundaries.push(i64::from(first));
++                boundaries.push(i64::from(last) + 1);
++            }
++        }
++        boundaries.sort_unstable();
++        boundaries.dedup();
++
++        let mut intervals: Vec<PreparedYearInterval> = Vec::new();
++        for bounds in boundaries.windows(2) {
++            let first = i32::try_from(bounds[0]).expect("link start is an i32");
++            let last = i32::try_from(bounds[1] - 1).expect("inclusive link end is an i32");
++            let Some(plan) = self.compose_prepared_decode_plan(links, Some(first), &mut remaining)
++            else {
++                return PreparedWmiPlans::Reference;
++            };
++            if plan.regular_schemas.is_empty() && plan.formula_schemas.is_empty() {
++                continue;
++            }
++            if let Some(previous) = intervals.last_mut() {
++                if previous.last.checked_add(1) == Some(first) && previous.plan == plan {
++                    previous.last = last;
++                    remaining += plan.regular_schemas.len() + plan.formula_schemas.len();
++                    continue;
++                }
++            }
++            intervals.push(PreparedYearInterval { first, last, plan });
++        }
++        PreparedWmiPlans::Cached {
++            any_year,
++            empty: PreparedDecodePlan {
++                regular_schemas: Box::new([]),
++                formula_schemas: Box::new([]),
++            },
++            intervals: intervals.into_boxed_slice(),
++        }
++    }
++
++    fn compose_prepared_decode_plan(
++        &self,
++        links: &[ArchivedWmiVinSchema],
++        model_year: Option<i32>,
++        remaining: &mut usize,
++    ) -> Option<PreparedDecodePlan> {
++        let eligible = |link: &ArchivedWmiVinSchema| {
++            model_year.is_none_or(|year| {
++                year >= link.yearfrom.to_native() && year <= link.yearto_or(2999)
++            })
++        };
++
++        // This map is intentionally populated before the VinSchema/QC gate. The
++        // SQL temp-table conflict behavior chooses the first eligible link even
++        // when that schema cannot produce a regular-pattern visit.
++        let mut first_year_from = IntMap::default();
++        for link in links.iter().filter(|link| eligible(link)) {
++            first_year_from
++                .entry(link.vinschemaid.to_native())
++                .or_insert(link.yearfrom.to_native());
++        }
++
++        let mut regular_schemas = Vec::new();
++        for link in links.iter().filter(|link| eligible(link)) {
++            let schema_id = link.vinschemaid.to_native();
++            if self
++                .vinschema_by_id(schema_id)
++                .is_none_or(|schema| schema.tobeqced)
++            {
++                continue;
++            }
++            *remaining = remaining.checked_sub(1)?;
++            regular_schemas.push(PreparedRegularSchema {
++                schema_id,
++                priority: first_year_from[&schema_id],
++            });
++        }
++
++        let mut formula_schemas = Vec::new();
++        let mut seen = IntSet::default();
++        for link in links.iter().filter(|link| eligible(link)) {
++            let schema_id = link.vinschemaid.to_native();
++            if !seen.insert(schema_id) {
++                continue;
++            }
++            *remaining = remaining.checked_sub(1)?;
++            formula_schemas.push(schema_id);
++        }
++        Some(PreparedDecodePlan {
++            regular_schemas: regular_schemas.into_boxed_slice(),
++            formula_schemas: formula_schemas.into_boxed_slice(),
++        })
++    }
++
+     /// Conservative preflight for a pass that needs a PatternId-bearing row to
+     /// compete. Any year-eligible link is enough, including orphan/QC schemas:
+     /// formula matching intentionally permits those. With no links, only a
+@@ -415,14 +614,23 @@ impl Db {
+         let Some(wmi) = wmi else {
+             return false;
+         };
+-        self.wmi_vinschema_for(wmi.id.to_native()).iter().any(|r| {
+-            year.is_none_or(|year| year >= r.yearfrom.to_native() && year <= r.yearto_or(2999))
+-        }) || *self.model_from_conversion.get_or_init(|| {
+-            self.a()
+-                .conversion
+-                .iter()
+-                .any(|c| c.toelementid.to_native() == 28)
+-        })
++        let linked = match self.prepared_decode_plan(wmi, year) {
++            PreparedPlanLookup::Cached(plan) => !plan.formula_schemas.is_empty(),
++            PreparedPlanLookup::Reference => {
++                self.wmi_vinschema_for(wmi.id.to_native()).iter().any(|r| {
++                    year.is_none_or(|year| {
++                        year >= r.yearfrom.to_native() && year <= r.yearto_or(2999)
++                    })
++                })
++            }
++        };
++        linked
++            || *self.model_from_conversion.get_or_init(|| {
++                self.a()
++                    .conversion
++                    .iter()
++                    .any(|c| c.toelementid.to_native() == 28)
++            })
+     }
+ 
+     /// Contiguous `pattern` rows for a vin schema id.
+@@ -471,8 +679,7 @@ impl Db {
+     /// distinguish even duplicate ids; addresses are only used to compute an
+     /// array index, never to reconstruct a pointer.
+     pub(crate) fn wmi_strings(&self, wmi: &ArchivedWmi) -> &WmiStrings {
+-        let position = (std::ptr::from_ref(wmi) as usize - self.wmis().as_ptr() as usize)
+-            / std::mem::size_of::<ArchivedWmi>();
++        let position = self.wmi_row_position(wmi);
+         let slots = self
+             .wmi_strings
+             .get_or_init(|| (0..self.wmis().len()).map(|_| OnceLock::new()).collect());
+@@ -1309,6 +1516,461 @@ mod tests {
+         assert!(!db.may_have_pattern_rows("ABC", Some(3000), 100));
+     }
+ 
++    fn prepared_plan_fixture() -> crate::tables::VpicData {
++        use crate::tables::{Element, Pattern, VinSchema, VpicData, Wmi, WmiVinSchema, NULL_I32};
++
++        VpicData {
++            // 0="", 1="ABC", 2="#", 3="q", 4="o", 5="1", 6="r"
++            arena_bytes: b"ABC#qo1r".to_vec(),
++            arena_offsets: vec![0, 0, 3, 4, 5, 6, 7, 8],
++            wmi: vec![
++                Wmi {
++                    id: 1,
++                    wmi: 1,
++                    manufacturerid: NULL_I32,
++                    makeid: NULL_I32,
++                    vehicletypeid: NULL_I32,
++                    trucktypeid: NULL_I32,
++                    publicavailabilitydate: 100,
++                    createdon_key: 0,
++                },
++                Wmi {
++                    id: 2,
++                    wmi: 1,
++                    manufacturerid: NULL_I32,
++                    makeid: NULL_I32,
++                    vehicletypeid: NULL_I32,
++                    trucktypeid: NULL_I32,
++                    publicavailabilitydate: 0,
++                    createdon_key: 0,
++                },
++            ],
++            wmi_vinschema: vec![
++                WmiVinSchema {
++                    id: 1,
++                    wmiid: 1,
++                    vinschemaid: 10,
++                    yearfrom: 2000,
++                    yearto: 2005,
++                },
++                WmiVinSchema {
++                    id: 2,
++                    wmiid: 1,
++                    vinschemaid: 10,
++                    yearfrom: 2003,
++                    yearto: 2010,
++                },
++                WmiVinSchema {
++                    id: 3,
++                    wmiid: 1,
++                    vinschemaid: 20,
++                    yearfrom: 2006,
++                    yearto: NULL_I32,
++                },
++                WmiVinSchema {
++                    id: 4,
++                    wmiid: 1,
++                    vinschemaid: 30,
++                    yearfrom: 2004,
++                    yearto: 2004,
++                },
++                WmiVinSchema {
++                    id: 5,
++                    wmiid: 1,
++                    vinschemaid: 40,
++                    yearfrom: 2004,
++                    yearto: 2004,
++                },
++                // None means all links, even a link with an empty real-year range.
++                WmiVinSchema {
++                    id: 6,
++                    wmiid: 1,
++                    vinschemaid: 10,
++                    yearfrom: 3000,
++                    yearto: 2000,
++                },
++                WmiVinSchema {
++                    id: 7,
++                    wmiid: 1,
++                    vinschemaid: 20,
++                    yearfrom: i32::MIN,
++                    yearto: -100,
++                },
++                WmiVinSchema {
++                    id: 8,
++                    wmiid: 1,
++                    vinschemaid: 20,
++                    yearfrom: 4000,
++                    yearto: i32::MAX,
++                },
++                WmiVinSchema {
++                    id: 9,
++                    wmiid: 2,
++                    vinschemaid: 20,
++                    yearfrom: 1990,
++                    yearto: 1991,
++                },
++            ],
++            vinschema: vec![
++                VinSchema {
++                    id: 10,
++                    tobeqced: false,
++                },
++                VinSchema {
++                    id: 20,
++                    tobeqced: false,
++                },
++                VinSchema {
++                    id: 30,
++                    tobeqced: true,
++                },
++            ],
++            pattern: vec![
++                Pattern {
++                    id: 3,
++                    vinschemaid: 10,
++                    keys: 5,
++                    keys_regex: 5,
++                    elementid: 129,
++                    attributeid: 6,
++                    createdon_key: 0,
++                    specificity: 1,
++                    has_bracket: false,
++                },
++                Pattern {
++                    id: 1,
++                    vinschemaid: 30,
++                    keys: 2,
++                    keys_regex: 2,
++                    elementid: 100,
++                    attributeid: 3,
++                    createdon_key: 0,
++                    specificity: 1,
++                    has_bracket: false,
++                },
++                Pattern {
++                    id: 2,
++                    vinschemaid: 40,
++                    keys: 2,
++                    keys_regex: 2,
++                    elementid: 101,
++                    attributeid: 4,
++                    createdon_key: 0,
++                    specificity: 1,
++                    has_bracket: false,
++                },
++            ],
++            element: vec![
++                Element {
++                    id: 100,
++                    name: 0,
++                    code: 0,
++                    isprivate: true,
++                    groupname: 0,
++                    datatype: 0,
++                    decode: 0,
++                    decode_present: false,
++                    weight: NULL_I32,
++                },
++                Element {
++                    id: 101,
++                    name: 0,
++                    code: 0,
++                    isprivate: false,
++                    groupname: 0,
++                    datatype: 0,
++                    decode: 0,
++                    decode_present: false,
++                    weight: NULL_I32,
++                },
++                Element {
++                    id: 129,
++                    name: 0,
++                    code: 0,
++                    isprivate: false,
++                    groupname: 0,
++                    datatype: 0,
++                    decode: 0,
++                    decode_present: true,
++                    weight: NULL_I32,
++                },
++            ],
++            make_model: vec![],
++            wmi_make: vec![],
++            enginemodel: vec![],
++            enginemodelpattern: vec![],
++            defaultvalue: vec![],
++            vinexception: vec![],
++            conversion: vec![],
++            lookups: vec![],
++            cover: vec![],
++            vspecschema: vec![],
++            vspecschemapattern: vec![],
++            vspecpattern: vec![],
++            vspecschemamodel: vec![],
++            vspecschemayear: vec![],
++        }
++    }
++
++    fn load_fixture(data: &crate::tables::VpicData) -> Db {
++        Db::from_bytes(&crate::tables::serialize_artifact(data, 1)).expect("test database")
++    }
++
++    fn cached_plan<'a>(db: &'a Db, wmi: &ArchivedWmi, year: Option<i32>) -> &'a PreparedDecodePlan {
++        match db.prepared_decode_plan(wmi, year) {
++            PreparedPlanLookup::Cached(plan) => plan,
++            PreparedPlanLookup::Reference => panic!("small fixture must retain its plan"),
++        }
++    }
++
++    #[test]
++    fn prepared_decode_plans_preserve_boundaries_duplicates_and_branch_gates() {
++        let db = load_fixture(&prepared_plan_fixture());
++        let wmi = db.wmi_by_str("ABC", 100).expect("first row is public");
++
++        let plan = cached_plan(&db, wmi, Some(2004));
++        assert_eq!(
++            plan.regular_schemas.as_ref(),
++            [
++                PreparedRegularSchema {
++                    schema_id: 10,
++                    priority: 2000,
++                },
++                PreparedRegularSchema {
++                    schema_id: 10,
++                    priority: 2000,
++                },
++            ]
++        );
++        assert_eq!(plan.formula_schemas.as_ref(), [10, 30, 40]);
++
++        let boundary = cached_plan(&db, wmi, Some(2005));
++        assert_eq!(boundary.regular_schemas.len(), 2);
++        let next = cached_plan(&db, wmi, Some(2006));
++        assert_eq!(
++            next.regular_schemas.as_ref(),
++            [
++                PreparedRegularSchema {
++                    schema_id: 10,
++                    priority: 2003,
++                },
++                PreparedRegularSchema {
++                    schema_id: 20,
++                    priority: 2006,
++                },
++            ]
++        );
++        assert_eq!(next.formula_schemas.as_ref(), [10, 20]);
++
++        let all = cached_plan(&db, wmi, None);
++        assert_eq!(
++            all.regular_schemas
++                .iter()
++                .map(|schema| (schema.schema_id, schema.priority))
++                .collect::<Vec<_>>(),
++            [
++                (10, 2000),
++                (10, 2000),
++                (20, 2006),
++                (10, 2000),
++                (20, 2006),
++                (20, 2006),
++            ]
++        );
++        assert_eq!(all.formula_schemas.as_ref(), [10, 20, 30, 40]);
++        for year in [1999, 3000, 3999] {
++            let empty = cached_plan(&db, wmi, Some(year));
++            assert!(empty.regular_schemas.is_empty(), "year {year}");
++            assert!(empty.formula_schemas.is_empty(), "year {year}");
++        }
++
++        for year in [i32::MIN, -100] {
++            let low = cached_plan(&db, wmi, Some(year));
++            assert_eq!(
++                low.regular_schemas.as_ref(),
++                [PreparedRegularSchema {
++                    schema_id: 20,
++                    priority: i32::MIN,
++                }]
++            );
++            assert_eq!(low.formula_schemas.as_ref(), [20]);
++        }
++        assert!(cached_plan(&db, wmi, Some(-99)).regular_schemas.is_empty());
++        for year in [4000, i32::MAX] {
++            let high = cached_plan(&db, wmi, Some(year));
++            assert_eq!(
++                high.regular_schemas.as_ref(),
++                [PreparedRegularSchema {
++                    schema_id: 20,
++                    priority: 4000,
++                }]
++            );
++            assert_eq!(high.formula_schemas.as_ref(), [20]);
++        }
++    }
++
++    #[test]
++    fn prepared_decode_plans_follow_the_publication_selected_row_and_database() {
++        let data = prepared_plan_fixture();
++        let first = load_fixture(&data);
++        let before = first.wmi_by_str("ABC", 50).expect("second row is public");
++        assert_eq!(before.id.to_native(), 2);
++        assert_eq!(
++            cached_plan(&first, before, Some(1990))
++                .formula_schemas
++                .as_ref(),
++            [20]
++        );
++        let after = first.wmi_by_str("ABC", 100).expect("first row is public");
++        assert_eq!(after.id.to_native(), 1);
++        assert!(cached_plan(&first, after, Some(1990))
++            .formula_schemas
++            .is_empty());
++
++        let mut changed = data;
++        changed.wmi_vinschema[0].yearfrom = 1900;
++        let second = load_fixture(&changed);
++        let second_wmi = second.wmi_by_str("ABC", 100).unwrap();
++        assert_eq!(
++            cached_plan(&first, after, Some(2000)).regular_schemas[0].priority,
++            2000
++        );
++        assert_eq!(
++            cached_plan(&second, second_wmi, Some(2000)).regular_schemas[0].priority,
++            1900
++        );
++    }
++
++    #[test]
++    fn formula_plan_keeps_qc_orphan_and_private_rows_permissive() {
++        let db = load_fixture(&prepared_plan_fixture());
++        let wmi = db.wmi_by_str("ABC", 100).unwrap();
++        let core = crate::decode::decode_core_into(
++            &db,
++            "ABC",
++            Some(wmi),
++            "1",
++            Some(2004),
++            crate::decode::DEFAULT_MODEL_YEAR_SOURCE,
++            &mut crate::decode::PatternScan::default(),
++            Vec::new(),
++        );
++        let formula: Vec<_> = core
++            .items
++            .iter()
++            .filter(|item| item.source == "Formula Pattern")
++            .map(|item| (item.element_id, item.vin_schema_id, item.value.as_ref()))
++            .collect();
++        assert_eq!(formula, [(100, 30, "1"), (101, 40, "1")]);
++    }
++
++    fn core_signature(core: crate::decode::CoreResult<'_>) -> Vec<String> {
++        assert!(core.wmi_found);
++        core.items
++            .into_iter()
++            .map(|item| {
++                format!(
++                    "{}|{}|{}|{}|{}|{}|{}|{}|{}|{}|{}",
++                    item.created_on,
++                    item.pattern_id,
++                    item.keys,
++                    item.vin_schema_id,
++                    item.wmi_id,
++                    item.element_id,
++                    item.attribute_id,
++                    item.value,
++                    item.source,
++                    item.priority,
++                    item.to_be_qced,
++                )
++            })
++            .collect()
++    }
++
++    fn run_fixture_core<'a>(db: &'a Db, wmi: &'a ArchivedWmi) -> crate::decode::CoreResult<'a> {
++        crate::decode::decode_core_into(
++            db,
++            "ABC",
++            Some(wmi),
++            "1",
++            Some(2004),
++            crate::decode::DEFAULT_MODEL_YEAR_SOURCE,
++            &mut crate::decode::PatternScan::default(),
++            Vec::new(),
++        )
++    }
++
++    #[test]
++    fn cached_and_reference_plans_produce_identical_mixed_core_rows() {
++        let data = prepared_plan_fixture();
++        let cached_db = load_fixture(&data);
++        let reference_db = load_fixture(&data);
++
++        let cached_wmi = cached_db.wmi_by_str("ABC", 100).unwrap();
++        let reference_wmi = reference_db.wmi_by_str("ABC", 100).unwrap();
++        let reference_slots = reference_db.decode_plans.get_or_init(|| {
++            (0..reference_db.wmis().len())
++                .map(|_| OnceLock::new())
++                .collect()
++        });
++        reference_slots[reference_db.wmi_row_position(reference_wmi)]
++            .set(PreparedWmiPlans::Reference)
++            .expect("reference fixture slot is unused");
++
++        let cached = core_signature(run_fixture_core(&cached_db, cached_wmi));
++        let reference = core_signature(run_fixture_core(&reference_db, reference_wmi));
++        assert_eq!(cached, reference);
++        assert_eq!(
++            cached
++                .iter()
++                .filter(|row| row.contains("|129|r|XXX|Pattern|2000|"))
++                .count(),
++            2,
++            "duplicate ordinary-pattern links remain duplicate exempt rows"
++        );
++        assert!(cached
++            .iter()
++            .any(|row| row.contains("|100|q|1|Formula Pattern|100|")));
++        assert!(cached
++            .iter()
++            .any(|row| row.contains("|101|o|1|Formula Pattern|100|")));
++    }
++
++    #[test]
++    fn oversized_interval_expansion_uses_the_exact_reference_path() {
++        use crate::tables::{VinSchema, WmiVinSchema};
++
++        let mut data = prepared_plan_fixture();
++        data.wmi.truncate(1);
++        data.wmi_vinschema.clear();
++        data.vinschema.clear();
++        data.pattern.clear();
++        data.element.clear();
++        for id in 1..=70 {
++            data.wmi_vinschema.push(WmiVinSchema {
++                id,
++                wmiid: 1,
++                vinschemaid: id,
++                yearfrom: id,
++                yearto: 100,
++            });
++            data.vinschema.push(VinSchema {
++                id,
++                tobeqced: false,
++            });
++        }
++        let db = load_fixture(&data);
++        let wmi = db.wmi_by_str("ABC", 100).unwrap();
++        assert!(matches!(
++            db.prepared_decode_plan(wmi, Some(70)),
++            PreparedPlanLookup::Reference
++        ));
++        assert!(matches!(
++            db.prepared_decode_plan(wmi, None),
++            PreparedPlanLookup::Reference
++        ));
++    }
++
+     #[test]
+     fn prepared_wmi_strings_match_the_archive() {
+         let db = Db::embedded_raw();
+diff --git a/crates/ultravin/src/decode.rs b/crates/ultravin/src/decode.rs
+index 0416851..0c9dbad 100644
+--- a/crates/ultravin/src/decode.rs
++++ b/crates/ultravin/src/decode.rs
+@@ -6,7 +6,7 @@ use std::borrow::Cow;
+ use std::cell::RefCell;
+ use std::cmp::Ordering;
+ 
+-use crate::db::Db;
++use crate::db::{Db, PreparedPlanLookup};
+ use crate::hash::{ElementIndex, ElementSet, IntMap, IntSet};
+ use crate::matcher::like_match;
+ use crate::tables::{element_lookup_tag, is_exempt, ArchivedWmi, NULL_I32, NULL_I64};
+@@ -167,7 +167,7 @@ const MAX_RETAINED_MAKE_IDS: usize = 64;
+ 
+ #[derive(Default)]
+ struct DecodeScratch {
+-    matched_patterns: Vec<(i32, u32)>,
++    matched_patterns: Vec<(i32, u32, i32)>,
+     schema_yearfrom: IntMap<i32, i32>,
+     distinct_makeids: Vec<i32>,
+ }
+@@ -375,38 +375,62 @@ pub(crate) fn decode_core_into<'a>(
+     items.reserve(96);
+ 
+     // --- Pattern pass: collect matches, then order globally by Pattern.Id ASC.
+-    // Capture each year-eligible schema's `YearFrom` here (in slice order, first
+-    // wins) so the Pattern-source priority is one map lookup per matched pattern
+-    // instead of `schema_year_from` rescanning `wmi_vinschema` per pattern.
+-    for wvs in db.wmi_vinschema_for(wmiid) {
+-        if let Some(my) = model_year {
+-            if my < wvs.yearfrom.to_native() || my > wvs.yearto_or(2999) {
+-                continue;
++    // The common path reuses the Db-owned WMI/year plan. Pathological custom
++    // artifacts whose interval expansion exceeds the retention cap use the exact
++    // reference setup without caching it.
++    let prepared_plan = db.prepared_decode_plan(wmi, model_year);
++    match prepared_plan {
++        PreparedPlanLookup::Cached(plan) => {
++            for schema in plan.regular_schemas.iter() {
++                // Year-independent, so the first pass to reach this schema pays
++                // for the scan and later candidate-year passes replay its hits.
++                let hits = scan.hits(db, schema.schema_id, var_keys);
++                scratch.matched_patterns.extend(hits.iter().map(|&index| {
++                    (
++                        db.patterns()[index as usize].id.to_native(),
++                        index,
++                        schema.priority,
++                    )
++                }));
+             }
+         }
+-        let sid = wvs.vinschemaid.to_native();
+-        scratch
+-            .schema_yearfrom
+-            .entry(sid)
+-            .or_insert(wvs.yearfrom.to_native());
+-        let Some(vs) = db.vinschema_by_id(sid) else {
+-            continue;
+-        };
+-        if vs.tobeqced {
+-            continue;
++        PreparedPlanLookup::Reference => {
++            for wvs in db.wmi_vinschema_for(wmiid) {
++                if let Some(my) = model_year {
++                    if my < wvs.yearfrom.to_native() || my > wvs.yearto_or(2999) {
++                        continue;
++                    }
++                }
++                let sid = wvs.vinschemaid.to_native();
++                scratch
++                    .schema_yearfrom
++                    .entry(sid)
++                    .or_insert(wvs.yearfrom.to_native());
++                let Some(vs) = db.vinschema_by_id(sid) else {
++                    continue;
++                };
++                if vs.tobeqced {
++                    continue;
++                }
++                let priority = scratch.schema_yearfrom[&sid];
++                let hits = scan.hits(db, sid, var_keys);
++                scratch.matched_patterns.extend(hits.iter().map(|&index| {
++                    (
++                        db.patterns()[index as usize].id.to_native(),
++                        index,
++                        priority,
++                    )
++                }));
++            }
+         }
+-        // Year-independent, so the first pass to reach this schema pays for the
+-        // scan and any later pass replays its hit list (see [`PatternScan`]).
+-        let hits = scan.hits(db, sid, var_keys);
+-        scratch.matched_patterns.extend(
+-            hits.iter()
+-                .map(|&index| (db.patterns()[index as usize].id.to_native(), index)),
+-        );
+     }
+-    // Pattern ids are unique, so the order is total — no need for a stable sort
+-    // (which allocates a scratch buffer).
+-    scratch.matched_patterns.sort_unstable_by_key(|&(id, _)| id);
+-    for &(_, index) in &scratch.matched_patterns {
++    // Pattern row ids are unique. Duplicate WMI/schema links repeat the same row
++    // with the same priority, so equal sort keys remain observationally identical
++    // and do not require a stable sort (which allocates a scratch buffer).
++    scratch
++        .matched_patterns
++        .sort_unstable_by_key(|&(id, _, _)| id);
++    for &(_, index, priority) in &scratch.matched_patterns {
+         let p = &db.patterns()[index as usize];
+         items.push(DecodingItem {
+             created_on: p.createdon_key.to_native(),
+@@ -418,10 +442,7 @@ pub(crate) fn decode_core_into<'a>(
+             attribute_id: Cow::Borrowed(db.s(p.attributeid.to_native())),
+             value: Cow::Borrowed("XXX"),
+             source: Cow::Borrowed("Pattern"),
+-            priority: *scratch
+-                .schema_yearfrom
+-                .get(&p.vinschemaid.to_native())
+-                .unwrap_or(&0),
++            priority,
+             to_be_qced: false,
+         });
+     }
+@@ -525,7 +546,7 @@ pub(crate) fn decode_core_into<'a>(
+ 
+     // --- Formula Pattern (priority 100): patterns whose keys carry `#` digit
+     // placeholders; the matched VIN digits become the value directly.
+-    append_formula_patterns(db, &mut items, wmiid, var_keys, model_year);
++    append_formula_patterns(db, &mut items, wmiid, var_keys, model_year, prepared_plan);
+ 
+     // --- Dedup (once).
+     dedup_per_element(&mut items);
+@@ -567,75 +588,97 @@ fn append_formula_patterns<'a>(
+     wmiid: i32,
+     var_keys: &str,
+     model_year: Option<i32>,
++    prepared_plan: PreparedPlanLookup<'_>,
+ ) {
+     let formula_keys = std::cell::OnceCell::new();
+-    let mut seen_vs: IntSet<i32> = IntSet::default();
+-    for wvs in db.wmi_vinschema_for(wmiid) {
+-        if let Some(my) = model_year {
+-            if my < wvs.yearfrom.to_native() || my > wvs.yearto_or(2999) {
+-                continue;
++    match prepared_plan {
++        PreparedPlanLookup::Cached(plan) => {
++            for &schema_id in plan.formula_schemas.iter() {
++                append_formula_schema(db, items, schema_id, var_keys, &formula_keys);
+             }
+         }
+-        let vsid = wvs.vinschemaid.to_native();
+-        let index = db.pattern_index(vsid);
+-        let rows = index
+-            .map(|index| index.formula_rows.as_slice())
+-            .unwrap_or(&[]);
+-        // Formula patterns do not require a VinSchema row. Preserve that join
+-        // behavior for orphan schema ids, which have no slot in the lazy index.
+-        let unindexed = if index.is_none() {
+-            db.patterns_for(vsid)
+-        } else {
+-            &[]
+-        };
+-        if rows.is_empty() && unindexed.is_empty() || !seen_vs.insert(vsid) {
++        PreparedPlanLookup::Reference => {
++            let mut seen_vs: IntSet<i32> = IntSet::default();
++            for wvs in db.wmi_vinschema_for(wmiid) {
++                if let Some(my) = model_year {
++                    if my < wvs.yearfrom.to_native() || my > wvs.yearto_or(2999) {
++                        continue;
++                    }
++                }
++                let schema_id = wvs.vinschemaid.to_native();
++                if seen_vs.insert(schema_id) {
++                    append_formula_schema(db, items, schema_id, var_keys, &formula_keys);
++                }
++            }
++        }
++    }
++}
++
++fn append_formula_schema<'a>(
++    db: &'a Db,
++    items: &mut Vec<DecodingItem<'a>>,
++    schema_id: i32,
++    var_keys: &str,
++    formula_keys: &std::cell::OnceCell<String>,
++) {
++    let index = db.pattern_index(schema_id);
++    let rows = index
++        .map(|index| index.formula_rows.as_slice())
++        .unwrap_or(&[]);
++    // Formula patterns do not require a VinSchema row. Preserve that join
++    // behavior for orphan schema ids, which have no slot in the lazy index.
++    let unindexed = if index.is_none() {
++        db.patterns_for(schema_id)
++    } else {
++        &[]
++    };
++    if rows.is_empty() && unindexed.is_empty() {
++        return;
++    }
++    for p in rows
++        .iter()
++        .map(|&i| &db.patterns()[i as usize])
++        .chain(unindexed)
++    {
++        if matches!(p.elementid.to_native(), 26 | 27 | 29 | 39) {
+             continue;
+         }
+-        for p in rows
+-            .iter()
+-            .map(|&i| &db.patterns()[i as usize])
+-            .chain(unindexed)
+-        {
+-            if matches!(p.elementid.to_native(), 26 | 27 | 29 | 39) {
+-                continue;
+-            }
+-            let keys = db.s(p.keys.to_native());
+-            if !keys.contains('#') {
+-                continue;
+-            }
+-            if db.element_by_id(p.elementid.to_native()).is_none() {
+-                continue;
+-            }
+-            // Most schemas have no formula rows. Build the substituted VIN
+-            // only when a surviving formula actually needs to match it.
+-            let fk = formula_keys
+-                .get_or_init(|| {
+-                    let mut text = String::with_capacity(var_keys.len());
+-                    text.extend(
+-                        var_keys
+-                            .chars()
+-                            .map(|c| if c.is_ascii_digit() { '#' } else { c }),
+-                    );
+-                    text
+-                })
+-                .as_bytes();
+-            if !like_match(fk, keys.as_bytes()) {
+-                continue;
+-            }
+-            items.push(DecodingItem {
+-                created_on: p.createdon_key.to_native(),
+-                pattern_id: p.id.to_native(),
+-                keys: Cow::Borrowed(keys),
+-                vin_schema_id: vsid,
+-                wmi_id: NULL_I32,
+-                element_id: p.elementid.to_native(),
+-                attribute_id: Cow::Borrowed(db.s(p.attributeid.to_native())),
+-                value: Cow::Owned(formula_value(var_keys, keys)),
+-                source: Cow::Borrowed("Formula Pattern"),
+-                priority: 100,
+-                to_be_qced: false,
+-            });
++        let keys = db.s(p.keys.to_native());
++        if !keys.contains('#') {
++            continue;
+         }
++        if db.element_by_id(p.elementid.to_native()).is_none() {
++            continue;
++        }
++        // Most schemas have no formula rows. Build the substituted VIN only when
++        // a surviving formula actually needs to match it.
++        let fk = formula_keys
++            .get_or_init(|| {
++                let mut text = String::with_capacity(var_keys.len());
++                text.extend(
++                    var_keys
++                        .chars()
++                        .map(|c| if c.is_ascii_digit() { '#' } else { c }),
++                );
++                text
++            })
++            .as_bytes();
++        if !like_match(fk, keys.as_bytes()) {
++            continue;
++        }
++        items.push(DecodingItem {
++            created_on: p.createdon_key.to_native(),
++            pattern_id: p.id.to_native(),
++            keys: Cow::Borrowed(keys),
++            vin_schema_id: schema_id,
++            wmi_id: NULL_I32,
++            element_id: p.elementid.to_native(),
++            attribute_id: Cow::Borrowed(db.s(p.attributeid.to_native())),
++            value: Cow::Owned(formula_value(var_keys, keys)),
++            source: Cow::Borrowed("Formula Pattern"),
++            priority: 100,
++            to_be_qced: false,
++        });
+     }
+ }
+ 

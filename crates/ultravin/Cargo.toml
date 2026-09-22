@@ -19,6 +19,7 @@ exclude = ["data/*.rkyv"]
 default = ["download-data"]
 batch-slab = []
 stage-trace = []
+diagnostic-ceilings = []
 # build.rs fetches this version's vpic.rkyv from its GitHub release when no
 # artifact is supplied — once per machine, blake3-verified against
 # data/manifest.json, then embedded. Off for offline/reproducible builds:
@@ -97,3 +98,7 @@ harness = false
 [[example]]
 name = "storage_probe"
 required-features = ["batch-slab"]
+
+[[example]]
+name = "architecture_ceiling_probe"
+required-features = ["diagnostic-ceilings"]

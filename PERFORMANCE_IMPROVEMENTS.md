@@ -6,6 +6,10 @@ true when changing it again. It covers the decoder, Python output, Arrow/parquet
 corpus generation, build resources, and the SQL oracle used for differential
 testing. Each dated optimization round has its own section.
 
+The later [September 15 architecture experiments](docs/NATIVE_ARCHITECTURE_TRIALS_2026_09_15.md)
+test compact candidate storage, prepared schema plans, and ordered-delivery
+overhead, with reproducible trial patches and a vector diagnostic chart.
+
 Measurements below are historical observations, not new benchmarks of the current
 checkout. Different dates used different toolchains, artifacts, worker counts,
 output shapes, and timing methods. Compare each before/after pair on its own;

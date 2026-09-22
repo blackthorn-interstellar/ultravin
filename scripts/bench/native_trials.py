@@ -35,19 +35,94 @@ ARCHIVE_FILES = (
     "Cargo.lock",
 )
 ARCHIVE_DIRS = ("crates/ultravin/src", "crates/ultravin/examples/support")
+BUILD_FILES = (
+    "crates/ultravin/Cargo.toml",
+    "crates/ultravin/build.rs",
+    "crates/ultravin/data/manifest.json",
+    "Cargo.toml",
+    "Cargo.lock",
+)
+CANONICAL_ARTIFACT = ROOT / "crates/ultravin/data/vpic.rkyv"
 
 
-def _archive_candidate(source_root: Path) -> tuple[Path, Path, dict[str, str]]:
-    if not BUILT.is_file():
-        msg = f"build the release throughput example first: {BUILT}"
+def _source_hashes(source_root: Path, example: str) -> dict[str, str]:
+    sources = [source_root / name for name in BUILD_FILES]
+    sources.append(source_root / f"crates/ultravin/examples/{example}.rs")
+    for directory in ARCHIVE_DIRS:
+        sources.extend(sorted((source_root / directory).rglob("*.rs")))
+    return {str(source.relative_to(source_root)): _sha256(source) for source in dict.fromkeys(sources)}
+
+
+def _build_candidate(
+    source_root: Path,
+    example: str,
+    features: tuple[str, ...] = (),
+) -> tuple[Path, dict[str, Any]]:
+    """Build one example from the selected checkout and prove its sources stayed fixed."""
+    before = _source_hashes(source_root, example)
+    command = [
+        "cargo",
+        "build",
+        "--locked",
+        "--release",
+        "--manifest-path",
+        str(source_root / "Cargo.toml"),
+        "-p",
+        "ultravin",
+        "--example",
+        example,
+    ]
+    if features:
+        command.extend(("--features", ",".join(features)))
+    build_environment = {
+        "CARGO_TARGET_DIR": str(ROOT / "target"),
+        "ULTRAVIN_DATA": str(CANONICAL_ARTIFACT),
+    }
+    captured = _capture(command, env={**os.environ, **build_environment})
+    after = _source_hashes(source_root, example)
+    if after != before:
+        message = "candidate sources changed while the release binary was building"
+        raise RuntimeError(message)
+    binary = ROOT / "target/release/examples" / example
+    if not binary.is_file():
+        message = f"cargo did not produce the expected example binary: {binary}"
+        raise RuntimeError(message)
+    return binary, {
+        "command": command,
+        "environment": build_environment,
+        "source_sha256": after,
+        "binary_sha256": _sha256(binary),
+        **captured,
+    }
+
+
+def _verify_built_candidate(
+    build: dict[str, Any],
+    archived_sources: dict[str, str],
+    archived_binary: Path,
+) -> None:
+    for relative, source_hash in build["source_sha256"].items():
+        if archived_sources.get(relative) != source_hash:
+            message = f"archived source differs from the source used to build: {relative}"
+            raise RuntimeError(message)
+    if _sha256(archived_binary) != build["binary_sha256"]:
+        message = "archived binary differs from the binary produced by the recorded build"
+        raise RuntimeError(message)
+
+
+def _archive_candidate(
+    source_root: Path, built: Path = BUILT, extra_files: tuple[str, ...] = ()
+) -> tuple[Path, Path, dict[str, str]]:
+    if not built.is_file():
+        msg = f"build the release benchmark example first: {built}"
         raise typer.BadParameter(msg)
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     archive = ROOT / "target/bench" / f"native-trial-{stamp}"
     archive.mkdir(parents=True, exist_ok=False)
-    binary = archive / "throughput"
-    shutil.copy2(BUILT, binary)
+    binary = archive / built.name
+    shutil.copy2(built, binary)
     source_hashes: dict[str, str] = {}
-    sources = [source_root / name for name in ARCHIVE_FILES]
+    sources = [source_root / name for name in (*ARCHIVE_FILES, *extra_files)]
     for directory in ARCHIVE_DIRS:
         sources.extend(sorted((source_root / directory).rglob("*.rs")))
     for source in sources:
@@ -67,7 +142,7 @@ def _archive_candidate(source_root: Path) -> tuple[Path, Path, dict[str, str]]:
     if _sha256(runner) != runner_hash:
         raise RuntimeError("archived runner hash mismatch")
     source_hashes["scripts/bench/native_trials.py"] = runner_hash
-    if _sha256(binary) != _sha256(BUILT):
+    if _sha256(binary) != _sha256(built):
         raise RuntimeError("archived binary hash mismatch")
     return archive, binary, source_hashes
 
@@ -115,7 +190,13 @@ def _sample(binary: Path, label: str) -> dict[str, Any]:
     }
 
 
-def main(source_root: Path = ROOT, output: Path = DEFAULT_OUTPUT, screen: bool = False) -> None:
+def main(
+    source_root: Path = ROOT,
+    output: Path = DEFAULT_OUTPUT,
+    screen: bool = False,
+    baseline_evidence: Path = BASELINE_EVIDENCE,
+    baseline_sha: str = BASELINE_SHA,
+) -> None:
     """Use --screen for one candidate run; otherwise retain the full ABBA comparison."""
     if screen and output == DEFAULT_OUTPUT:
         output = SCREEN_OUTPUT
@@ -124,13 +205,14 @@ def main(source_root: Path = ROOT, output: Path = DEFAULT_OUTPUT, screen: bool =
         raise typer.BadParameter(msg)
     if _sha256(CORPUS) != CORPUS_SHA:
         raise typer.BadParameter("fixed 20m unique corpus hash changed")
-    baseline_evidence = json.loads(BASELINE_EVIDENCE.read_text())
-    baseline_record = baseline_evidence["candidate"]
+    baseline_record = json.loads(baseline_evidence.read_text())["candidate"]
     baseline = Path(baseline_record["binary"])
-    if baseline_record["binary_sha256"] != BASELINE_SHA or _sha256(baseline) != BASELINE_SHA:
+    if baseline_record["binary_sha256"] != baseline_sha or _sha256(baseline) != baseline_sha:
         raise typer.BadParameter("immutable native-worker baseline hash changed")
     source_root = source_root.resolve(strict=True)
-    archive, candidate, source_hashes = _archive_candidate(source_root)
+    built, build = _build_candidate(source_root, "throughput")
+    archive, candidate, source_hashes = _archive_candidate(source_root, built)
+    _verify_built_candidate(build, source_hashes, candidate)
     candidate_sha = _sha256(candidate)
     samples: list[dict[str, Any]] = []
     sequence = ["candidate"] if screen else ["candidate", "baseline", "baseline", "candidate"]
@@ -152,10 +234,10 @@ def main(source_root: Path = ROOT, output: Path = DEFAULT_OUTPUT, screen: bool =
         },
         "corpus": {"path": str(CORPUS), "rows": ROWS, "unique": True, "sha256": CORPUS_SHA},
         "baseline": {
-            "evidence": str(BASELINE_EVIDENCE),
+            "evidence": str(baseline_evidence.resolve()),
             "archive": baseline_record["archive"],
             "binary": str(baseline),
-            "binary_sha256": BASELINE_SHA,
+            "binary_sha256": baseline_sha,
         },
         "candidate": {
             "archive": str(archive),
@@ -163,6 +245,7 @@ def main(source_root: Path = ROOT, output: Path = DEFAULT_OUTPUT, screen: bool =
             "binary_sha256": candidate_sha,
             "source_hashes": source_hashes,
             "source_root": str(source_root),
+            "build": build,
             "build_environment": {
                 "CARGO_TARGET_DIR": str(ROOT / "target"),
                 "ULTRAVIN_DATA": str(ROOT / "crates/ultravin/data/vpic.rkyv"),

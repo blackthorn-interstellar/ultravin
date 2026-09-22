@@ -1,0 +1,325 @@
+{
+  "schema_version": 1,
+  "status": "complete",
+  "scope": "architecture diagnostic; local consumption is not ordered production delivery",
+  "measured_at_utc": "2026-09-15T22:29:25+00:00",
+  "configuration": {
+    "sequence": [
+      [
+        8,
+        "ordered"
+      ],
+      [
+        8,
+        "local"
+      ],
+      [
+        1,
+        "ordered"
+      ],
+      [
+        1,
+        "local"
+      ]
+    ],
+    "batch_size": 100,
+    "slots_per_worker": 5,
+    "now_micros": 1788220800000000,
+    "full_warm_pass": true,
+    "full_timed_pass": true,
+    "minimum_timed_seconds": 10,
+    "full_results_and_cleanup": true,
+    "features": [
+      "diagnostic-ceilings"
+    ],
+    "stage_rows_requested": 1000000,
+    "stages_only": false,
+    "skip_stages": true
+  },
+  "corpus": {
+    "path": "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+    "rows": 20000000,
+    "unique": true,
+    "sha256": "0d6224e99d0a7f241e3dcd052ce973c8baea774feb0831db0071423de726bd9a"
+  },
+  "candidate": {
+    "archive": "/Volumes/fast-4tb/projects/ultravin/target/bench/native-trial-20260915T222925Z",
+    "binary": "/Volumes/fast-4tb/projects/ultravin/target/bench/native-trial-20260915T222925Z/architecture_ceiling_probe",
+    "binary_sha256": "ae819126512ca13f22c38510d2983d6db3b2b79dd89aeb652f82219385a12e32",
+    "source_root": "/private/tmp/ultravin-arch-ceilings",
+    "source_hashes": {
+      "crates/ultravin/examples/throughput.rs": "e538dbefff86853eae5d12c0c9e2003aa889c1c55cce667ba434b5fd3105fb86",
+      "crates/ultravin/Cargo.toml": "8847c7c1ca91e77c1b62678780cecc848bae4ee83924c51687e06c14d6d69e05",
+      "crates/ultravin/build.rs": "a7bb3fd6497464e096caea0112a267fe852142ec31ec20b5fc71f7b639fb248e",
+      "crates/ultravin/data/manifest.json": "57e423e2c0f3b78a1c85fa9cb6961377c0ee7d1ab2c9c48a0b65c8f798ca5109",
+      "Cargo.toml": "a85692348ace983f4e8dba935f913f4bb2edf7181194ce554d9290afb454cfb2",
+      "Cargo.lock": "9f0c0a83de09c13c0e89bf4fccca78bdcde7f5ffb499830f9eab8b592cb11f69",
+      "crates/ultravin/examples/architecture_ceiling_probe.rs": "5d80e6d5e973da76b68ea194a0687322cb3f7b679ae6face77933fdb7a02fe96",
+      "crates/ultravin/src/adaptive.rs": "755daec2ef8331220f2ed8754f5bc39a02c36e02e9f368bcd8a5363755d6b429",
+      "crates/ultravin/src/arrow_io.rs": "e21581520794aa515ac8b44968d26068f79f00fd5bb74965abdd755b606d4ad9",
+      "crates/ultravin/src/batch_results.rs": "aeb3cea7ace266a1660cac41e919bd0b1f4f6cf5bdbe8dc8f2f376f373852028",
+      "crates/ultravin/src/checkdigit.rs": "7781bbc5b1bacd13e57ffc2962ca149d33d865ebc2672f693d17e5e0dcdffe8d",
+      "crates/ultravin/src/clock_tests.rs": "6452909cf2c48650def8951be1b1d115c54ee3a39c05f36dabf504a0cb20d576",
+      "crates/ultravin/src/conversion.rs": "d3c43d380a23349b8b3a6c29243ee85ed7f40eeef82f2bf65ac8f2ec1f3df89a",
+      "crates/ultravin/src/cover.rs": "e2c1eae344e74864aa86e5683349a2aa3ad73c8177a8bfde20d4567c921c7a91",
+      "crates/ultravin/src/db.rs": "dbb6f5b4da7999dd3d4b36f18337aebb51b1a9f45cd9de19d7c64481b97c8d84",
+      "crates/ultravin/src/decode.rs": "ef7c9c9ca180ea03a7fa0dd9bb40bd0e3bd4c2f1648f6cc2c83c1371dff8c4a4",
+      "crates/ultravin/src/diagnostic_ceiling.rs": "318a628b0701f982eb544fff06d3355705c9df232991c7f98f3119d30b2364cc",
+      "crates/ultravin/src/errors.rs": "9c6ea0cc715fcba69e4841474e90e9c7fb8a15a688e58d975a453de25c9b6ead",
+      "crates/ultravin/src/experimental_batch.rs": "e70888fa056620d3ec2e1a7d568fed2a30813408b250b79f00b9dab99739870e",
+      "crates/ultravin/src/generate.rs": "3da67b6b45af7982fa13217140ae51ad3587fed37d8b6f9a181ec2fcf9d88e38",
+      "crates/ultravin/src/hash.rs": "c6cbe2360a1b17095a70d4c4a58657bdfd963fea6e5d7539e290ce018e0d562e",
+      "crates/ultravin/src/ids.rs": "8e0a624c4f0f7bbaa9017f0c9fb9087ee135e9ea21d922d0dd059337ea9db339",
+      "crates/ultravin/src/json.rs": "0b987c71ed88b9f16f1c4615bb4bae890b09106e5ddcdf3408e32d9878ddf853",
+      "crates/ultravin/src/keyspec.rs": "5ff20b7bbeed8d1cc9c9a879e1d07f0c727a50d45dda7cb6520ab8dfa2d3eebd",
+      "crates/ultravin/src/lib.rs": "c5a9c3414d3873d0983d619f0f8ac25434cad727d5178cd316e0b14c81b2e263",
+      "crates/ultravin/src/matcher.rs": "10af75b96a26e3f961f3618eac3e68e3736f67c450a159a2fff9754702346934",
+      "crates/ultravin/src/native_auto.rs": "9107f37ffdd85eab2cc28fca47eaf181805a8243ca394c5be216a6c1027e6133",
+      "crates/ultravin/src/native_stream.rs": "8b8cc0bf5f0e6069387c955c8ef3968c54173487c934123ae8d8d2ff40a104a8",
+      "crates/ultravin/src/parquet_io.rs": "0c7138bdc74ae346c34ec429d35b1e33b6b47de2b68d4bba9175a3919a5ca2d7",
+      "crates/ultravin/src/predictor.rs": "bafbbea06923b6c828a00c64d51a8ca1e14843bbc41c5c25b582a65393b10441",
+      "crates/ultravin/src/resolve.rs": "f8d3f62c832c28f966c0ba720e2e48821b2be0a24253217839e3ffc538ac3321",
+      "crates/ultravin/src/stage_trace.rs": "a54e25e0f65da6a9c19988b770d7cfc3fbc534e5cb6662b5c6aeb0e77f3c3044",
+      "crates/ultravin/src/tables.rs": "2b8ffb68468cfcfe52bb2d46a022d3baa4edd25a02eb9894dca8056153d3fb4e",
+      "crates/ultravin/src/wmi.rs": "27ba20c7aa0732e00f79e425ac4e46491cd21e75a8e5ccf051f432dc1eb42559",
+      "crates/ultravin/src/year.rs": "a0d1398885792559cd1777341c14d8d3a8c9847e2058035bd42572263a66f2b2",
+      "crates/ultravin/examples/support/allocation_counter.rs": "39580681c98d62066dd5e0798706ae52ccd086f0387753301c0dd63d4e526a97",
+      "crates/ultravin/examples/support/counters.rs": "b1db2cb48609acfb613fe7ce15ebec889de400b89cb5a902dbd3ea939ccc65dc",
+      "crates/ultravin/examples/support/cpu.rs": "4e1f57582372716d041ba5403a00d8135e6127e41d51539ebdd295eeb743eff5",
+      "crates/ultravin/examples/support/mod.rs": "210b3b14df1884e26d8003d27508f93461e0d022346ba4e2f6b57b422b3a3b0b",
+      "scripts/bench/native_trials.py": "7742e012bad8aaaf44dddb354663230f1a5c669ba53851064d5fd57c2675ca18",
+      "scripts/bench/architecture_ceilings.py": "240c8b441e295b86b992e911293d980043d1e7156836b46b752c8fa136aa85f2"
+    }
+  },
+  "environment": {
+    "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O",
+    "cpu_model": "Apple M2 Max"
+  },
+  "samples": [
+    {
+      "mode": "ordered",
+      "workers": 8,
+      "measurement": {
+        "average_busy_cores": 7.9752499107688655,
+        "batch_size": 100,
+        "elapsed_seconds": 19.963860792,
+        "fixed_now_micros": 1788220800000000,
+        "full_results_materialized_and_cleaned": true,
+        "full_warm_pass": true,
+        "interpretation": "current production ordered native worker pipeline",
+        "parity_checksum": 10465870802450184157,
+        "per_worker_counters": "omitted to keep the production ordered control uninstrumented",
+        "process_counters": {
+          "cycles": 518798270929,
+          "instructions": 1231137267446
+        },
+        "process_system_cpu_seconds": 0.386525,
+        "process_user_cpu_seconds": 158.83025400000002,
+        "report": {
+          "batches": 200000,
+          "mode": "ordered-production",
+          "rows": 20000000,
+          "workers": []
+        },
+        "rows": 20000000,
+        "rows_per_second": 1001810.2314164845,
+        "slots_per_worker": 5,
+        "timed_consumer": "black_box batch plus scalar row count, matching throughput probe",
+        "workers": 8
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/native-trial-20260915T222925Z/architecture_ceiling_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "ordered",
+        "8"
+      ],
+      "stdout": "{\"average_busy_cores\":7.9752499107688655,\"batch_size\":100,\"elapsed_seconds\":19.963860792,\"fixed_now_micros\":1788220800000000,\"full_results_materialized_and_cleaned\":true,\"full_warm_pass\":true,\"interpretation\":\"current production ordered native worker pipeline\",\"parity_checksum\":10465870802450184157,\"per_worker_counters\":\"omitted to keep the production ordered control uninstrumented\",\"process_counters\":{\"cycles\":518798270929,\"instructions\":1231137267446},\"process_system_cpu_seconds\":0.386525,\"process_user_cpu_seconds\":158.83025400000002,\"report\":{\"batches\":200000,\"mode\":\"ordered-production\",\"rows\":20000000,\"workers\":[]},\"rows\":20000000,\"rows_per_second\":1001810.2314164845,\"slots_per_worker\":5,\"timed_consumer\":\"black_box batch plus scalar row count, matching throughput probe\",\"workers\":8}\n",
+      "stderr": "full warm pass complete; starting timed whole-corpus pass\n",
+      "wall_seconds": 41.95663004100061,
+      "peak_rss_bytes": 2039857152
+    },
+    {
+      "mode": "local",
+      "workers": 8,
+      "measurement": {
+        "average_busy_cores": 7.994049662361159,
+        "batch_size": 100,
+        "elapsed_seconds": 19.174038,
+        "fixed_now_micros": 1788220800000000,
+        "full_results_materialized_and_cleaned": true,
+        "full_warm_pass": true,
+        "interpretation": "diagnostic coordination ceiling: local consumption changes result lifetime/backpressure",
+        "parity_checksum": 10465870802450184157,
+        "per_worker_counters": "worker-private batch/row counts and active wall time",
+        "process_counters": {
+          "cycles": 499581825610,
+          "instructions": 1230098090180
+        },
+        "process_system_cpu_seconds": 0.17646499999999998,
+        "process_user_cpu_seconds": 153.10174700000002,
+        "report": {
+          "batches": 200000,
+          "mode": "worker-local-diagnostic",
+          "rows": 20000000,
+          "workers": [
+            {
+              "active_wall_ns": 19173041208,
+              "batches": 25486,
+              "rows": 2548600,
+              "worker": 0
+            },
+            {
+              "active_wall_ns": 19173029459,
+              "batches": 25329,
+              "rows": 2532900,
+              "worker": 1
+            },
+            {
+              "active_wall_ns": 19172371583,
+              "batches": 24880,
+              "rows": 2488000,
+              "worker": 2
+            },
+            {
+              "active_wall_ns": 19173059208,
+              "batches": 24646,
+              "rows": 2464600,
+              "worker": 3
+            },
+            {
+              "active_wall_ns": 19172665625,
+              "batches": 24894,
+              "rows": 2489400,
+              "worker": 4
+            },
+            {
+              "active_wall_ns": 19172496208,
+              "batches": 24829,
+              "rows": 2482900,
+              "worker": 5
+            },
+            {
+              "active_wall_ns": 19172706292,
+              "batches": 25305,
+              "rows": 2530500,
+              "worker": 6
+            },
+            {
+              "active_wall_ns": 19172896750,
+              "batches": 24631,
+              "rows": 2463100,
+              "worker": 7
+            }
+          ]
+        },
+        "rows": 20000000,
+        "rows_per_second": 1043077.1024861847,
+        "slots_per_worker": 5,
+        "timed_consumer": "black_box batch plus scalar row count, matching throughput probe",
+        "workers": 8
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/native-trial-20260915T222925Z/architecture_ceiling_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "local",
+        "8"
+      ],
+      "stdout": "{\"average_busy_cores\":7.994049662361159,\"batch_size\":100,\"elapsed_seconds\":19.174038,\"fixed_now_micros\":1788220800000000,\"full_results_materialized_and_cleaned\":true,\"full_warm_pass\":true,\"interpretation\":\"diagnostic coordination ceiling: local consumption changes result lifetime/backpressure\",\"parity_checksum\":10465870802450184157,\"per_worker_counters\":\"worker-private batch/row counts and active wall time\",\"process_counters\":{\"cycles\":499581825610,\"instructions\":1230098090180},\"process_system_cpu_seconds\":0.17646499999999998,\"process_user_cpu_seconds\":153.10174700000002,\"report\":{\"batches\":200000,\"mode\":\"worker-local-diagnostic\",\"rows\":20000000,\"workers\":[{\"active_wall_ns\":19173041208,\"batches\":25486,\"rows\":2548600,\"worker\":0},{\"active_wall_ns\":19173029459,\"batches\":25329,\"rows\":2532900,\"worker\":1},{\"active_wall_ns\":19172371583,\"batches\":24880,\"rows\":2488000,\"worker\":2},{\"active_wall_ns\":19173059208,\"batches\":24646,\"rows\":2464600,\"worker\":3},{\"active_wall_ns\":19172665625,\"batches\":24894,\"rows\":2489400,\"worker\":4},{\"active_wall_ns\":19172496208,\"batches\":24829,\"rows\":2482900,\"worker\":5},{\"active_wall_ns\":19172706292,\"batches\":25305,\"rows\":2530500,\"worker\":6},{\"active_wall_ns\":19172896750,\"batches\":24631,\"rows\":2463100,\"worker\":7}]},\"rows\":20000000,\"rows_per_second\":1043077.1024861847,\"slots_per_worker\":5,\"timed_consumer\":\"black_box batch plus scalar row count, matching throughput probe\",\"workers\":8}\n",
+      "stderr": "full warm pass complete; starting timed whole-corpus pass\n",
+      "wall_seconds": 39.32022708299701,
+      "peak_rss_bytes": 2040004608
+    },
+    {
+      "mode": "ordered",
+      "workers": 1,
+      "measurement": {
+        "average_busy_cores": 1.0071116581552,
+        "batch_size": 100,
+        "elapsed_seconds": 111.445744959,
+        "fixed_now_micros": 1788220800000000,
+        "full_results_materialized_and_cleaned": true,
+        "full_warm_pass": true,
+        "interpretation": "current production ordered native worker pipeline",
+        "parity_checksum": 12427279811247571899,
+        "per_worker_counters": "omitted to keep the production ordered control uninstrumented",
+        "process_counters": {
+          "cycles": 390635337860,
+          "instructions": 1232186731065
+        },
+        "process_system_cpu_seconds": 1.268508,
+        "process_user_cpu_seconds": 110.969801,
+        "report": {
+          "batches": 200000,
+          "mode": "ordered-production",
+          "rows": 20000000,
+          "workers": []
+        },
+        "rows": 20000000,
+        "rows_per_second": 179459.52092973888,
+        "slots_per_worker": 5,
+        "timed_consumer": "black_box batch plus scalar row count, matching throughput probe",
+        "workers": 1
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/native-trial-20260915T222925Z/architecture_ceiling_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "ordered",
+        "1"
+      ],
+      "stdout": "{\"average_busy_cores\":1.0071116581552,\"batch_size\":100,\"elapsed_seconds\":111.445744959,\"fixed_now_micros\":1788220800000000,\"full_results_materialized_and_cleaned\":true,\"full_warm_pass\":true,\"interpretation\":\"current production ordered native worker pipeline\",\"parity_checksum\":12427279811247571899,\"per_worker_counters\":\"omitted to keep the production ordered control uninstrumented\",\"process_counters\":{\"cycles\":390635337860,\"instructions\":1232186731065},\"process_system_cpu_seconds\":1.268508,\"process_user_cpu_seconds\":110.969801,\"report\":{\"batches\":200000,\"mode\":\"ordered-production\",\"rows\":20000000,\"workers\":[]},\"rows\":20000000,\"rows_per_second\":179459.52092973888,\"slots_per_worker\":5,\"timed_consumer\":\"black_box batch plus scalar row count, matching throughput probe\",\"workers\":1}\n",
+      "stderr": "full warm pass complete; starting timed whole-corpus pass\n",
+      "wall_seconds": 227.90608229200006,
+      "peak_rss_bytes": 1996668928
+    },
+    {
+      "mode": "local",
+      "workers": 1,
+      "measurement": {
+        "average_busy_cores": 0.9999541408623905,
+        "batch_size": 100,
+        "elapsed_seconds": 116.210929333,
+        "fixed_now_micros": 1788220800000000,
+        "full_results_materialized_and_cleaned": true,
+        "full_warm_pass": true,
+        "interpretation": "diagnostic coordination ceiling: local consumption changes result lifetime/backpressure",
+        "parity_checksum": 12427279811247571899,
+        "per_worker_counters": "worker-private batch/row counts and active wall time",
+        "process_counters": {
+          "cycles": 404166931490,
+          "instructions": 1230142014395
+        },
+        "process_system_cpu_seconds": 0.23108899999999993,
+        "process_user_cpu_seconds": 115.97451099999999,
+        "report": {
+          "batches": 200000,
+          "mode": "worker-local-diagnostic",
+          "rows": 20000000,
+          "workers": [
+            {
+              "active_wall_ns": 116210532709,
+              "batches": 200000,
+              "rows": 20000000,
+              "worker": 0
+            }
+          ]
+        },
+        "rows": 20000000,
+        "rows_per_second": 172100.85243093115,
+        "slots_per_worker": 5,
+        "timed_consumer": "black_box batch plus scalar row count, matching throughput probe",
+        "workers": 1
+      },
+      "command": [
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/native-trial-20260915T222925Z/architecture_ceiling_probe",
+        "/Volumes/fast-4tb/projects/ultravin/target/bench/independent-sink-corpus.txt",
+        "local",
+        "1"
+      ],
+      "stdout": "{\"average_busy_cores\":0.9999541408623905,\"batch_size\":100,\"elapsed_seconds\":116.210929333,\"fixed_now_micros\":1788220800000000,\"full_results_materialized_and_cleaned\":true,\"full_warm_pass\":true,\"interpretation\":\"diagnostic coordination ceiling: local consumption changes result lifetime/backpressure\",\"parity_checksum\":12427279811247571899,\"per_worker_counters\":\"worker-private batch/row counts and active wall time\",\"process_counters\":{\"cycles\":404166931490,\"instructions\":1230142014395},\"process_system_cpu_seconds\":0.23108899999999993,\"process_user_cpu_seconds\":115.97451099999999,\"report\":{\"batches\":200000,\"mode\":\"worker-local-diagnostic\",\"rows\":20000000,\"workers\":[{\"active_wall_ns\":116210532709,\"batches\":200000,\"rows\":20000000,\"worker\":0}]},\"rows\":20000000,\"rows_per_second\":172100.85243093115,\"slots_per_worker\":5,\"timed_consumer\":\"black_box batch plus scalar row count, matching throughput probe\",\"workers\":1}\n",
+      "stderr": "full warm pass complete; starting timed whole-corpus pass\n",
+      "wall_seconds": 236.27600629099834,
+      "peak_rss_bytes": 1996652544
+    }
+  ],
+  "completed_at_utc": "2026-09-15T22:38:31+00:00"
+}
