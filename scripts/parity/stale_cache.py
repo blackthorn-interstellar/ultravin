@@ -228,15 +228,6 @@ def stale_positions(
     return (load_cells() if cells is None else cells).get(cell) or frozenset()
 
 
-def is_known_stale_cell(
-    vin: str,
-    decoded: dict[str, Any] | None = None,
-    cells: dict[tuple[str, int], frozenset[int]] | None = None,
-) -> bool:
-    """True when this VIN's decode reads a cell the scan found stale."""
-    return bool(stale_positions(vin, decoded, cells))
-
-
 def diff_view(record: dict[str, Any]) -> dict[str, Any]:
     """The complete diff description inside a divergence record.
 

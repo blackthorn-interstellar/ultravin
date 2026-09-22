@@ -105,14 +105,14 @@ def test_cell_for_is_none_without_a_model_year() -> None:
 def test_a_listed_cell_and_an_unlisted_one() -> None:
     listed = {"model_year": 2019}
     unlisted = {"model_year": 1989}  # same VIN, the other candidate year
-    assert stale_cache.is_known_stale_cell("MLHAE041XKA111111", listed, CELLS)
-    assert not stale_cache.is_known_stale_cell("MLHAE041XKA111111", unlisted, CELLS)
+    assert stale_cache.stale_positions("MLHAE041XKA111111", listed, CELLS)
+    assert not stale_cache.stale_positions("MLHAE041XKA111111", unlisted, CELLS)
 
 
 def test_a_six_character_cell_is_matched_on_the_full_key() -> None:
     """The three-character prefix is a different cell and must not match."""
-    assert stale_cache.is_known_stale_cell("1F9TC25FTAB123456", {"model_year": 2020}, CELLS)
-    assert not stale_cache.is_known_stale_cell("1F9TC25FTAB", {"model_year": 2020}, CELLS)
+    assert stale_cache.stale_positions("1F9TC25FTAB123456", {"model_year": 2020}, CELLS)
+    assert not stale_cache.stale_positions("1F9TC25FTAB", {"model_year": 2020}, CELLS)
 
 
 # --------------------------------------------------------------------------- the diff
@@ -200,7 +200,7 @@ def test_a_narrow_diff_in_a_listed_cell_at_an_unaffected_position_is_not_the_cla
         "order_ok": True,
     }
     assert stale_cache.error_fields_only(at_five)
-    assert stale_cache.is_known_stale_cell(vin, listed, CELLS)
+    assert stale_cache.stale_positions(vin, listed, CELLS)
     assert stale_cache.diff_positions(at_five) == {5}
     assert not stale_cache.is_expected_divergence(vin, at_five, listed, CELLS)
 
