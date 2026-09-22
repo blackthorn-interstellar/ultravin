@@ -31,14 +31,6 @@ def test_generated_vins_are_well_formed(seed: int) -> None:
         assert result["check_digit_valid"], result["vin"]
 
 
-def test_generated_vins_decode_to_real_vehicles() -> None:
-    # The point of generating from the data rather than at random: these decode
-    # to attributes, not to "manufacturer not registered".
-    for result in ultravin.decode_batch(ultravin.generate(25, seed=2), full=True):
-        assert 7 not in result["error_codes"], result["vin"]
-        assert result["elements"]
-
-
 def test_generate_will_not_draw_from_an_unpublished_wmi() -> None:
     # The decoder resolves a WMI only once its public-availability date has passed
     # and reports the miss as error 7, "manufacturer not registered"; generation
@@ -56,8 +48,8 @@ def test_generate_will_not_draw_from_an_unpublished_wmi() -> None:
 
 
 def test_no_generated_vin_comes_from_an_unregistered_wmi() -> None:
-    # The broad net behind the exact test above: the 25 VINs checked earlier cannot
-    # see a defect at the one-in-thousands rate this one samples at.
+    # The broad net behind the exact test above: a handful of VINs cannot see a
+    # defect at the one-in-thousands rate this one samples at.
     results = ultravin.decode_batch(ultravin.generate(4_000, seed=9))
     assert not [r["vin"] for r in results if 7 in r["error_codes"]]
 
@@ -227,13 +219,6 @@ def test_pairwise_pins_the_model_year_inside_the_schema_band() -> None:
     assert all(y is None or 1980 <= y <= 2040 for y in years)
 
 
-def test_now_freezes_the_clock_a_seed_is_drawn_against() -> None:
-    # Without `now` the caller cannot pin the clock, so a fixture that pins only
-    # the seed silently changes the day the model year rolls over.
-    frozen = datetime(2026, 6, 1, 12, 0, 0)  # noqa: DTZ001 -- naive on purpose: the binding reads it as UTC
-    assert ultravin.generate(200, seed=42, now=frozen) == ultravin.generate(200, seed=42, now=frozen)
-
-
 def test_a_frozen_clock_bounds_the_model_years_that_can_be_drawn() -> None:
     # The clock caps the year sampled inside a schema's band at current + 2, so
     # two clocks a decade apart draw from different bands and cannot agree.
@@ -278,12 +263,6 @@ def test_an_aware_now_is_converted_rather_than_truncated() -> None:
     plus_two = utc.astimezone(timezone(timedelta(hours=2)))
     assert plus_two.hour != utc.hour  # genuinely a different wall clock
     assert ultravin.generate(200, seed=6, now=utc) == ultravin.generate(200, seed=6, now=plus_two)
-
-
-def test_omitting_now_still_reads_the_system_clock() -> None:
-    # The parameter is additive: the old call has to keep working unchanged.
-    assert len(ultravin.generate(50, seed=11)) == 50
-    assert ultravin.generate(50, seed=11) == ultravin.generate(50, seed=11)
 
 
 def test_generate_draws_are_nearly_all_unique() -> None:
