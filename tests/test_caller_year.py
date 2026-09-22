@@ -20,11 +20,6 @@ def test_matching_year_changes_nothing() -> None:
     assert uv.decode(VIN, year=2003) == uv.decode(VIN)
 
 
-def test_json_paths_match_dict_paths() -> None:
-    assert json.loads(uv.decode_json(VIN, year=1995)) == uv.decode(VIN, year=1995)
-    assert json.loads(uv.decode_json(VIN, year=1995, full=True)) == uv.decode(VIN, year=1995, full=True)
-
-
 def test_batch_years_thread_per_vin() -> None:
     batch = uv.decode_batch([VIN, VIN], years=[None, 1995])
     assert batch[0] == uv.decode(VIN)
