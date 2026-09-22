@@ -106,11 +106,12 @@ const WEIGHTED: [[u16; 256]; 17] = {
 /// the caller compares it against this '?' ('?' == '?'). Matched deliberately in
 /// `errors.rs::compute_errors` — see there before changing this return.
 #[inline]
-fn check_digit_kernel(vin: &str, pos3: u8, rule: PosRule) -> Option<char> {
+fn check_digit_kernel(vin: &str, rule: PosRule) -> Option<char> {
     let b = vin.as_bytes();
     if b.len() != 17 {
         return None;
     }
+    let pos3 = b[2];
     let numeric13 = matches!(
         rule,
         PosRule::V1
@@ -141,10 +142,7 @@ fn check_digit_kernel(vin: &str, pos3: u8, rule: PosRule) -> Option<char> {
 /// or `Some(d)`, `Some('?')` if any character is invalid at its position, or
 /// `None` when the VIN is not 17 characters (the SQL returns `''`).
 pub fn check_digit_with_flag(vin: &str, is_car_mpv_lt: bool) -> Option<char> {
-    // Only read once len is known good; the kernel guards the length before
-    // consulting the rule, so a short VIN never indexes here.
-    let pos3 = vin.as_bytes().get(2).copied().unwrap_or(0);
-    check_digit_kernel(vin, pos3, PosRule::V2 { is_car_mpv_lt })
+    check_digit_kernel(vin, PosRule::V2 { is_car_mpv_lt })
 }
 
 /// Convenience wrapper for `fVINCheckDigit2(vin, false)`.
@@ -172,8 +170,7 @@ fn valid_at_v1(i: usize, c: u8, pos3: u8) -> bool {
 /// `vpic/procs/fvincheckdigit.sql`). Same transliteration/weights as
 /// `fVINCheckDigit2`; only the position 13/14 validity classes differ.
 pub fn check_digit_v1(vin: &str) -> Option<char> {
-    let pos3 = vin.as_bytes().get(2).copied().unwrap_or(0);
-    check_digit_kernel(vin, pos3, PosRule::V1)
+    check_digit_kernel(vin, PosRule::V1)
 }
 
 #[cfg(test)]
@@ -229,7 +226,7 @@ mod tests {
                         bytes[pos] = byte;
                         let vin = std::str::from_utf8(&bytes).unwrap();
                         assert_eq!(
-                            check_digit_kernel(vin, bytes[2], rule),
+                            check_digit_kernel(vin, rule),
                             reference(vin, rule),
                             "{vin:?}"
                         );
@@ -243,7 +240,7 @@ mod tests {
                     "AAAAAAAAAAAAAAAAA",
                 ] {
                     assert_eq!(
-                        check_digit_kernel(vin, vin.as_bytes().get(2).copied().unwrap_or(0), rule),
+                        check_digit_kernel(vin, rule),
                         reference(vin, rule),
                         "{vin:?}"
                     );

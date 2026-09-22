@@ -15,7 +15,6 @@ const REQUIRED_WINS: usize = 3;
 const MAX_PAIR_ATTEMPTS: usize = 5;
 const MATERIAL_GAIN: f64 = 1.05;
 const MAX_BRACKET_CHANGE: f64 = 1.15;
-pub const DEFAULT_MEMORY_BYTES: usize = 64 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct BatchTunerStatus {
@@ -96,7 +95,8 @@ impl BatchFeedback {
         Ok(feedback)
     }
 
-    pub fn calibration_needed(&self) -> bool {
+    #[cfg(test)]
+    fn calibration_needed(&self) -> bool {
         self.0
             .lock()
             .expect("batch feedback mutex poisoned")
@@ -588,6 +588,8 @@ fn candidates(center: usize, max_rows: usize) -> Vec<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const DEFAULT_MEMORY_BYTES: usize = 64 * 1024 * 1024;
 
     fn sample(tuner: &mut BatchTuner, rate: f64, bytes_per_row: usize) {
         let rows = tuner.next_rows();

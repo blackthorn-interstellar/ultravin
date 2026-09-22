@@ -741,13 +741,6 @@ impl Db {
             .collect()
     }
 
-    /// `VehicleSpecSchema` rows for a make id.
-    pub fn vspecschemas_for_make(&self, makeid: i32) -> &[ArchivedVSpecSchema] {
-        slice_eq(self.a().vspecschema.as_slice(), makeid, |r| {
-            r.makeid.to_native()
-        })
-    }
-
     pub(crate) fn vspecschemas_for_make_model(
         &self,
         makeid: i32,
@@ -1381,8 +1374,9 @@ mod tests {
         pairs.insert((-1, -1));
         for (make, model) in pairs {
             let expected: Vec<i32> = db
-                .vspecschemas_for_make(make)
+                .vspecschemas()
                 .iter()
+                .filter(|s| s.makeid.to_native() == make)
                 .filter(|s| {
                     db.vspecschema_models_for(s.id.to_native())
                         .iter()

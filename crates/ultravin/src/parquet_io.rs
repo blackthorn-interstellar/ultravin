@@ -384,16 +384,8 @@ pub fn open_chunks_at(
     open_chunks_impl(src, opts, now_micros, None)
 }
 
-/// Open a dataset with batch sizes learned from the work itself.
-pub fn open_chunks_auto(
-    src: &Path,
-    opts: ParquetOpts,
-    memory_bytes: usize,
-) -> Result<ParquetChunkIter, ParquetError> {
-    open_chunks_auto_at(src, opts, memory_bytes, crate::now_micros())
-}
-
-/// [`open_chunks_auto`] at one stable instant shared by the whole dataset.
+/// Open a dataset with batch sizes learned from the work itself, at one stable
+/// instant shared by the whole dataset.
 pub fn open_chunks_auto_at(
     src: &Path,
     opts: ParquetOpts,

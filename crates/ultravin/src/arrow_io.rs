@@ -91,10 +91,6 @@ impl ArrowBatchRebatcher {
         }
     }
 
-    pub fn buffered_rows(&self) -> usize {
-        self.rows
-    }
-
     pub fn take(&mut self, rows: usize) -> Result<Option<RecordBatch>, ArrowError> {
         let rows = rows.max(1);
         if self.rows < rows {
@@ -208,23 +204,6 @@ impl ArrowDecoder {
     /// Bind a decoder to `in_schema` with the columns already resolved — for a
     /// caller that found them some other way ([`crate::parquet_io`] falls back to
     /// sniffing values when the names give nothing).
-    pub fn with_columns(
-        in_schema: &SchemaRef,
-        vin_idx: usize,
-        year_idx: Option<usize>,
-        metas: Vec<IdMeta>,
-        names: ColumnNames,
-    ) -> Result<ArrowDecoder, ArrowError> {
-        Self::with_columns_at(
-            in_schema,
-            vin_idx,
-            year_idx,
-            metas,
-            names,
-            crate::now_micros(),
-        )
-    }
-
     pub fn with_columns_at(
         in_schema: &SchemaRef,
         vin_idx: usize,
