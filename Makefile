@@ -53,7 +53,7 @@ wheel-smoke: build-wheel  ## Build a wheel then prove the installed artifact rea
 	@python3 scripts/wheel_smoke.py target/wheels/*.whl
 
 test: build-dev ## Run the Python tests (builds the extension first).
-	@uv run -- pytest
+	@uv run -- pytest -n auto
 	@echo -e "✅ The tests pass! ✨ 🍰 ✨"
 
 check: afu lint typecheck rust test ## Run all checks (format, lint, typecheck, rust, test).

@@ -30,6 +30,7 @@ dev = [
     "pytest",
     "pytest-randomly",
     "pytest-sugar",
+    "pytest-xdist>=3.8.0",
     "ruff",
     "ty",
 ]
