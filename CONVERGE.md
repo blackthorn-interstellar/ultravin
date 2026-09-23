@@ -85,7 +85,7 @@ Test:
 
 ## Consecutive empty iterations
 
-1
+2
 
 Converged at 98127a3 on 2026-09-21 — reset 2026-09-22: the human waived backward compatibility (1,081 lines of previously compat-blocked deletions landed the same evening), the orphaned 2026-09-15 experiment left the tree, and CI went red on a flaky test, so the verdict no longer holds. Resume the loop.
 
