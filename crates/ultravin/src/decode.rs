@@ -1096,30 +1096,23 @@ fn append_default_values<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
         return;
     };
     let present: ElementSet = items.iter().map(|it| it.element_id).collect();
-    for dv in db.defaultvalues_for(veh) {
-        let element_id = dv.elementid.to_native();
-        if !dv.defaultvalue_present || present.contains(&element_id) {
+    for dv in db.default_templates_for(veh) {
+        if present.contains(&dv.element_id) {
             continue;
         }
-        let default_str = db.s(dv.defaultvalue.to_native());
-        let is_lookup = db
-            .element_by_id(element_id)
-            .map(|e| db.s(e.datatype.to_native()).eq_ignore_ascii_case("lookup"))
-            .unwrap_or(false);
-        let value: Cow<'static, str> = if is_lookup && default_str == "0" {
-            Cow::Borrowed("Not Applicable")
-        } else {
-            Cow::Borrowed("XXX")
-        };
         items.push(DecodingItem {
-            created_on: dv.createdon_key.to_native(),
+            created_on: dv.created_on,
             pattern_id: NULL_I32,
             keys: Cow::Borrowed(""),
             vin_schema_id: NULL_I32,
             wmi_id: NULL_I32,
-            element_id,
-            attribute_id: Cow::Borrowed(default_str),
-            value,
+            element_id: dv.element_id,
+            attribute_id: Cow::Borrowed(db.s(dv.attribute_id)),
+            value: Cow::Borrowed(if dv.not_applicable {
+                "Not Applicable"
+            } else {
+                "XXX"
+            }),
             source: Cow::Borrowed("Default"),
             priority: 10,
             to_be_qced: false,

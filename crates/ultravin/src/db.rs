@@ -96,6 +96,9 @@ pub struct Db {
     element_index: OnceLock<Box<[i32]>>,
     wmi_strings: OnceLock<Box<[OnceLock<Box<WmiStrings>>]>>,
     output_order: OnceLock<Box<[u32]>>,
+    /// `element_id -> dense position in public output order` (`u16::MAX` = not
+    /// projected), so projection can place items instead of sorting them.
+    output_rank: OnceLock<Box<[u16]>>,
     projection_meta: OnceLock<Box<[Option<ProjectionMeta>]>>,
     json_elements: OnceLock<Box<[OnceLock<crate::json::ElementJson>]>>,
     correction_text: OnceLock<Box<[OnceLock<CorrectionPage>]>>,
@@ -128,6 +131,20 @@ pub struct Db {
     engine_name_index:
         OnceLock<std::collections::HashMap<String, usize, crate::hash::FxBuildHasher>>,
     valid_charset_cache: OnceLock<crate::errors::ValidCharsetCache>,
+    /// Vehicle type -> its present default rows, in archive order, with the
+    /// datatype test already applied: the default pass runs on every decode.
+    default_templates: OnceLock<IntMap<i32, Box<[DefaultTemplate]>>>,
+    /// Hashes of every exception VIN: nearly all decodes miss, and a miss
+    /// should not binary-search archive strings.
+    vinexception_hashes: OnceLock<crate::hash::IntSet<u64>>,
+}
+
+/// A `DefaultValue` row reduced to what the default pass emits.
+pub(crate) struct DefaultTemplate {
+    pub element_id: i32,
+    pub attribute_id: u32,
+    pub not_applicable: bool,
+    pub created_on: i64,
 }
 
 // SAFETY: the archive is immutable, validated bytes; sharing `&Db` across threads
@@ -167,6 +184,7 @@ impl Db {
             element_index: OnceLock::new(),
             wmi_strings: OnceLock::new(),
             output_order: OnceLock::new(),
+            output_rank: OnceLock::new(),
             projection_meta: OnceLock::new(),
             json_elements: OnceLock::new(),
             correction_text: OnceLock::new(),
@@ -182,6 +200,8 @@ impl Db {
             spec_model_index: OnceLock::new(),
             engine_name_index: OnceLock::new(),
             valid_charset_cache: OnceLock::new(),
+            default_templates: OnceLock::new(),
+            vinexception_hashes: OnceLock::new(),
         }
     }
 
@@ -487,14 +507,12 @@ impl Db {
         }
     }
 
-    pub(crate) fn projection_meta(&self, id: i32) -> Option<&ProjectionMeta> {
-        if id < 0 {
-            return None;
-        }
-        let slot = *self.element_index().get(id as usize)?;
-        if slot < 0 {
-            return None;
-        }
+    /// `element_id -> projection metadata`, with its tables fetched once for
+    /// per-item loops.
+    pub(crate) fn projection_meta_lookup<'a>(
+        &'a self,
+    ) -> impl Fn(i32) -> Option<&'a ProjectionMeta> + 'a {
+        let index = self.element_index();
         let metadata = self.projection_meta.get_or_init(|| {
             self.elements()
                 .iter()
@@ -510,7 +528,10 @@ impl Db {
                 })
                 .collect()
         });
-        metadata[slot as usize].as_ref()
+        move |id| {
+            let slot = *index.get(usize::try_from(id).ok()?)?;
+            metadata.get(usize::try_from(slot).ok()?)?.as_ref()
+        }
     }
 
     /// Called only for elements admitted by the public projection order.
@@ -546,6 +567,24 @@ impl Db {
             .get(slot as usize)
             .copied()
             .filter(|&key| key != u32::MAX)
+    }
+
+    /// `element_id ->` position among all projected elements, ordered by
+    /// [`Db::output_sort_key`]; `u16::MAX` where the element is not projected.
+    /// Keys are unique per element id, so so are ranks.
+    pub(crate) fn output_ranks(&self) -> &[u16] {
+        self.output_rank.get_or_init(|| {
+            let ids = self.element_index().len();
+            let mut keyed: Vec<(u32, usize)> = (0..ids)
+                .filter_map(|id| Some((self.output_sort_key(id as i32)?, id)))
+                .collect();
+            keyed.sort_unstable();
+            let mut ranks = vec![u16::MAX; ids];
+            for (rank, &(_, id)) in keyed.iter().enumerate() {
+                ranks[id] = u16::try_from(rank).unwrap_or(u16::MAX);
+            }
+            ranks.into_boxed_slice()
+        })
     }
 
     /// `element_id -> eligible for the pattern pass`: the element exists, has a
@@ -698,9 +737,54 @@ impl Db {
         })
     }
 
+    /// [`Db::defaultvalues_for`] rows with a value, as emit-ready templates.
+    pub(crate) fn default_templates_for(&self, vehicletypeid: i32) -> &[DefaultTemplate] {
+        let templates = self.default_templates.get_or_init(|| {
+            let mut by_type: IntMap<i32, Vec<DefaultTemplate>> = IntMap::default();
+            for dv in self.a().defaultvalue.iter() {
+                if !dv.defaultvalue_present {
+                    continue;
+                }
+                let element_id = dv.elementid.to_native();
+                let attribute_id = dv.defaultvalue.to_native();
+                let is_lookup = self
+                    .element_by_id(element_id)
+                    .map(|e| {
+                        self.s(e.datatype.to_native())
+                            .eq_ignore_ascii_case("lookup")
+                    })
+                    .unwrap_or(false);
+                by_type
+                    .entry(dv.vehicletypeid.to_native())
+                    .or_default()
+                    .push(DefaultTemplate {
+                        element_id,
+                        attribute_id,
+                        not_applicable: is_lookup && self.s(attribute_id) == "0",
+                        created_on: dv.createdon_key.to_native(),
+                    });
+            }
+            by_type
+                .into_iter()
+                .map(|(id, rows)| (id, rows.into_boxed_slice()))
+                .collect()
+        });
+        templates.get(&vehicletypeid).map_or(&[], |rows| rows)
+    }
+
     /// `true` if `vin` has a check-digit exception.
     pub fn vinexception_checkdigit(&self, vin: &str) -> bool {
         let v = self.a().vinexception.as_slice();
+        let hash = |s: &str| {
+            use std::hash::BuildHasher;
+            crate::hash::FxBuildHasher::default().hash_one(s)
+        };
+        let hashes = self
+            .vinexception_hashes
+            .get_or_init(|| v.iter().map(|r| hash(self.s(r.vin.to_native()))).collect());
+        if !hashes.contains(&hash(vin)) {
+            return false;
+        }
         let lo = v.partition_point(|r| self.s(r.vin.to_native()) < vin);
         v.get(lo)
             .map(|r| self.s(r.vin.to_native()) == vin && r.checkdigit)

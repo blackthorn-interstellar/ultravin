@@ -312,11 +312,33 @@ fn scrub(v: std::borrow::Cow<'_, str>) -> String {
 /// Column builders can copy clean borrowed text directly into their final
 /// buffers; only values containing control characters need an intermediate.
 fn scrub_value(v: std::borrow::Cow<'_, str>) -> std::borrow::Cow<'_, str> {
-    if memchr::memchr3(b'\t', b'\r', b'\n', v.as_bytes()).is_some() {
+    if has_line_control(v.as_bytes()) {
         std::borrow::Cow::Owned(v.replace(['\t', '\r', '\n'], " "))
     } else {
         v
     }
+}
+
+/// Whether `bytes` holds a tab, CR or LF. Values are short and almost never
+/// contain one, so test eight bytes at a time for any byte below 0x0E and
+/// look closer only then.
+fn has_line_control(bytes: &[u8]) -> bool {
+    const ONES: u64 = u64::from_ne_bytes([1; 8]);
+    let below_0e = |word: [u8; 8]| {
+        let w = u64::from_ne_bytes(word);
+        w.wrapping_sub(ONES * 0x0E) & !w & (ONES * 0x80)
+    };
+    let suspect = match bytes.last_chunk::<8>() {
+        // The final (possibly overlapping) word covers the tail.
+        Some(&last) => {
+            let (words, _) = bytes.as_chunks::<8>();
+            words
+                .iter()
+                .fold(below_0e(last), |acc, &w| acc | below_0e(w))
+        }
+        None => bytes.iter().fold(0, |acc, &b| acc | u64::from(b < 0x0E)),
+    };
+    suspect != 0 && bytes.iter().any(|b| matches!(b, b'\t' | b'\r' | b'\n'))
 }
 
 /// Convert Unix epoch seconds to the calendar year (Hinnant's civil algorithm).
@@ -1592,16 +1614,49 @@ fn fill_projection_order(
     db: &Db,
     items: &[decode::DecodingItem<'_>],
 ) {
-    // Sort small keys before constructing the large output records. The original
-    // item index breaks ties, preserving repeated notes in insertion order.
     order.clear();
+    // Each projected element has a fixed output rank. When no element repeats,
+    // marking ranks in a bitmap and reading it back in order is the sort.
+    const RANK_WORDS: usize = 4;
+    let mut ranked = [0u64; RANK_WORDS];
+    let mut item_at = [0u16; RANK_WORDS * 64];
+    let ranks = db.output_ranks();
+    let placed = items.len() <= usize::from(u16::MAX)
+        && items.iter().enumerate().all(|(index, it)| {
+            let rank = usize::try_from(it.element_id)
+                .ok()
+                .and_then(|id| ranks.get(id).copied())
+                .unwrap_or(u16::MAX);
+            if rank == u16::MAX {
+                return true;
+            }
+            let (word, bit) = (usize::from(rank / 64), rank % 64);
+            if word >= RANK_WORDS || ranked[word] >> bit & 1 != 0 {
+                return false;
+            }
+            ranked[word] |= 1 << bit;
+            item_at[usize::from(rank)] = index as u16;
+            true
+        });
+    if placed {
+        for (word, mut bits) in ranked.into_iter().enumerate() {
+            while bits != 0 {
+                let rank = word * 64 + bits.trailing_zeros() as usize;
+                bits &= bits - 1;
+                order.push((rank as u32, usize::from(item_at[rank])));
+            }
+        }
+        return;
+    }
+    // Repeated elements (notes) keep insertion order: sort (key, item index).
     order.extend(
         items
             .iter()
             .enumerate()
             .filter_map(|(index, it)| Some((db.output_sort_key(it.element_id)?, index))),
     );
-    order.sort_unstable();
+    // One u64 comparison orders (key, index) exactly; item counts fit in 32 bits.
+    order.sort_unstable_by_key(|&(key, index)| u64::from(key) << 32 | index as u64);
 }
 
 const MAX_PROJECTION_SCRATCH_ENTRIES: usize = 256;
@@ -1678,12 +1733,18 @@ fn append_projected<'a>(
     order: &[(u32, usize)],
     elements: &mut Vec<DecodedElement<'a>>,
 ) {
+    // Write each 224-byte record straight into reserved capacity; `push`
+    // builds it on the stack and copies it in.
+    elements.reserve(order.len());
+    let spare = elements.spare_capacity_mut();
+    let mut written = 0;
+    let projection_meta = db.projection_meta_lookup();
     for (_, index) in order.iter().copied() {
         let it = &mut items[index];
-        let Some(meta) = db.projection_meta(it.element_id) else {
+        let Some(meta) = projection_meta(it.element_id) else {
             continue;
         };
-        elements.push(DecodedElement {
+        spare[written].write(DecodedElement {
             group_name: &meta.group_name,
             variable: &meta.variable,
             value: scrub_value(std::mem::take(&mut it.value)),
@@ -1700,7 +1761,10 @@ fn append_projected<'a>(
             wmi_id: opt_i32(it.wmi_id),
             to_be_qced: it.to_be_qced,
         });
+        written += 1;
     }
+    // SAFETY: the first `written` spare slots were initialized above.
+    unsafe { elements.set_len(elements.len() + written) };
 }
 
 fn project_reusing<'a>(

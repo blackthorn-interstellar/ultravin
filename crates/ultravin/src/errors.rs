@@ -839,7 +839,10 @@ fn trim_truncate500(mut value: String) -> String {
     let trailing_end = value.trim_end().len();
     value.truncate(trailing_end);
     if value.len() > 500 {
-        if let Some((end, _)) = value.char_indices().nth(500) {
+        // 500 ASCII bytes are 500 chars; skip decoding them one by one.
+        if value.as_bytes()[..500].is_ascii() {
+            value.truncate(500);
+        } else if let Some((end, _)) = value.char_indices().nth(500) {
             value.truncate(end);
         }
     }
@@ -952,9 +955,31 @@ pub(crate) fn compute_errors_with_context(
     // DecodingItem with a non-null PatternId (regular/engine/formula patterns,
     // pattern-model make, propagated conversions, vehicle specs) — not just the
     // regular Pattern matches.
+    // Every item-level fact below, gathered in one walk over the items.
+    let mut has_pattern = false;
+    let mut is_engine_off_road = false;
+    let mut is_off_road = false;
+    let mut has_incomplete_body = false;
+    let mut has_model = false;
+    let mut vehicle_type: Option<&str> = None;
+    for it in items {
+        has_pattern |= it.pattern_id != NULL_I32;
+        match it.element_id {
+            5 => {
+                let attribute = it.attribute_id.as_ref();
+                is_engine_off_road |= attribute == "64";
+                is_off_road |= OFF_ROAD.contains(&attribute);
+                has_incomplete_body |= INCOMPLETE.contains(&attribute);
+            }
+            28 => has_model = true,
+            39 if vehicle_type.is_none() => vehicle_type = Some(it.attribute_id.as_ref()),
+            _ => {}
+        }
+    }
+
     if !core.wmi_found {
         raw.insert(7);
-    } else if !items.iter().any(|it| it.pattern_id != NULL_I32) {
+    } else if !has_pattern {
         raw.insert(8);
     } else {
         let matched_keys = items
@@ -971,15 +996,9 @@ pub(crate) fn compute_errors_with_context(
     }
 
     // C2: glider (9), off-road (10), missing model year (11).
-    let is_engine_off_road = items
-        .iter()
-        .any(|it| it.element_id == 5 && it.attribute_id == "64");
     if is_engine_off_road {
         raw.insert(9);
     }
-    let is_off_road = items
-        .iter()
-        .any(|it| it.element_id == 5 && OFF_ROAD.contains(&it.attribute_id.as_ref()));
     if is_off_road {
         raw.insert(10);
     }
@@ -987,10 +1006,6 @@ pub(crate) fn compute_errors_with_context(
         raw.insert(11);
     }
 
-    let vehicle_type: Option<&str> = items
-        .iter()
-        .find(|it| it.element_id == 39)
-        .map(|it| it.attribute_id.as_ref());
     let (start_pos, is_car_mpv_lt) = start_context(vin, is_car_mpv_lt);
 
     // C5: invalid-char scan; stamps `!` into the corrected VIN AFTER the helper.
@@ -1083,7 +1098,6 @@ pub(crate) fn compute_errors_with_context(
     if non_special == 0 || (non_special == 1 && has_14) {
         raw.insert(0);
     }
-    let has_model = items.iter().any(|it| it.element_id == 28);
     if raw.contains(&0) && !has_model {
         raw.insert(14);
     }
@@ -1114,10 +1128,7 @@ pub(crate) fn compute_errors_with_context(
             &[" Invalid character(s): ", stripped, ". "],
         ));
     }
-    let incomplete = vehicle_type == Some("10")
-        || items
-            .iter()
-            .any(|it| it.element_id == 5 && INCOMPLETE.contains(&it.attribute_id.as_ref()));
+    let incomplete = vehicle_type == Some("10") || has_incomplete_body;
     if incomplete {
         info = Some(append_info(
             info,
