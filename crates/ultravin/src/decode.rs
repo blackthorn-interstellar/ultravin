@@ -159,6 +159,9 @@ impl Drop for PatternScan {
 pub struct CoreResult<'a> {
     pub items: Vec<DecodingItem<'a>>,
     pub wmi_found: bool,
+    /// The vehicle type whose default rows were left out of `items` because
+    /// [`Db::defaults_independent`]; they belong after every item listed.
+    pub defaults: Option<i32>,
 }
 
 const MAX_RETAINED_MATCHED_PATTERNS: usize = 256;
@@ -361,6 +364,7 @@ pub(crate) fn decode_core_into<'a>(
         return CoreResult {
             items,
             wmi_found: false,
+            defaults: None,
         };
     };
     let wmiid = wmi.id.to_native();
@@ -547,11 +551,17 @@ pub(crate) fn decode_core_into<'a>(
     append_vehicle_specs(db, &mut items, var_wmi, model_year);
 
     // --- DefaultValue (priority 10).
-    append_default_values(db, &mut items);
+    let defaults = if db.defaults_independent() {
+        default_vehicle_type(&items)
+    } else {
+        append_default_values(db, &mut items);
+        None
+    };
 
     CoreResult {
         items,
         wmi_found: true,
+        defaults,
     }
 }
 
@@ -1086,13 +1096,46 @@ fn append_vehicle_specs<'a>(
     }
 }
 
-/// DefaultValue (priority 10) for the decoded vehicle type, for absent elements.
-fn append_default_values<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
-    let Some(veh) = items
+/// The vehicle type (element 39) whose defaults apply, when it parses.
+fn default_vehicle_type(items: &[DecodingItem]) -> Option<i32> {
+    items
         .iter()
         .find(|it| it.element_id == 39)
         .and_then(|it| it.attribute_id.parse::<i32>().ok())
-    else {
+}
+
+/// Which of the vehicle type's default rows apply: bit `i` is set when row `i`'s
+/// element is absent from `items`. Requires [`Db::defaults_independent`].
+pub(crate) fn default_mask(db: &Db, vehicle_type: i32, items: &[DecodingItem]) -> u64 {
+    let present: ElementSet = items.iter().map(|it| it.element_id).collect();
+    db.default_templates_for(vehicle_type)
+        .iter()
+        .enumerate()
+        .filter(|(_, dv)| !present.contains(&dv.element_id))
+        .fold(0, |mask, (i, _)| mask | 1 << i)
+}
+
+/// Insert the masked default rows at `at`, where the core pass would have
+/// appended them.
+pub(crate) fn insert_default_values<'a>(
+    db: &'a Db,
+    items: &mut Vec<DecodingItem<'a>>,
+    vehicle_type: i32,
+    mask: u64,
+    at: usize,
+) {
+    let rows = db.default_templates_for(vehicle_type);
+    let defaults = rows
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| mask >> i & 1 != 0)
+        .map(|(_, dv)| default_item(db, dv));
+    items.splice(at..at, defaults);
+}
+
+/// DefaultValue (priority 10) for the decoded vehicle type, for absent elements.
+fn append_default_values<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
+    let Some(veh) = default_vehicle_type(items) else {
         return;
     };
     let present: ElementSet = items.iter().map(|it| it.element_id).collect();
@@ -1100,23 +1143,27 @@ fn append_default_values<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
         if present.contains(&dv.element_id) {
             continue;
         }
-        items.push(DecodingItem {
-            created_on: dv.created_on,
-            pattern_id: NULL_I32,
-            keys: Cow::Borrowed(""),
-            vin_schema_id: NULL_I32,
-            wmi_id: NULL_I32,
-            element_id: dv.element_id,
-            attribute_id: Cow::Borrowed(db.s(dv.attribute_id)),
-            value: Cow::Borrowed(if dv.not_applicable {
-                "Not Applicable"
-            } else {
-                "XXX"
-            }),
-            source: Cow::Borrowed("Default"),
-            priority: 10,
-            to_be_qced: false,
-        });
+        items.push(default_item(db, dv));
+    }
+}
+
+fn default_item<'a>(db: &'a Db, dv: &crate::db::DefaultTemplate) -> DecodingItem<'a> {
+    DecodingItem {
+        created_on: dv.created_on,
+        pattern_id: NULL_I32,
+        keys: Cow::Borrowed(""),
+        vin_schema_id: NULL_I32,
+        wmi_id: NULL_I32,
+        element_id: dv.element_id,
+        attribute_id: Cow::Borrowed(db.s(dv.attribute_id)),
+        value: Cow::Borrowed(if dv.not_applicable {
+            "Not Applicable"
+        } else {
+            "XXX"
+        }),
+        source: Cow::Borrowed("Default"),
+        priority: 10,
+        to_be_qced: false,
     }
 }
 

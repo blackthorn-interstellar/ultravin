@@ -960,6 +960,9 @@ struct Pass<'a> {
     id: i32,
     model_year: Option<i32>,
     items: Vec<decode::DecodingItem<'a>>,
+    /// Default rows left out of `items`: the vehicle type, and the item count
+    /// they would have followed (before the correction items).
+    defaults: Option<(i32, usize)>,
     codes: Vec<i32>,
     corrected_vin: String,
     check_digit_valid: bool,
@@ -1172,6 +1175,82 @@ struct RawResult<'a> {
     check_digit_valid: bool,
     corrected_vin: String,
     items: Vec<decode::DecodingItem<'a>>,
+    /// Default rows not yet in `items` (see [`Db::defaults_independent`]).
+    defaults: Option<Defaults>,
+}
+
+/// The winning pass's deferred default rows: bit `i` of `mask` selects the
+/// vehicle type's template row `i`; they belong at item index `at`.
+#[derive(Clone, Copy)]
+struct Defaults {
+    vehicle_type: i32,
+    mask: u64,
+    at: usize,
+}
+
+/// The embedded database's default rows as finished output records, per
+/// vehicle type and in template order (`None` when not projected), each with
+/// its output rank. They borrow only `'static` storage, so a full result can
+/// copy them instead of building an item and projecting it per VIN.
+type DefaultElements = hash::IntMap<i32, Box<[Option<(u16, DecodedElement<'static>)>]>>;
+
+/// One vehicle type's finished default records and the mask of those that apply.
+type DefaultRecords = Option<(&'static [Option<(u16, DecodedElement<'static>)>], u64)>;
+
+fn default_elements(db: &Db) -> Option<&'static DefaultElements> {
+    static ELEMENTS: std::sync::OnceLock<DefaultElements> = std::sync::OnceLock::new();
+    let embedded = Db::embedded_raw();
+    if !std::ptr::eq(db, embedded) || !embedded.defaults_independent() {
+        return None;
+    }
+    Some(ELEMENTS.get_or_init(|| {
+        let ranks = embedded.output_ranks();
+        let projection_meta = embedded.projection_meta_lookup();
+        embedded
+            .default_vehicle_types()
+            .map(|vehicle_type| {
+                let rows = embedded
+                    .default_templates_for(vehicle_type)
+                    .iter()
+                    .map(|dv| {
+                        let meta = projection_meta(dv.element_id)?;
+                        let rank = *ranks.get(usize::try_from(dv.element_id).ok()?)?;
+                        let attribute_id = embedded.s(dv.attribute_id);
+                        let value = if dv.not_applicable {
+                            std::borrow::Cow::Borrowed("Not Applicable")
+                        } else {
+                            resolve::felement_attribute_value(
+                                embedded,
+                                dv.element_id,
+                                std::borrow::Cow::Borrowed(attribute_id),
+                            )
+                        };
+                        Some((
+                            rank,
+                            DecodedElement {
+                                group_name: &meta.group_name,
+                                variable: &meta.variable,
+                                value: scrub_value(value),
+                                element_id: dv.element_id,
+                                attribute_id: std::borrow::Cow::Borrowed(attribute_id),
+                                code: &meta.code,
+                                data_type: &meta.data_type,
+                                decode: &meta.decode,
+                                source: std::borrow::Cow::Borrowed("Default"),
+                                pattern_id: None,
+                                vin_schema_id: None,
+                                keys: std::borrow::Cow::Borrowed(""),
+                                created_on: opt_i64(dv.created_on),
+                                wmi_id: None,
+                                to_be_qced: false,
+                            },
+                        ))
+                    })
+                    .collect();
+                (vehicle_type, rows)
+            })
+            .collect()
+    }))
 }
 
 /// Year-independent database and validation facts for one sanitized VIN.
@@ -1199,7 +1278,28 @@ impl<'a> VinPassContext<'a> {
 }
 
 impl<'a> RawResult<'a> {
+    /// Put deferred default rows into `items`, exactly where the core pass
+    /// would have placed them. Every item-based output shape starts here.
+    fn materialize_defaults(&mut self) {
+        if let Some(d) = self.defaults.take() {
+            decode::insert_default_values(self.db, &mut self.items, d.vehicle_type, d.mask, d.at);
+        }
+    }
+
+    /// Deferred defaults as finished records when available, else materialized.
+    fn default_records(&mut self) -> DefaultRecords {
+        let d = self.defaults?;
+        let Some(rows) = default_elements(self.db).and_then(|by_type| by_type.get(&d.vehicle_type))
+        else {
+            self.materialize_defaults();
+            return None;
+        };
+        self.defaults = None;
+        Some((rows, d.mask))
+    }
+
     fn full(mut self) -> DecodeResult<'a> {
+        let defaults = self.default_records();
         resolve::resolve_xxx(self.db, &mut self.items);
         DecodeResult {
             vin: self.vin,
@@ -1209,7 +1309,7 @@ impl<'a> RawResult<'a> {
             error_codes: self.error_codes,
             check_digit_valid: self.check_digit_valid,
             corrected_vin: self.corrected_vin,
-            elements: project(self.db, self.items),
+            elements: project(self.db, self.items, defaults),
         }
     }
 
@@ -1218,8 +1318,9 @@ impl<'a> RawResult<'a> {
         mut elements: Vec<DecodedElement<'a>>,
         workspace: &mut DecodeWorkspace<'a>,
     ) -> DecodeResult<'a> {
+        let defaults = self.default_records();
         resolve::resolve_xxx(self.db, &mut self.items);
-        project_reusing(self.db, &mut self.items, &mut elements);
+        project_reusing(self.db, &mut self.items, defaults, &mut elements);
         let result = DecodeResult {
             vin: self.vin,
             wmi: self.wmi,
@@ -1235,6 +1336,7 @@ impl<'a> RawResult<'a> {
     }
 
     fn flat(mut self) -> FlatResult<'a> {
+        self.materialize_defaults();
         resolve::resolve_xxx(self.db, &mut self.items);
         let mut values: Vec<_> = self
             .items
@@ -1429,6 +1531,12 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
     workspace.put_passes(passes);
 
     let mut items = best.items;
+    // Which defaults apply is fixed by the items before QC filtering.
+    let defaults = best.defaults.map(|(vehicle_type, at)| Defaults {
+        vehicle_type,
+        mask: decode::default_mask(db, vehicle_type, &items[..at]),
+        at: at - items[..at].iter().filter(|it| it.to_be_qced).count(),
+    });
     // QC filtering belongs after scoring, before every output shape.
     items.retain(|it| !it.to_be_qced);
 
@@ -1442,6 +1550,7 @@ fn decode_items_with_pruning_and_buffers_workspace<'a>(
         check_digit_valid: best.check_digit_valid,
         corrected_vin: best.corrected_vin,
         items,
+        defaults,
     }
 }
 
@@ -1510,6 +1619,9 @@ fn run_pass<'a>(
         context.is_vin_exception,
     );
 
+    let defaults = core
+        .defaults
+        .map(|vehicle_type| (vehicle_type, core.items.len()));
     let mut items = core.items;
     let (codes_csv, error_text) = correction_text(db, &err);
     append_correction(&mut items, 142, err.corrected_vin.clone());
@@ -1523,6 +1635,7 @@ fn run_pass<'a>(
         id,
         model_year,
         items,
+        defaults,
         codes: err.codes,
         corrected_vin: err.corrected_vin,
         check_digit_valid: err.check_digit_valid,
@@ -1562,7 +1675,7 @@ fn score(pass: &Pass, db: &Db, caller_year: Option<i32>) -> Score {
         .sum();
 
     let mut weighted = hash::ElementSet::default();
-    let elements_weight: i32 = pass
+    let item_weight: i32 = pass
         .items
         .iter()
         .filter(|it| !it.value.is_empty() && weighted.insert(it.element_id))
@@ -1570,6 +1683,18 @@ fn score(pass: &Pass, db: &Db, caller_year: Option<i32>) -> Score {
         .map(|e| e.weight.to_native())
         .filter(|w| *w != tables::NULL_I32)
         .sum();
+    // Deferred defaults: each applying row has a non-empty value and an element
+    // no item shares, so it adds exactly its element's weight.
+    let default_weight: i32 = pass.defaults.map_or(0, |(vehicle_type, at)| {
+        let mask = decode::default_mask(db, vehicle_type, &pass.items[..at]);
+        db.default_templates_for(vehicle_type)
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| mask >> i & 1 != 0)
+            .map(|(_, dv)| dv.weight)
+            .sum()
+    });
+    let elements_weight = item_weight + default_weight;
 
     let patterns = pass
         .items
@@ -1605,15 +1730,27 @@ fn cmp_year_nulls_last(a: Option<i32>, b: Option<i32>) -> std::cmp::Ordering {
 
 fn projection_order(db: &Db, items: &[decode::DecodingItem<'_>]) -> Vec<(u32, usize)> {
     let mut order = Vec::new();
-    fill_projection_order(&mut order, db, items);
+    fill_projection_order(&mut order, db, items, None);
     order
 }
 
+/// Output order as `(_, index)`; an index past `items` names default record
+/// `index - items.len()`. Default elements never repeat an item's element, so
+/// their unique keys place them without any tie.
 fn fill_projection_order(
     order: &mut Vec<(u32, usize)>,
     db: &Db,
     items: &[decode::DecodingItem<'_>],
+    defaults: DefaultRecords,
 ) {
+    let (records, mask) = defaults.unwrap_or((&[], 0));
+    let applied = || {
+        records
+            .iter()
+            .enumerate()
+            .filter(move |(i, _)| mask >> i & 1 != 0)
+            .filter_map(|(i, record)| Some((items.len() + i, record.as_ref()?)))
+    };
     order.clear();
     // Each projected element has a fixed output rank. When no element repeats,
     // marking ranks in a bitmap and reading it back in order is the sort.
@@ -1621,23 +1758,27 @@ fn fill_projection_order(
     let mut ranked = [0u64; RANK_WORDS];
     let mut item_at = [0u16; RANK_WORDS * 64];
     let ranks = db.output_ranks();
-    let placed = items.len() <= usize::from(u16::MAX)
+    let mut place = |index: usize, rank: u16| {
+        if rank == u16::MAX {
+            return true;
+        }
+        let (word, bit) = (usize::from(rank / 64), rank % 64);
+        if word >= RANK_WORDS || ranked[word] >> bit & 1 != 0 {
+            return false;
+        }
+        ranked[word] |= 1 << bit;
+        item_at[usize::from(rank)] = index as u16;
+        true
+    };
+    let placed = items.len() + records.len() <= usize::from(u16::MAX)
         && items.iter().enumerate().all(|(index, it)| {
             let rank = usize::try_from(it.element_id)
                 .ok()
                 .and_then(|id| ranks.get(id).copied())
                 .unwrap_or(u16::MAX);
-            if rank == u16::MAX {
-                return true;
-            }
-            let (word, bit) = (usize::from(rank / 64), rank % 64);
-            if word >= RANK_WORDS || ranked[word] >> bit & 1 != 0 {
-                return false;
-            }
-            ranked[word] |= 1 << bit;
-            item_at[usize::from(rank)] = index as u16;
-            true
-        });
+            place(index, rank)
+        })
+        && applied().all(|(index, &(rank, _))| place(index, rank));
     if placed {
         for (word, mut bits) in ranked.into_iter().enumerate() {
             while bits != 0 {
@@ -1653,7 +1794,9 @@ fn fill_projection_order(
         items
             .iter()
             .enumerate()
-            .filter_map(|(index, it)| Some((db.output_sort_key(it.element_id)?, index))),
+            .map(|(index, it)| (index, it.element_id))
+            .chain(applied().map(|(index, (_, record))| (index, record.element_id)))
+            .filter_map(|(index, id)| Some((db.output_sort_key(id)?, index))),
     );
     // One u64 comparison orders (key, index) exactly; item counts fit in 32 bits.
     order.sort_unstable_by_key(|&(key, index)| u64::from(key) << 32 | index as u64);
@@ -1719,20 +1862,26 @@ impl Drop for ProjectionOrderScratch {
 
 /// Project the surviving items into output elements (non-empty Decode, public),
 /// ordered by the GroupName CASE rank then element id.
-fn project<'a>(db: &'a Db, mut items: Vec<decode::DecodingItem<'a>>) -> Vec<DecodedElement<'a>> {
+fn project<'a>(
+    db: &'a Db,
+    mut items: Vec<decode::DecodingItem<'a>>,
+    defaults: DefaultRecords,
+) -> Vec<DecodedElement<'a>> {
     let mut order = ProjectionOrderScratch::take();
-    fill_projection_order(&mut order, db, &items);
+    fill_projection_order(&mut order, db, &items, defaults);
     let mut elements: Vec<DecodedElement> = Vec::with_capacity(order.len());
-    append_projected(db, &mut items, &order, &mut elements);
+    append_projected(db, &mut items, defaults, &order, &mut elements);
     elements
 }
 
 fn append_projected<'a>(
     db: &'a Db,
     items: &mut [decode::DecodingItem<'a>],
+    defaults: DefaultRecords,
     order: &[(u32, usize)],
     elements: &mut Vec<DecodedElement<'a>>,
 ) {
+    let records = defaults.map_or(&[][..], |(records, _)| records);
     // Write each 224-byte record straight into reserved capacity; `push`
     // builds it on the stack and copies it in.
     elements.reserve(order.len());
@@ -1740,7 +1889,13 @@ fn append_projected<'a>(
     let mut written = 0;
     let projection_meta = db.projection_meta_lookup();
     for (_, index) in order.iter().copied() {
-        let it = &mut items[index];
+        let Some(it) = items.get_mut(index) else {
+            if let Some((_, record)) = &records[index - items.len()] {
+                spare[written].write(record.clone());
+                written += 1;
+            }
+            continue;
+        };
         let Some(meta) = projection_meta(it.element_id) else {
             continue;
         };
@@ -1770,13 +1925,14 @@ fn append_projected<'a>(
 fn project_reusing<'a>(
     db: &'a Db,
     items: &mut [decode::DecodingItem<'a>],
+    defaults: DefaultRecords,
     elements: &mut Vec<DecodedElement<'a>>,
 ) {
     debug_assert!(elements.is_empty());
     let mut order = ProjectionOrderScratch::take();
-    fill_projection_order(&mut order, db, items);
+    fill_projection_order(&mut order, db, items, defaults);
     elements.reserve_exact(order.len());
-    append_projected(db, items, &order, elements);
+    append_projected(db, items, defaults, &order, elements);
 }
 
 fn error_codes_csv(codes: &[i32]) -> String {
@@ -2285,6 +2441,20 @@ mod tests {
         assert_eq!(decode_flat(vin, None), FlatResult::from(decode(vin, None)));
         // The caller year reaches the decode through the flat door too.
         assert_eq!(decode_flat(vin, Some(2013)).model_year, Some(2013));
+    }
+
+    #[test]
+    fn default_records_match_projected_default_items_across_the_builtin_cover() {
+        let Some(db) = Db::try_embedded() else { return };
+        assert!(db.defaults_independent());
+        for vin in db.cover() {
+            for year in [None, Some(2003), Some(2028)] {
+                let decode = || decode_items(db, &vin, 1_788_739_200_000_000, 2026, year);
+                let mut materialized = decode();
+                materialized.materialize_defaults();
+                assert_eq!(decode().full(), materialized.full(), "{vin}, {year:?}");
+            }
+        }
     }
 
     #[test]

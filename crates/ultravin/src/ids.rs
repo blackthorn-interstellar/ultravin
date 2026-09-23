@@ -306,13 +306,14 @@ pub(crate) fn decode_chunks_at<I: AsRef<str> + Sync, C: ColumnWriter>(
                 let mut model_year = Vec::with_capacity(vins.len());
                 for (row, vin) in vins.iter().enumerate() {
                     let input_index = chunk_index * CHUNK_ROWS + row;
-                    let r = decode_items(
+                    let mut r = decode_items(
                         db,
                         vin.as_ref(),
                         now_micros,
                         current_year,
                         crate::year_at(years, input_index),
                     );
+                    r.materialize_defaults();
                     model_year.push(r.model_year);
                     let mut seen = ElementSet::default();
                     for it in r.items {

@@ -22,9 +22,9 @@ use crate::{db::Db, tables::ArchivedPattern};
 /// Owned by its database, so string ids cannot alias another loaded artifact.
 pub(crate) struct PatternIndex {
     groups: Vec<KeyGroup>,
-    literals: IntMap<u32, Vec<usize>>,
+    literals: LiteralTable,
     positions: Vec<(usize, usize)>,
-    fallback: Vec<usize>,
+    fallback: Vec<u32>,
     pub(crate) formula_rows: Vec<u32>,
 }
 
@@ -68,7 +68,7 @@ impl PatternIndex {
             });
             groups[group].rows.push(start + i as u32);
         }
-        let mut literals: IntMap<u32, Vec<usize>> = IntMap::default();
+        let mut literals: IntMap<u32, Vec<u32>> = IntMap::default();
         let mut positions = Vec::new();
         let mut fallback = Vec::new();
         for (i, group) in groups.iter().enumerate() {
@@ -99,17 +99,17 @@ impl PatternIndex {
                 literals
                     .entry(literal_pair(first, last, a, b))
                     .or_default()
-                    .push(i);
+                    .push(i as u32);
                 positions.push((first, last));
             } else {
-                fallback.push(i);
+                fallback.push(i as u32);
             }
         }
         positions.sort_unstable();
         positions.dedup();
         Self {
             groups,
-            literals,
+            literals: LiteralTable::new(literals),
             positions,
             fallback,
             formula_rows,
@@ -124,12 +124,12 @@ impl PatternIndex {
             .filter_map(|&(first, last)| {
                 let a = *keys.as_bytes().get(first)?;
                 let b = *keys.as_bytes().get(last)?;
-                self.literals.get(&literal_pair(first, last, a, b))
+                Some(self.literals.get(literal_pair(first, last, a, b)))
             })
             .flatten()
             .chain(&self.fallback);
         for &i in candidates {
-            let group = &self.groups[i];
+            let group = &self.groups[i as usize];
             let matched = match &group.matcher {
                 Some(matcher) => matcher.is_match(keys),
                 None => like_match(keys.as_bytes(), db.s(group.key).as_bytes()),
@@ -172,6 +172,60 @@ impl PatternIndex {
         let mut hits = Vec::new();
         self.hits_into(db, keys, &mut hits);
         hits
+    }
+}
+
+/// Literal-pair buckets in one open-addressed table and one candidate array:
+/// a lookup touches about two cache lines instead of a hash map's control
+/// bytes, bucket and separately allocated vector.
+struct LiteralTable {
+    /// `(pair, start, len)` into `candidates`; `EMPTY` pairs mark free slots.
+    slots: Box<[(u32, u32, u32)]>,
+    candidates: Box<[u32]>,
+}
+
+impl LiteralTable {
+    /// A pair's first position is below 14, so its top byte is never 0xFF.
+    const EMPTY: u32 = u32::MAX;
+
+    fn new(buckets: IntMap<u32, Vec<u32>>) -> Self {
+        let size = (buckets.len() * 2).next_power_of_two();
+        let mut slots = vec![(Self::EMPTY, 0, 0); size].into_boxed_slice();
+        let mut candidates = Vec::new();
+        for (pair, groups) in buckets {
+            let mut slot = Self::home(pair, size);
+            while slots[slot].0 != Self::EMPTY {
+                slot = (slot + 1) & (size - 1);
+            }
+            slots[slot] = (pair, candidates.len() as u32, groups.len() as u32);
+            candidates.extend(groups);
+        }
+        Self {
+            slots,
+            candidates: candidates.into_boxed_slice(),
+        }
+    }
+
+    fn home(pair: u32, size: usize) -> usize {
+        (pair.wrapping_mul(0x9E37_79B9) as usize >> 7) & (size - 1)
+    }
+
+    fn get(&self, pair: u32) -> &[u32] {
+        let size = self.slots.len();
+        if size == 0 {
+            return &[];
+        }
+        let mut slot = Self::home(pair, size);
+        loop {
+            let (key, start, len) = self.slots[slot];
+            if key == pair {
+                return &self.candidates[start as usize..(start + len) as usize];
+            }
+            if key == Self::EMPTY {
+                return &[];
+            }
+            slot = (slot + 1) & (size - 1);
+        }
     }
 }
 

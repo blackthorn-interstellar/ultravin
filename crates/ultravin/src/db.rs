@@ -133,7 +133,7 @@ pub struct Db {
     valid_charset_cache: OnceLock<crate::errors::ValidCharsetCache>,
     /// Vehicle type -> its present default rows, in archive order, with the
     /// datatype test already applied: the default pass runs on every decode.
-    default_templates: OnceLock<IntMap<i32, Box<[DefaultTemplate]>>>,
+    default_templates: OnceLock<DefaultTemplates>,
     /// Hashes of every exception VIN: nearly all decodes miss, and a miss
     /// should not binary-search archive strings.
     vinexception_hashes: OnceLock<crate::hash::IntSet<u64>>,
@@ -145,7 +145,21 @@ pub(crate) struct DefaultTemplate {
     pub attribute_id: u32,
     pub not_applicable: bool,
     pub created_on: i64,
+    /// The element's pass-scoring weight; 0 when it has none.
+    pub weight: i32,
 }
+
+struct DefaultTemplates {
+    by_type: IntMap<i32, Box<[DefaultTemplate]>>,
+    /// Whether decode passes can leave default rows out and add them to the
+    /// winner only (see [`Db::defaults_independent`]).
+    independent: bool,
+}
+
+/// Elements that error checks and scoring read by id, plus the correction
+/// elements appended after defaults. A default for one of them must stay a
+/// real item in every pass.
+const DEFAULT_SENSITIVE_ELEMENTS: [i32; 10] = [5, 28, 29, 39, 142, 143, 144, 156, 191, 196];
 
 // SAFETY: the archive is immutable, validated bytes; sharing `&Db` across threads
 // only ever reads. The backing owns its buffer for the lifetime of the `Db`.
@@ -739,7 +753,27 @@ impl Db {
 
     /// [`Db::defaultvalues_for`] rows with a value, as emit-ready templates.
     pub(crate) fn default_templates_for(&self, vehicletypeid: i32) -> &[DefaultTemplate] {
-        let templates = self.default_templates.get_or_init(|| {
+        self.default_templates()
+            .by_type
+            .get(&vehicletypeid)
+            .map_or(&[], |rows| rows)
+    }
+
+    /// Vehicle types that have default rows.
+    pub(crate) fn default_vehicle_types(&self) -> impl Iterator<Item = i32> + '_ {
+        self.default_templates().by_type.keys().copied()
+    }
+
+    /// Defaults affect a pass only through its element weights when no default
+    /// row targets an element that errors, scoring or corrections read, and no
+    /// vehicle type repeats an element or lists more than 64 rows (a `u64`
+    /// mask). Passes then carry the vehicle type instead of ~40 default items.
+    pub(crate) fn defaults_independent(&self) -> bool {
+        self.default_templates().independent
+    }
+
+    fn default_templates(&self) -> &DefaultTemplates {
+        self.default_templates.get_or_init(|| {
             let mut by_type: IntMap<i32, Vec<DefaultTemplate>> = IntMap::default();
             for dv in self.a().defaultvalue.iter() {
                 if !dv.defaultvalue_present {
@@ -747,8 +781,8 @@ impl Db {
                 }
                 let element_id = dv.elementid.to_native();
                 let attribute_id = dv.defaultvalue.to_native();
-                let is_lookup = self
-                    .element_by_id(element_id)
+                let element = self.element_by_id(element_id);
+                let is_lookup = element
                     .map(|e| {
                         self.s(e.datatype.to_native())
                             .eq_ignore_ascii_case("lookup")
@@ -762,14 +796,28 @@ impl Db {
                         attribute_id,
                         not_applicable: is_lookup && self.s(attribute_id) == "0",
                         created_on: dv.createdon_key.to_native(),
+                        weight: element
+                            .map(|e| e.weight.to_native())
+                            .filter(|&w| w != crate::tables::NULL_I32)
+                            .unwrap_or(0),
                     });
             }
-            by_type
-                .into_iter()
-                .map(|(id, rows)| (id, rows.into_boxed_slice()))
-                .collect()
-        });
-        templates.get(&vehicletypeid).map_or(&[], |rows| rows)
+            let independent = by_type.values().all(|rows| {
+                let mut seen = crate::hash::IntSet::default();
+                rows.len() <= 64
+                    && rows.iter().all(|row| {
+                        !DEFAULT_SENSITIVE_ELEMENTS.contains(&row.element_id)
+                            && seen.insert(row.element_id)
+                    })
+            });
+            DefaultTemplates {
+                by_type: by_type
+                    .into_iter()
+                    .map(|(id, rows)| (id, rows.into_boxed_slice()))
+                    .collect(),
+                independent,
+            }
+        })
     }
 
     /// `true` if `vin` has a check-digit exception.

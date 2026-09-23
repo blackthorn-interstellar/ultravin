@@ -93,6 +93,7 @@ const NULL_PROVENANCE: &[u8] =
 const NULL_WMI: &[u8] = b",\"wmi_id\":null,\"to_be_qced\":false}";
 
 pub(crate) fn encode(mut result: RawResult<'_>) -> String {
+    result.materialize_defaults();
     crate::resolve::resolve_xxx(result.db, &mut result.items);
     let order = crate::projection_order(result.db, &result.items);
     let mut out = Vec::with_capacity(order.len() * 400 + 512);
@@ -256,6 +257,7 @@ mod tests {
                     item
                 })
                 .collect(),
+            defaults: None,
         }
     }
 
