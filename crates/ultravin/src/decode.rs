@@ -1235,6 +1235,10 @@ mod tests {
 
     #[test]
     fn scratch_reuse_preserves_duplicate_priority_and_output_order() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
         let embedded = Db::embedded();
         let artifact = std::fs::read(env!("ULTRAVIN_ARTIFACT")).expect("database artifact");
         let loaded = Db::from_bytes(&artifact).expect("independently loaded database");
@@ -1303,6 +1307,10 @@ mod tests {
 
     #[test]
     fn core_into_returns_caller_storage_on_missing_wmi() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
         let mut items = Vec::with_capacity(123);
         items.push(DecodingItem {
             created_on: 0,

@@ -2410,6 +2410,10 @@ mod tests {
 
     #[test]
     fn full_result_borrows_are_anchored_to_an_external_db() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
         use std::borrow::Cow;
 
         fn decode_from<'db>(db: &'db Db) -> DecodeResult<'db> {

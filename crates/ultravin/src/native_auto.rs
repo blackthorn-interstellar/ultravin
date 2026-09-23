@@ -192,6 +192,10 @@ mod tests {
 
     #[test]
     fn automatic_stream_delivers_calibration_rows_once_with_fixed_clock() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
         let inputs: Vec<_> = ["1HGCM82633A004352", "5YJ3E1EA7KF317001", "invalid"]
             .into_iter()
             .cycle()
@@ -224,6 +228,10 @@ mod tests {
 
     #[test]
     fn empty_auto_job_has_no_callback_or_prediction() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
         assert!(decode_native_stream_auto_at(
             &[],
             None,
@@ -251,6 +259,10 @@ mod tests {
 
     #[test]
     fn one_row_job_does_not_budget_for_idle_requested_workers() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
         let inputs = vec!["1HGCM82633A004352".to_owned()];
         let mut rows = 0;
         let prediction = decode_native_stream_auto_at(

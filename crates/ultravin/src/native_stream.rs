@@ -691,6 +691,10 @@ mod tests {
 
     #[test]
     fn repeated_streams_recycle_slots_and_preserve_full_order() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
         let inputs = inputs();
         let expected = crate::decode_batch_at(&inputs, None, NOW);
         for _ in 0..3 {
@@ -706,6 +710,10 @@ mod tests {
 
     #[test]
     fn recycled_slot_retains_header_and_element_buffers() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
         let inputs: Vec<_> = ["1HGCM82633A004352", "1HGCM82633A004352"]
             .into_iter()
             .map(str::to_owned)
@@ -727,6 +735,10 @@ mod tests {
 
     #[test]
     fn reuse_preserves_whitespace_unicode_and_low_volume_headers() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
         let inputs = [
             "  1hgcm82633a004352  ",
             "1F9TC25FTAB123456",
@@ -755,6 +767,10 @@ mod tests {
 
     #[test]
     fn empty_input_does_not_call_consumer() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
         let mut called = false;
         decode_native_stream_at(&[], None, NOW, recycling_config(), |_| called = true).unwrap();
         assert!(!called);
@@ -797,6 +813,10 @@ mod tests {
 
     #[test]
     fn consumer_panic_cancels_and_joins_workers() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
         let inputs = inputs();
         let panic = std::panic::catch_unwind(|| {
             decode_native_stream_at(&inputs, None, NOW, recycling_config(), |_| {
@@ -816,6 +836,10 @@ mod tests {
 
     #[test]
     fn tight_row_cap_with_extra_physical_slots_does_not_stall() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
         let inputs: Vec<_> = inputs().into_iter().cycle().take(31).collect();
         let config = NativeStreamConfig {
             workers: 3,
@@ -833,6 +857,10 @@ mod tests {
 
     #[test]
     fn unexpected_worker_panic_is_cancelled_joined_and_propagated() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
         let inputs: Vec<_> = inputs().into_iter().cycle().take(31).collect();
         PANIC_WORKER_INPUT.store(
             inputs.as_ptr() as usize,
