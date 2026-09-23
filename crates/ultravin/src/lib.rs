@@ -1230,7 +1230,18 @@ fn default_elements(db: &Db) -> Option<&'static DefaultElements> {
                             DecodedElement {
                                 group_name: &meta.group_name,
                                 variable: &meta.variable,
-                                value: scrub_value(value),
+                                // Keep every field borrowed so records copy bitwise
+                                // (see `copy_default_record`). A default value
+                                // with a tab or line break is scrubbed once and
+                                // kept for the life of the process.
+                                value: match scrub_value(value) {
+                                    std::borrow::Cow::Owned(scrubbed) => {
+                                        std::borrow::Cow::Borrowed(&*Box::leak(
+                                            scrubbed.into_boxed_str(),
+                                        ))
+                                    }
+                                    borrowed => borrowed,
+                                },
                                 element_id: dv.element_id,
                                 attribute_id: std::borrow::Cow::Borrowed(attribute_id),
                                 code: &meta.code,
@@ -1251,6 +1262,21 @@ fn default_elements(db: &Db) -> Option<&'static DefaultElements> {
             })
             .collect()
     }))
+}
+
+/// A default record as an independent output element, copied bitwise.
+fn copy_default_record<'a>(record: &DecodedElement<'static>) -> DecodedElement<'a> {
+    debug_assert!([
+        &record.value,
+        &record.attribute_id,
+        &record.source,
+        &record.keys
+    ]
+    .iter()
+    .all(|text| matches!(text, std::borrow::Cow::Borrowed(_))));
+    // SAFETY: `default_elements` builds records whose every field borrows
+    // `'static` text, so the copy owns nothing and neither copy's drop frees.
+    unsafe { std::ptr::read(record) }
 }
 
 /// Year-independent database and validation facts for one sanitized VIN.
@@ -1891,7 +1917,7 @@ fn append_projected<'a>(
     for (_, index) in order.iter().copied() {
         let Some(it) = items.get_mut(index) else {
             if let Some((_, record)) = &records[index - items.len()] {
-                spare[written].write(record.clone());
+                spare[written].write(copy_default_record(record));
                 written += 1;
             }
             continue;
