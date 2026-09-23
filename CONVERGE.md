@@ -87,7 +87,7 @@ Test:
 
 3
 
-Converged at b2536da on 2026-09-22. Later commits by someone else (fcfed22, decode-path perf, coverage-gated files) reset this on the next run.
+Converged at 8befaf6 on 2026-09-22. Includes another agent's decode-path perf commits 6712776 and fcfed22, which touch coverage-gated files this loop cannot verify locally (see open questions) and were not reviewed here.
 
 ## Open questions
 
