@@ -5,6 +5,7 @@
 //! layers on codes 0/1/6/7/8/9/10/11/12/400 and builds AdditionalDecodingInfo
 //! (element 156). Every intentional bug is preserved (see comments).
 
+use std::borrow::Cow;
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::rc::Rc;
@@ -117,7 +118,7 @@ pub struct ErrorState {
     /// element 144 (error bytes, e.g. `(5:M)`).
     pub error_bytes: String,
     /// element 156 (AdditionalDecodingInfo).
-    pub additional_info: String,
+    pub additional_info: Cow<'static, str>,
     pub is_off_road: bool,
     pub is_vin_exception: bool,
     pub check_digit_valid: bool,
@@ -458,8 +459,9 @@ struct ErrorCodeOut {
     codes: Vec<i32>,
     corrected_vin: String,
     error_bytes: String,
-    /// `None` mirrors the SQL OUT param left NULL (no unused positions).
-    unused_positions: Option<String>,
+    /// `None` mirrors the SQL OUT param left NULL (no unused positions); bit
+    /// `k` stands for position `UNUSED_CHECKED[k]`.
+    unused_positions: Option<u8>,
 }
 
 fn correction_position_text(position: i32) -> &'static str {
@@ -504,7 +506,7 @@ fn errorcode<'a>(
     let mut codes: Vec<i32> = Vec::new();
     let mut corrected_vin = String::new();
     let mut error_bytes = String::new();
-    let mut unused_positions: Option<String> = None;
+    let mut unused_positions: Option<u8> = None;
 
     if var_wmi.chars().count() < 3 {
         // 2026_09: spvindecode_errorcode appends code 6 and returns, skipping
@@ -614,24 +616,12 @@ fn errorcode<'a>(
     // every possible character from every matched key.
     let used = used_key_positions(vb, matched_keys);
     let ubound = 11.min(vlen);
-    let mut unused = String::new();
-    let mut i = 3i32;
-    while i < ubound {
-        i += 1;
-        if !matches!(i, 4 | 5 | 6 | 7 | 8 | 11) {
-            continue;
-        }
-        if !used[(i - 4) as usize] {
-            // Comma-joined as it is built. The SQL accumulates " N" and then
-            // trims + replaces ' ' with ',', which yields exactly this — every
-            // part is a bare decimal, so there is no interior space to convert.
-            if !unused.is_empty() {
-                unused.push(',');
-            }
-            unused.push_str(correction_position_text(i));
-        }
-    }
-    if !unused.is_empty() {
+    let unused = UNUSED_CHECKED
+        .iter()
+        .enumerate()
+        .filter(|&(_, &i)| i <= ubound && !used[(i - 4) as usize])
+        .fold(0u8, |mask, (k, _)| mask | 1 << k);
+    if unused != 0 {
         codes.push(14);
         unused_positions = Some(unused);
     }
@@ -642,6 +632,25 @@ fn errorcode<'a>(
         error_bytes,
         unused_positions,
     }
+}
+
+/// The VIN positions E6 reports as unused, in report order.
+const UNUSED_CHECKED: [i32; 6] = [4, 5, 6, 7, 8, 11];
+
+/// Comma-joined unused positions. The SQL accumulates " N" and then trims +
+/// replaces ' ' with ',', which yields exactly this: every part is a bare
+/// decimal, so there is no interior space to convert.
+fn unused_positions_text(mask: u8) -> String {
+    let mut text = String::new();
+    for (k, &i) in UNUSED_CHECKED.iter().enumerate() {
+        if mask >> k & 1 != 0 {
+            if !text.is_empty() {
+                text.push(',');
+            }
+            text.push_str(correction_position_text(i));
+        }
+    }
+    text
 }
 
 /// E6 examines VIN positions 4..8 and 11. Stop visiting pattern rows once
@@ -858,6 +867,52 @@ fn append_info(info: Option<String>, parts: &[&str]) -> String {
     trim_truncate500(value)
 }
 
+/// AdditionalDecodingInfo (156). `info = None` mirrors a SQL NULL.
+fn additional_info(
+    raw: &ErrorCodes,
+    unused_positions: Option<u8>,
+    invalid_chars: Option<&str>,
+    incomplete: bool,
+    conclusive: bool,
+) -> String {
+    let mut info: Option<String> = None;
+    if raw.contains(&4) {
+        info = Some(ADDL_ERR_4.to_string());
+    }
+    if raw.contains(&5) {
+        info = Some(ADDL_ERR_5.to_string());
+    }
+    if raw.contains(&14) {
+        // `prev || ' Unused position(s): ' || UnUsedPositions || '. '`; a NULL
+        // UnUsedPositions makes the whole concat NULL (no-model code-14 case).
+        info = unused_positions.map(|mask| {
+            append_info(
+                info,
+                &[" Unused position(s): ", &unused_positions_text(mask), ". "],
+            )
+        });
+    }
+    if let Some(stripped) = invalid_chars {
+        info = Some(append_info(
+            info,
+            &[" Invalid character(s): ", stripped, ". "],
+        ));
+    }
+    if incomplete {
+        info = Some(append_info(
+            info,
+            &[" Incomplete Vehicle Warning - Please be advised that the vehicle may have been altered and may not be an accurate representation of the vehicle in its current condition. "],
+        ));
+    }
+    if !conclusive {
+        info = Some(append_info(
+            info,
+            &[" The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information. "],
+        ));
+    }
+    info.unwrap_or_default()
+}
+
 /// ASCII case-insensitive substring test without allocating — the proc's
 /// `Source ILIKE '%pattern%'` gate. `needle` must already be lowercase ASCII.
 fn contains_ci(haystack: &str, needle: &[u8]) -> bool {
@@ -948,7 +1003,7 @@ pub(crate) fn compute_errors_with_context(
     let mut raw = ErrorCodes::default();
     let mut corrected_vin = String::new();
     let mut error_bytes = String::new();
-    let mut unused_positions: Option<String> = None;
+    let mut unused_positions: Option<u8> = None;
 
     // C1: code 7 (no WMI) / code 8 (no PatternId-bearing item) / else the
     // errorcode helper. Per spvindecode_core L380 the code-8 gate counts EVERY
@@ -1102,51 +1157,41 @@ pub(crate) fn compute_errors_with_context(
         raw.insert(14);
     }
 
-    // C9: AdditionalDecodingInfo (156). `info = None` mirrors a SQL NULL.
-    let mut info: Option<String> = None;
-    if raw.contains(&4) {
-        info = Some(ADDL_ERR_4.to_string());
-    }
-    if raw.contains(&5) {
-        info = Some(ADDL_ERR_5.to_string());
-    }
-    if raw.contains(&14) {
-        // `prev || ' Unused position(s): ' || UnUsedPositions || '. '`; a NULL
-        // UnUsedPositions makes the whole concat NULL (no-model code-14 case).
-        info = unused_positions
-            .as_ref()
-            .map(|u| append_info(info, &[" Unused position(s): ", u, ". "]));
-    }
-    if raw.contains(&400) {
+    // C9: AdditionalDecodingInfo (156). Without invalid characters the text is
+    // a function of a few flags, so it is built once per combination.
+    let incomplete = vehicle_type == Some("10") || has_incomplete_body;
+    let info = if raw.contains(&400) {
         let stripped = if invalid_chars.len() > 2 {
             &invalid_chars[2..]
         } else {
             ""
         };
-        info = Some(append_info(
-            info,
-            &[" Invalid character(s): ", stripped, ". "],
-        ));
-    }
-    let incomplete = vehicle_type == Some("10") || has_incomplete_body;
-    if incomplete {
-        info = Some(append_info(
-            info,
-            &[" Incomplete Vehicle Warning - Please be advised that the vehicle may have been altered and may not be an accurate representation of the vehicle in its current condition. "],
-        ));
-    }
-    if !conclusive {
-        info = Some(append_info(
-            info,
-            &[" The Model Year decoded for this VIN may be incorrect. If you know the Model year, please enter it and decode again to get more accurate information. "],
-        ));
-    }
+        Cow::Owned(additional_info(
+            &raw,
+            unused_positions,
+            Some(stripped),
+            incomplete,
+            conclusive,
+        ))
+    } else {
+        static CACHE: [OnceLock<Box<str>>; 1 << 12] = [const { OnceLock::new() }; 1 << 12];
+        let key = usize::from(raw.contains(&4))
+            | usize::from(raw.contains(&5)) << 1
+            | usize::from(raw.contains(&14)) << 2
+            | usize::from(incomplete) << 3
+            | usize::from(conclusive) << 4
+            | unused_positions.map_or(0, |mask| 1 << 5 | usize::from(mask) << 6);
+        let text: &'static str = CACHE[key].get_or_init(|| {
+            additional_info(&raw, unused_positions, None, incomplete, conclusive).into()
+        });
+        Cow::Borrowed(text)
+    };
 
     ErrorState {
         codes: raw.iter().collect(),
         corrected_vin,
         error_bytes,
-        additional_info: info.unwrap_or_default(),
+        additional_info: info,
         is_off_road,
         is_vin_exception,
         check_digit_valid,

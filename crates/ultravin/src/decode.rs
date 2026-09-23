@@ -9,7 +9,7 @@ use std::cmp::Ordering;
 use crate::db::Db;
 use crate::hash::{ElementIndex, ElementSet, IntMap, IntSet};
 use crate::matcher::like_match;
-use crate::tables::{element_lookup_tag, is_exempt, ArchivedWmi, NULL_I32, NULL_I64};
+use crate::tables::{is_exempt, ArchivedWmi, NULL_I32, NULL_I64};
 
 /// A single decoding item (the `tblDecodingItem` ROW), pre-resolution.
 ///
@@ -44,7 +44,7 @@ fn uppercase_key(key: &str) -> Cow<'_, str> {
 
 /// Archive names commonly already have their required uppercase spelling.
 /// Unicode names retain the full to_uppercase behavior, including expansions.
-fn uppercase_name(name: &str) -> Cow<'_, str> {
+pub(crate) fn uppercase_name(name: &str) -> Cow<'_, str> {
     if name.is_ascii() && !name.bytes().any(|b| b.is_ascii_lowercase()) {
         Cow::Borrowed(name)
     } else {
@@ -790,11 +790,7 @@ fn append_make<'a>(
     if let Some((model_attr, pattern_id, keys, vin_schema_id)) = model_item {
         if let Ok(modelid) = model_attr.parse::<i32>() {
             for mm in db.makes_for_model(modelid) {
-                let makeid = mm.makeid.to_native();
-                let name = element_lookup_tag(26)
-                    .and_then(|t| db.lookup(t, makeid))
-                    .map(uppercase_name)
-                    .unwrap_or_default();
+                let (makeid, name) = db.make_text(mm.makeid.to_native());
                 items.push(DecodingItem {
                     created_on: NULL_I64,
                     pattern_id,
@@ -802,7 +798,7 @@ fn append_make<'a>(
                     vin_schema_id,
                     wmi_id: NULL_I32,
                     element_id: 26,
-                    attribute_id: Cow::Owned(makeid.to_string()),
+                    attribute_id: makeid,
                     value: name,
                     source: Cow::Borrowed("pattern - model"),
                     priority: 1000,
@@ -817,11 +813,7 @@ fn append_make<'a>(
         distinct_makeids.sort_unstable();
         distinct_makeids.dedup();
         if distinct_makeids.len() == 1 {
-            let makeid = distinct_makeids[0];
-            let name = element_lookup_tag(26)
-                .and_then(|t| db.lookup(t, makeid))
-                .map(uppercase_name)
-                .unwrap_or_default();
+            let (makeid, name) = db.make_text(distinct_makeids[0]);
             items.push(DecodingItem {
                 created_on: wmi_created,
                 pattern_id: NULL_I32,
@@ -829,7 +821,7 @@ fn append_make<'a>(
                 vin_schema_id: NULL_I32,
                 wmi_id: wmiid,
                 element_id: 26,
-                attribute_id: Cow::Owned(makeid.to_string()),
+                attribute_id: makeid,
                 value: name,
                 source: Cow::Borrowed("Make"),
                 priority: -100,

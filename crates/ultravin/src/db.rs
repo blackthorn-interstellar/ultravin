@@ -10,6 +10,7 @@
 //! `include_bytes!` and external `mmap`) feed the same validated archived bytes,
 //! so they decode identically by construction.
 
+use std::borrow::Cow;
 use std::sync::OnceLock;
 
 use crate::hash::IntMap;
@@ -137,6 +138,17 @@ pub struct Db {
     /// Hashes of every exception VIN: nearly all decodes miss, and a miss
     /// should not binary-search archive strings.
     vinexception_hashes: OnceLock<crate::hash::IntSet<u64>>,
+    /// Make id -> its decimal text and uppercase name, filled on first use,
+    /// over the Make table's id span: every Make item needs both.
+    make_texts: OnceLock<Option<MakeTexts>>,
+}
+
+/// The Make table's first id and one lazily filled slot per id in its span.
+type MakeTexts = (i32, Box<[OnceLock<MakeText>]>);
+
+struct MakeText {
+    id: Box<str>,
+    name: Box<str>,
 }
 
 /// A `DefaultValue` row reduced to what the default pass emits.
@@ -216,6 +228,7 @@ impl Db {
             valid_charset_cache: OnceLock::new(),
             default_templates: OnceLock::new(),
             vinexception_hashes: OnceLock::new(),
+            make_texts: OnceLock::new(),
         }
     }
 
@@ -818,6 +831,42 @@ impl Db {
                 independent,
             }
         })
+    }
+
+    /// A Make item's attribute id and value: the make id as text and the
+    /// make's name, uppercased, or empty when the id has no name.
+    pub(crate) fn make_text(&self, makeid: i32) -> (Cow<'_, str>, Cow<'_, str>) {
+        let tag = crate::tables::element_lookup_tag(26);
+        let name = || {
+            tag.and_then(|t| self.lookup(t, makeid))
+                .map(crate::decode::uppercase_name)
+                .unwrap_or_default()
+        };
+        let texts = self.make_texts.get_or_init(|| {
+            let rows = self.a().lookups.as_slice();
+            let tag = tag?;
+            let start = rows.partition_point(|r| r.tag.to_native() < tag);
+            let end = start + rows[start..].partition_point(|r| r.tag.to_native() == tag);
+            let first = rows[start..end].first()?.id.to_native();
+            let last = rows[start..end].last()?.id.to_native();
+            let span = usize::try_from(i64::from(last) - i64::from(first) + 1)
+                .ok()
+                .filter(|&span| span <= 1 << 20)?;
+            Some((first, (0..span).map(|_| OnceLock::new()).collect()))
+        });
+        let slot = texts.as_ref().and_then(|(first, slots)| {
+            slots.get(usize::try_from(i64::from(makeid) - i64::from(*first)).ok()?)
+        });
+        match slot {
+            Some(slot) => {
+                let text = slot.get_or_init(|| MakeText {
+                    id: makeid.to_string().into(),
+                    name: name().into(),
+                });
+                (Cow::Borrowed(&text.id), Cow::Borrowed(&text.name))
+            }
+            None => (Cow::Owned(makeid.to_string()), name()),
+        }
     }
 
     /// `true` if `vin` has a check-digit exception.
