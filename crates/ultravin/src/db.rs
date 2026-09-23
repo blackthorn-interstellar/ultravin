@@ -66,7 +66,9 @@ impl Backing {
     }
 }
 
-type WmiRangeIndex = IntMap<u64, (usize, usize)>;
+/// Sorted by key. A binary search, not a hash map: WMI bytes come from the
+/// artifact, and crafted keys collide under the deterministic Fx hash.
+type WmiRangeIndex = Box<[(u64, (usize, usize))]>;
 
 pub(crate) struct WmiStrings {
     pub wmi: String,
@@ -129,15 +131,18 @@ pub struct Db {
     /// archive order so decoding need not scan every model of a manufacturer's
     /// every schema. Vehicle type, year and QC checks still run on each pass.
     spec_model_index: OnceLock<IntMap<(i32, i32), Vec<u32>>>,
-    engine_name_index:
-        OnceLock<std::collections::HashMap<String, usize, crate::hash::FxBuildHasher>>,
+    /// Randomly seeded: names come from the artifact, and a crafted artifact
+    /// could collide them under the deterministic Fx hash.
+    engine_name_index: OnceLock<std::collections::HashMap<String, usize>>,
     valid_charset_cache: OnceLock<crate::errors::ValidCharsetCache>,
     /// Vehicle type -> its present default rows, in archive order, with the
     /// datatype test already applied: the default pass runs on every decode.
     default_templates: OnceLock<DefaultTemplates>,
-    /// Hashes of every exception VIN: nearly all decodes miss, and a miss
-    /// should not binary-search archive strings.
-    vinexception_hashes: OnceLock<crate::hash::IntSet<u64>>,
+    /// A one-bit-per-slot filter over exception VIN hashes: nearly all decodes
+    /// miss, and a miss should not binary-search archive strings. A bitset, not
+    /// a hash set, so crafted VINs can at worst saturate it (every lookup then
+    /// takes the exact search), never build probe chains.
+    vinexception_filter: OnceLock<Box<[u64]>>,
     /// Make id -> its decimal text and uppercase name, filled on first use,
     /// over the Make table's id span: every Make item needs both.
     make_texts: OnceLock<Option<MakeTexts>>,
@@ -227,7 +232,7 @@ impl Db {
             engine_name_index: OnceLock::new(),
             valid_charset_cache: OnceLock::new(),
             default_templates: OnceLock::new(),
-            vinexception_hashes: OnceLock::new(),
+            vinexception_filter: OnceLock::new(),
             make_texts: OnceLock::new(),
         }
     }
@@ -388,17 +393,26 @@ impl Db {
                 };
                 let start = v.partition_point(|row| row_prefix(row) < prefix);
                 let len = v[start..].partition_point(|row| row_prefix(row) == prefix);
-                let mut index: IntMap<u64, (usize, usize)> =
-                    IntMap::with_capacity_and_hasher(len, Default::default());
+                // Validated order keeps equal strings adjacent.
+                let mut index: Vec<(u64, (usize, usize))> = Vec::new();
                 for (offset, row) in v[start..start + len].iter().enumerate() {
                     let i = start + offset;
                     if let Some(key) = packed_wmi(self.s(row.wmi.to_native())) {
-                        index.entry(key).or_insert((i, i + 1)).1 = i + 1;
+                        match index.last_mut() {
+                            Some((last, range)) if *last == key => range.1 = i + 1,
+                            _ => index.push((key, (i, i + 1))),
+                        }
                     }
                 }
-                index
+                index.sort_unstable_by_key(|&(key, _)| key);
+                index.into_boxed_slice()
             });
-            return index.get(&key).map_or(&[], |&(start, end)| &v[start..end]);
+            return index
+                .binary_search_by_key(&key, |&(key, _)| key)
+                .map_or(&[], |i| {
+                    let (start, end) = index[i].1;
+                    &v[start..end]
+                });
         }
         // Retain the ordinary lookup for short, nonstandard or long strings
         // supplied through the explicit-database API.
@@ -736,11 +750,16 @@ impl Db {
     /// Normalization is indexed once; the decode path supplies a lowercase key.
     pub fn enginemodel_by_norm(&self, norm: &str) -> Option<&ArchivedEngineModel> {
         let index = self.engine_name_index.get_or_init(|| {
-            let mut index = std::collections::HashMap::default();
+            let mut index = std::collections::HashMap::new();
+            // Normalize each interned name once, however many rows share it.
+            let mut seen = crate::hash::IntSet::default();
             for (i, model) in self.enginemodels().iter().enumerate() {
-                index
-                    .entry(self.s(model.name.to_native()).trim().to_ascii_lowercase())
-                    .or_insert(i);
+                let name = model.name.to_native();
+                if seen.insert(name) {
+                    index
+                        .entry(self.s(name).trim().to_ascii_lowercase())
+                        .or_insert(i);
+                }
             }
             index
         });
@@ -851,7 +870,7 @@ impl Db {
             let last = rows[start..end].last()?.id.to_native();
             let span = usize::try_from(i64::from(last) - i64::from(first) + 1)
                 .ok()
-                .filter(|&span| span <= 1 << 20)?;
+                .filter(|&span| span <= 1 << 20 && span <= (end - start).saturating_mul(2))?;
             Some((first, (0..span).map(|_| OnceLock::new()).collect()))
         });
         let slot = texts.as_ref().and_then(|(first, slots)| {
@@ -876,10 +895,22 @@ impl Db {
             use std::hash::BuildHasher;
             crate::hash::FxBuildHasher::default().hash_one(s)
         };
-        let hashes = self
-            .vinexception_hashes
-            .get_or_init(|| v.iter().map(|r| hash(self.s(r.vin.to_native()))).collect());
-        if !hashes.contains(&hash(vin)) {
+        // ~16 bits per VIN: a false positive only costs the exact search below.
+        let bits = (v.len() * 16).next_power_of_two().max(64);
+        let slot = |s: &str| (hash(s) >> (64 - bits.trailing_zeros())) as usize;
+        let filter = self.vinexception_filter.get_or_init(|| {
+            let mut filter = vec![0u64; bits / 64];
+            // Equal VINs are adjacent and interned once: hash each string once.
+            let mut ids: Vec<u32> = v.iter().map(|r| r.vin.to_native()).collect();
+            ids.dedup();
+            for id in ids {
+                let i = slot(self.s(id));
+                filter[i / 64] |= 1 << (i % 64);
+            }
+            filter.into_boxed_slice()
+        });
+        let i = slot(vin);
+        if filter[i / 64] & (1 << (i % 64)) == 0 {
             return false;
         }
         let lo = v.partition_point(|r| self.s(r.vin.to_native()) < vin);

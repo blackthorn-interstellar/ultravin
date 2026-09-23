@@ -528,7 +528,122 @@ pub fn validate_body(body: &[u8]) -> Result<&ArchivedVpicData, String> {
         .map_err(|e| format!("artifact validation failed: {e}"))?;
     validate_arena(archived)?;
     check_element_ids(archived)?;
+    check_string_ids(archived)?;
+    check_order(archived)?;
     Ok(archived)
+}
+
+/// Every `u32` string reference must name an arena string: `Db::s` indexes the
+/// offsets directly, and the lazy caches walk whole tables, so one bad id in an
+/// unused row would panic every decode.
+fn check_string_ids(a: &ArchivedVpicData) -> Result<(), String> {
+    let count = a.arena_offsets.len() - 1; // non-empty: `validate_arena`
+    let check = |table: &str, ids: &mut dyn Iterator<Item = u32>| {
+        for id in ids {
+            if id as usize >= count {
+                return Err(format!("{table} string id {id} out of range"));
+            }
+        }
+        Ok(())
+    };
+    check("wmi", &mut a.wmi.iter().map(|r| r.wmi.to_native()))?;
+    check(
+        "pattern",
+        &mut a
+            .pattern
+            .iter()
+            .flat_map(|r| [r.keys, r.keys_regex, r.attributeid].map(|id| id.to_native())),
+    )?;
+    check(
+        "element",
+        &mut a.element.iter().flat_map(|r| {
+            [r.name, r.code, r.groupname, r.datatype, r.decode].map(|id| id.to_native())
+        }),
+    )?;
+    check(
+        "enginemodel",
+        &mut a.enginemodel.iter().map(|r| r.name.to_native()),
+    )?;
+    check(
+        "enginemodelpattern",
+        &mut a
+            .enginemodelpattern
+            .iter()
+            .map(|r| r.attributeid.to_native()),
+    )?;
+    check(
+        "defaultvalue",
+        &mut a.defaultvalue.iter().map(|r| r.defaultvalue.to_native()),
+    )?;
+    check(
+        "vinexception",
+        &mut a.vinexception.iter().map(|r| r.vin.to_native()),
+    )?;
+    check(
+        "conversion",
+        &mut a.conversion.iter().map(|r| r.formula.to_native()),
+    )?;
+    check("lookups", &mut a.lookups.iter().map(|r| r.name.to_native()))?;
+    check(
+        "vspecpattern",
+        &mut a.vspecpattern.iter().map(|r| r.attributeid.to_native()),
+    )
+}
+
+/// The documented sort orders are load-bearing: range searches and the dense
+/// indexes derive spans from the first and last row. Also rejects duplicate
+/// vehicle-spec schema ids, which the importer never emits and which would
+/// otherwise make the spec join cache quadratic.
+fn check_order(a: &ArchivedVpicData) -> Result<(), String> {
+    fn sorted<T, K: Ord>(table: &str, rows: &[T], key: impl Fn(&T) -> K) -> Result<(), String> {
+        match rows.windows(2).position(|w| key(&w[0]) > key(&w[1])) {
+            Some(i) => Err(format!("{table} row {} is out of order", i + 1)),
+            None => Ok(()),
+        }
+    }
+    let s = |id: rkyv::rend::u32_le| {
+        let i = id.to_native() as usize;
+        let range =
+            a.arena_offsets[i].to_native() as usize..a.arena_offsets[i + 1].to_native() as usize;
+        &a.arena_bytes[range]
+    };
+    let n = |x: rkyv::rend::i32_le| x.to_native();
+    sorted("wmi", &a.wmi, |r| (s(r.wmi), n(r.id)))?;
+    sorted("wmi_vinschema", &a.wmi_vinschema, |r| (n(r.wmiid), n(r.id)))?;
+    sorted("vinschema", &a.vinschema, |r| n(r.id))?;
+    sorted("pattern", &a.pattern, |r| (n(r.vinschemaid), n(r.id)))?;
+    sorted("element", &a.element, |r| n(r.id))?;
+    sorted("make_model", &a.make_model, |r| (n(r.modelid), n(r.makeid)))?;
+    sorted("wmi_make", &a.wmi_make, |r| (n(r.wmiid), n(r.makeid)))?;
+    sorted("enginemodel", &a.enginemodel, |r| n(r.id))?;
+    sorted("enginemodelpattern", &a.enginemodelpattern, |r| {
+        (n(r.enginemodelid), n(r.id))
+    })?;
+    sorted("defaultvalue", &a.defaultvalue, |r| {
+        (n(r.vehicletypeid), n(r.id))
+    })?;
+    sorted("vinexception", &a.vinexception, |r| s(r.vin))?;
+    sorted("conversion", &a.conversion, |r| n(r.id))?;
+    sorted("lookups", &a.lookups, |r| (r.tag.to_native(), n(r.id)))?;
+    sorted("vspecschema", &a.vspecschema, |r| (n(r.makeid), n(r.id)))?;
+    sorted("vspecschemapattern", &a.vspecschemapattern, |r| {
+        (n(r.schemaid), n(r.id))
+    })?;
+    sorted("vspecpattern", &a.vspecpattern, |r| {
+        (n(r.vspecschemapatternid), n(r.id))
+    })?;
+    sorted("vspecschemamodel", &a.vspecschemamodel, |r| {
+        (n(r.schemaid), n(r.modelid))
+    })?;
+    sorted("vspecschemayear", &a.vspecschemayear, |r| {
+        (n(r.schemaid), n(r.year))
+    })?;
+    let mut schema_ids: Vec<i32> = a.vspecschema.iter().map(|r| n(r.id)).collect();
+    schema_ids.sort_unstable();
+    match schema_ids.windows(2).find(|w| w[0] == w[1]) {
+        Some(w) => Err(format!("duplicate vspecschema id {}", w[0])),
+        None => Ok(()),
+    }
 }
 
 /// Prove every arena slice is in range and valid UTF-8.
@@ -645,9 +760,8 @@ impl VpicData {
 mod provenance_tests {
     use super::*;
 
-    #[test]
-    fn computed_digest_does_not_trust_a_stale_header() {
-        let data = VpicData {
+    fn empty() -> VpicData {
+        VpicData {
             cover: Vec::new(),
             arena_bytes: vec![0],
             arena_offsets: vec![0, 0],
@@ -669,7 +783,72 @@ mod provenance_tests {
             vspecpattern: Vec::new(),
             vspecschemamodel: Vec::new(),
             vspecschemayear: Vec::new(),
-        };
+        }
+    }
+
+    fn validate(data: &VpicData) -> Result<(), String> {
+        let bytes = serialize_artifact(data, 0);
+        let mut body = rkyv::util::AlignedVec::<16>::new();
+        body.extend_from_slice(&bytes[HEADER_LEN..]);
+        validate_body(&body).map(|_| ())
+    }
+
+    #[test]
+    fn validation_rejects_dangling_string_ids() {
+        assert_eq!(validate(&empty()), Ok(()));
+        let mut data = empty();
+        data.vinexception.push(VinException {
+            vin: 1,
+            checkdigit: true,
+        });
+        assert_eq!(
+            validate(&data),
+            Err("vinexception string id 1 out of range".into())
+        );
+        let mut data = empty();
+        data.element.push(Element {
+            id: 1,
+            name: 0,
+            code: 0,
+            isprivate: false,
+            groupname: 0,
+            datatype: 0,
+            decode: 2,
+            decode_present: true,
+            weight: NULL_I32,
+        });
+        assert_eq!(
+            validate(&data),
+            Err("element string id 2 out of range".into())
+        );
+    }
+
+    #[test]
+    fn validation_rejects_unsorted_rows_and_duplicate_spec_schemas() {
+        let mut data = empty();
+        data.lookups = [0, 100, 1]
+            .map(|id| LookupRow {
+                tag: 0,
+                id,
+                name: 0,
+            })
+            .into();
+        assert_eq!(validate(&data), Err("lookups row 2 is out of order".into()));
+        let mut data = empty();
+        data.vspecschema = [1, 2]
+            .map(|makeid| VSpecSchema {
+                id: 7,
+                makeid,
+                vehicletypeid: NULL_I32,
+                tobeqced: false,
+            })
+            .into();
+        assert_eq!(validate(&data), Err("duplicate vspecschema id 7".into()));
+    }
+
+    #[test]
+    fn computed_digest_does_not_trust_a_stale_header() {
+        let data = empty();
         let mut bytes = serialize_artifact(&data, 0);
         assert_eq!(
             artifact_blake3_hex(&bytes),
