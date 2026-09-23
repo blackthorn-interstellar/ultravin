@@ -81,10 +81,11 @@ Test:
 - `_batch_cli.write_jsonl` chunk loop -> `list(islice(parsed, n))`: skeptic — `islice` raises ValueError for a stop > `sys.maxsize`, and `--batch-size` has no upper bound, so `--batch-size 9223372036854775808` on short input regresses from success to a crash.
 - delete `stale_cache.py`'s `cells` subcommand (no in-repo caller): skeptic — `docs/DATA_REFRESH.md:217` directs regenerating an inconsistent cell list, and `cells --report target/refresh/stale_cache.json` is that recovery; re-running refresh can exit early when the dump matches the pinned hash (refresh.py ~894).
 - delete `test_cli.py::test_decode_batch_jsonl_empty_input_emits_nothing`: skeptic — moving blank-line filtering from `rows()` into the array path's `collect()` would emit empty-VIN JSONL rows that only this test (blank-only stdin) catches.
+- perf: `cargo test ... --lib --bins --tests` to skip linking 16 ~94 MB examples (scout: 2.5-3.7s saved after a Rust edit, 0 on a warm no-op): re-measured under another agent's concurrent load — 184/197s default vs 186/140s without examples, noise swamps a few seconds; gain unconfirmed, and it drops the only link check the examples get in `make rust`/release.
 
 ## Consecutive empty iterations
 
-0
+1
 
 Converged at 98127a3 on 2026-09-21 — reset 2026-09-22: the human waived backward compatibility (1,081 lines of previously compat-blocked deletions landed the same evening), the orphaned 2026-09-15 experiment left the tree, and CI went red on a flaky test, so the verdict no longer holds. Resume the loop.
 
@@ -106,7 +107,6 @@ Scout findings not yet through the skeptic. Re-verify before acting.
 - clean (2026-09-21, iteration 21): `ultravin.__all__` matches the stub's public surface (the stub-only names are the `ArrowArraySource`/`ArrowStreamSource` typing aliases and the extension-level `elements()`/`multi_valued()` behind the `ELEMENTS`/`MULTI_VALUED` constants); AGENTS.md's commands and SECURITY.md's scope statements match the Makefile and code; conftest fixtures and `vin_samples` symbols are all used. Considered and dropped: an importer guard for a dump missing a core table — the refresh parity gates already fail an empty decoder, so it is speculative hardening.
 - clean (do not re-probe): all six decode entry points agree on 3,562 VINs × 13 year hints, plain and full; empty/blank/CRLF stdin, zero-row parquet, dst-inside-src, duplicate columns, second use of a stream, generate filters and determinism all behave.
 
-- perf (2026-09-22 scout4): `Makefile:38` `cargo test --workspace --exclude ultravin-py --all-features` links 16 ~94 MB example binaries (0 doctests; clippy --all-targets already type-checks examples); `--lib --bins --tests` cuts post-Rust-edit cargo test 5.9/4.0s -> 2.2/1.5s, no warm-noop gain. Trade: a link-only example failure no longer fails `make rust`.
 - tooling note: when break-testing Rust, `touch` the restored file — `mv`-restoring an older mtime leaves cargo serving the broken build.
 - perf (needs human, new dev dep): `pytest -n auto` (pytest-xdist) cut pytest ~26s -> ~10.5s warm, 6 runs no flakes; also pyo3 recompiles twice per warm run because maturin sets `PYO3_CONFIG_FILE` and clippy does not (~4s, no clean fix found).
 - docs (low value, counts drift): `docs/CORPUS.md:143,155,162,164` allowance counts (39/138/26/16) vs `scripts/coverage_allowances.json` today (38/136/29/11); `docs/RELEASE.md:27` "~82MB" for an 83.4 MB artifact the same doc calls 83MB at :39; `docs/SCANNER-NOTES.md` cites `db.rs` unsafe-site line numbers, `.gitignore:120`, `BENCHMARKS.md:202`, `data-review.yaml:14` that have all moved.
