@@ -6,28 +6,27 @@
   <a href="https://github.com/blackthorn-interstellar/ultravin/blob/master/LICENSE"><img src="https://img.shields.io/github/license/blackthorn-interstellar/ultravin" alt="License"></a>
 </p>
 
-**The complete NHTSA VIN decoder, thousands of times faster. Fully offline.**
+**An extremely fast, fully offline NHTSA vPIC VIN decoder, written in Rust.**
 
 <p align="center">
   <img src="assets/benchmark.svg" alt="VINs decoded per second: ultravin 1,853,346 with automatic batching on 12 cores / 935,066 on 4 cores / 257,709 on 1 core vs corgi v3 83, corgi v2 33, NHTSA MSSQL 22.5, NHTSA Postgres 19.5" width="640"><br>
   <sub>VINs decoded per second — ultravin uses automatic batching over twenty million unique VINs.</sub>
 </p>
 
-- ⚡️ ~258,000 VIN/s on one core with automatic batching — ~11,450× the NHTSA SQL Server baseline (22.5 VIN/s)
+- ⚡️ ~82,000× faster than NHTSA's own `spVinDecode` — ~1.85 million VIN/s on 12 cores
 - 🦀 Pure Rust core, shipped as a Python library and a Rust crate
 - 📦 The entire vPIC vehicle database baked into the wheel
 - 🔌 Fully offline — no network, no database, no data files at runtime
 - 🎯 Full-field vPIC parity, tested across decoding rules and their interactions — with documented upstream defects corrected ([accuracy policy](docs/ACCEPTANCE.md), [evidence](docs/KNOWN_DEVIATIONS.md))
 - 🐍 Installable via `pip`, with a CLI and a library API
-- 🧵 Batches in parallel to ~935,000 VIN/s on 4 cores and ~1.85 million VIN/s on all 12 — ~41,558× and ~82,371× that same baseline
 - 🗃️ Parquet in, parquet out — decodes a dataset of any size in the memory of one chunk
 
 ultravin brings the complete `spVinDecode` algorithm into your process: vehicle
 attributes, model-year resolution, VIN correction, errors, and provenance.
 It checks every output field against NHTSA's unmodified Postgres procedure and
 corrects documented defects in the upstream data and procedures. You get vPIC
-fidelity with better answers on those defective cases, at **over 11,400× the
-NHTSA SQL Server baseline** on one core.
+fidelity with better answers on those defective cases, at **over 82,000× the
+NHTSA SQL Server baseline** on 12 cores.
 [Benchmarks and reproduction](docs/BENCHMARKS.md).
 
 The complete vehicle database ships inside the binary. No network, no database
