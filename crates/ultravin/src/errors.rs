@@ -68,6 +68,7 @@ impl ValidChars {
         })
     }
 
+    #[cfg(test)]
     fn contains(&self, c: char) -> bool {
         if c.is_ascii() {
             self.ascii & (1 << (c as u32)) != 0
@@ -76,6 +77,7 @@ impl ValidChars {
         }
     }
 
+    #[cfg(test)]
     fn is_empty(&self) -> bool {
         self.ascii == 0 && self.other.is_empty()
     }
@@ -255,9 +257,58 @@ fn key_chars(key: &str) -> KeyChars {
     expansion
 }
 
-// The correction helper consults only VIN positions 4..14. Index those
-// directly; the public recomputation function still returns every position.
-type Charset = [ValidChars; 11];
+/// The correction charset for VIN positions 4..14 (the only ones the helper
+/// consults; the public recomputation still returns every position), frozen
+/// for lookups: ASCII masks inline and every position's rendering in one
+/// string, a few cache lines instead of eleven sets and their separate texts.
+pub(crate) struct Charset {
+    ascii: [u128; 11],
+    /// Non-ASCII members per position; absent when there are none (the norm).
+    other: Option<Box<[std::collections::BTreeSet<char>; 11]>>,
+    rendered: Box<str>,
+    /// Position `i` renders as `rendered[ends[i - 1]..ends[i]]`.
+    ends: [u32; 11],
+}
+
+impl Charset {
+    fn freeze(sets: [ValidChars; 11]) -> Self {
+        let mut rendered = String::new();
+        let mut ends = [0; 11];
+        for (end, set) in ends.iter_mut().zip(&sets) {
+            rendered.push_str(set.rendered());
+            *end = rendered.len() as u32;
+        }
+        let other = sets
+            .iter()
+            .any(|set| !set.other.is_empty())
+            .then(|| Box::new(sets.each_ref().map(|set| set.other.clone())));
+        Self {
+            ascii: sets.each_ref().map(|set| set.ascii),
+            other,
+            rendered: rendered.into_boxed_str(),
+            ends,
+        }
+    }
+
+    fn is_empty(&self, i: usize) -> bool {
+        self.ascii[i] == 0 && self.other.as_ref().is_none_or(|other| other[i].is_empty())
+    }
+
+    fn contains(&self, i: usize, c: char) -> bool {
+        if c.is_ascii() {
+            self.ascii[i] & (1 << (c as u32)) != 0
+        } else {
+            self.other
+                .as_ref()
+                .is_some_and(|other| other[i].contains(&c))
+        }
+    }
+
+    fn rendered(&self, i: usize) -> &str {
+        let start = if i == 0 { 0 } else { self.ends[i - 1] };
+        &self.rendered[start as usize..self.ends[i] as usize]
+    }
+}
 
 pub(crate) struct ValidCharsetCache {
     /// Keys are copied only from the immutable archive. Caller input can query
@@ -364,7 +415,7 @@ pub fn recompute_valid_chars(db: &Db, wmi: &str, year: i32) -> BTreeMap<i32, BTr
 /// the shipped cache is stale for ~2% of (wmi, year) cells — see
 /// `docs/KNOWN_DEVIATIONS.md` and the `--stale-cache-report` scan.
 fn build_charset(db: &Db, wmi: &str, year: i32) -> Option<Charset> {
-    let mut map: Charset = std::array::from_fn(|_| ValidChars::default());
+    let mut map: [ValidChars; 11] = std::array::from_fn(|_| ValidChars::default());
     let mut any = false;
     for key in &charset_keys(db, wmi, year) {
         for (kpos, c) in valid_chars_in_key(key) {
@@ -374,7 +425,7 @@ fn build_charset(db: &Db, wmi: &str, year: i32) -> Option<Charset> {
             }
         }
     }
-    any.then_some(map)
+    any.then(|| Charset::freeze(map))
 }
 
 fn valid_charset<'a>(db: &'a Db, wmi: &str, model_year: Option<i32>) -> Option<&'a Charset> {
@@ -536,12 +587,13 @@ fn errorcode<'a>(
             corrected.push(var_c);
             continue;
         }
-        match charset.and_then(|chars| chars.get((i - 4) as usize)) {
-            Some(set) if !set.is_empty() => {
-                if set.contains(var_c) {
+        let slot = (i - 4) as usize;
+        match charset.filter(|chars| slot < 11 && !chars.is_empty(slot)) {
+            Some(chars) => {
+                if chars.contains(slot, var_c) {
                     corrected.push(var_c);
                 } else {
-                    let x = set.rendered();
+                    let x = chars.rendered(slot);
                     push_replacement(&mut replacements, i, x);
                     cnt_errors += 1;
                     last_error_pos = i;
@@ -757,6 +809,40 @@ mod tests {
             let mut ordered: Vec<_> = expected.iter().copied().collect();
             ordered.sort_by_key(|c| (c.is_ascii_alphanumeric(), *c));
             assert_eq!(actual.rendered(), ordered.iter().collect::<String>());
+        }
+    }
+
+    #[test]
+    fn frozen_charsets_answer_like_their_sets() {
+        let texts = [
+            "",
+            "_9A",
+            "é日",
+            "",
+            "0123456789",
+            "Z|\n",
+            "",
+            "AB",
+            "é",
+            "",
+            "X",
+        ];
+        let sets: [ValidChars; 11] = std::array::from_fn(|i| {
+            let mut set = ValidChars::default();
+            texts[i].chars().for_each(|c| set.insert(c));
+            set
+        });
+        let frozen = Charset::freeze(sets.clone());
+        for (i, set) in sets.iter().enumerate() {
+            assert_eq!(frozen.is_empty(i), set.is_empty(), "{i}");
+            assert_eq!(frozen.rendered(i), set.rendered(), "{i}");
+            for probe in (0..=127u8).map(char::from).chain("é日本".chars()) {
+                assert_eq!(
+                    frozen.contains(i, probe),
+                    set.contains(probe),
+                    "{i} {probe:?}"
+                );
+            }
         }
     }
 
@@ -1503,7 +1589,7 @@ mod shared_charset_tests {
     }
 
     fn allows(db: &Db, year: i32, value: char) -> bool {
-        valid_charset(db, "ABC", Some(year)).is_some_and(|charset| charset[0].contains(value))
+        valid_charset(db, "ABC", Some(year)).is_some_and(|charset| charset.contains(0, value))
     }
 
     #[test]
@@ -1553,7 +1639,7 @@ mod shared_charset_tests {
             let oracle = recompute_valid_chars(&db, "ABC", year);
             for value in "ABEFZ".chars() {
                 let cached = valid_charset(&db, "ABC", Some(year))
-                    .is_some_and(|charset| charset[0].contains(value));
+                    .is_some_and(|charset| charset.contains(0, value));
                 let recomputed = oracle.get(&4).is_some_and(|chars| chars.contains(&value));
                 assert_eq!(cached, recomputed, "year={year}, value={value}");
             }
