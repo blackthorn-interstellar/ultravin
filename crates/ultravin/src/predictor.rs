@@ -217,12 +217,11 @@ fn predict_native_slots(
     memory_bytes: usize,
     bytes_per_row: f64,
 ) -> Result<BatchPrediction, BatchPredictError> {
-    // Candidate rates come from scripts/bench/slot_budget_sweep.py. They seed
-    // a plan; they are not throughput guarantees or cross-machine validation.
-    // The reference is the median of the four production-kernel calibration
-    // samples in native_worker_calibration_2026_09_15.json, not the retired
-    // shared-batch controller's contiguous-offset calibration.
-    const REFERENCE_SINGLE: f64 = 174_387.694_628_043_04;
+    // Candidate rates come from NATIVE_PLAN_RATES. They seed a plan; they are
+    // not throughput guarantees or cross-machine validation. The reference is
+    // the median of five production-kernel calibration samples from the same
+    // build, recorded with the plan grid.
+    const REFERENCE_SINGLE: f64 = 360_035.0;
 
     let bytes_per_row_ceil = bytes_per_row.ceil();
     if bytes_per_row_ceil > usize::MAX as f64 {
@@ -263,8 +262,8 @@ fn predict_native_slots(
     let (batch_size, slots_per_worker, estimated_working_bytes, reference_plan_rate) =
         if feasible.is_empty() {
             // Below the measured-plan budget, retain up to B200 with one slot.
-            // Rate scales linearly by batch and applies the measured W12
-            // B200/S1-to-S5 loss; this is an explicit fallback extrapolation.
+            // Rate scales linearly by batch and applies the W12 B200/S1-to-S5
+            // loss measured September 15; an explicit fallback extrapolation.
             let batch = max_rows_per_slot.min(200);
             let bytes = working(batch, 1).expect("validated native fallback memory product");
             let anchor = native_measured_rate(workers, 200, 5);
@@ -313,70 +312,89 @@ fn smallest_near_peak(candidates: &[(usize, usize, f64)]) -> Option<(usize, usiz
         .min_by_key(|candidate| (candidate.0 * candidate.1, candidate.0, candidate.1))
 }
 
-fn interpolate(workers: usize, left: (usize, f64), right: (usize, f64)) -> f64 {
-    let fraction = (workers - left.0) as f64 / (right.0 - left.0) as f64;
-    left.1 + (right.1 - left.1) * fraction
-}
+/// Measured whole-pass native rates (VIN/s) per (batch, slots) plan at each
+/// measured worker count: medians of alternating runs over the 20M-VIN corpus,
+/// scripts/bench/native_plan_grid_2026_09_23.json. Worker counts between two
+/// anchors interpolate the plans both measured; above 12 the W12 rates are a
+/// conservative seed rather than invented scaling.
+const NATIVE_PLAN_RATES: [(usize, &[NativePlanRate]); 4] = [
+    (
+        1,
+        &[(32, 3, 260_050.0), (100, 5, 247_345.0), (200, 5, 251_356.0)],
+    ),
+    (
+        4,
+        &[
+            (16, 4, 820_000.0),
+            (24, 4, 873_000.0),
+            (32, 3, 897_000.0),
+            (48, 3, 887_000.0),
+            (100, 5, 814_000.0),
+            (200, 2, 697_000.0),
+            (200, 5, 796_000.0),
+            (400, 2, 740_000.0),
+        ],
+    ),
+    (
+        8,
+        &[
+            (16, 4, 1_575_000.0),
+            (24, 4, 1_509_000.0),
+            (32, 3, 1_425_000.0),
+            (48, 3, 1_403_000.0),
+            (100, 5, 1_480_000.0),
+            (200, 2, 1_315_000.0),
+            (200, 5, 1_234_000.0),
+            (400, 2, 1_140_000.0),
+        ],
+    ),
+    (
+        12,
+        &[
+            (16, 4, 1_579_000.0),
+            (24, 4, 1_640_000.0),
+            (32, 3, 1_645_000.0),
+            (32, 4, 1_611_000.0),
+            (48, 3, 1_495_000.0),
+            (64, 2, 1_599_000.0),
+            (100, 5, 1_609_000.0),
+            (200, 2, 1_577_000.0),
+            (200, 5, 1_403_000.0),
+            (400, 2, 1_383_000.0),
+        ],
+    ),
+];
+
+/// (batch rows, slots per worker, VIN/s).
+type NativePlanRate = (usize, usize, f64);
 
 fn native_measured_rate(workers: usize, batch: usize, slots: usize) -> f64 {
-    let w12 = match (batch, slots) {
-        (100, 1) => 910_005.0,
-        (100, 2) => 945_406.0,
-        (100, 5) => 961_448.0,
-        (100, 10) => 942_917.0,
-        (200, 1) => 887_306.0,
-        (200, 2) => 943_377.0,
-        (200, 5) => 943_428.0,
-        (200, 10) => 956_335.0,
-        (400, 1) => 874_224.0,
-        (400, 2) => 921_613.0,
-        (400, 5) => 946_747.0,
-        (400, 10) => 959_363.0,
-        _ => unreachable!("plan is outside the measured W12 grid"),
-    };
-    if workers >= 12 {
-        // No worker counts above 12 were measured; retain the W12 rate as a
-        // conservative seed rather than inventing additional scaling.
-        return w12;
-    }
-    let w4 = match (batch, slots) {
-        (100, 5) => 492_493.0,
-        (200, 2) => 478_356.0,
-        (200, 5) => 473_278.0,
-        (400, 2) => 458_530.0,
-        _ => unreachable!("plan was not measured at W4"),
-    };
-    let w8 = match (batch, slots) {
-        (100, 5) => 843_852.0,
-        (200, 2) => 841_184.0,
-        (200, 5) => 845_172.0,
-        (400, 2) => 823_082.0,
-        _ => unreachable!("plan was not measured at W8"),
-    };
-    match workers {
-        0 => unreachable!("workers validated above"),
-        1 => 134_166.0,
-        2..=3 => interpolate(workers, (1, 134_166.0), (4, w4)),
-        4 => w4,
-        5..=8 => interpolate(workers, (4, w4), (8, w8)),
-        9..=11 => interpolate(workers, (8, w8), (12, w12)),
-        _ => unreachable!("W12 and larger returned above"),
-    }
+    native_measured_candidates(workers)
+        .into_iter()
+        .find(|&(b, s, _)| (b, s) == (batch, slots))
+        .map(|(_, _, rate)| rate)
+        .expect("plan was measured at the bracketing worker counts")
 }
 
 fn native_measured_candidates(workers: usize) -> Vec<(usize, usize, f64)> {
-    if workers <= 3 {
-        return vec![(200, 5, native_measured_rate(workers, 200, 5))];
+    let upper = NATIVE_PLAN_RATES
+        .iter()
+        .position(|&(anchor, _)| anchor >= workers)
+        .unwrap_or(NATIVE_PLAN_RATES.len() - 1);
+    let (right, right_plans) = NATIVE_PLAN_RATES[upper];
+    if workers >= right || upper == 0 {
+        return right_plans.to_vec();
     }
-    if workers <= 11 {
-        return [(100, 5), (200, 2), (200, 5), (400, 2)]
-            .map(|(batch, slots)| (batch, slots, native_measured_rate(workers, batch, slots)))
-            .to_vec();
-    }
-    [100, 200, 400]
-        .into_iter()
-        .flat_map(|batch| [1, 2, 5, 10].map(move |slots| (batch, slots)))
-        .map(|(batch, slots)| (batch, slots, native_measured_rate(workers, batch, slots)))
+    let (left, left_plans) = NATIVE_PLAN_RATES[upper - 1];
+    let fraction = (workers - left) as f64 / (right - left) as f64;
+    left_plans
+        .iter()
+        .filter_map(|&(batch, slots, low)| {
+            let &(_, _, high) = right_plans
+                .iter()
+                .find(|&&(b, s, _)| (b, s) == (batch, slots))?;
+            Some((batch, slots, low + (high - low) * fraction))
+        })
         .collect()
 }
 
@@ -408,15 +426,12 @@ mod tests {
         )
         .unwrap();
         assert_eq!(native.model_version, "ultravin-native-slots-v1");
-        assert_eq!(native.batch_size, 100);
-        assert_eq!(native.slots_per_worker, Some(5));
-        assert_eq!(native.max_inflight_rows, Some(6_000));
+        assert_eq!(native.batch_size, 24);
+        assert_eq!(native.slots_per_worker, Some(4));
+        assert_eq!(native.max_inflight_rows, Some(1_152));
         assert_eq!(native.estimated_peak_rss_bytes, None);
         assert_eq!(native.target_fraction, 0.99);
-        assert_eq!(
-            native.estimated_rows_per_second,
-            native.estimated_peak_rows_per_second
-        );
+        assert!(native.estimated_rows_per_second >= 0.99 * native.estimated_peak_rows_per_second);
         let memory_capped = predict_batch(
             1,
             174_387.694_628_043_04,
@@ -425,8 +440,8 @@ mod tests {
             BatchFormat::Native.default_bytes_per_row(),
         )
         .unwrap();
-        assert_eq!(memory_capped.batch_size, 200);
-        assert_eq!(memory_capped.slots_per_worker, Some(5));
+        assert_eq!(memory_capped.batch_size, 32);
+        assert_eq!(memory_capped.slots_per_worker, Some(3));
         assert!(memory_capped.estimated_working_bytes <= 512 * 1024 * 1024);
     }
 
@@ -448,7 +463,8 @@ mod tests {
             12,
             140_000.0,
             BatchFormat::Native,
-            64 * 1024 * 1024,
+            // 90 rows per worker: below the 96-row preferred plans.
+            12 * 90 * 17_408,
             17_408.0,
         )
         .unwrap();
@@ -495,9 +511,9 @@ mod tests {
         let w4 = plan(4);
         let w8 = plan(8);
         let w12 = plan(12);
-        assert_eq!((w4.batch_size, w4.slots_per_worker), (100, Some(5)));
-        assert_eq!((w8.batch_size, w8.slots_per_worker), (200, Some(2)));
-        assert_eq!((w12.batch_size, w12.slots_per_worker), (100, Some(5)));
+        assert_eq!((w4.batch_size, w4.slots_per_worker), (32, Some(3)));
+        assert_eq!((w8.batch_size, w8.slots_per_worker), (16, Some(4)));
+        assert_eq!((w12.batch_size, w12.slots_per_worker), (24, Some(4)));
         for prediction in [w4, w8, w12] {
             assert!(
                 prediction.estimated_rows_per_second

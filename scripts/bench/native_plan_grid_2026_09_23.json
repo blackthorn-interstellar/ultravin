@@ -1,0 +1,1407 @@
+{
+  "date": "2026-09-23",
+  "host": "Apple M2 Max (8P+4E), shared host; each run started when the 1-minute load average was <= 3.5 (or after a 30-minute wait)",
+  "corpus": {
+    "path": "target/bench/independent-sink-corpus.txt",
+    "sha256": "0d6224e99d0a7f241e3dcd052ce973c8baea774feb0831db0071423de726bd9a",
+    "rows": 20000000
+  },
+  "probe": "crates/ultravin/examples/native_slot_grid.rs: warm whole-corpus pass, then one timed whole-corpus pass; fixed clock 1788220800000000",
+  "baseline": "35ff816 (before the September 22 decoder work)",
+  "candidate": "2bd46db84a9241a9f96b52ab36d88a6d5e6ea14f",
+  "rounds": "W4/W8/W12: three alternating rounds; W1: two rounds",
+  "calibration_single_core_rows_per_second": {
+    "samples": [
+      358334.1,
+      357833.8,
+      363270.5,
+      362991.8,
+      360035.0
+    ],
+    "median": 360035.0
+  },
+  "plans": [
+    {
+      "workers": 1,
+      "build": "candidate",
+      "batch": 32,
+      "slots": 3,
+      "median_rows_per_second": 260050,
+      "samples": [
+        257768,
+        262332
+      ]
+    },
+    {
+      "workers": 1,
+      "build": "candidate",
+      "batch": 100,
+      "slots": 5,
+      "median_rows_per_second": 247345,
+      "samples": [
+        247881,
+        246809
+      ]
+    },
+    {
+      "workers": 1,
+      "build": "candidate",
+      "batch": 200,
+      "slots": 5,
+      "median_rows_per_second": 251356,
+      "samples": [
+        252448,
+        250264
+      ]
+    },
+    {
+      "workers": 4,
+      "build": "baseline",
+      "batch": 100,
+      "slots": 5,
+      "median_rows_per_second": 562751,
+      "samples": [
+        562751,
+        545562,
+        599585
+      ]
+    },
+    {
+      "workers": 4,
+      "build": "candidate",
+      "batch": 16,
+      "slots": 4,
+      "median_rows_per_second": 819629,
+      "samples": [
+        812003,
+        838359,
+        819629
+      ]
+    },
+    {
+      "workers": 4,
+      "build": "candidate",
+      "batch": 24,
+      "slots": 4,
+      "median_rows_per_second": 872591,
+      "samples": [
+        852343,
+        872591,
+        945524
+      ]
+    },
+    {
+      "workers": 4,
+      "build": "candidate",
+      "batch": 32,
+      "slots": 3,
+      "median_rows_per_second": 896531,
+      "samples": [
+        870933,
+        896531,
+        958758
+      ]
+    },
+    {
+      "workers": 4,
+      "build": "candidate",
+      "batch": 48,
+      "slots": 3,
+      "median_rows_per_second": 886934,
+      "samples": [
+        886934,
+        884988,
+        958634
+      ]
+    },
+    {
+      "workers": 4,
+      "build": "candidate",
+      "batch": 100,
+      "slots": 5,
+      "median_rows_per_second": 813860,
+      "samples": [
+        788491,
+        839876,
+        813860
+      ]
+    },
+    {
+      "workers": 4,
+      "build": "candidate",
+      "batch": 200,
+      "slots": 2,
+      "median_rows_per_second": 696536,
+      "samples": [
+        696536,
+        817844,
+        638478
+      ]
+    },
+    {
+      "workers": 4,
+      "build": "candidate",
+      "batch": 200,
+      "slots": 5,
+      "median_rows_per_second": 795942,
+      "samples": [
+        789371,
+        795942,
+        821993
+      ]
+    },
+    {
+      "workers": 4,
+      "build": "candidate",
+      "batch": 400,
+      "slots": 2,
+      "median_rows_per_second": 740372,
+      "samples": [
+        707585,
+        740372,
+        742966
+      ]
+    },
+    {
+      "workers": 8,
+      "build": "baseline",
+      "batch": 100,
+      "slots": 5,
+      "median_rows_per_second": 960030,
+      "samples": [
+        870732,
+        960030,
+        1094159
+      ]
+    },
+    {
+      "workers": 8,
+      "build": "candidate",
+      "batch": 16,
+      "slots": 4,
+      "median_rows_per_second": 1574651,
+      "samples": [
+        1574651,
+        1410793,
+        1605960
+      ]
+    },
+    {
+      "workers": 8,
+      "build": "candidate",
+      "batch": 24,
+      "slots": 4,
+      "median_rows_per_second": 1508772,
+      "samples": [
+        1510283,
+        835744,
+        1508772
+      ]
+    },
+    {
+      "workers": 8,
+      "build": "candidate",
+      "batch": 32,
+      "slots": 3,
+      "median_rows_per_second": 1424879,
+      "samples": [
+        1424879,
+        1259802,
+        1590539
+      ]
+    },
+    {
+      "workers": 8,
+      "build": "candidate",
+      "batch": 48,
+      "slots": 3,
+      "median_rows_per_second": 1402589,
+      "samples": [
+        1221935,
+        1402589,
+        1561621
+      ]
+    },
+    {
+      "workers": 8,
+      "build": "candidate",
+      "batch": 100,
+      "slots": 5,
+      "median_rows_per_second": 1479628,
+      "samples": [
+        1529676,
+        1407818,
+        1479628
+      ]
+    },
+    {
+      "workers": 8,
+      "build": "candidate",
+      "batch": 200,
+      "slots": 2,
+      "median_rows_per_second": 1315271,
+      "samples": [
+        1335456,
+        1250863,
+        1315271
+      ]
+    },
+    {
+      "workers": 8,
+      "build": "candidate",
+      "batch": 200,
+      "slots": 5,
+      "median_rows_per_second": 1234243,
+      "samples": [
+        1204213,
+        1234243,
+        1337100
+      ]
+    },
+    {
+      "workers": 8,
+      "build": "candidate",
+      "batch": 400,
+      "slots": 2,
+      "median_rows_per_second": 1140049,
+      "samples": [
+        939954,
+        1140049,
+        1240524
+      ]
+    },
+    {
+      "workers": 12,
+      "build": "baseline",
+      "batch": 100,
+      "slots": 5,
+      "median_rows_per_second": 1166083,
+      "samples": [
+        985753,
+        1170388,
+        1166083
+      ]
+    },
+    {
+      "workers": 12,
+      "build": "candidate",
+      "batch": 16,
+      "slots": 4,
+      "median_rows_per_second": 1578762,
+      "samples": [
+        967015,
+        1842733,
+        1578762
+      ]
+    },
+    {
+      "workers": 12,
+      "build": "candidate",
+      "batch": 24,
+      "slots": 4,
+      "median_rows_per_second": 1639725,
+      "samples": [
+        1479594,
+        1910372,
+        1639725
+      ]
+    },
+    {
+      "workers": 12,
+      "build": "candidate",
+      "batch": 32,
+      "slots": 3,
+      "median_rows_per_second": 1644654,
+      "samples": [
+        1644654,
+        1797799,
+        1610660
+      ]
+    },
+    {
+      "workers": 12,
+      "build": "candidate",
+      "batch": 32,
+      "slots": 4,
+      "median_rows_per_second": 1611166,
+      "samples": [
+        1580350,
+        1931200,
+        1611166
+      ]
+    },
+    {
+      "workers": 12,
+      "build": "candidate",
+      "batch": 48,
+      "slots": 3,
+      "median_rows_per_second": 1495275,
+      "samples": [
+        1495275,
+        1250966,
+        1701526
+      ]
+    },
+    {
+      "workers": 12,
+      "build": "candidate",
+      "batch": 64,
+      "slots": 2,
+      "median_rows_per_second": 1598578,
+      "samples": [
+        1598578,
+        1515513,
+        1642906
+      ]
+    },
+    {
+      "workers": 12,
+      "build": "candidate",
+      "batch": 100,
+      "slots": 5,
+      "median_rows_per_second": 1609249,
+      "samples": [
+        1383531,
+        1609249,
+        1669817
+      ]
+    },
+    {
+      "workers": 12,
+      "build": "candidate",
+      "batch": 200,
+      "slots": 2,
+      "median_rows_per_second": 1577343,
+      "samples": [
+        1447698,
+        1577343,
+        1607937
+      ]
+    },
+    {
+      "workers": 12,
+      "build": "candidate",
+      "batch": 200,
+      "slots": 5,
+      "median_rows_per_second": 1403409,
+      "samples": [
+        1403409,
+        1577622,
+        1273719
+      ]
+    },
+    {
+      "workers": 12,
+      "build": "candidate",
+      "batch": 400,
+      "slots": 2,
+      "median_rows_per_second": 1382915,
+      "samples": [
+        1382915,
+        1526773,
+        1258409
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "round": 0,
+      "binary": "grid-base",
+      "workers": 12,
+      "batch": 100,
+      "slots": 5,
+      "rate": 985752.9920976434,
+      "load_start": 3.4,
+      "load_end": 9.36,
+      "waited": 10
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 100,
+      "slots": 5,
+      "rate": 1383531.3478309456,
+      "load_start": 3.27,
+      "load_end": 7.85,
+      "waited": 200
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 200,
+      "slots": 2,
+      "rate": 1447698.2323113524,
+      "load_start": 3.3,
+      "load_end": 7.39,
+      "waited": 90
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 200,
+      "slots": 5,
+      "rate": 1403409.3637665578,
+      "load_start": 3.43,
+      "load_end": 11.19,
+      "waited": 90
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 400,
+      "slots": 2,
+      "rate": 1382914.5221198369,
+      "load_start": 3.45,
+      "load_end": 7.47,
+      "waited": 350
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 16,
+      "slots": 4,
+      "rate": 967015.102757261,
+      "load_start": 3.36,
+      "load_end": 9.78,
+      "waited": 90
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 24,
+      "slots": 4,
+      "rate": 1479593.5338322518,
+      "load_start": 3.34,
+      "load_end": 7.56,
+      "waited": 110
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 32,
+      "slots": 3,
+      "rate": 1644653.8091338372,
+      "load_start": 3.27,
+      "load_end": 6.37,
+      "waited": 150
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 32,
+      "slots": 4,
+      "rate": 1580350.40238541,
+      "load_start": 3.04,
+      "load_end": 7.09,
+      "waited": 70
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 48,
+      "slots": 3,
+      "rate": 1495275.4436364246,
+      "load_start": 3.44,
+      "load_end": 7.71,
+      "waited": 90
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 64,
+      "slots": 2,
+      "rate": 1598578.2618367106,
+      "load_start": 3.39,
+      "load_end": 6.96,
+      "waited": 160
+    },
+    {
+      "round": 0,
+      "binary": "grid-base",
+      "workers": 8,
+      "batch": 100,
+      "slots": 5,
+      "rate": 870732.4926746697,
+      "load_start": 3.45,
+      "load_end": 8.0,
+      "waited": 210
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 100,
+      "slots": 5,
+      "rate": 1529675.6307918215,
+      "load_start": 3.19,
+      "load_end": 6.02,
+      "waited": 570
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 200,
+      "slots": 2,
+      "rate": 1335456.3008252303,
+      "load_start": 3.15,
+      "load_end": 5.99,
+      "waited": 90
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 200,
+      "slots": 5,
+      "rate": 1204212.8483581014,
+      "load_start": 3.41,
+      "load_end": 8.74,
+      "waited": 110
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 400,
+      "slots": 2,
+      "rate": 939954.4082163953,
+      "load_start": 3.39,
+      "load_end": 9.62,
+      "waited": 120
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 16,
+      "slots": 4,
+      "rate": 1574651.408633277,
+      "load_start": 3.23,
+      "load_end": 5.48,
+      "waited": 470
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 24,
+      "slots": 4,
+      "rate": 1510282.6508389143,
+      "load_start": 3.33,
+      "load_end": 5.89,
+      "waited": 290
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 32,
+      "slots": 3,
+      "rate": 1424879.4345622384,
+      "load_start": 3.3,
+      "load_end": 6.36,
+      "waited": 50
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 48,
+      "slots": 3,
+      "rate": 1221935.2841474588,
+      "load_start": 3.5,
+      "load_end": 7.36,
+      "waited": 100
+    },
+    {
+      "round": 0,
+      "binary": "grid-base",
+      "workers": 4,
+      "batch": 100,
+      "slots": 5,
+      "rate": 562750.5908544116,
+      "load_start": 3.23,
+      "load_end": 6.76,
+      "waited": 170
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 100,
+      "slots": 5,
+      "rate": 788490.9599046435,
+      "load_start": 3.43,
+      "load_end": 5.38,
+      "waited": 100
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 200,
+      "slots": 2,
+      "rate": 696535.8265183143,
+      "load_start": 3.25,
+      "load_end": 6.81,
+      "waited": 280
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 200,
+      "slots": 5,
+      "rate": 789371.3567655594,
+      "load_start": 3.49,
+      "load_end": 5.83,
+      "waited": 120
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 400,
+      "slots": 2,
+      "rate": 707585.2546697952,
+      "load_start": 3.5,
+      "load_end": 5.94,
+      "waited": 580
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 16,
+      "slots": 4,
+      "rate": 812003.0548815153,
+      "load_start": 3.45,
+      "load_end": 6.17,
+      "waited": 170
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 24,
+      "slots": 4,
+      "rate": 852342.5673146576,
+      "load_start": 3.29,
+      "load_end": 5.1,
+      "waited": 310
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 32,
+      "slots": 3,
+      "rate": 870932.8786581093,
+      "load_start": 3.43,
+      "load_end": 6.18,
+      "waited": 540
+    },
+    {
+      "round": 0,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 48,
+      "slots": 3,
+      "rate": 886933.6436714153,
+      "load_start": 3.38,
+      "load_end": 6.41,
+      "waited": 410
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 48,
+      "slots": 3,
+      "rate": 884987.5686902461,
+      "load_start": 3.42,
+      "load_end": 5.21,
+      "waited": 110
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 32,
+      "slots": 3,
+      "rate": 896531.109332518,
+      "load_start": 3.33,
+      "load_end": 4.81,
+      "waited": 330
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 24,
+      "slots": 4,
+      "rate": 872590.9248297246,
+      "load_start": 3.41,
+      "load_end": 7.29,
+      "waited": 80
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 16,
+      "slots": 4,
+      "rate": 838358.7013778075,
+      "load_start": 3.29,
+      "load_end": 5.16,
+      "waited": 120
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 400,
+      "slots": 2,
+      "rate": 740372.1862085653,
+      "load_start": 3.49,
+      "load_end": 5.23,
+      "waited": 80
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 200,
+      "slots": 5,
+      "rate": 795941.6408226488,
+      "load_start": 3.46,
+      "load_end": 5.2,
+      "waited": 70
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 200,
+      "slots": 2,
+      "rate": 817843.5232270202,
+      "load_start": 3.29,
+      "load_end": 5.08,
+      "waited": 70
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 100,
+      "slots": 5,
+      "rate": 839876.4550015874,
+      "load_start": 3.45,
+      "load_end": 5.88,
+      "waited": 200
+    },
+    {
+      "round": 1,
+      "binary": "grid-base",
+      "workers": 4,
+      "batch": 100,
+      "slots": 5,
+      "rate": 545562.4453120413,
+      "load_start": 3.46,
+      "load_end": 5.54,
+      "waited": 490
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 48,
+      "slots": 3,
+      "rate": 1402589.3868901338,
+      "load_start": 3.4,
+      "load_end": 6.99,
+      "waited": 80
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 32,
+      "slots": 3,
+      "rate": 1259801.8357437528,
+      "load_start": 3.49,
+      "load_end": 6.85,
+      "waited": 280
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 24,
+      "slots": 4,
+      "rate": 835743.9860897621,
+      "load_start": 3.45,
+      "load_end": 14.61,
+      "waited": 90
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 16,
+      "slots": 4,
+      "rate": 1410792.9475838612,
+      "load_start": 3.32,
+      "load_end": 6.38,
+      "waited": 340
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 400,
+      "slots": 2,
+      "rate": 1140049.3857776816,
+      "load_start": 3.45,
+      "load_end": 6.75,
+      "waited": 60
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 200,
+      "slots": 5,
+      "rate": 1234242.7728891908,
+      "load_start": 3.38,
+      "load_end": 6.4,
+      "waited": 470
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 200,
+      "slots": 2,
+      "rate": 1250863.186755516,
+      "load_start": 3.46,
+      "load_end": 6.35,
+      "waited": 60
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 100,
+      "slots": 5,
+      "rate": 1407818.3467254667,
+      "load_start": 3.32,
+      "load_end": 6.01,
+      "waited": 70
+    },
+    {
+      "round": 1,
+      "binary": "grid-base",
+      "workers": 8,
+      "batch": 100,
+      "slots": 5,
+      "rate": 960029.9337333337,
+      "load_start": 3.48,
+      "load_end": 6.9,
+      "waited": 70
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 64,
+      "slots": 2,
+      "rate": 1515512.6071554972,
+      "load_start": 3.41,
+      "load_end": 7.05,
+      "waited": 110
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 48,
+      "slots": 3,
+      "rate": 1250966.048757981,
+      "load_start": 3.35,
+      "load_end": 9.59,
+      "waited": 650
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 32,
+      "slots": 4,
+      "rate": 1931200.165242138,
+      "load_start": 3.28,
+      "load_end": 5.93,
+      "waited": 270
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 32,
+      "slots": 3,
+      "rate": 1797798.5553264031,
+      "load_start": 3.29,
+      "load_end": 7.59,
+      "waited": 80
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 24,
+      "slots": 4,
+      "rate": 1910371.9089136466,
+      "load_start": 3.26,
+      "load_end": 6.05,
+      "waited": 100
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 16,
+      "slots": 4,
+      "rate": 1842733.2372584064,
+      "load_start": 3.22,
+      "load_end": 6.05,
+      "waited": 60
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 400,
+      "slots": 2,
+      "rate": 1526772.6259592187,
+      "load_start": 3.24,
+      "load_end": 7.17,
+      "waited": 60
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 200,
+      "slots": 5,
+      "rate": 1577621.9532089753,
+      "load_start": 3.12,
+      "load_end": 7.75,
+      "waited": 70
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 200,
+      "slots": 2,
+      "rate": 1577343.2880849997,
+      "load_start": 3.5,
+      "load_end": 6.27,
+      "waited": 70
+    },
+    {
+      "round": 1,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 100,
+      "slots": 5,
+      "rate": 1609248.6469169236,
+      "load_start": 3.45,
+      "load_end": 8.07,
+      "waited": 60
+    },
+    {
+      "round": 1,
+      "binary": "grid-base",
+      "workers": 12,
+      "batch": 100,
+      "slots": 5,
+      "rate": 1170388.2212338212,
+      "load_start": 3.46,
+      "load_end": 8.71,
+      "waited": 140
+    },
+    {
+      "round": 2,
+      "binary": "grid-base",
+      "workers": 12,
+      "batch": 100,
+      "slots": 5,
+      "rate": 1166082.8393557419,
+      "load_start": 3.41,
+      "load_end": 8.6,
+      "waited": 70
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 100,
+      "slots": 5,
+      "rate": 1669817.0896970846,
+      "load_start": 3.14,
+      "load_end": 7.0,
+      "waited": 80
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 200,
+      "slots": 2,
+      "rate": 1607937.4814984985,
+      "load_start": 3.19,
+      "load_end": 6.78,
+      "waited": 70
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 200,
+      "slots": 5,
+      "rate": 1273719.0873850503,
+      "load_start": 3.17,
+      "load_end": 9.98,
+      "waited": 70
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 400,
+      "slots": 2,
+      "rate": 1258408.7132123162,
+      "load_start": 3.29,
+      "load_end": 13.28,
+      "waited": 310
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 16,
+      "slots": 4,
+      "rate": 1578762.4817903147,
+      "load_start": 3.37,
+      "load_end": 6.88,
+      "waited": 370
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 24,
+      "slots": 4,
+      "rate": 1639724.585391564,
+      "load_start": 3.47,
+      "load_end": 7.77,
+      "waited": 110
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 32,
+      "slots": 3,
+      "rate": 1610659.90557424,
+      "load_start": 3.05,
+      "load_end": 7.03,
+      "waited": 270
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 32,
+      "slots": 4,
+      "rate": 1611166.1655854098,
+      "load_start": 3.42,
+      "load_end": 6.82,
+      "waited": 90
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 48,
+      "slots": 3,
+      "rate": 1701526.242453133,
+      "load_start": 3.44,
+      "load_end": 5.98,
+      "waited": 150
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 12,
+      "batch": 64,
+      "slots": 2,
+      "rate": 1642906.0636533976,
+      "load_start": 3.47,
+      "load_end": 6.49,
+      "waited": 90
+    },
+    {
+      "round": 2,
+      "binary": "grid-base",
+      "workers": 8,
+      "batch": 100,
+      "slots": 5,
+      "rate": 1094158.9643517334,
+      "load_start": 3.44,
+      "load_end": 6.89,
+      "waited": 450
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 100,
+      "slots": 5,
+      "rate": 1479627.6678134992,
+      "load_start": 3.39,
+      "load_end": 5.73,
+      "waited": 70
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 200,
+      "slots": 2,
+      "rate": 1315270.7421525316,
+      "load_start": 3.46,
+      "load_end": 6.05,
+      "waited": 50
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 200,
+      "slots": 5,
+      "rate": 1337100.4951547678,
+      "load_start": 3.39,
+      "load_end": 6.37,
+      "waited": 80
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 400,
+      "slots": 2,
+      "rate": 1240523.6463011221,
+      "load_start": 3.45,
+      "load_end": 6.65,
+      "waited": 90
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 16,
+      "slots": 4,
+      "rate": 1605960.3881076034,
+      "load_start": 3.32,
+      "load_end": 5.73,
+      "waited": 80
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 24,
+      "slots": 4,
+      "rate": 1508771.8343854784,
+      "load_start": 3.48,
+      "load_end": 5.6,
+      "waited": 60
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 32,
+      "slots": 3,
+      "rate": 1590538.938825594,
+      "load_start": 3.5,
+      "load_end": 5.65,
+      "waited": 50
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 8,
+      "batch": 48,
+      "slots": 3,
+      "rate": 1561621.1966955462,
+      "load_start": 3.21,
+      "load_end": 5.55,
+      "waited": 70
+    },
+    {
+      "round": 2,
+      "binary": "grid-base",
+      "workers": 4,
+      "batch": 100,
+      "slots": 5,
+      "rate": 599584.728372606,
+      "load_start": 3.16,
+      "load_end": 5.64,
+      "waited": 110
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 100,
+      "slots": 5,
+      "rate": 813859.96326168,
+      "load_start": 3.49,
+      "load_end": 6.4,
+      "waited": 70
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 200,
+      "slots": 2,
+      "rate": 638478.2917021677,
+      "load_start": 3.4,
+      "load_end": 7.2,
+      "waited": 50
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 200,
+      "slots": 5,
+      "rate": 821992.6799516596,
+      "load_start": 3.27,
+      "load_end": 5.24,
+      "waited": 310
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 400,
+      "slots": 2,
+      "rate": 742966.0559410003,
+      "load_start": 3.43,
+      "load_end": 4.28,
+      "waited": 40
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 16,
+      "slots": 4,
+      "rate": 819628.7059422293,
+      "load_start": 3.42,
+      "load_end": 4.29,
+      "waited": 20
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 24,
+      "slots": 4,
+      "rate": 945523.9973140965,
+      "load_start": 3.5,
+      "load_end": 4.53,
+      "waited": 20
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 32,
+      "slots": 3,
+      "rate": 958758.2412536425,
+      "load_start": 3.13,
+      "load_end": 4.52,
+      "waited": 30
+    },
+    {
+      "round": 2,
+      "binary": "grid-c18",
+      "workers": 4,
+      "batch": 48,
+      "slots": 3,
+      "rate": 958633.6422296626,
+      "load_start": 3.46,
+      "load_end": 4.37,
+      "waited": 40
+    },
+    {
+      "kind": "w1",
+      "round": 0,
+      "batch": 200,
+      "slots": 5,
+      "rate": 252448.37370801182
+    },
+    {
+      "kind": "w1",
+      "round": 0,
+      "batch": 32,
+      "slots": 3,
+      "rate": 257767.5689971166
+    },
+    {
+      "kind": "w1",
+      "round": 0,
+      "batch": 100,
+      "slots": 5,
+      "rate": 247881.20889941617
+    },
+    {
+      "kind": "w1",
+      "round": 1,
+      "batch": 200,
+      "slots": 5,
+      "rate": 250263.5109220697
+    },
+    {
+      "kind": "w1",
+      "round": 1,
+      "batch": 32,
+      "slots": 3,
+      "rate": 262331.6125783372
+    },
+    {
+      "kind": "w1",
+      "round": 1,
+      "batch": 100,
+      "slots": 5,
+      "rate": 246809.13909912133
+    }
+  ]
+}
