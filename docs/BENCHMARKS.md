@@ -1,12 +1,14 @@
 # ultravin benchmarks
 
-The README uses the [September 15 headline benchmark](#headline-throughput-september-15-2026):
-**1,147,742 VIN/s on twelve workers**, **521,234 VIN/s on four**, and
-**164,316 VIN/s on one**, all with automatic batching over twenty million unique
+The README uses the [September 23 headline benchmark](#headline-throughput-september-23-2026):
+**1,853,346 VIN/s on twelve workers**, **935,066 VIN/s on four**, and
+**257,709 VIN/s on one**, all with automatic batching over twenty million unique
 VINs on an Apple M2 Max. That section compares every engine against one
 baseline — NHTSA MSSQL `spVinDecode` at 22.5 VIN/s — so one ultravin core is
-**~7,303× the baseline** and twelve are **~51,011×**. The [September 14 multicore
-session](MULTICORE_OPTIMIZATION_2026_09_14.md) is the previous headline —
+**~11,454× the baseline** and twelve are **~82,371×**. The [September 15
+headline](#headline-throughput-september-15-2026) it replaces measured
+1,147,742, 521,234, and 164,316 VIN/s on the same corpus and host. The [September 14 multicore
+session](MULTICORE_OPTIMIZATION_2026_09_14.md) is the headline before that —
 400,843 VIN/s on four workers and 105,372 on one, with 656,900 at eight workers
 and 630,092 at twelve; its [coordination
 follow-up](COORDINATION_EXPERIMENTS_2026_09_14.md) added a further 3.3% at eight
@@ -30,6 +32,42 @@ The [shipped predictor](BATCH_PREDICTOR.md) adds worker-count and single-core
 calibration, batch-size and memory heatmaps, and a separate validation of the
 current automatic defaults at 4, 8, and 12 workers.
 The comparison tables below preserve their dated measurement sessions.
+
+## Headline throughput (September 23, 2026)
+
+Commit `5750746`, Apple M2 Max (eight performance and four efficiency cores),
+**20,000,000 unique synthetic VINs**, automatic batching, decode clock frozen at
+`2026-09-01T00:00:00Z`.
+
+| engine | VIN/s | vs NHTSA MSSQL | vs September 15 |
+|---|---:|---:|---:|
+| **ultravin** — automatic batches, 12 cores | **1,853,346** | ~82,371× faster | 1.61× |
+| **ultravin** — automatic batches, 4 cores | **935,066** | ~41,558× faster | 1.79× |
+| **ultravin** — automatic batches, 1 core | **257,709** | ~11,454× faster | 1.57× |
+
+Each figure is the median of two fresh-process trials, run 1/4/12 then 12/4/1,
+with the September 15 method: one untimed unique warm pass, then one timed
+unique pass including calibration, live tuning, full native results, order
+restoration, and synchronous cleanup. Trials were 260,117 / 255,301 (one
+worker), 932,712 / 937,420 (four), and 1,842,584 / 1,864,109 (twelve). The host
+is shared with other work, so each trial waited until the one-minute load
+average was at most 2.5 (2.2–2.5 at start). Automatic batching chose 32 rows ×
+3 slots on one and four workers and 24 rows × 4 slots on twelve. The timed
+binary is SHA-256 `f7490705…9468`.
+
+The gain comes from the September 22 decoder work: vehicle-type defaults leave
+the per-year passes and are copied as prebuilt records into the winning
+result; repeated correction texts and make names are shared instead of
+rebuilt; several scans, a sort, and a character-by-character truncation are
+gone; and the correction charsets and pattern-literal buckets are compact.
+Steady-state instructions per VIN on the native path fall from 62.6k to about
+33k. All 1,862,306 full-result fingerprints, plus 298,507 fingerprints of this
+corpus, match the previous build byte for byte. The native slot plans were
+then re-measured on the faster decoder
+([raw runs](../scripts/bench/native_plan_grid_2026_09_23.json)); smaller plans
+that keep each worker's in-flight results in cache add about 10% at four
+workers and 20% at eight, and match the old pick within noise at twelve.
+Reproduce with the commands in the September 15 section below.
 
 ## Headline throughput (September 15, 2026)
 

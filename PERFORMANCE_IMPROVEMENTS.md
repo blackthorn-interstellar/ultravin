@@ -20,6 +20,7 @@ identified as such.
 - [September 9 follow-up: index joins and narrow matching](#september-9-follow-up-index-joins-and-narrow-matching)
 - [September 10: direct full JSON output](#september-10-direct-full-json-output)
 - [September 11: check digits and result projection](#september-11-check-digits-and-result-projection)
+- [September 22-23: deferred defaults and retuned slot plans](#september-22-23-deferred-defaults-and-retuned-slot-plans)
 - [Experiments we rejected or replaced](#experiments-we-rejected-or-replaced)
 - [SQL oracle and development resources](#sql-oracle-and-development-resources)
 - [Correctness and measurement rules](#correctness-and-measurement-rules)
@@ -560,6 +561,45 @@ and output ownership remain unchanged. The
 [September 11 report](docs/THROUGHPUT_2026_09_11.md) records the measurements,
 startup/memory checks, rejected experiments and reproduction commands, with
 [raw evidence](scripts/bench/throughput_2026_09_11.json).
+
+## September 22-23: deferred defaults and retuned slot plans
+
+Commits `6712776` through `5750746`, against `35ff816`. The target was 2× on
+the headline benchmark; it was not reached. The [September 23
+headline](docs/BENCHMARKS.md#headline-throughput-september-23-2026) measures
+1.57× on one worker, 1.79× on four, and 1.61× on twelve.
+
+- **Defaults leave the passes.** 44 of 58 output elements per headline VIN are
+  vehicle-type defaults. When no default row targets an element that errors,
+  scoring, or corrections read (checked once per database), passes carry only
+  the vehicle type: scoring adds the applicable rows' element weights, and the
+  winner copies finished default records bitwise (embedded database, full
+  results) or inserts the items exactly where the core pass would have (every
+  other output shape). A unit test compares both paths over the built-in cover.
+- **Shared texts.** AdditionalDecodingInfo without invalid characters is a
+  function of five flags and the unused-position set, so it is built once per
+  combination; make id text and uppercase names come from a per-database table.
+- **Waste removed.** ASCII truncation by byte instead of `char_indices().nth`;
+  word-at-a-time tab/CR/LF scrub; projection by a precomputed per-element output
+  rank bitmap instead of a sort; records written into reserved capacity; one
+  scan for error item facts; a hash prefilter for check-digit exception VINs.
+- **Compact lookups.** Pattern literal buckets in one open-addressed table;
+  correction charsets frozen into inline ASCII masks plus one rendered string
+  (peak RSS 398 → 378 MiB on 2M VINs).
+- **Slot plans re-measured.** On the faster decoder, plans with ~64-96
+  in-flight rows per worker lead; the table now picks 32×3 at four workers
+  (+10%), 16×4 at eight (+20%), and 24×4 at twelve (+2%, within noise).
+  [Raw runs](scripts/bench/native_plan_grid_2026_09_23.json).
+
+Steady-state instructions per VIN on the native path fell from 62.6k to about
+33k. About a third of the remaining single-core time is cache misses in
+database lookups: the same build runs ~1.5× faster when each VIN repeats four
+times in a row. Rejected as within noise: flattening per-schema key groups into
+one allocation, probing all literal buckets before matching, a per-database
+conversion-source prefilter, presizing error-byte buffers, a larger key
+expansion memo, and unchecked projection-order writes. Correctness: all
+1,862,306 full-result fingerprints and 298,507 headline-corpus fingerprints
+matched the baseline after every change; `make check` passed on each commit.
 
 ## Experiments we rejected or replaced
 
