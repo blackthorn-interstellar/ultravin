@@ -1,0 +1,537 @@
+{
+ "date": "2026-09-23",
+ "commit": "25bec64",
+ "binary_sha256": "61afde15c5eeb66d407f4bd36c64dd6e980e96914cf661f6c71193e72ee76afa",
+ "shuffled_corpus": "target/bench/independent-sink-corpus.txt",
+ "shuffled_sha256": "0d6224e99d0a7f241e3dcd052ce973c8baea774feb0831db0071423de726bd9a",
+ "sorted_corpus": "target/bench/independent-sink-corpus-sorted.txt (LC_ALL=C sort of the shuffled corpus)",
+ "sorted_sha256": "5a4ee330b05ed03005fe746f5f97e229fb9d24bb03c675ec8830f7583c79381f",
+ "command": "RAYON_NUM_THREADS=$N ULTRAVIN_NOW_MICROS=1788220800000000 target/release/examples/throughput $CORPUS 10 batch full auto",
+ "order": "1/4/12 shuffled-then-sorted, then 12/4/1 sorted-then-shuffled",
+ "runs": [
+  {
+   "workers": 1,
+   "corpus": "shuffled",
+   "load_at_start": "{ 2.06 2.41 2.64 }",
+   "result": {
+    "actual_rows_per_second": 215415.757073233,
+    "average_busy_cores": 0.9884812141362405,
+    "batch_size": "auto",
+    "benchmark": "batch",
+    "elapsed_seconds": 92.843718917,
+    "format": "full",
+    "memory_bytes": 536870912,
+    "predictor": {
+     "batch_size": 32,
+     "estimated_peak_rows_per_second": 239000.07034910104,
+     "estimated_peak_rss_bytes": null,
+     "estimated_rows_per_second": 239000.07034910104,
+     "estimated_working_bytes": 1671168,
+     "max_inflight_rows": 96,
+     "memory_limited": false,
+     "model_version": "ultravin-native-slots-v1",
+     "single_core_rows_per_second": 330891.7143939188,
+     "slots_per_worker": 3,
+     "target_fraction": 0.99,
+     "workers": 1
+    },
+    "process_counters": {
+     "cycles": 299950227114,
+     "instructions": 567122043190
+    },
+    "process_system_cpu_seconds": 3.6277790000000003,
+    "process_user_cpu_seconds": 88.14649299999999,
+    "result_owner": "worker_slots",
+    "rows": 20000000,
+    "selected_size_batches": {
+     "32": 625000
+    },
+    "selected_size_rows": {
+     "32": 20000000
+    },
+    "workers": 1
+   }
+  },
+  {
+   "workers": 1,
+   "corpus": "sorted",
+   "load_at_start": "{ 2.89 3.99 3.57 }",
+   "result": {
+    "actual_rows_per_second": 391814.37696846534,
+    "average_busy_cores": 1.0239760580063355,
+    "batch_size": "auto",
+    "benchmark": "batch",
+    "elapsed_seconds": 51.044579208,
+    "format": "full",
+    "memory_bytes": 536870912,
+    "predictor": {
+     "batch_size": 32,
+     "estimated_peak_rows_per_second": 248154.963833958,
+     "estimated_peak_rss_bytes": null,
+     "estimated_rows_per_second": 248154.963833958,
+     "estimated_working_bytes": 1671168,
+     "max_inflight_rows": 96,
+     "memory_limited": false,
+     "model_version": "ultravin-native-slots-v1",
+     "single_core_rows_per_second": 343566.5156852877,
+     "slots_per_worker": 3,
+     "target_fraction": 0.99,
+     "workers": 1
+    },
+    "process_counters": {
+     "cycles": 171963753356,
+     "instructions": 548252130045
+    },
+    "process_system_cpu_seconds": 2.750708,
+    "process_user_cpu_seconds": 49.517719,
+    "result_owner": "worker_slots",
+    "rows": 20000000,
+    "selected_size_batches": {
+     "32": 625000
+    },
+    "selected_size_rows": {
+     "32": 20000000
+    },
+    "workers": 1
+   }
+  },
+  {
+   "workers": 4,
+   "corpus": "shuffled",
+   "load_at_start": "{ 2.96 3.79 3.55 }",
+   "result": {
+    "actual_rows_per_second": 927208.4336773253,
+    "average_busy_cores": 4.051623712569085,
+    "batch_size": "auto",
+    "benchmark": "batch",
+    "elapsed_seconds": 21.570123042,
+    "format": "full",
+    "memory_bytes": 536870912,
+    "predictor": {
+     "batch_size": 32,
+     "estimated_peak_rows_per_second": 910716.2705177163,
+     "estimated_peak_rss_bytes": null,
+     "estimated_rows_per_second": 910716.2705177163,
+     "estimated_working_bytes": 6684672,
+     "max_inflight_rows": 384,
+     "memory_limited": false,
+     "model_version": "ultravin-native-slots-v1",
+     "single_core_rows_per_second": 365540.39292736456,
+     "slots_per_worker": 3,
+     "target_fraction": 0.99,
+     "workers": 4
+    },
+    "process_counters": {
+     "cycles": 285621503252,
+     "instructions": 564756992892
+    },
+    "process_system_cpu_seconds": 2.8509089999999997,
+    "process_user_cpu_seconds": 84.54311299999999,
+    "result_owner": "worker_slots",
+    "rows": 20000000,
+    "selected_size_batches": {
+     "32": 625000
+    },
+    "selected_size_rows": {
+     "32": 20000000
+    },
+    "workers": 4
+   }
+  },
+  {
+   "workers": 4,
+   "corpus": "sorted",
+   "load_at_start": "{ 2.82 3.64 3.55 }",
+   "result": {
+    "actual_rows_per_second": 1479173.965602835,
+    "average_busy_cores": 4.066698234699452,
+    "batch_size": "auto",
+    "benchmark": "batch",
+    "elapsed_seconds": 13.521060041,
+    "format": "full",
+    "memory_bytes": 536870912,
+    "predictor": {
+     "batch_size": 32,
+     "estimated_peak_rows_per_second": 887071.8468435103,
+     "estimated_peak_rss_bytes": null,
+     "estimated_rows_per_second": 887071.8468435103,
+     "estimated_working_bytes": 6684672,
+     "max_inflight_rows": 384,
+     "memory_limited": false,
+     "model_version": "ultravin-native-slots-v1",
+     "single_core_rows_per_second": 356050.0695410292,
+     "slots_per_worker": 3,
+     "target_fraction": 0.99,
+     "workers": 4
+    },
+    "process_counters": {
+     "cycles": 179696812342,
+     "instructions": 550014802174
+    },
+    "process_system_cpu_seconds": 2.3301389999999995,
+    "process_user_cpu_seconds": 52.65593199999999,
+    "result_owner": "worker_slots",
+    "rows": 20000000,
+    "selected_size_batches": {
+     "32": 625000
+    },
+    "selected_size_rows": {
+     "32": 20000000
+    },
+    "workers": 4
+   }
+  },
+  {
+   "workers": 12,
+   "corpus": "shuffled",
+   "load_at_start": "{ 2.95 3.54 3.53 }",
+   "result": {
+    "actual_rows_per_second": 1756374.6098958508,
+    "average_busy_cores": 10.51980809707692,
+    "batch_size": "auto",
+    "benchmark": "batch",
+    "elapsed_seconds": 11.387092416,
+    "format": "full",
+    "memory_bytes": 536870912,
+    "predictor": {
+     "batch_size": 24,
+     "estimated_peak_rows_per_second": 1569140.575595363,
+     "estimated_peak_rss_bytes": null,
+     "estimated_rows_per_second": 1564371.1513534319,
+     "estimated_working_bytes": 20054016,
+     "max_inflight_rows": 1152,
+     "memory_limited": false,
+     "model_version": "ultravin-native-slots-v1",
+     "single_core_rows_per_second": 343431.9313887395,
+     "slots_per_worker": 4,
+     "target_fraction": 0.99,
+     "workers": 12
+    },
+    "process_counters": {
+     "cycles": 360256940647,
+     "instructions": 564151534826
+    },
+    "process_system_cpu_seconds": 4.045052,
+    "process_user_cpu_seconds": 115.744975,
+    "result_owner": "worker_slots",
+    "rows": 20000000,
+    "selected_size_batches": {
+     "24": 833333,
+     "8": 1
+    },
+    "selected_size_rows": {
+     "24": 19999992,
+     "8": 8
+    },
+    "workers": 12
+   }
+  },
+  {
+   "workers": 12,
+   "corpus": "sorted",
+   "load_at_start": "{ 2.90 3.85 3.72 }",
+   "result": {
+    "actual_rows_per_second": 2450885.874614134,
+    "average_busy_cores": 9.66578281850114,
+    "batch_size": "auto",
+    "benchmark": "batch",
+    "elapsed_seconds": 16.320629375,
+    "format": "full",
+    "memory_bytes": 536870912,
+    "predictor": {
+     "batch_size": 24,
+     "estimated_peak_rows_per_second": 1597266.7429185507,
+     "estimated_peak_rss_bytes": null,
+     "estimated_rows_per_second": 1592411.8288063363,
+     "estimated_working_bytes": 20054016,
+     "max_inflight_rows": 1152,
+     "memory_limited": false,
+     "model_version": "ultravin-native-slots-v1",
+     "single_core_rows_per_second": 349587.80047822517,
+     "slots_per_worker": 4,
+     "target_fraction": 0.99,
+     "workers": 12
+    },
+    "process_counters": {
+     "cycles": 474710517712,
+     "instructions": 1109554828042
+    },
+    "process_system_cpu_seconds": 9.45384,
+    "process_user_cpu_seconds": 148.297819,
+    "result_owner": "worker_slots",
+    "rows": 40000000,
+    "selected_size_batches": {
+     "24": 1666666,
+     "8": 2
+    },
+    "selected_size_rows": {
+     "24": 39999984,
+     "8": 16
+    },
+    "workers": 12
+   }
+  },
+  {
+   "workers": 12,
+   "corpus": "sorted",
+   "load_at_start": "{ 2.92 4.04 3.88 }",
+   "result": {
+    "actual_rows_per_second": 2782803.709696491,
+    "average_busy_cores": 10.619919808119425,
+    "batch_size": "auto",
+    "benchmark": "batch",
+    "elapsed_seconds": 14.373992625,
+    "format": "full",
+    "memory_bytes": 536870912,
+    "predictor": {
+     "batch_size": 24,
+     "estimated_peak_rows_per_second": 1589398.872206296,
+     "estimated_peak_rss_bytes": null,
+     "estimated_rows_per_second": 1584567.8725947267,
+     "estimated_working_bytes": 20054016,
+     "max_inflight_rows": 1152,
+     "memory_limited": false,
+     "model_version": "ultravin-native-slots-v1",
+     "single_core_rows_per_second": 347865.7890302698,
+     "slots_per_worker": 4,
+     "target_fraction": 0.99,
+     "workers": 12
+    },
+    "process_counters": {
+     "cycles": 458734452733,
+     "instructions": 1107400369140
+    },
+    "process_system_cpu_seconds": 8.81933,
+    "process_user_cpu_seconds": 143.831319,
+    "result_owner": "worker_slots",
+    "rows": 40000000,
+    "selected_size_batches": {
+     "24": 1666666,
+     "8": 2
+    },
+    "selected_size_rows": {
+     "24": 39999984,
+     "8": 16
+    },
+    "workers": 12
+   }
+  },
+  {
+   "workers": 12,
+   "corpus": "shuffled",
+   "load_at_start": "{ 2.94 4.10 3.99 }",
+   "result": {
+    "actual_rows_per_second": 1773177.6559267077,
+    "average_busy_cores": 10.540512898761605,
+    "batch_size": "auto",
+    "benchmark": "batch",
+    "elapsed_seconds": 11.279185666,
+    "format": "full",
+    "memory_bytes": 536870912,
+    "predictor": {
+     "batch_size": 24,
+     "estimated_peak_rows_per_second": 1634558.7107014249,
+     "estimated_peak_rss_bytes": null,
+     "estimated_rows_per_second": 1629590.447143062,
+     "estimated_working_bytes": 20054016,
+     "max_inflight_rows": 1152,
+     "memory_limited": false,
+     "model_version": "ultravin-native-slots-v1",
+     "single_core_rows_per_second": 357749.7540470441,
+     "slots_per_worker": 4,
+     "target_fraction": 0.99,
+     "workers": 12
+    },
+    "process_counters": {
+     "cycles": 357245178033,
+     "instructions": 563872349525
+    },
+    "process_system_cpu_seconds": 3.9917749999999996,
+    "process_user_cpu_seconds": 114.896627,
+    "result_owner": "worker_slots",
+    "rows": 20000000,
+    "selected_size_batches": {
+     "24": 833333,
+     "8": 1
+    },
+    "selected_size_rows": {
+     "24": 19999992,
+     "8": 8
+    },
+    "workers": 12
+   }
+  },
+  {
+   "workers": 4,
+   "corpus": "sorted",
+   "load_at_start": "{ 2.82 3.97 3.97 }",
+   "result": {
+    "actual_rows_per_second": 1470894.5500575532,
+    "average_busy_cores": 4.071641451438496,
+    "batch_size": "auto",
+    "benchmark": "batch",
+    "elapsed_seconds": 13.597167791,
+    "format": "full",
+    "memory_bytes": 536870912,
+    "predictor": {
+     "batch_size": 32,
+     "estimated_peak_rows_per_second": 892086.888852889,
+     "estimated_peak_rss_bytes": null,
+     "estimated_rows_per_second": 892086.888852889,
+     "estimated_working_bytes": 6684672,
+     "max_inflight_rows": 384,
+     "memory_limited": false,
+     "model_version": "ultravin-native-slots-v1",
+     "single_core_rows_per_second": 358062.99111276463,
+     "slots_per_worker": 3,
+     "target_fraction": 0.99,
+     "workers": 4
+    },
+    "process_counters": {
+     "cycles": 180881106173,
+     "instructions": 550061864977
+    },
+    "process_system_cpu_seconds": 2.5223310000000003,
+    "process_user_cpu_seconds": 52.840461000000005,
+    "result_owner": "worker_slots",
+    "rows": 20000000,
+    "selected_size_batches": {
+     "32": 625000
+    },
+    "selected_size_rows": {
+     "32": 20000000
+    },
+    "workers": 4
+   }
+  },
+  {
+   "workers": 4,
+   "corpus": "shuffled",
+   "load_at_start": "{ 2.95 3.82 3.92 }",
+   "result": {
+    "actual_rows_per_second": 943959.7674575238,
+    "average_busy_cores": 4.055039147633751,
+    "batch_size": "auto",
+    "benchmark": "batch",
+    "elapsed_seconds": 21.187343666,
+    "format": "full",
+    "memory_bytes": 536870912,
+    "predictor": {
+     "batch_size": 32,
+     "estimated_peak_rows_per_second": 879529.1807399738,
+     "estimated_peak_rss_bytes": null,
+     "estimated_rows_per_second": 879529.1807399738,
+     "estimated_working_bytes": 6684672,
+     "max_inflight_rows": 384,
+     "memory_limited": false,
+     "model_version": "ultravin-native-slots-v1",
+     "single_core_rows_per_second": 353022.6182694721,
+     "slots_per_worker": 3,
+     "target_fraction": 0.99,
+     "workers": 4
+    },
+    "process_counters": {
+     "cycles": 280735357538,
+     "instructions": 564632377547
+    },
+    "process_system_cpu_seconds": 2.884519,
+    "process_user_cpu_seconds": 83.030989,
+    "result_owner": "worker_slots",
+    "rows": 20000000,
+    "selected_size_batches": {
+     "32": 625000
+    },
+    "selected_size_rows": {
+     "32": 20000000
+    },
+    "workers": 4
+   }
+  },
+  {
+   "workers": 1,
+   "corpus": "sorted",
+   "load_at_start": "{ 2.97 3.87 3.95 }",
+   "result": {
+    "actual_rows_per_second": 370910.1840611153,
+    "average_busy_cores": 0.9958446615136881,
+    "batch_size": "auto",
+    "benchmark": "batch",
+    "elapsed_seconds": 53.921409709,
+    "format": "full",
+    "memory_bytes": 536870912,
+    "predictor": {
+     "batch_size": 32,
+     "estimated_peak_rows_per_second": 207876.86051352214,
+     "estimated_peak_rss_bytes": null,
+     "estimated_rows_per_second": 207876.86051352214,
+     "estimated_working_bytes": 1671168,
+     "max_inflight_rows": 96,
+     "memory_limited": false,
+     "model_version": "ultravin-native-slots-v1",
+     "single_core_rows_per_second": 287802.13603147835,
+     "slots_per_worker": 3,
+     "target_fraction": 0.99,
+     "workers": 1
+    },
+    "process_counters": {
+     "cycles": 175226552858,
+     "instructions": 548336159327
+    },
+    "process_system_cpu_seconds": 2.8152160000000004,
+    "process_user_cpu_seconds": 50.882132000000006,
+    "result_owner": "worker_slots",
+    "rows": 20000000,
+    "selected_size_batches": {
+     "32": 625000
+    },
+    "selected_size_rows": {
+     "32": 20000000
+    },
+    "workers": 1
+   }
+  },
+  {
+   "workers": 1,
+   "corpus": "shuffled",
+   "load_at_start": "{ 2.99 3.65 3.85 }",
+   "result": {
+    "actual_rows_per_second": 234239.456675936,
+    "average_busy_cores": 0.9929237231294988,
+    "batch_size": "auto",
+    "benchmark": "batch",
+    "elapsed_seconds": 85.382711708,
+    "format": "full",
+    "memory_bytes": 536870912,
+    "predictor": {
+     "batch_size": 32,
+     "estimated_peak_rows_per_second": 247242.47692031148,
+     "estimated_peak_rss_bytes": null,
+     "estimated_rows_per_second": 247242.47692031148,
+     "estimated_working_bytes": 1671168,
+     "max_inflight_rows": 96,
+     "memory_limited": false,
+     "model_version": "ultravin-native-slots-v1",
+     "single_core_rows_per_second": 342303.1923784055,
+     "slots_per_worker": 3,
+     "target_fraction": 0.99,
+     "workers": 1
+    },
+    "process_counters": {
+     "cycles": 278408478209,
+     "instructions": 565105684172
+    },
+    "process_system_cpu_seconds": 3.729836,
+    "process_user_cpu_seconds": 81.04868400000001,
+    "result_owner": "worker_slots",
+    "rows": 20000000,
+    "selected_size_batches": {
+     "32": 625000
+    },
+    "selected_size_rows": {
+     "32": 20000000
+    },
+    "workers": 1
+   }
+  }
+ ]
+}

@@ -9,8 +9,8 @@
 **An extremely fast, fully offline NHTSA vPIC VIN decoder, written in Rust.**
 
 <p align="center">
-  <img src="assets/benchmark.svg" alt="VINs decoded per second: ultravin 1,853,346 with automatic batching on 12 cores / 935,066 on 4 cores / 257,709 on 1 core vs corgi v3 83, corgi v2 33, NHTSA MSSQL 22.5, NHTSA Postgres 19.5" width="640"><br>
-  <sub>VINs decoded per second — ultravin uses automatic batching over twenty million unique VINs.</sub>
+  <img src="assets/benchmark.svg" alt="VINs decoded per second: ultravin on 12 cores 2,616,845 sorted / 1,853,346 shuffled, on 4 cores 1,475,034 / 935,066, on 1 core 381,362 / 257,709 vs corgi v3 83, corgi v2 33, NHTSA MSSQL 22.5, NHTSA Postgres 19.5" width="640"><br>
+  <sub>VINs decoded per second over twenty million unique VINs, in shuffled order or sorted.</sub>
 </p>
 
 - ⚡️ ~82,000× faster than NHTSA's own `spVinDecode` — ~1.85 million VIN/s on 12 cores
@@ -302,9 +302,12 @@ MSSQL `spVinDecode` baseline of 22.5 VIN/s.
 
 | engine | VIN/s | vs NHTSA MSSQL |
 |---|---:|---:|
-| **ultravin** — automatic batches, 12 cores | **1,853,346** | ~82,371× faster |
-| **ultravin** — automatic batches, 4 cores | **935,066** | ~41,558× faster |
-| **ultravin** — automatic batches, 1 core | **257,709** | ~11,454× faster |
+| **ultravin** — 12 cores, sorted input | **2,616,845** | ~116,304× faster |
+| **ultravin** — 12 cores | **1,853,346** | ~82,371× faster |
+| **ultravin** — 4 cores, sorted input | **1,475,034** | ~65,557× faster |
+| **ultravin** — 4 cores | **935,066** | ~41,558× faster |
+| **ultravin** — 1 core, sorted input | **381,362** | ~16,949× faster |
+| **ultravin** — 1 core | **257,709** | ~11,454× faster |
 | corgi v3 — `@cardog/corgi` (binary index) | ~83 | ~3.7× faster |
 | corgi v2 — `@cardog/corgi` 2.0.1 (SQLite) | ~33 | ~1.5× faster |
 | NHTSA MSSQL — `spVinDecode` (SQL Server) | 22.5 | 1× (baseline) |
@@ -312,9 +315,15 @@ MSSQL `spVinDecode` baseline of 22.5 VIN/s.
 | NHTSA vPIC web API — public rate limit | ~10 | ~2.3× slower |
 
 Commit `5750746`, September 23, 2026, Apple M2 Max (eight performance and four
-efficiency cores), 20,000,000 unique synthetic VINs, automatic batching on one,
-four, or twelve workers, medians of two fresh-process trials. Across worker
-counts ultravin scales to ~3.6× and ~7.2× its own single-core rate.
+efficiency cores), 20,000,000 unique synthetic VINs on one, four, or twelve
+workers, medians of two fresh-process trials. Across worker counts ultravin
+scales to ~3.6× and ~7.2× its own single-core rate.
+
+Sorting the same VINs first makes decoding ~1.5–1.7× faster: neighbouring VINs
+share a manufacturer and pattern tables, so they stay in CPU cache. The work per
+VIN is unchanged. The sorted rows were measured later the same day on a busier
+host, paired with fresh runs of the shuffled corpus
+([details](docs/BENCHMARKS.md#sorted-input-september-23-2026)).
 
 ultravin runs in-process with the database embedded — no server, no round-trip.
 The corgi rows are derived from that project's published per-VIN latency, and

@@ -5,7 +5,9 @@ The README uses the [September 23 headline benchmark](#headline-throughput-septe
 **257,709 VIN/s on one**, all with automatic batching over twenty million unique
 VINs on an Apple M2 Max. That section compares every engine against one
 baseline — NHTSA MSSQL `spVinDecode` at 22.5 VIN/s — so one ultravin core is
-**~11,454× the baseline** and twelve are **~82,371×**. The [September 15
+**~11,454× the baseline** and twelve are **~82,371×**. The same VINs
+[sorted](#sorted-input-september-23-2026) reach 2,616,845 VIN/s on twelve
+workers. The [September 15
 headline](#headline-throughput-september-15-2026) it replaces measured
 1,147,742, 521,234, and 164,316 VIN/s on the same corpus and host. The [September 14 multicore
 session](MULTICORE_OPTIMIZATION_2026_09_14.md) is the headline before that —
@@ -41,9 +43,9 @@ Commit `5750746`, Apple M2 Max (eight performance and four efficiency cores),
 
 | engine | VIN/s | vs NHTSA MSSQL | vs September 15 |
 |---|---:|---:|---:|
-| **ultravin** — automatic batches, 12 cores | **1,853,346** | ~82,371× faster | 1.61× |
-| **ultravin** — automatic batches, 4 cores | **935,066** | ~41,558× faster | 1.79× |
-| **ultravin** — automatic batches, 1 core | **257,709** | ~11,454× faster | 1.57× |
+| **ultravin** — 12 cores | **1,853,346** | ~82,371× faster | 1.61× |
+| **ultravin** — 4 cores | **935,066** | ~41,558× faster | 1.79× |
+| **ultravin** — 1 core | **257,709** | ~11,454× faster | 1.57× |
 
 Each figure is the median of two fresh-process trials, run 1/4/12 then 12/4/1,
 with the September 15 method: one untimed unique warm pass, then one timed
@@ -68,6 +70,44 @@ then re-measured on the faster decoder
 that keep each worker's in-flight results in cache add about 10% at four
 workers and 20% at eight, and match the old pick within noise at twelve.
 Reproduce with the commands in the September 15 section below.
+
+## Sorted input (September 23, 2026)
+
+The same twenty million VINs, byte-sorted (`LC_ALL=C sort`, SHA-256
+`5a4ee330…381f`), decode ~1.5–1.7× faster. Commit `25bec64`, same host,
+command, and warm-then-time method as the headline; binary SHA-256
+`61afde15…6afa`. Each worker count ran shuffled and sorted back to back, in
+the order 1/4/12 then 12/4/1 with the pair reversed, on a busier host (one-minute
+load 2.1–3.0 at start) than the headline.
+
+| workers | shuffled VIN/s | sorted VIN/s | sorted / shuffled | sorted vs NHTSA MSSQL |
+|---:|---:|---:|---:|---:|
+| 12 | 1,764,776 | **2,616,845** | 1.48× | ~116,304× faster |
+| 4 | 935,584 | **1,475,034** | 1.58× | ~65,557× faster |
+| 1 | 224,828 | **381,362** | 1.70× | ~16,949× faster |
+
+Trials: shuffled 215,416 / 234,239, 927,208 / 943,960, and 1,756,375 /
+1,773,178; sorted 391,814 / 370,910, 1,479,174 / 1,470,895, and 2,450,886 /
+2,782,804. Instructions per VIN are the same for both orders (27.4k–28.3k).
+Cycles per VIN fall from about 14.2k–17.9k to 8.7k–11.7k. Sorting groups each
+manufacturer's VINs together, so their pattern tables stay in cache. Twelve
+sorted workers finish the corpus in about eight seconds, under the ten-second
+window, so that row timed two passes over the corpus. The warm pass had already
+touched every VIN, so the second timed pass repeats the same work rather than a
+cheaper one.
+
+The chart and README keep the headline's quieter-host shuffled rows and add
+these sorted rows, so sorted-versus-shuffled gains read from the chart
+understate the paired ratios above. Raw runs:
+[`scripts/bench/sorted_corpus_2026_09_23.json`](../scripts/bench/sorted_corpus_2026_09_23.json).
+
+```sh
+LC_ALL=C sort target/bench/independent-sink-corpus.txt \
+  > target/bench/independent-sink-corpus-sorted.txt
+RAYON_NUM_THREADS=12 ULTRAVIN_NOW_MICROS=1788220800000000 \
+  target/release/examples/throughput \
+  target/bench/independent-sink-corpus-sorted.txt 10 batch full auto
+```
 
 ## Headline throughput (September 15, 2026)
 
