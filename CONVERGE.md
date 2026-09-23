@@ -85,9 +85,9 @@ Test:
 
 ## Consecutive empty iterations
 
-2
+3
 
-Converged at 98127a3 on 2026-09-21 — reset 2026-09-22: the human waived backward compatibility (1,081 lines of previously compat-blocked deletions landed the same evening), the orphaned 2026-09-15 experiment left the tree, and CI went red on a flaky test, so the verdict no longer holds. Resume the loop.
+Converged at b2536da on 2026-09-22. Later commits by someone else (fcfed22, decode-path perf, coverage-gated files) reset this on the next run.
 
 ## Open questions
 
