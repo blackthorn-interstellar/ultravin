@@ -77,6 +77,8 @@ ureq = { version = "3", default-features = false, features = ["rustls"], optiona
 
 [dev-dependencies]
 criterion = { version = "0.5", default-features = false, features = ["cargo_bench_support"] }
+# examples/demangle: names for the coverage gate (scripts/coverage.py).
+rustc-demangle = "0.1.28"
 
 # Bench/example only: the throughput probe uses the same sharded allocator as the
 # shipped wheel so its measured ceiling matches production — same features too
