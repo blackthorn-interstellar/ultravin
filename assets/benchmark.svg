@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 388" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
-<desc>Ultravin: September 23, 2026, Apple M2 Max (8 performance + 4 efficiency cores), twenty million unique synthetic VINs; Ultravin rows decode the corpus in its shuffled order, or sorted where marked, at the worker count shown. Other engines retain historical comparison figures.</desc>
+<desc>Ultravin: September 23, 2026, Apple M2 Max (8 performance + 4 efficiency cores), twenty million unique synthetic VINs; Ultravin rows decode the corpus in random or sorted order, as marked, at the worker count shown. Other engines retain historical comparison figures.</desc>
 <style>.background{fill:#ffffff}.label{fill:#57606a;font-size:13px}.value{fill:#57606a;font-size:13px}.strong{fill:#1f2328;font-weight:700}.axis{fill:#8c8c98;font-size:11px}.grid{stroke:#d8dee4;stroke-width:1}.bar{fill:#c3aef5}.bar-hi{fill:#7c4dff}@media(prefers-color-scheme:dark){.background{fill:#0d1117}.label,.value{fill:#9198a1}.strong{fill:#f0f6fc}.axis{fill:#7d8590}.grid{stroke:#30363d}.bar{fill:#6b5bb0}.bar-hi{fill:#a786ff}}</style>
 <rect class="background" width="760" height="388" rx="8"/>
 <line class="grid" x1="220.0" y1="14" x2="220.0" y2="346"/>
@@ -17,19 +17,19 @@
 <text class="label strong" x="210" y="35.0" text-anchor="end">ultravin — 12 cores, sorted</text>
 <rect class="bar-hi" x="220" y="22.0" width="447.2" height="18" rx="2"/>
 <text class="value strong" x="673.2" y="35.0">2,616,845</text>
-<text class="label strong" x="210" y="65.0" text-anchor="end">ultravin — 12 cores</text>
+<text class="label strong" x="210" y="65.0" text-anchor="end">ultravin — 12 cores, random</text>
 <rect class="bar-hi" x="220" y="52.0" width="316.8" height="18" rx="2"/>
 <text class="value strong" x="542.8" y="65.0">1,853,346</text>
 <text class="label strong" x="210" y="95.0" text-anchor="end">ultravin — 4 cores, sorted</text>
 <rect class="bar-hi" x="220" y="82.0" width="252.1" height="18" rx="2"/>
 <text class="value strong" x="478.1" y="95.0">1,475,034</text>
-<text class="label strong" x="210" y="125.0" text-anchor="end">ultravin — 4 cores</text>
+<text class="label strong" x="210" y="125.0" text-anchor="end">ultravin — 4 cores, random</text>
 <rect class="bar-hi" x="220" y="112.0" width="159.8" height="18" rx="2"/>
 <text class="value strong" x="385.8" y="125.0">935,066</text>
 <text class="label strong" x="210" y="155.0" text-anchor="end">ultravin — 1 core, sorted</text>
 <rect class="bar-hi" x="220" y="142.0" width="65.2" height="18" rx="2"/>
 <text class="value strong" x="291.2" y="155.0">381,362</text>
-<text class="label strong" x="210" y="185.0" text-anchor="end">ultravin — 1 core</text>
+<text class="label strong" x="210" y="185.0" text-anchor="end">ultravin — 1 core, random</text>
 <rect class="bar-hi" x="220" y="172.0" width="44.0" height="18" rx="2"/>
 <text class="value strong" x="270.0" y="185.0">257,709</text>
 <text class="label" x="210" y="215.0" text-anchor="end">corgi v3</text>

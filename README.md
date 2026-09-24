@@ -9,8 +9,8 @@
 **An extremely fast, fully offline NHTSA vPIC VIN decoder, written in Rust.**
 
 <p align="center">
-  <img src="assets/benchmark.svg" alt="VINs decoded per second: ultravin on 12 cores 2,616,845 sorted / 1,853,346 shuffled, on 4 cores 1,475,034 / 935,066, on 1 core 381,362 / 257,709 vs corgi v3 83, corgi v2 33, NHTSA MSSQL 22.5, NHTSA Postgres 19.5" width="640"><br>
-  <sub>VINs decoded per second over twenty million unique VINs, in shuffled order or sorted.</sub>
+  <img src="assets/benchmark.svg" alt="VINs decoded per second: ultravin on 12 cores 2,616,845 sorted / 1,853,346 random, on 4 cores 1,475,034 / 935,066, on 1 core 381,362 / 257,709 vs corgi v3 83, corgi v2 33, NHTSA MSSQL 22.5, NHTSA Postgres 19.5" width="640"><br>
+  <sub>VINs decoded per second over twenty million unique VINs, in random or sorted order.</sub>
 </p>
 
 - ⚡️ ~82,000× faster than NHTSA's own `spVinDecode` — ~1.85 million VIN/s on 12 cores

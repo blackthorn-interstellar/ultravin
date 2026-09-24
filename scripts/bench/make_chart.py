@@ -24,11 +24,11 @@ OUT = Path(__file__).resolve().parents[2] / "assets" / "benchmark.svg"
 # (label, results-key, highlighted?) top -> bottom: ultravin by core count, then the rest.
 ROWS = [
     ("ultravin — 12 cores, sorted", "ultravin-sorted-12", True),
-    ("ultravin — 12 cores", "ultravin-auto-12", True),
+    ("ultravin — 12 cores, random", "ultravin-auto-12", True),
     ("ultravin — 4 cores, sorted", "ultravin-sorted-4", True),
-    ("ultravin — 4 cores", "ultravin-batch", True),
+    ("ultravin — 4 cores, random", "ultravin-batch", True),
     ("ultravin — 1 core, sorted", "ultravin-sorted-1", True),
-    ("ultravin — 1 core", "ultravin", True),
+    ("ultravin — 1 core, random", "ultravin", True),
     ("corgi v3", "corgi-v3", False),
     ("corgi v2", "corgi-v2", False),
     ("NHTSA MSSQL", "mssql", False),
@@ -86,7 +86,7 @@ def render(data: dict) -> str:
     )
     s.append(
         f"<desc>Ultravin: {prov['date']}, {prov['machine']}, {prov['corpus']}; "
-        "Ultravin rows decode the corpus in its shuffled order, or sorted where marked, "
+        "Ultravin rows decode the corpus in random or sorted order, as marked, "
         "at the worker count shown. "
         "Other engines retain historical comparison figures.</desc>"
     )

@@ -1,7 +1,7 @@
 # ultravin
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/blackthorn-interstellar/ultravin/master/assets/benchmark.svg" alt="VINs decoded per second: ultravin on 12, 4 and 1 cores, shuffled and sorted input, vs corgi v3, corgi v2, NHTSA MSSQL, NHTSA Postgres" width="640">
+  <img src="https://raw.githubusercontent.com/blackthorn-interstellar/ultravin/master/assets/benchmark.svg" alt="VINs decoded per second: ultravin on 12, 4 and 1 cores, random and sorted input, vs corgi v3, corgi v2, NHTSA MSSQL, NHTSA Postgres" width="640">
 </p>
 
 Pure-Rust NHTSA vPIC VIN decoder: full-field `spVinDecode` parity with documented
