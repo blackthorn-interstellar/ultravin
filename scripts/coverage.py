@@ -47,50 +47,47 @@ DECODE_FILES = {
 app = typer.Typer(add_completion=False, help="Decode-path coverage gate.")
 
 
-def _length_prefixed(tail: str) -> list[str]:
-    out: list[str] = []
-    i = 0
-    while i < len(tail):
-        digits = ""
-        while i < len(tail) and tail[i].isdigit():
-            digits += tail[i]
-            i += 1
-        if not digits:
-            i += 1
-            continue
-        n = int(digits)
-        if n == 0 or i + n > len(tail):
-            break
-        out.append(tail[i : i + n])
-        i += n
-    return out
+def demangle(names: list[str]) -> list[str]:
+    """Demangle Rust symbols with `rustc-demangle` (via `examples/demangle.rs`).
 
-
-def _after_crate(parts: list[str]) -> str:
-    if "ultravin" in parts:
-        rest = "::".join(p for p in parts[parts.index("ultravin") + 1 :] if p)
-        if rest:
-            return rest
-    return "::".join(p for p in parts if p)
-
-
-def demangle(name: str) -> str:
-    """The bare function name out of a Rust symbol, e.g. `decode::decode_core`.
-
-    llvm-cov on current rustc emits v0 mangling (`_RNvNtCs…_8ultravin10checkdigit11check_digit`).
-    Older reports used Itanium (`…13ultravin11checkdigit11check_digit`) or already-demangled
-    names with crate-disambiguator prefixes (`qzY::N4i::ultravin::checkdigit::check_digit`).
-    All three collapse to the same allowance key.
+    Raw llvm-cov names embed crate hashes, which move with every dependency bump.
     """
-    if "::" in name:
-        return _after_crate([p for p in name.split("::") if p]) or name
-    tail = name
-    for marker in ("8ultravin", "13ultravin"):
-        if marker in name:
-            tail = name.rsplit(marker, 1)[-1]
-            break
-    parts = _length_prefixed(tail)
-    return _after_crate(parts) or name
+    proc = subprocess.run(
+        ["cargo", "run", "-q", "-p", "ultravin", "--example", "demangle"],
+        cwd=REPO,
+        input="\n".join(names) + "\n",
+        capture_output=True,
+        text=True,
+        env={**os.environ, "CARGO_TARGET_DIR": str(REPO / "target" / "corpus-cov")},
+        check=False,
+    )
+    if proc.returncode != 0:
+        msg = f"demangle failed ({proc.returncode}):\n{proc.stderr[-2000:]}"
+        raise RuntimeError(msg)
+    return proc.stdout.splitlines()
+
+
+def allowance_key(demangled: str) -> str:
+    """A demangled name without generic arguments or the `ultravin::` crate prefix.
+
+    `ultravin::errors::used_key_positions::<core::iter::Map<…>>` becomes
+    `errors::used_key_positions`: every instantiation of a generic shares a key.
+    """
+    out: list[str] = []
+    depth = 0
+    i = 0
+    while i < len(demangled):
+        if depth == 0 and demangled.startswith("::<", i):
+            depth = 1
+            i += 3
+            continue
+        c = demangled[i]
+        if depth:
+            depth += {"<": 1, ">": -1}.get(c, 0)
+        else:
+            out.append(c)
+        i += 1
+    return "".join(out).replace("ultravin::", "")
 
 
 def measure(vins: Path, json_out: Path) -> dict[str, Any]:
@@ -132,15 +129,19 @@ def uncovered_by_function(report: dict[str, Any]) -> dict[tuple[str, str], int]:
     new uncovered branch appearing exactly as an old one becomes covered). We take
     stability over that precision.
     """
-    out: dict[tuple[str, str], int] = {}
+    missed_by_symbol: list[tuple[str, str, int]] = []
     for fn in report["data"][0]["functions"]:
         file = fn["filenames"][0].split("/")[-1]
         if file not in DECODE_FILES:
             continue
         missed = sum(1 for r in fn["regions"] if r[4] == 0)
         if missed:
-            key = (file, demangle(fn["name"]))
-            out[key] = out.get(key, 0) + missed
+            missed_by_symbol.append((file, fn["name"], missed))
+    names = demangle([name for _, name, _ in missed_by_symbol])
+    out: dict[tuple[str, str], int] = {}
+    for (file, _, missed), name in zip(missed_by_symbol, names, strict=True):
+        key = (file, allowance_key(name))
+        out[key] = out.get(key, 0) + missed
     return out
 
 
