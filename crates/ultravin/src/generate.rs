@@ -7,15 +7,16 @@
 //!
 //! Three ways in, in increasing size:
 //!
-//! - [`generate`] — `n` valid VINs, deterministic per seed, optionally filtered
-//!   to a WMI, make, model year (exact or a range) or vehicle type.
+//! - [`generate`] — `n` random VINs, deterministic per seed, mostly valid with
+//!   a configurable share of realistic invalid ones, optionally filtered to a
+//!   WMI, make, model year (exact or a range) or vehicle type.
 //! - [`Db::cover`] — the smallest set that exercises every decode behaviour the
 //!   data can reach (computed when the artifact is built).
 //! - [`sweep`] — one VIN per row of every dimension that can change a decode,
 //!   plus the cases that are not rows at all. Hundreds of thousands of VINs.
 
 use std::collections::BTreeSet;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use crate::db::Db;
 
@@ -25,8 +26,13 @@ const MY_CHARS: &[u8; 30] = b"ABCDEFGHJKLMNPRSTVWXY123456789";
 const FILL: u8 = b'A';
 const FILL_SERIAL: u8 = b'1';
 /// The default per-position class `[A-H,J-N,P,R-Z,0-9]` — every character legal
-/// at an unconstrained VDS/plant position. Randomized fills draw from this.
+/// at an unconstrained VDS/plant position.
 const DEFAULT_CLASS: &[u8; 33] = b"ABCDEFGHJKLMNPRSTUVWXYZ0123456789";
+const DIGITS: &[u8; 10] = b"0123456789";
+
+/// Share of [`generate`]'s VINs that are deliberately invalid when
+/// [`Filter::invalid_rate`] is unset.
+pub const DEFAULT_INVALID_RATE: f64 = 0.05;
 
 /// Which VINs [`generate`] is allowed to return. Every field is a conjunct; an
 /// unset field constrains nothing.
@@ -44,6 +50,9 @@ pub struct Filter {
     pub max_year: Option<i32>,
     /// `VehicleType` row id (2 = passenger car, 7 = MPV, ...).
     pub vehicle_type: Option<i32>,
+    /// Share of VINs, 0.0 to 1.0, that are a valid VIN with one realistic
+    /// defect (see [`generate`]); `None` means [`DEFAULT_INVALID_RATE`].
+    pub invalid_rate: Option<f64>,
 }
 
 /// The model-year character for a year, as position 10 encodes it.
@@ -140,29 +149,28 @@ pub fn build_vin(wmi: &str, keys: &str, year: i32) -> Option<String> {
     build_vin_filled(wmi, keys, year, None)
 }
 
-/// [`build_vin`] with the fills chosen by `rng` instead of fixed: unpinned VDS
-/// and plant positions draw from the full default class, the serial draws random
-/// digits, and a key's open choices (`#`, bracket classes) draw a random
-/// satisfying member. Still a VIN that satisfies `keys` — the pins land on top of
-/// the fills — and still a pure function of the RNG state, so [`generate`] stays
-/// deterministic per seed.
-fn build_vin_filled(wmi: &str, keys: &str, year: i32, mut rng: Option<&mut Rng>) -> Option<String> {
+/// [`build_vin`] with the fills chosen by `rng` instead of fixed: every open
+/// position draws from `fills` (see [`Fills`]), and a key's open choices (`#`,
+/// bracket classes) draw a random satisfying member. Still a VIN that satisfies
+/// `keys` — the pins land on top of the fills — and still a pure function of the
+/// RNG state, so [`generate`] stays deterministic per seed.
+fn build_vin_filled(
+    wmi: &str,
+    keys: &str,
+    year: i32,
+    mut fill: Option<(&mut Rng, &Fills)>,
+) -> Option<String> {
     let mut vin = [FILL; 17];
-    match rng.as_deref_mut() {
-        Some(r) => {
-            // Only the positions a fill can actually reach: 4-8 (VDS) and 11
-            // (plant). WMI, check digit and year char are stamped below.
-            for i in [3, 4, 5, 6, 7, 10] {
-                vin[i] = DEFAULT_CLASS[r.below(DEFAULT_CLASS.len())];
-            }
-            // The serial stays numeric: digits are valid at positions 12-17 under
-            // every check-digit rule, letters only at some.
-            for slot in &mut vin[11..17] {
-                *slot = b'0' + r.below(10) as u8;
+    match fill.as_mut() {
+        // WMI, check digit and year char are stamped below.
+        Some((r, fills)) => {
+            for (i, set) in fills.0.iter().enumerate() {
+                vin[i + 3] = set[r.below(set.len())];
             }
         }
         None => vin[11..17].fill(FILL_SERIAL),
     }
+    let mut rng = fill.map(|(r, _)| r);
 
     let w = wmi.as_bytes();
     for (i, &c) in w.iter().take(3).enumerate() {
@@ -261,6 +269,78 @@ fn year_to(link: &crate::tables::ArchivedWmiVinSchema) -> i32 {
     link.yearto_or(9999)
 }
 
+/// What each open position of a random VIN draws from, for VIN positions 4..=17
+/// (index 0 is position 4). Where the WMI's patterns constrain a position for the
+/// year, only those characters: a character no pattern accepts is exactly what
+/// makes the decoder report errors 4/5/14, so a uniform fill made nearly every
+/// VIN invalid. Elsewhere the default class for VDS/plant, digits for the serial.
+/// The serial stays numeric either way: digits are legal at positions 12-17
+/// under every check-digit rule, letters only at some.
+struct Fills([Vec<u8>; 14]);
+
+impl Fills {
+    fn new(db: &Db, wmi: &str, year: i32) -> Self {
+        Fills(std::array::from_fn(|i| {
+            let position = i + 4;
+            let default: &[u8] = if position >= 12 {
+                DIGITS
+            } else {
+                DEFAULT_CLASS
+            };
+            let allowed: Vec<u8> = (position <= 14)
+                .then(|| crate::errors::allowed_chars(db, wmi, year, position))
+                .flatten()
+                .map(|chars| chars.bytes().filter(|c| default.contains(c)).collect())
+                .unwrap_or_default();
+            if allowed.is_empty() {
+                default.to_vec()
+            } else {
+                allowed
+            }
+        }))
+    }
+}
+
+/// Is every error code one the decoder's scoring does not penalize? Codes 9 and
+/// 10 only flag an off-road vehicle; everything else says the VIN is wrong.
+fn is_valid(codes: &[i32]) -> bool {
+    codes
+        .iter()
+        .all(|&c| crate::tables::errorcode_weight(c) == 0)
+}
+
+/// One defect of the kind real VIN data carries: a mistyped character, a wrong
+/// check digit, or two adjacent characters swapped. Positions 1-3 (and 12-14 of
+/// a low-volume VIN, which extend its WMI) are left alone so the manufacturer
+/// still resolves. `None` when the draw changed nothing.
+fn corrupt(vin: &str, rng: &mut Rng) -> Option<String> {
+    let mut b = vin.as_bytes().to_vec();
+    let low_volume = b[2] == b'9';
+    let editable: Vec<usize> = (3..17)
+        .filter(|&i| i != 8 && !(low_volume && (11..14).contains(&i)))
+        .collect();
+    match rng.below(3) {
+        0 => {
+            let i = editable[rng.below(editable.len())];
+            b[i] = DEFAULT_CLASS[rng.below(DEFAULT_CLASS.len())];
+        }
+        1 => b[8] = b"0123456789X"[rng.below(11)],
+        _ => {
+            let pairs: Vec<usize> = editable
+                .iter()
+                .copied()
+                .filter(|&i| editable.contains(&(i + 1)) && b[i] != b[i + 1])
+                .collect();
+            if pairs.is_empty() {
+                return None;
+            }
+            let i = pairs[rng.below(pairs.len())];
+            b.swap(i, i + 1);
+        }
+    }
+    (b != vin.as_bytes()).then(|| String::from_utf8_lossy(&b).into_owned())
+}
+
 /// SplitMix64 — a deterministic, dependency-free PRNG. Generation must repeat
 /// exactly for a given seed or a corpus is not a fixture.
 struct Rng(u64);
@@ -280,6 +360,11 @@ impl Rng {
         } else {
             (self.next() % n as u64) as usize
         }
+    }
+
+    /// True with probability `p`; NaN and `p <= 0` never, `p >= 1` always.
+    fn chance(&mut self, p: f64) -> bool {
+        ((self.next() >> 11) as f64) < p * (1u64 << 53) as f64
     }
 }
 
@@ -303,17 +388,23 @@ fn check_digit_agrees(db: &Db, vin: &str) -> bool {
     crate::checkdigit::check_digit_with_flag(vin, car_lt) == Some(vin.as_bytes()[8] as char)
 }
 
-/// `n` valid VINs matching `filter`, deterministic for a given `seed`.
+/// `n` random VINs matching `filter`, deterministic for a given `seed`.
 ///
 /// Each VIN is drawn from a real WMI, a schema that WMI actually uses, and one of
 /// that schema's patterns, so it decodes to real vehicle attributes rather than
-/// to an unknown-manufacturer error. Returns fewer than `n` when the filter
+/// to an unknown-manufacturer error. Every candidate is decoded: a valid VIN is
+/// one whose error codes carry no scoring penalty (0, or the off-road flags 9 and
+/// 10). A share `filter.invalid_rate` (default [`DEFAULT_INVALID_RATE`]) of the
+/// VINs are instead a valid VIN with one realistic defect — a mistyped
+/// character, a wrong check digit, or two adjacent characters swapped — kept
+/// only if the decoder does flag it. Returns fewer than `n` when the filter
 /// matches nothing — including a `wmi` that exists in the data but is not
 /// published yet, which the decoder refuses to resolve and this refuses to emit.
 ///
 /// Every position a pattern leaves open is randomized — the serial digits, the
-/// unpinned VDS/plant positions, and the free choices inside a key (`#`, bracket
-/// classes) — so two draws of the same (WMI, schema, pattern) still yield
+/// unpinned VDS/plant positions (from the characters the WMI's patterns accept
+/// there, so the VIN stays valid), and the free choices inside a key (`#`,
+/// bracket classes) — so two draws of the same (WMI, schema, pattern) still yield
 /// different strings essentially always. **The result can still repeat a VIN**
 /// (the draws are independent, nothing dedups), but collisions need identical
 /// random fills on top of an identical combo, so they are vanishingly rare
@@ -388,6 +479,8 @@ pub fn generate(
     let year_constrained = year_lo != i32::MIN || year_hi != i32::MAX;
 
     let mut rng = Rng(seed);
+    let invalid_rate = filter.invalid_rate.unwrap_or(DEFAULT_INVALID_RATE);
+    let mut fills: HashMap<(i32, i32), Fills> = HashMap::new();
     // `n` is caller-supplied; a huge value would abort in the allocator before the
     // attempt bound can limit the work. The Vec grows as needed, so only cap the
     // starting capacity. The Python boundary rejects absurd `n` outright.
@@ -443,12 +536,29 @@ pub fn generate(
         } else {
             db.s(patterns[rng.below(patterns.len())].keys.to_native())
         };
-        let Some(vin) = build_vin_filled(db.s(w.wmi.to_native()), keys, year, Some(&mut rng))
-        else {
+        let wmi = db.s(w.wmi.to_native());
+        let fills = fills
+            .entry((w.id.to_native(), year))
+            .or_insert_with(|| Fills::new(db, wmi, year));
+        let Some(mut vin) = build_vin_filled(wmi, keys, year, Some((&mut rng, fills))) else {
             continue;
         };
         if !check_digit_agrees(db, &vin) {
             continue;
+        }
+        let mut full = crate::decode_full(db, &vin, now_micros, current_year, None);
+        if !is_valid(&full.error_codes) {
+            continue;
+        }
+        if rng.chance(invalid_rate) {
+            let Some(bad) = corrupt(&vin, &mut rng) else {
+                continue;
+            };
+            full = crate::decode_full(db, &bad, now_micros, current_year, None);
+            if is_valid(&full.error_codes) {
+                continue;
+            }
+            vin = bad;
         }
         // The year range and `make` are promises about the *decoded* VIN, and
         // the draw alone cannot keep either. Year: position 10 is a 30-year cycle, so `L`
@@ -461,24 +571,21 @@ pub fn generate(
         // So the only honest filter is to decode the candidate and keep it when
         // it really resolves to what was asked for; the WMI/schema it was drawn
         // from is a necessary condition, not a sufficient one.
-        if year_constrained || filter.make.is_some() {
-            let full = crate::decode_full(db, &vin, now_micros, current_year, None);
-            if year_constrained {
-                match full.model_year {
-                    Some(y) if (year_lo..=year_hi).contains(&y) => {}
-                    _ => continue,
-                }
+        if year_constrained {
+            match full.model_year {
+                Some(y) if (year_lo..=year_hi).contains(&y) => {}
+                _ => continue,
             }
-            if let Some(want) = filter.make.as_deref() {
-                // The same equality `lookup_ids_by_name` used to pre-filter the
-                // WMIs; element 26 is Make, its `value` the resolved lookup name.
-                if !full
-                    .elements
-                    .iter()
-                    .any(|e| e.element_id == 26 && e.value.eq_ignore_ascii_case(want))
-                {
-                    continue;
-                }
+        }
+        if let Some(want) = filter.make.as_deref() {
+            // The same equality `lookup_ids_by_name` used to pre-filter the
+            // WMIs; element 26 is Make, its `value` the resolved lookup name.
+            if !full
+                .elements
+                .iter()
+                .any(|e| e.element_id == 26 && e.value.eq_ignore_ascii_case(want))
+            {
+                continue;
             }
         }
         out.push(vin);

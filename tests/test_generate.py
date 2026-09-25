@@ -21,7 +21,7 @@ def test_generate_is_deterministic_per_seed() -> None:
 def test_generated_vins_are_well_formed(seed: int) -> None:
     # seed=7 previously produced I/O/Q VINs (e.g. 1H9AOAAA0WA588111) that failed
     # this regex and decoded to error 400; such candidates are now skipped.
-    vins = ultravin.generate(500, seed=seed)
+    vins = ultravin.generate(500, seed=seed, invalid_rate=0)
     assert len(vins) == 500
     for vin in vins:
         assert VIN_CHARS.match(vin), vin
@@ -29,6 +29,41 @@ def test_generated_vins_are_well_formed(seed: int) -> None:
     # '0' fallback the old I/O/Q path emitted — validates.
     for result in ultravin.decode_batch(vins):
         assert result["check_digit_valid"], result["vin"]
+
+
+def is_valid(codes: list[int]) -> bool:
+    # Codes 9 and 10 only flag an off-road vehicle; every other nonzero code is a defect.
+    return set(codes) <= {0, 9, 10}
+
+
+def test_generate_makes_valid_vins_with_a_default_share_of_invalid_ones() -> None:
+    # Filling open positions from the whole alphabet once made ~99.5% of VINs
+    # decode with errors 5/14; open positions now draw only what the WMI's
+    # patterns accept, and ~5% are deliberately broken.
+    results = ultravin.decode_batch(ultravin.generate(4_000, seed=11))
+    invalid = sum(not is_valid(r["error_codes"]) for r in results)
+    assert 0.03 < invalid / len(results) < 0.07, invalid
+
+
+@pytest.mark.parametrize(("rate", "want_valid"), [(0.0, True), (1.0, False)])
+def test_generate_invalid_rate_bounds(rate: float, want_valid: bool) -> None:
+    results = ultravin.decode_batch(ultravin.generate(1_000, seed=12, invalid_rate=rate))
+    assert len(results) == 1_000
+    assert all(is_valid(r["error_codes"]) == want_valid for r in results)
+
+
+def test_generate_rejects_an_out_of_range_invalid_rate() -> None:
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        ultravin.generate(10, invalid_rate=1.5)
+
+
+def test_generate_stays_random_under_a_narrow_filter() -> None:
+    # Validity must not collapse the draw: one WMI and one year still yields
+    # fresh strings, not a handful of repeats.
+    vins = ultravin.generate(2_000, seed=13, wmi="1HG", year=2020, invalid_rate=0)
+    assert len(vins) == 2_000
+    assert len(set(vins)) == len(vins)
+    assert len({v[3:8] for v in vins}) > 20
 
 
 def test_generate_will_not_draw_from_an_unpublished_wmi() -> None:

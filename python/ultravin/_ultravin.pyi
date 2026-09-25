@@ -147,14 +147,21 @@ def generate(
     min_year: int | None = None,
     max_year: int | None = None,
     vehicle_type: int | None = None,
+    invalid_rate: float = 0.05,
     now: datetime | None = None,
 ) -> list[str]:
-    """Generate ``n`` valid VINs, deterministic for a given ``seed``.
+    """Generate ``n`` random VINs, deterministic for a given ``seed``.
 
     Each VIN is built from a real WMI, a schema that WMI uses, and one of that
     schema's patterns, with a correct check digit — so it decodes to real vehicle
     attributes rather than to an unknown-manufacturer error. No database and no
     network: everything comes from the embedded artifact.
+
+    Every candidate is decoded, and a valid VIN is one whose error codes carry
+    no penalty (``[0]``, or the off-road flags 9 and 10). A share
+    ``invalid_rate`` (0 to 1, default 5%) is instead a valid VIN with one
+    realistic defect — a mistyped character, a wrong check digit, or two
+    adjacent characters swapped — kept only if the decoder flags it.
 
     Filters are conjunctive. ``vehicle_type`` is a VehicleType row id (2 =
     passenger car, 7 = MPV). ``year`` and ``make`` are what the VIN *decodes
@@ -190,7 +197,8 @@ def generate(
     result is empty rather than an error. Omit it to read the system clock.
 
     Every position a pattern leaves open is randomized — the serial digits, the
-    unpinned VDS/plant positions, and the free choices inside a key — so two
+    unpinned VDS/plant positions (from the characters the WMI's patterns accept
+    there, so the VIN stays valid), and the free choices inside a key — so two
     draws of the same (WMI, schema, pattern) still yield different strings
     essentially always. **VINs may still repeat** (the draws are independent,
     nothing dedups), but a collision needs identical random fills on top of an

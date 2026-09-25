@@ -500,7 +500,7 @@ fn decode_clock(now: Option<&Bound<'_, PyDateTime>>) -> PyResult<(i64, i32)> {
 /// Unix epoch leaves every WMI's publication date in the future, so nothing is
 /// drawable and the result is empty rather than an error.
 #[pyfunction]
-#[pyo3(signature = (n, *, seed = 0, wmi = None, make = None, year = None, min_year = None, max_year = None, vehicle_type = None, now = None))]
+#[pyo3(signature = (n, *, seed = 0, wmi = None, make = None, year = None, min_year = None, max_year = None, vehicle_type = None, invalid_rate = ultravin::DEFAULT_INVALID_RATE, now = None))]
 // One parameter per documented keyword; collapsing them into a struct would only
 // move the argument list into Python.
 #[allow(clippy::too_many_arguments)]
@@ -514,8 +514,14 @@ fn generate<'py>(
     min_year: Option<i32>,
     max_year: Option<i32>,
     vehicle_type: Option<i32>,
+    invalid_rate: f64,
     now: Option<Bound<'py, PyDateTime>>,
 ) -> PyResult<Vec<String>> {
+    if !(0.0..=1.0).contains(&invalid_rate) {
+        return Err(PyValueError::new_err(format!(
+            "invalid_rate={invalid_rate} must be between 0 and 1"
+        )));
+    }
     if n > GENERATE_MAX {
         return Err(PyValueError::new_err(format!(
             "n={n} is too large; generate at most {GENERATE_MAX} VINs per call"
@@ -529,6 +535,7 @@ fn generate<'py>(
         min_year,
         max_year,
         vehicle_type,
+        invalid_rate: Some(invalid_rate),
     };
     Ok(py.detach(|| {
         ultravin::generate(

@@ -5,7 +5,8 @@ Generation ships **in the library**, so anyone testing a VIN decoder can use it:
 ```python
 import ultravin
 
-ultravin.generate(100, seed=42)  # deterministic valid VINs
+ultravin.generate(100, seed=42)  # deterministic random VINs, ~5% invalid
+ultravin.generate(100, invalid_rate=0)  # every VIN decodes without errors
 ultravin.generate(50, make="HONDA", year=2020)  # filtered
 ultravin.generate(50, min_year=2015, max_year=2020)  # decoded model year in a range
 ultravin.cover_vins()  # ~164: every behaviour, once
@@ -15,6 +16,11 @@ ultravin.sweep(["pattern"])  # ~545k: every pattern row
 No database, no network — it all comes from the artifact already baked into the
 wheel. `scripts/parity/coverage.py` keeps only the part that genuinely needs
 Postgres: auditing a corpus against the vPIC row counts.
+
+`generate` decodes every VIN it draws. Open positions take only characters the
+WMI's patterns accept, so a VIN decodes with no penalized error code. A share
+`invalid_rate` (default 5%) instead carries one realistic defect: a mistyped
+character, a wrong check digit, or two adjacent characters swapped.
 
 `generate` samples, so it can hand back the same VIN twice — a pattern that pins
 no characters leaves the whole VIN to the fill — and the share that repeats climbs

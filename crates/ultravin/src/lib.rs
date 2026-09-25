@@ -52,7 +52,7 @@ pub use checkdigit::check_digit;
 pub use db::Db;
 #[doc(hidden)] // build-tooling hook (`vpic-import --stale-cache-report`), not API
 pub use errors::recompute_valid_chars;
-pub use generate::{generate, pairwise, seeded, sweep, Dimension, Filter};
+pub use generate::{generate, pairwise, seeded, sweep, Dimension, Filter, DEFAULT_INVALID_RATE};
 pub use ids::{
     all_public_ids, decode_batch_ids, decode_batch_ids_at, resolve_columns, resolve_ids,
     ColumnSpec, ColumnValues, IdMeta, IdsBatch, IdsDType,
