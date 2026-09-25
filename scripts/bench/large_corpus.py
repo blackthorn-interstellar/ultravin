@@ -18,6 +18,9 @@ DEFAULT_COUNT = 5_000_000
 DEFAULT_SEED = 42
 DEFAULT_CHUNK_SIZE = 100_000
 DEFAULT_MAX_CHUNKS = 500
+# Real traffic carries some broken VINs; generate()'s default share, pinned here
+# so the corpus does not drift if that default changes.
+INVALID_RATE = 0.05
 FROZEN_NOW = datetime(2026, 9, 1, tzinfo=timezone.utc)
 OUT = Path("target/bench/large-corpus.txt")
 MANIFEST = Path("target/bench/large-corpus.manifest.json")
@@ -57,7 +60,7 @@ def collect_unique_vins(
         requested = min(chunk_size, count - len(vins))
         if requested == 0:
             return vins, chunk_index, candidates
-        batch = generate(requested, seed=seed + chunk_index, now=now)
+        batch = generate(requested, seed=seed + chunk_index, now=now, invalid_rate=INVALID_RATE)
         candidates += len(batch)
         for vin in batch:
             if not VIN_RE.fullmatch(vin):
@@ -79,12 +82,9 @@ def check_digit(vin: str) -> str:
     return "X" if remainder == 10 else str(remainder)
 
 
-def verify_check_digits(vins: list[str]) -> None:
-    """Verify check digits directly, without allocating decode dictionaries."""
-    for vin in vins:
-        if vin[8] != check_digit(vin):
-            msg = f"invalid check digit: {vin}"
-            raise ValueError(msg)
+def check_digit_failures(vins: list[str]) -> int:
+    """Count VINs whose check digit is wrong, without allocating decode dictionaries."""
+    return sum(vin[8] != check_digit(vin) for vin in vins)
 
 
 def _sha256_bytes(data: bytes) -> str:
@@ -130,7 +130,6 @@ def build(
     )
     if len(vins) != count or len(set(vins)) != count:
         raise RuntimeError("internal error: corpus is not exact and unique")
-    verify_check_digits(vins)
 
     corpus = ("\n".join(vins) + "\n").encode()
     provenance = ultravin.provenance()
@@ -146,7 +145,8 @@ def build(
         "candidates_examined": candidates,
         "corpus": {"path": str(out), "bytes": len(corpus), "sha256": _sha256_bytes(corpus)},
         "generator": {
-            "api": "ultravin.generate(n, seed=seed + chunk_index, now=frozen_now)",
+            "api": "ultravin.generate(n, seed=seed + chunk_index, now=frozen_now, invalid_rate=invalid_rate)",
+            "invalid_rate": INVALID_RATE,
             "script": str(script_path),
             "script_sha256": _sha256_bytes(script_path.read_bytes()),
             "decoder_version": provenance["decoder_version"],
@@ -160,7 +160,8 @@ def build(
             "distinct_wmis": len({_wmi(vin) for vin in vins}),
             "distinct_year_characters": len({vin[9] for vin in vins}),
         },
-        "verification": {"unique": True, "vin_alphabet": True, "check_digits": True},
+        "verification": {"unique": True, "vin_alphabet": True},
+        "check_digit_failures": check_digit_failures(vins),
     }
     _write_atomic(out, corpus)
     _write_atomic(manifest, (json.dumps(metadata, indent=2, sort_keys=True) + "\n").encode())
@@ -175,7 +176,7 @@ def main(
     out: Annotated[Path, typer.Option(help="Corpus output path.")] = OUT,
     manifest: Annotated[Path, typer.Option(help="Provenance manifest output path.")] = MANIFEST,
 ) -> None:
-    """Write an exact-size, unique, valid VIN benchmark corpus."""
+    """Write an exact-size, unique VIN benchmark corpus, mostly valid with a share of broken VINs."""
     metadata = build(
         count=count,
         seed=seed,

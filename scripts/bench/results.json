@@ -1,15 +1,15 @@
 {
   "provenance": {
-    "commit": "575074673eb92ef2d53149b7d51c072a6a039c57",
-    "version": "v2.2.1-78-g5750746",
-    "date": "September 23, 2026",
+    "commit": "c54a2ee908ca6b1b78583453fc820b10d9bee07e",
+    "version": "v3.0.1-6-gc54a2ee",
+    "date": "September 25, 2026",
     "machine": "Apple M2 Max (8 performance + 4 efficiency cores)",
-    "corpus": "twenty million unique synthetic VINs",
-    "corpus_path": "target/bench/independent-sink-corpus.txt",
-    "corpus_sha256": "0d6224e99d0a7f241e3dcd052ce973c8baea774feb0831db0071423de726bd9a",
-    "binary_sha256": "f74907050f9e40bef1bcdc6ac040232c0bd93f8af340e5f960e20d6615b09468",
-    "command": "RAYON_NUM_THREADS=$N ULTRAVIN_NOW_MICROS=1788220800000000 target/release/examples/throughput target/bench/independent-sink-corpus.txt 10 batch full auto",
-    "method": "Median of two fresh-process trials per worker count, run 1/4/12 then 12/4/1. Each process warms one full unique pass, then times one full unique pass including calibration, live tuning, full native results, order restoration and synchronous cleanup. Each trial started once the one-minute load average was at most 2.5 (2.2-2.5 at start).",
+    "corpus": "twenty million unique synthetic VINs, ~95% valid and ~5% with one realistic defect",
+    "corpus_path": "target/bench/realistic-corpus.txt",
+    "corpus_sha256": "03b610da26b5f1f270422858e4e412c062a7d31f8d7156fb6500224843fb5ea9",
+    "binary_sha256": "033f911858d1f886463ee6425d1c34a9614c1ac5554779461ec8464686b421de",
+    "command": "RAYON_NUM_THREADS=$N ULTRAVIN_NOW_MICROS=1788220800000000 target/release/examples/throughput target/bench/realistic-corpus.txt 10 batch full auto",
+    "method": "Median of two fresh-process trials per worker count, run 1/4/12 then 12/4/1, each worker count running the previous corpus, this corpus and this corpus sorted back to back. Each process warms one full unique pass, then times one full unique pass including calibration, live tuning, full native results, order restoration and synchronous cleanup. The host was shared: each trial waited up to five minutes for a one-minute load average of at most 3.5 (2.9-3.5 at start, one 6.0). Raw runs in scripts/bench/realistic_corpus_2026_09_25.json.",
     "ultravin_rows": {
       "ultravin": 1,
       "ultravin-batch": 4,
@@ -17,16 +17,16 @@
     },
     "ultravin_trials": {
       "ultravin": [
-        260117,
-        255301
+        214913,
+        195157
       ],
       "ultravin-batch": [
-        932712,
-        937420
+        827598,
+        763791
       ],
       "ultravin-auto-12": [
-        1842584,
-        1864109
+        1465817,
+        1462398
       ]
     },
     "other_engines": "corgi and NHTSA rows are their earlier published or measured figures; they were not re-run for this session.",
@@ -38,33 +38,33 @@
       },
       "ultravin_trials": {
         "ultravin-sorted-1": [
-          391814,
-          370910
+          374740,
+          374243
         ],
         "ultravin-sorted-4": [
-          1479174,
-          1470895
+          1396814,
+          1361221
         ],
         "ultravin-sorted-12": [
-          2450886,
-          2782804
+          2535811,
+          2369090
         ]
       },
-      "commit": "25bec64",
-      "binary_sha256": "61afde15c5eeb66d407f4bd36c64dd6e980e96914cf661f6c71193e72ee76afa",
+      "commit": "c54a2ee",
+      "binary_sha256": "033f911858d1f886463ee6425d1c34a9614c1ac5554779461ec8464686b421de",
       "corpus": "the same twenty million VINs, byte-sorted (LC_ALL=C sort)",
-      "corpus_path": "target/bench/independent-sink-corpus-sorted.txt",
-      "corpus_sha256": "5a4ee330b05ed03005fe746f5f97e229fb9d24bb03c675ec8830f7583c79381f",
-      "method": "Same command and two-trial median as the shuffled rows, run later on September 23 paired with fresh shuffled trials on a busier host (one-minute load 2.1-3.0); raw runs in scripts/bench/sorted_corpus_2026_09_23.json."
+      "corpus_path": "target/bench/realistic-corpus-sorted.txt",
+      "corpus_sha256": "358c7b6996ac732e1d6e20cd6eec22bc9b077577e5e34a5de3a8be877da85995",
+      "method": "Same session, command and two-trial median as the random-order rows; raw runs in scripts/bench/realistic_corpus_2026_09_25.json."
     }
   },
   "engines": {
-    "ultravin-sorted-12": 2616845,
-    "ultravin-auto-12": 1853346,
-    "ultravin-sorted-4": 1475034,
-    "ultravin-batch": 935066,
-    "ultravin-sorted-1": 381362,
-    "ultravin": 257709,
+    "ultravin-sorted-12": 2452450,
+    "ultravin-auto-12": 1464108,
+    "ultravin-sorted-4": 1379018,
+    "ultravin-batch": 795694,
+    "ultravin-sorted-1": 374492,
+    "ultravin": 205035,
     "corgi-v3": 83,
     "corgi-v2": 33,
     "mssql": 22.5,

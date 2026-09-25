@@ -1,14 +1,17 @@
 # ultravin benchmarks
 
-The README uses the [September 23 headline benchmark](#headline-throughput-september-23-2026):
-**1,853,346 VIN/s on twelve workers**, **935,066 VIN/s on four**, and
-**257,709 VIN/s on one**, all with automatic batching over twenty million unique
-VINs on an Apple M2 Max. That section compares every engine against one
-baseline — NHTSA MSSQL `spVinDecode` at 22.5 VIN/s — so one ultravin core is
-**~11,454× the baseline** and twelve are **~82,371×**. The same VINs
-[sorted](#sorted-input-september-23-2026) reach 2,616,845 VIN/s on twelve
-workers. The [September 15
-headline](#headline-throughput-september-15-2026) it replaces measured
+The README uses the [September 25 headline benchmark](#headline-throughput-september-25-2026):
+**1,464,108 VIN/s on twelve workers**, **795,694 VIN/s on four**, and
+**205,035 VIN/s on one**, all with automatic batching over twenty million unique
+VINs, ~95% of them valid, on an Apple M2 Max. That section compares every engine
+against one baseline — NHTSA MSSQL `spVinDecode` at 22.5 VIN/s — so one ultravin
+core is **~9,113× the baseline** and twelve are **~65,072×**. The same VINs
+sorted reach 2,452,450 VIN/s on twelve workers. The [September 23
+headline](#headline-throughput-september-23-2026) it replaces measured
+1,853,346, 935,066, and 257,709 VIN/s, but ~99.5% of that corpus's VINs were
+invalid, so it timed the decoder's error path rather than real traffic.
+The [September 15
+headline](#headline-throughput-september-15-2026) before that measured
 1,147,742, 521,234, and 164,316 VIN/s on the same corpus and host. The [September 14 multicore
 session](MULTICORE_OPTIMIZATION_2026_09_14.md) is the headline before that —
 400,843 VIN/s on four workers and 105,372 on one, with 656,900 at eight workers
@@ -35,7 +38,80 @@ calibration, batch-size and memory heatmaps, and a separate validation of the
 current automatic defaults at 4, 8, and 12 workers.
 The comparison tables below preserve their dated measurement sessions.
 
+## Headline throughput (September 25, 2026)
+
+Commit `c54a2ee`, Apple M2 Max (eight performance and four efficiency cores),
+**20,000,000 unique synthetic VINs**, automatic batching, decode clock frozen at
+`2026-09-01T00:00:00Z`. About 95% of the VINs are valid; 5% carry one
+realistic defect (a mistyped character, a wrong check digit, or two adjacent
+characters swapped).
+
+| engine | VIN/s | vs NHTSA MSSQL |
+|---|---:|---:|
+| **ultravin** — 12 cores, sorted input | **2,452,450** | ~108,998× faster |
+| **ultravin** — 12 cores | **1,464,108** | ~65,072× faster |
+| **ultravin** — 4 cores, sorted input | **1,379,018** | ~61,290× faster |
+| **ultravin** — 4 cores | **795,694** | ~35,364× faster |
+| **ultravin** — 1 core, sorted input | **374,492** | ~16,644× faster |
+| **ultravin** — 1 core | **205,035** | ~9,113× faster |
+
+### Why the corpus changed
+
+The September 23 corpus came from `ultravin.generate()`, which from August 26
+pinned only the one or two positions of a single drawn pattern and filled every
+other VDS/plant position from the whole alphabet. Real VINs choose every
+position from the manufacturer's scheme, so ~99.5% of those VINs decoded with
+errors 5 and 14 ("errors in a few positions", "unused positions"). The
+generator now draws open positions from the characters the WMI's patterns
+accept, decodes every candidate, and keeps a VIN only if it has no penalized
+error code; `invalid_rate` (default 5%) adds realistic broken VINs.
+
+### Paired comparison with the old corpus
+
+Every worker count ran the old corpus, the new corpus and the new corpus sorted
+back to back, twice (1/4/12, then 12/4/1 in reverse corpus order), on one binary
+(SHA-256 `033f9118…`). Medians of the two trials:
+
+| workers | old corpus | new corpus | new / old | new, sorted |
+|---:|---:|---:|---:|---:|
+| 12 | 1,336,194 | 1,464,108 | 1.10× | 2,452,450 |
+| 4 | 890,074 | 795,694 | 0.89× | 1,379,018 |
+| 1 | 231,524 | 205,035 | 0.89× | 374,492 |
+
+Valid VINs cost about 11% more to decode than the old, mostly invalid ones at one
+and four workers. The twelve-worker old-corpus trials split widely (1,491,364
+and 1,181,023), so that ratio is noise. The host was busier than on September 23:
+other work kept the one-minute load average at 2.9–3.5 when trials started (one
+at 6.0), so each trial waited at most five minutes for a load of 3.5 or less.
+That depresses every row, including the old corpus, which ran 5–28% below its
+September 23 figures. Sorting gains ~1.7–1.8× on the new corpus, against
+~1.5–1.7× on the old one.
+
+Trials, in run order per row: new corpus 214,913 / 195,157 (one worker), 827,598
+/ 763,791 (four), 1,465,817 / 1,462,398 (twelve); sorted 374,740 / 374,243,
+1,396,814 / 1,361,221, 2,535,811 / 2,369,090. Raw runs:
+[`scripts/bench/realistic_corpus_2026_09_25.json`](../scripts/bench/realistic_corpus_2026_09_25.json).
+
+```sh
+cargo build -p ultravin --release --example throughput
+UV_FROZEN=1 uv run --frozen maturin develop --uv --release --locked
+UV_FROZEN=1 uv run python -m scripts.bench.large_corpus --count 20000000 \
+  --out target/bench/realistic-corpus.txt \
+  --manifest target/bench/realistic-corpus.manifest.json
+LC_ALL=C sort target/bench/realistic-corpus.txt > target/bench/realistic-corpus-sorted.txt
+RAYON_NUM_THREADS=12 ULTRAVIN_NOW_MICROS=1788220800000000 \
+  target/release/examples/throughput \
+  target/bench/realistic-corpus.txt 10 batch full auto
+```
+
+The corpus (SHA-256 `03b610da…5ea9`) is built from the `2026_09` data month;
+its manifest records the generator call, invalid rate, check-digit failures
+(925,618) and diversity counts.
+
 ## Headline throughput (September 23, 2026)
+
+~99.5% of this corpus's VINs are invalid (see [why the corpus
+changed](#why-the-corpus-changed)); kept for history.
 
 Commit `5750746`, Apple M2 Max (eight performance and four efficiency cores),
 **20,000,000 unique synthetic VINs**, automatic batching, decode clock frozen at

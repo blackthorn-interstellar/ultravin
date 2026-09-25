@@ -9,11 +9,11 @@
 **An extremely fast, fully offline NHTSA vPIC VIN decoder, written in Rust.**
 
 <p align="center">
-  <img src="assets/benchmark.svg" alt="VINs decoded per second: ultravin on 12 cores 2,616,845 sorted / 1,853,346 random, on 4 cores 1,475,034 / 935,066, on 1 core 381,362 / 257,709 vs corgi v3 83, corgi v2 33, NHTSA MSSQL 22.5, NHTSA Postgres 19.5" width="640"><br>
+  <img src="assets/benchmark.svg" alt="VINs decoded per second: ultravin on 12 cores 2,452,450 sorted / 1,464,108 random, on 4 cores 1,379,018 / 795,694, on 1 core 374,492 / 205,035 vs corgi v3 83, corgi v2 33, NHTSA MSSQL 22.5, NHTSA Postgres 19.5" width="640"><br>
   <sub>VINs decoded per second over twenty million unique VINs, in random or sorted order.</sub>
 </p>
 
-- ⚡️ ~82,000× faster than NHTSA's own `spVinDecode` — ~1.85 million VIN/s on 12 cores
+- ⚡️ ~65,000× faster than NHTSA's own `spVinDecode` — ~1.46 million VIN/s on 12 cores
 - 🦀 Pure Rust core, shipped as a Python library and a Rust crate
 - 📦 The entire vPIC vehicle database baked into the wheel
 - 🔌 Fully offline — no network, no database, no data files at runtime
@@ -25,7 +25,7 @@ ultravin brings the complete `spVinDecode` algorithm into your process: vehicle
 attributes, model-year resolution, VIN correction, errors, and provenance.
 It checks every output field against NHTSA's unmodified Postgres procedure and
 corrects documented defects in the upstream data and procedures. You get vPIC
-fidelity with better answers on those defective cases, at **over 82,000× the
+fidelity with better answers on those defective cases, at **over 65,000× the
 NHTSA SQL Server baseline** on 12 cores.
 [Benchmarks and reproduction](docs/BENCHMARKS.md).
 
@@ -302,28 +302,29 @@ MSSQL `spVinDecode` baseline of 22.5 VIN/s.
 
 | engine | VIN/s | vs NHTSA MSSQL |
 |---|---:|---:|
-| **ultravin** — 12 cores, sorted input | **2,616,845** | ~116,304× faster |
-| **ultravin** — 12 cores | **1,853,346** | ~82,371× faster |
-| **ultravin** — 4 cores, sorted input | **1,475,034** | ~65,557× faster |
-| **ultravin** — 4 cores | **935,066** | ~41,558× faster |
-| **ultravin** — 1 core, sorted input | **381,362** | ~16,949× faster |
-| **ultravin** — 1 core | **257,709** | ~11,454× faster |
+| **ultravin** — 12 cores, sorted input | **2,452,450** | ~108,998× faster |
+| **ultravin** — 12 cores | **1,464,108** | ~65,072× faster |
+| **ultravin** — 4 cores, sorted input | **1,379,018** | ~61,290× faster |
+| **ultravin** — 4 cores | **795,694** | ~35,364× faster |
+| **ultravin** — 1 core, sorted input | **374,492** | ~16,644× faster |
+| **ultravin** — 1 core | **205,035** | ~9,113× faster |
 | corgi v3 — `@cardog/corgi` (binary index) | ~83 | ~3.7× faster |
 | corgi v2 — `@cardog/corgi` 2.0.1 (SQLite) | ~33 | ~1.5× faster |
 | NHTSA MSSQL — `spVinDecode` (SQL Server) | 22.5 | 1× (baseline) |
 | NHTSA Postgres — `spvindecode` | 19.5 | ~1.2× slower |
 | NHTSA vPIC web API — public rate limit | ~10 | ~2.3× slower |
 
-Commit `5750746`, September 23, 2026, Apple M2 Max (eight performance and four
+Commit `c54a2ee`, September 25, 2026, Apple M2 Max (eight performance and four
 efficiency cores), 20,000,000 unique synthetic VINs on one, four, or twelve
-workers, medians of two fresh-process trials. Across worker counts ultravin
-scales to ~3.6× and ~7.2× its own single-core rate.
+workers, medians of two fresh-process trials. About 95% of the VINs are valid
+and 5% carry one realistic defect (a typo, a wrong check digit, or two swapped
+characters). Across worker counts ultravin scales to ~3.9× and ~7.1× its own
+single-core rate.
 
-Sorting the same VINs first makes decoding ~1.5–1.7× faster: neighbouring VINs
+Sorting the same VINs first makes decoding ~1.7–1.8× faster: neighbouring VINs
 share a manufacturer and pattern tables, so they stay in CPU cache. The work per
-VIN is unchanged. The sorted rows were measured later the same day on a busier
-host, paired with fresh runs of the shuffled corpus
-([details](docs/BENCHMARKS.md#sorted-input-september-23-2026)).
+VIN is unchanged
+([details](docs/BENCHMARKS.md#headline-throughput-september-25-2026)).
 
 ultravin runs in-process with the database embedded — no server, no round-trip.
 The corgi rows are derived from that project's published per-VIN latency, and

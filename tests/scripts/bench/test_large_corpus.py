@@ -7,7 +7,14 @@ from pathlib import Path
 
 import pytest
 
-from scripts.bench.large_corpus import FROZEN_NOW, build, check_digit, collect_unique_vins, verify_check_digits
+from scripts.bench.large_corpus import (
+    FROZEN_NOW,
+    INVALID_RATE,
+    build,
+    check_digit,
+    check_digit_failures,
+    collect_unique_vins,
+)
 
 
 def vins() -> Iterator[str]:
@@ -19,7 +26,8 @@ def test_collection_deduplicates_and_advances_seed() -> None:
     source = vins()
     calls: list[tuple[int, int, datetime]] = []
 
-    def generate(n: int, *, seed: int, now: datetime) -> list[str]:
+    def generate(n: int, *, seed: int, now: datetime, invalid_rate: float) -> list[str]:
+        assert invalid_rate == INVALID_RATE
         calls.append((n, seed, now))
         if len(calls) == 1:
             vin = next(source)
@@ -45,7 +53,7 @@ def test_short_generator_cannot_silently_underfill() -> None:
             now=FROZEN_NOW,
             chunk_size=2,
             max_chunks=3,
-            generate=lambda n, *, seed, now: [],
+            generate=lambda n, *, seed, now, invalid_rate: [],
         )
 
 
@@ -58,7 +66,7 @@ def test_invalid_generator_output_fails(vin: str) -> None:
             now=FROZEN_NOW,
             chunk_size=1,
             max_chunks=1,
-            generate=lambda n, *, seed, now: [vin],
+            generate=lambda n, *, seed, now, invalid_rate: [vin],
         )
 
 
@@ -74,7 +82,7 @@ def test_build_writes_exact_corpus_and_hashed_manifest(tmp_path: Path) -> None:
         max_chunks=1,
         out=out,
         manifest=manifest,
-        generate=lambda n, *, seed, now: [next(generated) for _ in range(n)],
+        generate=lambda n, *, seed, now, invalid_rate: [next(generated) for _ in range(n)],
     )
 
     assert out.read_text().splitlines() == ["1HGCM82633A004352", "1M8GDM9AXKP042788"]
@@ -87,21 +95,21 @@ def test_build_writes_exact_corpus_and_hashed_manifest(tmp_path: Path) -> None:
         "distinct_wmis": 2,
         "distinct_year_characters": 2,
     }
-    assert metadata["verification"] == {"unique": True, "vin_alphabet": True, "check_digits": True}
+    assert metadata["verification"] == {"unique": True, "vin_alphabet": True}
+    assert metadata["check_digit_failures"] == 0
 
 
-def test_check_digit_accepts_known_digits_and_rejects_a_wrong_one() -> None:
+def test_check_digit_accepts_known_digits_and_counts_wrong_ones() -> None:
     assert check_digit("1HGCM82633A004352") == "3"
     assert check_digit("1M8GDM9AXKP042788") == "X"
-    with pytest.raises(ValueError, match="invalid check digit"):
-        verify_check_digits(["1HGCM82643A004352"])
+    assert check_digit_failures(["1HGCM82633A004352", "1HGCM82643A004352"]) == 1
 
 
 def test_build_rejects_colliding_output_paths_before_generation(tmp_path: Path) -> None:
     path = tmp_path / "same"
     called = False
 
-    def generate(n: int, *, seed: int, now: datetime) -> list[str]:
+    def generate(n: int, *, seed: int, now: datetime, invalid_rate: float) -> list[str]:
         nonlocal called
         called = True
         return []
@@ -109,21 +117,3 @@ def test_build_rejects_colliding_output_paths_before_generation(tmp_path: Path) 
     with pytest.raises(ValueError, match="paths must differ"):
         build(count=1, out=path, manifest=path, generate=generate)
     assert not called
-
-
-def test_build_rejects_bad_check_digit_without_publishing(tmp_path: Path) -> None:
-    out = tmp_path / "corpus.txt"
-    manifest = tmp_path / "manifest.json"
-
-    with pytest.raises(ValueError, match="invalid check digit"):
-        build(
-            count=1,
-            out=out,
-            manifest=manifest,
-            chunk_size=1,
-            max_chunks=1,
-            generate=lambda n, *, seed, now: ["1HGCM82643A004352"],
-        )
-
-    assert not out.exists()
-    assert not manifest.exists()
