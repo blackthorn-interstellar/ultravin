@@ -166,20 +166,17 @@ pub struct CoreResult<'a> {
 
 const MAX_RETAINED_MATCHED_PATTERNS: usize = 256;
 const MAX_RETAINED_SCHEMA_PRIORITIES: usize = 128;
-const MAX_RETAINED_MAKE_IDS: usize = 64;
 
 #[derive(Default)]
 struct DecodeScratch {
     matched_patterns: Vec<(i32, u32)>,
     schema_yearfrom: IntMap<i32, i32>,
-    distinct_makeids: Vec<i32>,
 }
 
 impl DecodeScratch {
     fn clear(&mut self) {
         self.matched_patterns.clear();
         self.schema_yearfrom.clear();
-        self.distinct_makeids.clear();
     }
 
     fn bound_retained_capacity(&mut self) {
@@ -188,9 +185,6 @@ impl DecodeScratch {
         }
         if self.schema_yearfrom.capacity() > MAX_RETAINED_SCHEMA_PRIORITIES {
             self.schema_yearfrom = IntMap::default();
-        }
-        if self.distinct_makeids.capacity() > MAX_RETAINED_MAKE_IDS {
-            self.distinct_makeids = Vec::new();
         }
     }
 }
@@ -241,9 +235,6 @@ impl Drop for DecodeScratchGuard {
                 }
                 if slot.schema_yearfrom.capacity() < self.scratch.schema_yearfrom.capacity() {
                     slot.schema_yearfrom = std::mem::take(&mut self.scratch.schema_yearfrom);
-                }
-                if slot.distinct_makeids.capacity() < self.scratch.distinct_makeids.capacity() {
-                    slot.distinct_makeids = std::mem::take(&mut self.scratch.distinct_makeids);
                 }
             }
         });
@@ -351,7 +342,6 @@ fn build_var_keys_reference(vin: &str) -> String {
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn decode_core_into<'a>(
     db: &'a Db,
-    var_wmi: &str,
     wmi: Option<&'a ArchivedWmi>,
     var_keys: &str,
     model_year: Option<i32>,
@@ -541,14 +531,14 @@ pub(crate) fn decode_core_into<'a>(
         wmiid,
         db.s(wmi.wmi.to_native()),
         wmi.createdon_key.to_native(),
-        &mut scratch.distinct_makeids,
+        &strings.makes,
     );
 
     // --- Conversion (priority 100): derive sibling elements via vpic.conversion.
     append_conversions(db, &mut items);
 
     // --- Vehicle Specs (priority -100): make/model/year/vehicletype matching.
-    append_vehicle_specs(db, &mut items, var_wmi, model_year);
+    append_vehicle_specs(db, &mut items, &strings.spec_makes, model_year);
 
     // --- DefaultValue (priority 10).
     let defaults = if db.defaults_independent() {
@@ -776,7 +766,7 @@ fn append_make<'a>(
     wmiid: i32,
     var_wmi: &'a str,
     wmi_created: i64,
-    distinct_makeids: &mut Vec<i32>,
+    distinct_makeids: &[i32],
 ) {
     let model_item = items.iter().find(|it| it.element_id == 28).map(|it| {
         (
@@ -808,10 +798,6 @@ fn append_make<'a>(
         }
     } else {
         // single distinct public make via wmi_make
-        let makes = db.wmi_makes_for(wmiid);
-        distinct_makeids.extend(makes.iter().map(|m| m.makeid.to_native()));
-        distinct_makeids.sort_unstable();
-        distinct_makeids.dedup();
         if distinct_makeids.len() == 1 {
             let (makeid, name) = db.make_text(distinct_makeids[0]);
             items.push(DecodingItem {
@@ -924,7 +910,7 @@ const SPEC_EXEMPT: [i32; 9] = [1, 114, 121, 129, 150, 154, 155, 169, 186];
 fn append_vehicle_specs<'a>(
     db: &'a Db,
     items: &mut Vec<DecodingItem<'a>>,
-    var_wmi: &str,
+    makeids: &[i32],
     model_year: Option<i32>,
 ) {
     // STEP 0: tVehicleType (element 39) and var_modelId (element 28). Either NULL
@@ -948,14 +934,13 @@ fn append_vehicle_specs<'a>(
     // qualifies on make in {wmi's makes}, vehicletype, a model row == model_id,
     // year (no year rows match any, else exact), tobeqced gate, and having >=1
     // key pattern. (includeNotPublicilyAvailable is false here, as in W1.)
-    let makeids = db.makeids_for_wmi_str(var_wmi);
     struct Candidate {
         sp_id: i32,
         schema_id: i32,
         tobeqced: bool,
     }
     let mut candidates: Vec<Candidate> = Vec::new();
-    for &makeid in &makeids {
+    for &makeid in makeids {
         for s in db.vspecschemas_for_make_model(makeid, model_id) {
             let schema_id = s.id.to_native();
             if s.vehicletypeid.to_native() != veh_type || s.tobeqced {
@@ -1218,7 +1203,7 @@ mod tests {
         {
             let mut nested = DecodeScratchGuard::take();
             assert!(nested.matched_patterns.is_empty());
-            nested.distinct_makeids.reserve(8);
+            nested.schema_yearfrom.reserve(8);
         }
         let panic = std::panic::catch_unwind(|| {
             let mut scratch = DecodeScratchGuard::take();
@@ -1230,7 +1215,6 @@ mod tests {
         let restored = DecodeScratchGuard::take();
         assert!(restored.matched_patterns.capacity() >= 32);
         assert!(restored.schema_yearfrom.capacity() >= 16);
-        assert!(restored.distinct_makeids.capacity() >= 8);
     }
 
     #[test]
@@ -1265,12 +1249,10 @@ mod tests {
             scratch
                 .schema_yearfrom
                 .reserve(MAX_RETAINED_SCHEMA_PRIORITIES + 1);
-            scratch.distinct_makeids.reserve(MAX_RETAINED_MAKE_IDS + 1);
         }
         let scratch = DecodeScratchGuard::take();
         assert!(scratch.matched_patterns.capacity() <= MAX_RETAINED_MATCHED_PATTERNS);
         assert!(scratch.schema_yearfrom.capacity() <= MAX_RETAINED_SCHEMA_PRIORITIES);
-        assert!(scratch.distinct_makeids.capacity() <= MAX_RETAINED_MAKE_IDS);
     }
 
     #[test]
@@ -1329,7 +1311,6 @@ mod tests {
         let mut scan = PatternScan::default();
         let result = decode_core_into(
             Db::embedded(),
-            "___",
             None,
             "",
             None,

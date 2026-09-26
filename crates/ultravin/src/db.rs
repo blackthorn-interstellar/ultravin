@@ -74,6 +74,10 @@ pub(crate) struct WmiStrings {
     pub wmi: String,
     pub vehicle: Option<(String, String)>,
     pub manufacturer: Option<(String, String)>,
+    /// Distinct make ids linked to this row, ascending.
+    pub makes: Box<[i32]>,
+    /// [`Db::makeids_for_wmi_str`] of this row's WMI string.
+    pub spec_makes: Box<[i32]>,
 }
 
 pub(crate) struct ProjectionMeta {
@@ -527,7 +531,18 @@ impl Db {
                     .unwrap_or_default();
                 (manufacturer_id.to_string(), name.to_uppercase())
             });
+            let mut makes: Vec<i32> = self
+                .wmi_makes_for(wmi.id.to_native())
+                .iter()
+                .map(|m| m.makeid.to_native())
+                .collect();
+            makes.sort_unstable();
+            makes.dedup();
             Box::new(WmiStrings {
+                makes: makes.into_boxed_slice(),
+                spec_makes: self
+                    .makeids_for_wmi_str(self.s(wmi.wmi.to_native()))
+                    .into_boxed_slice(),
                 wmi: self.s(wmi.wmi.to_native()).to_ascii_uppercase(),
                 vehicle,
                 manufacturer,

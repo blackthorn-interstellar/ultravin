@@ -1192,10 +1192,16 @@ struct Defaults {
 /// vehicle type and in template order (`None` when not projected), each with
 /// its output rank. They borrow only `'static` storage, so a full result can
 /// copy them instead of building an item and projecting it per VIN.
-type DefaultElements = hash::IntMap<i32, Box<[Option<(u16, DecodedElement<'static>)>]>>;
+type DefaultElements = hash::IntMap<i32, DefaultBlock>;
+
+struct DefaultBlock {
+    rows: Box<[Option<(u16, DecodedElement<'static>)>]>,
+    /// `(rank, row)` for every projected row, by ascending output rank.
+    by_rank: Box<[(u16, u8)]>,
+}
 
 /// One vehicle type's finished default records and the mask of those that apply.
-type DefaultRecords = Option<(&'static [Option<(u16, DecodedElement<'static>)>], u64)>;
+type DefaultRecords = Option<(&'static DefaultBlock, u64)>;
 
 fn default_elements(db: &Db) -> Option<&'static DefaultElements> {
     static ELEMENTS: std::sync::OnceLock<DefaultElements> = std::sync::OnceLock::new();
@@ -1257,8 +1263,16 @@ fn default_elements(db: &Db) -> Option<&'static DefaultElements> {
                             },
                         ))
                     })
+                    .collect::<Box<[_]>>();
+                let mut by_rank: Vec<(u16, u8)> = rows
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(i, row)| Some((row.as_ref()?.0, u8::try_from(i).ok()?)))
+                    .filter(|&(rank, _)| rank != u16::MAX)
                     .collect();
-                (vehicle_type, rows)
+                by_rank.sort_unstable();
+                let by_rank = by_rank.into_boxed_slice();
+                (vehicle_type, DefaultBlock { rows, by_rank })
             })
             .collect()
     }))
@@ -1616,7 +1630,6 @@ fn run_pass<'a>(
     }
     let core = decode::decode_core_into(
         db,
-        var_wmi,
         context.public_wmi,
         var_keys,
         model_year,
@@ -1769,7 +1782,7 @@ fn fill_projection_order(
     items: &[decode::DecodingItem<'_>],
     defaults: DefaultRecords,
 ) {
-    let (records, mask) = defaults.unwrap_or((&[], 0));
+    let (records, mask) = defaults.map_or((&[][..], 0), |(block, mask)| (&block.rows[..], mask));
     let applied = || {
         records
             .iter()
@@ -1893,11 +1906,117 @@ fn project<'a>(
     mut items: Vec<decode::DecodingItem<'a>>,
     defaults: DefaultRecords,
 ) -> Vec<DecodedElement<'a>> {
-    let mut order = ProjectionOrderScratch::take();
-    fill_projection_order(&mut order, db, &items, defaults);
-    let mut elements: Vec<DecodedElement> = Vec::with_capacity(order.len());
-    append_projected(db, &mut items, defaults, &order, &mut elements);
+    let mut elements = Vec::new();
+    project_into(db, &mut items, defaults, &mut elements);
     elements
+}
+
+/// Project into `elements`. Each element has a fixed output rank and applied
+/// defaults are stored by rank, so when no item element repeats, the output is
+/// a merge of the items' rank bitmap with the defaults; repeats (notes) take
+/// the general ordering.
+fn project_into<'a>(
+    db: &'a Db,
+    items: &mut [decode::DecodingItem<'a>],
+    defaults: DefaultRecords,
+    elements: &mut Vec<DecodedElement<'a>>,
+) {
+    const RANK_WORDS: usize = 4;
+    let mut ranked = [0u64; RANK_WORDS];
+    let mut item_at = [0u16; RANK_WORDS * 64];
+    let ranks = db.output_ranks();
+    let placed = items.len() <= usize::from(u16::MAX)
+        && items.iter().enumerate().all(|(index, it)| {
+            let rank = usize::try_from(it.element_id)
+                .ok()
+                .and_then(|id| ranks.get(id).copied())
+                .unwrap_or(u16::MAX);
+            if rank == u16::MAX {
+                return true;
+            }
+            let (word, bit) = (usize::from(rank / 64), rank % 64);
+            if word >= RANK_WORDS || ranked[word] >> bit & 1 != 0 {
+                return false;
+            }
+            ranked[word] |= 1 << bit;
+            item_at[usize::from(rank)] = index as u16;
+            true
+        });
+    if !placed {
+        let mut order = ProjectionOrderScratch::take();
+        fill_projection_order(&mut order, db, items, defaults);
+        elements.reserve_exact(order.len());
+        append_projected(db, items, defaults, &order, elements);
+        return;
+    }
+    let (rows, by_rank, mask) = defaults.map_or((&[][..], &[][..], 0), |(block, mask)| {
+        (&block.rows[..], &block.by_rank[..], mask)
+    });
+    let applied = by_rank
+        .iter()
+        .filter(move |&&(_, row)| mask.checked_shr(u32::from(row)).is_some_and(|m| m & 1 != 0));
+    let upper = ranked
+        .iter()
+        .map(|w| w.count_ones() as usize)
+        .sum::<usize>()
+        + applied.clone().count();
+    elements.reserve_exact(upper);
+    let spare = elements.spare_capacity_mut();
+    let mut written = 0;
+    let projection_meta = db.projection_meta_lookup();
+    let mut applied = applied.peekable();
+    let default_record = |row: u8| {
+        let (_, record) = rows[usize::from(row)]
+            .as_ref()
+            .expect("ranked defaults are projected");
+        copy_default_record(record)
+    };
+    for (word, mut bits) in ranked.into_iter().enumerate() {
+        while bits != 0 {
+            let rank = (word * 64) as u16 + bits.trailing_zeros() as u16;
+            bits &= bits - 1;
+            while let Some(&(_, row)) = applied.next_if(|&&(default_rank, _)| default_rank < rank) {
+                spare[written].write(default_record(row));
+                written += 1;
+            }
+            let it = &mut items[usize::from(item_at[usize::from(rank)])];
+            if let Some(meta) = projection_meta(it.element_id) {
+                spare[written].write(projected_item(meta, it));
+                written += 1;
+            }
+        }
+    }
+    for &(_, row) in applied {
+        spare[written].write(default_record(row));
+        written += 1;
+    }
+    // SAFETY: the first `written` spare slots were initialized above.
+    unsafe { elements.set_len(elements.len() + written) };
+}
+
+/// An item's output element, moving its owned text out of the item.
+#[inline]
+fn projected_item<'a>(
+    meta: &'a db::ProjectionMeta,
+    it: &mut decode::DecodingItem<'a>,
+) -> DecodedElement<'a> {
+    DecodedElement {
+        group_name: &meta.group_name,
+        variable: &meta.variable,
+        value: scrub_value(std::mem::take(&mut it.value)),
+        element_id: it.element_id,
+        attribute_id: std::mem::take(&mut it.attribute_id),
+        code: &meta.code,
+        data_type: &meta.data_type,
+        decode: &meta.decode,
+        source: std::mem::take(&mut it.source),
+        pattern_id: opt_i32(it.pattern_id),
+        vin_schema_id: opt_i32(it.vin_schema_id),
+        keys: std::mem::take(&mut it.keys),
+        created_on: opt_i64(it.created_on),
+        wmi_id: opt_i32(it.wmi_id),
+        to_be_qced: it.to_be_qced,
+    }
 }
 
 fn append_projected<'a>(
@@ -1907,7 +2026,7 @@ fn append_projected<'a>(
     order: &[(u32, usize)],
     elements: &mut Vec<DecodedElement<'a>>,
 ) {
-    let records = defaults.map_or(&[][..], |(records, _)| records);
+    let records = defaults.map_or(&[][..], |(block, _)| &block.rows[..]);
     // Write each 224-byte record straight into reserved capacity; `push`
     // builds it on the stack and copies it in.
     elements.reserve(order.len());
@@ -1925,23 +2044,7 @@ fn append_projected<'a>(
         let Some(meta) = projection_meta(it.element_id) else {
             continue;
         };
-        spare[written].write(DecodedElement {
-            group_name: &meta.group_name,
-            variable: &meta.variable,
-            value: scrub_value(std::mem::take(&mut it.value)),
-            element_id: it.element_id,
-            attribute_id: std::mem::take(&mut it.attribute_id),
-            code: &meta.code,
-            data_type: &meta.data_type,
-            decode: &meta.decode,
-            source: std::mem::take(&mut it.source),
-            pattern_id: opt_i32(it.pattern_id),
-            vin_schema_id: opt_i32(it.vin_schema_id),
-            keys: std::mem::take(&mut it.keys),
-            created_on: opt_i64(it.created_on),
-            wmi_id: opt_i32(it.wmi_id),
-            to_be_qced: it.to_be_qced,
-        });
+        spare[written].write(projected_item(meta, it));
         written += 1;
     }
     // SAFETY: the first `written` spare slots were initialized above.
@@ -1955,10 +2058,7 @@ fn project_reusing<'a>(
     elements: &mut Vec<DecodedElement<'a>>,
 ) {
     debug_assert!(elements.is_empty());
-    let mut order = ProjectionOrderScratch::take();
-    fill_projection_order(&mut order, db, items, defaults);
-    elements.reserve_exact(order.len());
-    append_projected(db, items, defaults, &order, elements);
+    project_into(db, items, defaults, elements);
 }
 
 fn error_codes_csv(codes: &[i32]) -> String {
@@ -2540,7 +2640,6 @@ mod tests {
             for model_year in [None, plan.rmy, plan.omy] {
                 let core = decode::decode_core_into(
                     db,
-                    &var_wmi,
                     context.public_wmi,
                     var_keys.as_str(),
                     model_year,
