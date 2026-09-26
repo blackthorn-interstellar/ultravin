@@ -625,6 +625,9 @@ fn batch_pool() -> Arc<rayon::ThreadPool> {
     if let Some((_, pool)) = slot.as_ref().filter(|(owner, _)| *owner == pid) {
         return Arc::clone(pool);
     }
+    // Leak the parent's pool: dropping it wakes workers that no longer exist,
+    // through a lock fork() may have left held.
+    std::mem::forget(slot.take());
     let pool = Arc::new(
         rayon::ThreadPoolBuilder::new()
             .build()

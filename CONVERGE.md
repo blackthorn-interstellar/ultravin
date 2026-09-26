@@ -70,6 +70,7 @@ Test:
 - 2026-09-26 bug: `decode_stream()` on a StructArray with a null row panicked (`RecordBatch::from(&StructArray)` asserts no top-level nulls); the struct now goes through `StructArray::flatten`, so a masked row reads as a null VIN/year. Failing test written first; sliced masked structs checked. Found by a Codex scout; skeptic (Codex) accepted.
 - 2026-09-26 bug: `decode_stream(table["vin"])` — a ChunkedArray (or polars Series) — failed with "Unable to interpret C data struct as a Schema": `ArrowArrayStreamReader` only takes struct streams, though the stub promises a bare array is read as the VIN column. A non-struct C stream now goes through a small `BareStream` reader that wraps each chunk as the `vin` column (shared `column_batch` with the single-array path). Failing test written first. Found by a Codex scout; skeptic (Codex) accepted after a release-before-`get_schema` guard.
 - 2026-09-26 bug: `seeded()`/`pairwise()` varied VIN positions 12-14 like any other, overwriting a six-character (low-volume) WMI's suffix, so every low-volume schema's VINs decoded as error 7 and matched none of its rules (0 of 1,722,279 seeded VINs kept WMI 1F9434). `position_classes` now pins those positions to the suffix. Full `seeded()`: 1,804,525 VINs, 12 error-7, 0 error-400. Failing test written first. Found by a Codex scout; skeptic (Codex) accepted. `answerkey verify` checks the VINs stored in the key, so the pinned key stays valid; the next monthly build sends the low-volume VINs to the oracle for the first time.
+- 2026-09-26 bug: a `decode_stream(..., batch_size="auto")` built before `os.fork()` hung forever in the child: `BatchFeedback::new_predictive` eagerly builds a 1-thread rayon calibration pool whose worker does not survive fork. The calibration now records the pool's pid and rebuilds it in a child; every release of an inherited pool (rebuild, calibration done, drop) leaks it instead of dropping it, since rayon's Drop wakes the missing worker through a lock fork may have left held — `lib.rs::batch_pool`'s replacement now leaks too. Failing test written first (`test_fork.py`). Found by a Codex scout; skeptic (Codex) accepted after three rounds.
 
 ## Rejected
 
@@ -109,7 +110,7 @@ Test:
 
 ## Consecutive empty iterations
 
-1
+0
 
 Resumed 2026-09-25 after other agents' perf commits (8befaf6..2b7aeca). Previously converged at 8befaf6 on 2026-09-22. Includes another agent's decode-path perf commits 6712776 and fcfed22, which touch coverage-gated files this loop cannot verify locally (see open questions) and were not reviewed here.
 

@@ -44,6 +44,27 @@ struct PredictorCalibration {
     measured_elapsed: Duration,
     measured_bytes: usize,
     pool: Option<Arc<rayon::ThreadPool>>,
+    /// The process that built `pool`: `fork()` copies its bookkeeping but not its
+    /// worker, so a child must build its own (see `batch_pool` in lib.rs).
+    pool_pid: u32,
+}
+
+impl PredictorCalibration {
+    /// Let go of the pool. One built before a `fork()` is leaked, not dropped:
+    /// dropping it wakes a worker that no longer exists, through a lock the fork
+    /// may have left held.
+    fn release_pool(&mut self) {
+        let pool = self.pool.take();
+        if self.pool_pid != std::process::id() {
+            std::mem::forget(pool);
+        }
+    }
+}
+
+impl Drop for PredictorCalibration {
+    fn drop(&mut self) {
+        self.release_pool();
+    }
 }
 
 impl BatchFeedback {
@@ -91,6 +112,7 @@ impl BatchFeedback {
             measured_elapsed: Duration::ZERO,
             measured_bytes: 0,
             pool: Some(Arc::new(pool)),
+            pool_pid: std::process::id(),
         });
         Ok(feedback)
     }
@@ -125,9 +147,22 @@ impl BatchFeedback {
             .lock()
             .expect("batch feedback mutex poisoned")
             .calibration
-            .as_ref()
+            .as_mut()
             .filter(|c| c.completed < 2)
-            .map(|c| (c.pool.clone(), c.completed == 1))
+            .map(|c| {
+                let pid = std::process::id();
+                if c.pool_pid != pid {
+                    c.release_pool();
+                    // A pool that cannot be rebuilt only costs isolated timing.
+                    c.pool = rayon::ThreadPoolBuilder::new()
+                        .num_threads(1)
+                        .build()
+                        .ok()
+                        .map(Arc::new);
+                    c.pool_pid = pid;
+                }
+                (c.pool.clone(), c.completed == 1)
+            })
             .unwrap_or((None, false));
         let (value, bytes, elapsed) = match pool {
             Some(pool) => pool.install(|| {
@@ -180,7 +215,7 @@ impl BatchFeedback {
                         return None;
                     }
                     calibration.completed = 2;
-                    calibration.pool = None;
+                    calibration.release_pool();
                     Some((
                         calibration.format,
                         calibration.memory_bytes,
