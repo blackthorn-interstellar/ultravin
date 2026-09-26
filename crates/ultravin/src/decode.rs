@@ -77,12 +77,6 @@ impl PatternScanStorage {
         }
     }
 
-    fn retained_capacity(&self) -> usize {
-        self.schema_slots.capacity()
-            + self.hit_vectors.capacity()
-            + self.hit_vectors.iter().map(Vec::capacity).sum::<usize>()
-    }
-
     fn bound_retained_capacity(&mut self) {
         let total_hits = self.hit_vectors.iter().map(Vec::capacity).sum::<usize>();
         if self.schema_slots.capacity() > MAX_RETAINED_PATTERN_SCHEMAS
@@ -105,14 +99,14 @@ pub struct PatternScan {
 
 impl Default for PatternScan {
     fn default() -> Self {
-        let mut storage = PATTERN_SCAN_SCRATCH
+        let storage = PATTERN_SCAN_SCRATCH
             .try_with(|slot| {
                 slot.try_borrow_mut()
                     .map(|mut slot| std::mem::take(&mut *slot))
                     .unwrap_or_default()
             })
             .unwrap_or_default();
-        storage.clear();
+        // Pooled storage was cleared when its last scan dropped.
         Self {
             storage,
             used_vectors: 0,
@@ -147,7 +141,9 @@ impl Drop for PatternScan {
         self.storage.bound_retained_capacity();
         let _ = PATTERN_SCAN_SCRATCH.try_with(|slot| {
             if let Ok(mut slot) = slot.try_borrow_mut() {
-                if slot.retained_capacity() < self.storage.retained_capacity() {
+                // A nested scan returns first; the outer one then finds the
+                // pool occupied and is freed.
+                if slot.hit_vectors.capacity() == 0 {
                     *slot = std::mem::take(&mut self.storage);
                 }
             }
@@ -287,8 +283,8 @@ pub(crate) struct VarKeys {
 
 impl VarKeys {
     pub(crate) fn as_str(&self) -> &str {
-        // `sanitize` makes the internal decode VIN ASCII before constructing this.
-        std::str::from_utf8(&self.bytes[..self.len]).expect("sanitized VIN keys are ASCII")
+        // SAFETY: `build_var_keys_stack` stores only ASCII bytes.
+        unsafe { std::str::from_utf8_unchecked(&self.bytes[..self.len]) }
     }
 }
 
@@ -312,6 +308,13 @@ pub(crate) fn build_var_keys_stack(vin: &str) -> VarKeys {
         let second = &b[9..end2];
         out.bytes[out.len..out.len + second.len()].copy_from_slice(second);
         out.len += second.len();
+    }
+    // Decode VINs are already sanitized to ASCII; this keeps `as_str` sound
+    // for any other input.
+    for byte in &mut out.bytes[..out.len] {
+        if !byte.is_ascii() {
+            *byte = b'&';
+        }
     }
     out
 }
