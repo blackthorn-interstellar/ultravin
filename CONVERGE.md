@@ -67,6 +67,7 @@ Test:
 - 2026-09-26 simplify: `tests/decode.rs` identity helper `db_ref` (one call site) inlined as `&db` (-9 lines after rustfmt). Skeptic (Codex) accepted.
 - 2026-09-26 docs: DATA_REFRESH.md:61 said any jump past 500 newly stale cells fails; `stale_cache_gate` fails it only in the charset-regression shape (recompute-only rows up >500, or a nonzero stale count more than doubled and up >2,500) and reports schema-drop cache lag. Skeptic (Codex) accepted after the nonzero-previous-count fix.
 - 2026-09-26 performance: `test_answerkey.py::test_the_sample_keeps_roughly_one_in_n`, the slowest test (7s idle, 13s loaded), spent it all in `ultravin.generate(40_000)`; the blake2b sampler only needs strings, so it now draws 40,000 seeded VIN-alphabet strings (call 0.05s). Wrong-stride and `vin[9].isdigit()`-keyed sampler breaks still fail it. Skeptic (Codex) rejected a digits-only first cut, accepted this.
+- 2026-09-26 bug: `decode_stream()` on a StructArray with a null row panicked (`RecordBatch::from(&StructArray)` asserts no top-level nulls); the struct now goes through `StructArray::flatten`, so a masked row reads as a null VIN/year. Failing test written first; sliced masked structs checked. Found by a Codex scout; skeptic (Codex) accepted.
 
 ## Rejected
 
@@ -105,7 +106,7 @@ Test:
 
 ## Consecutive empty iterations
 
-1
+0
 
 Resumed 2026-09-25 after other agents' perf commits (8befaf6..2b7aeca). Previously converged at 8befaf6 on 2026-09-22. Includes another agent's decode-path perf commits 6712776 and fcfed22, which touch coverage-gated files this loop cannot verify locally (see open questions) and were not reviewed here.
 
@@ -131,5 +132,6 @@ Scout findings not yet through the skeptic. Re-verify before acting.
 - clean (do not re-probe): all six decode entry points agree on 3,562 VINs × 13 year hints, plain and full; empty/blank/CRLF stdin, zero-row parquet, dst-inside-src, duplicate columns, second use of a stream, generate filters and determinism all behave.
 
 - Left for the human: `docs/VISION.md:28` quotes September 15 benchmark numbers (164,316 / 521,234 / 1,147,742); the loop never edits the vision.
+- 2026-09-26 skeptic side-find (unverified by the loop): a StructArray with a nested struct child, `.slice(1,3)`, panics in `decode_stream` even without a mask, inside `make_array(data)` after `from_ffi` (crates/ultravin-py/src/lib.rs ~725) — before this loop's flatten change. Reproduce and root-cause (arrow-rs FFI import of sliced nested structs?) before fixing.
 - tooling note: when break-testing Rust, `touch` the restored file — `mv`-restoring an older mtime leaves cargo serving the broken build.
 - docs (low value, counts drift): `docs/CORPUS.md:143,155,162,164` allowance counts (39/138/26/16) vs `scripts/coverage_allowances.json` today (38/136/29/11); `docs/RELEASE.md:27` "~82MB" for an 83.4 MB artifact the same doc calls 83MB at :39; `docs/SCANNER-NOTES.md` cites `db.rs` unsafe-site line numbers, `.gitignore:120`, `BENCHMARKS.md:202`, `data-review.yaml:14` that have all moved.

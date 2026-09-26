@@ -12,7 +12,9 @@ use std::time::{Duration, Instant};
 use arrow_array::array::make_array;
 use arrow_array::ffi::{from_ffi, FFI_ArrowArray};
 use arrow_array::ffi_stream::{ArrowArrayStreamReader, FFI_ArrowArrayStream};
-use arrow_array::{Array, RecordBatch, RecordBatchIterator, RecordBatchReader, StructArray};
+use arrow_array::{
+    Array, RecordBatch, RecordBatchIterator, RecordBatchOptions, RecordBatchReader, StructArray,
+};
 use arrow_schema::ffi::FFI_ArrowSchema;
 use arrow_schema::{ArrowError as ArrowRsError, Field, Schema, SchemaRef};
 use pyo3::exceptions::{PyImportError, PyOSError, PyRuntimeError, PyTypeError, PyValueError};
@@ -724,11 +726,22 @@ fn batch_from_capsules(
     let data = unsafe { from_ffi(array, &schema) }
         .map_err(|e| PyValueError::new_err(format!("importing an Arrow array: {e}")))?;
     let array = make_array(data);
-    if let Some(st) = array.as_any().downcast_ref::<StructArray>() {
-        return Ok(RecordBatch::from(st));
-    }
-    let field = Field::new(BARE_ARRAY_COLUMN, array.data_type().clone(), true);
-    RecordBatch::try_new(Arc::new(Schema::new(vec![field])), vec![array])
+    let (fields, columns) = match array.as_any().downcast_ref::<StructArray>() {
+        // `flatten` folds a null struct row into every child, so a masked row
+        // reads as nulls instead of exposing whatever its children hold.
+        Some(st) => st.flatten(),
+        None => (
+            vec![Field::new(
+                BARE_ARRAY_COLUMN,
+                array.data_type().clone(),
+                true,
+            )]
+            .into(),
+            vec![array.clone()],
+        ),
+    };
+    let options = RecordBatchOptions::new().with_row_count(Some(array.len()));
+    RecordBatch::try_new_with_options(Arc::new(Schema::new(fields)), columns, &options)
         .map_err(|e| PyValueError::new_err(format!("importing an Arrow array: {e}")))
 }
 

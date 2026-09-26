@@ -670,6 +670,20 @@ def test_a_struct_array_is_read_as_its_named_columns() -> None:
     }
 
 
+def test_a_null_struct_row_decodes_as_a_null_row() -> None:
+    """A masked struct row hides whatever its children hold; it must read as a
+    null VIN and year, not panic and not decode the hidden values."""
+    vins = pa.array([HONDA, HONDA])
+    years = pa.array([2013, 2013], pa.int32())
+    struct = pa.StructArray.from_arrays([vins, years], names=["vin", "year"], mask=pa.array([True, False]))
+    assert columns(struct, columns=[MAKE]) == {
+        "vin": [None, HONDA],
+        "year": [None, 2013],
+        "decoded_model_year": [None, 2013],
+        "Make": [None, "HONDA"],
+    }
+
+
 def test_an_abandoned_capsule_releases_its_stream(tmp_path: Path) -> None:
     """The exported stream owns the decoder; dropping the capsule undrained has
     to run its release callback, or every abandoned stream leaks one reader."""
