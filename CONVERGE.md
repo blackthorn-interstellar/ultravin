@@ -116,9 +116,9 @@ Test:
 
 ## Consecutive empty iterations
 
-2
+3
 
-Resumed 2026-09-25 after other agents' perf commits (8befaf6..2b7aeca). Previously converged at 8befaf6 on 2026-09-22. Includes another agent's decode-path perf commits 6712776 and fcfed22, which touch coverage-gated files this loop cannot verify locally (see open questions) and were not reviewed here.
+Converged at ae5e6ad on 2026-09-26 (resumed 2026-09-25 after other agents' perf commits 8befaf6..2b7aeca; previously converged at 8befaf6 on 2026-09-22).
 
 ## Open questions
 
