@@ -150,6 +150,8 @@ pub struct Db {
     /// Make id -> its decimal text and uppercase name, filled on first use,
     /// over the Make table's id span: every Make item needs both.
     make_texts: OnceLock<Option<MakeTexts>>,
+    /// Elements some conversion reads: most items have none to look up.
+    conversion_sources: OnceLock<crate::hash::ElementSet>,
 }
 
 /// The Make table's first id and one lazily filled slot per id in its span.
@@ -172,6 +174,9 @@ pub(crate) struct DefaultTemplate {
 
 struct DefaultTemplates {
     by_type: IntMap<i32, Box<[DefaultTemplate]>>,
+    /// Per vehicle type: every row's bit, and `element_id ->` the bits of the
+    /// rows that element displaces, so a mask is one OR per item.
+    masks: IntMap<i32, (u64, Box<[u64]>)>,
     /// Whether decode passes can leave default rows out and add them to the
     /// winner only (see [`Db::defaults_independent`]).
     independent: bool,
@@ -238,6 +243,7 @@ impl Db {
             default_templates: OnceLock::new(),
             vinexception_filter: OnceLock::new(),
             make_texts: OnceLock::new(),
+            conversion_sources: OnceLock::new(),
         }
     }
 
@@ -806,6 +812,40 @@ impl Db {
             .map_or(&[], |rows| rows)
     }
 
+    /// Which of the vehicle type's first 64 default rows have an element absent
+    /// from `elements`: bit `i` stands for row `i`.
+    pub(crate) fn default_mask(
+        &self,
+        vehicletypeid: i32,
+        elements: impl Iterator<Item = i32>,
+    ) -> u64 {
+        let Some((all, by_element)) = self.default_templates().masks.get(&vehicletypeid) else {
+            return 0;
+        };
+        let present = elements.fold(0, |present, element| {
+            present
+                | usize::try_from(element)
+                    .ok()
+                    .and_then(|element| by_element.get(element))
+                    .copied()
+                    .unwrap_or(0)
+        });
+        all & !present
+    }
+
+    /// Whether any conversion reads `element_id`.
+    pub(crate) fn is_conversion_source(&self, element_id: i32) -> bool {
+        self.conversion_sources
+            .get_or_init(|| {
+                self.a()
+                    .conversion
+                    .iter()
+                    .map(|c| c.fromelementid.to_native())
+                    .collect()
+            })
+            .contains(&element_id)
+    }
+
     /// Vehicle types that have default rows.
     pub(crate) fn default_vehicle_types(&self) -> impl Iterator<Item = i32> + '_ {
         self.default_templates().by_type.keys().copied()
@@ -857,7 +897,25 @@ impl Db {
                             && seen.insert(row.element_id)
                     })
             });
+            let masks = by_type
+                .iter()
+                .map(|(&id, rows)| {
+                    let mut all = 0u64;
+                    let mut by_element = Vec::new();
+                    for (i, row) in rows.iter().enumerate().take(64) {
+                        all |= 1 << i;
+                        if let Ok(element) = usize::try_from(row.element_id) {
+                            if by_element.len() <= element {
+                                by_element.resize(element + 1, 0);
+                            }
+                            by_element[element] |= 1 << i;
+                        }
+                    }
+                    (id, (all, by_element.into_boxed_slice()))
+                })
+                .collect();
             DefaultTemplates {
+                masks,
                 by_type: by_type
                     .into_iter()
                     .map(|(id, rows)| (id, rows.into_boxed_slice()))

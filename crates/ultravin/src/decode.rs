@@ -840,7 +840,10 @@ fn append_conversions<'a>(db: &'a Db, items: &mut Vec<DecodingItem<'a>>) {
     // Snapshot the cursor rows before any insert (PostgreSQL evaluates the FOR
     // query once, so conversion-derived items never spawn further conversions).
     let mut rows: Vec<Row> = Vec::new();
-    for it in items.iter() {
+    for it in items
+        .iter()
+        .filter(|it| db.is_conversion_source(it.element_id))
+    {
         for c in db.conversions_from(it.element_id) {
             rows.push(Row {
                 priority: it.priority,
@@ -1084,12 +1087,7 @@ fn default_vehicle_type(items: &[DecodingItem]) -> Option<i32> {
 /// Which of the vehicle type's default rows apply: bit `i` is set when row `i`'s
 /// element is absent from `items`. Requires [`Db::defaults_independent`].
 pub(crate) fn default_mask(db: &Db, vehicle_type: i32, items: &[DecodingItem]) -> u64 {
-    let present: ElementSet = items.iter().map(|it| it.element_id).collect();
-    db.default_templates_for(vehicle_type)
-        .iter()
-        .enumerate()
-        .filter(|(_, dv)| !present.contains(&dv.element_id))
-        .fold(0, |mask, (i, _)| mask | 1 << i)
+    db.default_mask(vehicle_type, items.iter().map(|it| it.element_id))
 }
 
 /// Insert the masked default rows at `at`, where the core pass would have

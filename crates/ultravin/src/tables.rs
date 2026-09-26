@@ -249,7 +249,15 @@ pub fn tag_of_table(name: &str) -> Option<u16> {
 
 /// The `tag` (index into `lookups`) for an element id.
 pub fn element_lookup_tag(element_id: i32) -> Option<u16> {
-    lookup_table_for_element(element_id).and_then(tag_of_table)
+    // Resolution asks this for every decoded item; answer from a table
+    // instead of comparing table names.
+    static TAGS: std::sync::LazyLock<[Option<u16>; 256]> = std::sync::LazyLock::new(|| {
+        std::array::from_fn(|id| lookup_table_for_element(id as i32).and_then(tag_of_table))
+    });
+    match usize::try_from(element_id) {
+        Ok(id) if id < 256 => TAGS[id],
+        _ => lookup_table_for_element(element_id).and_then(tag_of_table),
+    }
 }
 
 #[derive(Archive, Serialize, Deserialize, Debug, Clone)]
