@@ -61,6 +61,7 @@ Test:
 - 2026-09-25 docs: crates/ultravin/README.md quoted the Sept 23 ~258,000 VIN/s one-core figure (a ~99.5%-invalid corpus); now ~205,000, the current headline. The `generate()` stub promised a correct check digit though the default `invalid_rate` deliberately breaks some, and now names the `invalid_rate` ValueError. Skeptic (Codex) accepted.
 - 2026-09-25 bug: `ultravin decode-batch -` on non-UTF-8 stdin under a C locale or `PYTHONUTF8=1` (stdin uses surrogateescape) dumped a UnicodeEncodeError traceback (exit 1); `input_lines` now reconfigures stdin to strict UTF-8, as the file route already reads, so it is the one-line error, exit 2. Failing test written first. Skeptic (Codex) accepted.
 - 2026-09-25 bug: `ultravin decode $'\xff'` (argv not UTF-8, arrives as surrogates) dumped a UnicodeEncodeError traceback (exit 1); now `VIN is not valid UTF-8`, exit 2, as `decode-parquet` already reports it. Failing test written first. Skeptic (Codex) accepted.
+- 2026-09-25 bug: `make help` split descriptions on every colon (`column -t -s :`), so the 7 containing "usage:" printed their usage 50 columns away; the help pipeline now separates name and description with `|`. Checked on BSD and GNU sed. Skeptic (Codex) accepted.
 
 ## Rejected
 
@@ -118,6 +119,6 @@ Scout findings not yet through the skeptic. Re-verify before acting.
 - clean (do not re-probe): all six decode entry points agree on 3,562 VINs × 13 year hints, plain and full; empty/blank/CRLF stdin, zero-row parquet, dst-inside-src, duplicate columns, second use of a stream, generate filters and determinism all behave.
 
 - Left for the human: `docs/VISION.md:28` quotes September 15 benchmark numbers (164,316 / 521,234 / 1,147,742); the loop never edits the vision.
-- 2026-09-25 scout 3 (not yet through the skeptic): (b) `make help` (`Makefile:167`, `column -t -s :`) splits the 7 descriptions containing "usage:"; use a `|` separator. (c) `Db::defaultvalues_for` (`db.rs:801`) has no caller since a82eeaa — public API, needs the human's compatibility waiver. (d) `scripts/refresh.py` `Probe.etag` written, never read (-2).
+- 2026-09-25 scout 3 (not yet through the skeptic): (c) `Db::defaultvalues_for` (`db.rs:801`) has no caller since a82eeaa — public API, needs the human's compatibility waiver. (d) `scripts/refresh.py` `Probe.etag` written, never read (-2).
 - tooling note: when break-testing Rust, `touch` the restored file — `mv`-restoring an older mtime leaves cargo serving the broken build.
 - docs (low value, counts drift): `docs/CORPUS.md:143,155,162,164` allowance counts (39/138/26/16) vs `scripts/coverage_allowances.json` today (38/136/29/11); `docs/RELEASE.md:27` "~82MB" for an 83.4 MB artifact the same doc calls 83MB at :39; `docs/SCANNER-NOTES.md` cites `db.rs` unsafe-site line numbers, `.gitignore:120`, `BENCHMARKS.md:202`, `data-review.yaml:14` that have all moved.
