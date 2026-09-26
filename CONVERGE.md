@@ -116,7 +116,7 @@ Test:
 
 ## Consecutive empty iterations
 
-1
+2
 
 Resumed 2026-09-25 after other agents' perf commits (8befaf6..2b7aeca). Previously converged at 8befaf6 on 2026-09-22. Includes another agent's decode-path perf commits 6712776 and fcfed22, which touch coverage-gated files this loop cannot verify locally (see open questions) and were not reviewed here.
 
@@ -131,6 +131,8 @@ Resumed 2026-09-25 after other agents' perf commits (8befaf6..2b7aeca). Previous
 - `crates/ultravin/examples/slot_budget_probe.rs:916-918` has a `#[cfg(test)]` call to `run_pass` with 8 arguments where the function takes 9 (`max_rows` was added), so `cargo test -p ultravin --all-features --example slot_budget_probe` fails to compile (E0061); `make check` never builds example test modules, so nothing noticed. The file's sha256 is recorded as `source_sha256` in `scripts/bench/slot_budget_sweep_2026_09_15.json:162`, so any edit breaks that experiment record. Options: (A) leave it — recommended, it is a frozen record and the broken test guards nothing shipped; (B) fix the call and re-hash the record, accepting that the JSON no longer describes the measured source byte-for-byte.
 
 - `seeded()` promises every decoding rule is matched, but its greedy pair-covering fill can satisfy a rule's key while a competing rule still wins. A 200k-VIN sample (first 3,000 schemas) found 45 rules that the pattern sweep reaches and seeded never shows: 22 lose to a same-schema rule (e.g. schema 3585 pattern 127759 `**084` Coupe loses to 128017 Roadster), 8 lose to another schema, 15 not root-caused. Emitting one plain `build_vin(wmi, keys, year)` per distinct key as well recovered all 22 in emulation, but it adds up to one VIN per rule (the pattern sweep is ~548k, deduplicated against seeded's 1.8M) to the monthly answer-key corpus the oracle must answer — the corpus seeded was designed to keep below sweep+pairwise's ~2.26M. Options: (A) leave it and soften the docstring to "every rule's key is matched" — recommended, costs nothing and is honest; (B) add the per-key VINs and pay the larger oracle run; (C) a targeted re-seed that retries only rules that lost, checked by decoding — no growth, more code.
+
+- A displacement taken from a formula pattern (source "Formula Pattern", e.g. `1A9HS40A4DA329205`: Displacement (CI) `40`) converts to `0` in the other units (CC `0`, L `0`) instead of 655.48 cc / 0.655 L, because conversion reads the row's `attribute_id` (`TBD`) rather than its extracted value (crates/ultravin/src/decode.rs ~635/~857, conversion.rs ~19). NHTSA's own `spvindecode_core.sql:252` does the same (`value = cursor_item."AttributeId"`), so today this is exact spVinDecode parity, and fixing it is a deliberate deviation. Options: (A) keep parity — recommended by the vision's "spVinDecode parity is the correctness oracle" and non-goal "reinterpret NHTSA's decoding rules"; (B) correct it and register it in docs/KNOWN_DEVIATIONS.md like the other documented upstream corrections, accepting that the answer key must pin ultravin's answer for those VINs.
 
 ## Leads
 
