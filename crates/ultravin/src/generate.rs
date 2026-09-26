@@ -168,7 +168,14 @@ fn build_vin_filled(
                 vin[i + 3] = set[r.below(set.len())];
             }
         }
-        None => vin[11..17].fill(FILL_SERIAL),
+        None => {
+            vin[11..17].fill(FILL_SERIAL);
+            // A car/MPV/light truck's position 7 picks the 30-year cycle: a
+            // digit means 1980-2009, a letter 2010-2039. Fill it to agree.
+            if year < 2010 {
+                vin[6] = FILL_SERIAL;
+            }
+        }
     }
     let mut rng = fill.map(|(r, _)| r);
 
@@ -914,6 +921,21 @@ mod tests {
         assert_eq!(vin.len(), 17);
         assert!(vin.starts_with("1HGCM826"));
         assert_eq!(crate::check_digit(&vin), vin.chars().nth(8));
+    }
+
+    #[test]
+    fn an_open_position_seven_keeps_a_car_in_its_year_cycle() {
+        // For a car/MPV/light truck, position 7 picks the 30-year cycle: a digit
+        // means 1980-2009, a letter 2010-2039. Filling it with a letter sent a
+        // 1994 Honda pattern (`EH2*7`) to 2024, where its engine does not exist.
+        let Some(db) = Db::try_embedded() else {
+            eprintln!("skip: artifact not built");
+            return;
+        };
+        let vin = build_vin("JHM", "EH2*7", 1994).unwrap();
+        let r = crate::decode_with(db, &vin, 1_790_000_000_000_000, 2026);
+        assert_eq!(r.model_year, Some(1994), "{vin}");
+        assert_eq!(build_vin("JHM", "EH2*7", 2024).unwrap().as_bytes()[6], FILL);
     }
 
     #[test]
