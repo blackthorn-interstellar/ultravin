@@ -153,7 +153,7 @@ def generate(
     """Generate ``n`` random VINs, deterministic for a given ``seed``.
 
     Each VIN is built from a real WMI, a schema that WMI uses, and one of that
-    schema's patterns, with a correct check digit — so it decodes to real vehicle
+    schema's patterns, so it decodes to real vehicle
     attributes rather than to an unknown-manufacturer error. No database and no
     network: everything comes from the embedded artifact.
 
@@ -208,7 +208,8 @@ def generate(
     deduplicated corpus builder.
 
     ``n`` may not exceed 10,000,000; a larger request raises ``ValueError``
-    rather than attempting a multi-terabyte allocation. A filter that is
+    rather than attempting a multi-terabyte allocation, as does an
+    ``invalid_rate`` outside 0 to 1 (or NaN). A filter that is
     satisfiable in principle but effectively never — ``year=2039`` today — gives
     up after a long run of misses and returns what it found.
     """
