@@ -37,17 +37,10 @@ use crate::tables::NULL_I32;
 pub(crate) struct ValidChars {
     ascii: u128,
     other: std::collections::BTreeSet<char>,
-    /// The rendered form, built on first use and kept: a charset is built once
-    /// per (WMI, year, position) and memoized, but every VIN with a bad character
-    /// at that position renders the same set again — sorting and formatting it
-    /// char by char was ~4% of a decode. Cleared on `insert`, so the cache can
-    /// never outlive the set it describes.
-    rendered: OnceLock<String>,
 }
 
 impl ValidChars {
     fn insert(&mut self, c: char) {
-        self.rendered.take();
         if c.is_ascii() {
             self.ascii |= 1 << (c as u32);
         } else {
@@ -55,17 +48,18 @@ impl ValidChars {
         }
     }
 
-    /// The `Display` text, computed once per set.
-    fn rendered(&self) -> &str {
-        self.rendered.get_or_init(|| {
-            let mut chars: Vec<char> = (0..128u8)
-                .filter(|c| self.ascii & (1 << c) != 0)
-                .map(char::from)
-                .chain(self.other.iter().copied())
-                .collect();
-            chars.sort_by_key(|c| (c.is_ascii_alphanumeric(), *c));
-            chars.into_iter().collect()
-        })
+    /// Renders in the reference's order — the only way to turn this into a
+    /// string. Deliberately not `Deref`, and the inner set is private: a caller
+    /// that could reach `.iter()` would get codepoint order, which is the bug
+    /// this type exists to make unrepresentable.
+    fn rendered(&self) -> String {
+        let mut chars: Vec<char> = (0..128u8)
+            .filter(|c| self.ascii & (1 << c) != 0)
+            .map(char::from)
+            .chain(self.other.iter().copied())
+            .collect();
+        chars.sort_by_key(|c| (c.is_ascii_alphanumeric(), *c));
+        chars.into_iter().collect()
     }
 
     #[cfg(test)]
@@ -80,17 +74,6 @@ impl ValidChars {
     #[cfg(test)]
     fn is_empty(&self) -> bool {
         self.ascii == 0 && self.other.is_empty()
-    }
-}
-
-/// Renders in the reference's order — the only way to turn this into a string.
-///
-/// Deliberately not `Deref`, and the inner set is private: a caller that could
-/// reach `.iter()` would get codepoint order, which is the bug this type exists
-/// to make unrepresentable.
-impl std::fmt::Display for ValidChars {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.rendered())
     }
 }
 
@@ -275,7 +258,7 @@ impl Charset {
         let mut rendered = String::new();
         let mut ends = [0; 11];
         for (end, set) in ends.iter_mut().zip(&sets) {
-            rendered.push_str(set.rendered());
+            rendered.push_str(&set.rendered());
             *end = rendered.len() as u32;
         }
         let other = sets
@@ -1463,14 +1446,14 @@ mod collation_tests {
         // payload `_0129AZ`. Codepoint order would put `_` last.
         let mut set = ValidChars::default();
         "_0129AZ".chars().for_each(|c| set.insert(c));
-        assert_eq!(set.to_string(), "_0129AZ");
+        assert_eq!(set.rendered(), "_0129AZ");
     }
 
     #[test]
     fn an_alphanumeric_only_set_is_unchanged() {
         let mut set = ValidChars::default();
         "9A0Z".chars().for_each(|c| set.insert(c));
-        assert_eq!(set.to_string(), "09AZ");
+        assert_eq!(set.rendered(), "09AZ");
     }
 
     #[test]
@@ -1481,7 +1464,7 @@ mod collation_tests {
         "_|0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
             .chars()
             .for_each(|c| set.insert(c));
-        assert_eq!(set.to_string(), "_|0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+        assert_eq!(set.rendered(), "_|0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ");
     }
 }
 

@@ -37,7 +37,6 @@
     {"file": "errors.rs", "function": "<errors::Charset>::freeze::{closure#1}", "reason": "non-ASCII members of a frozen correction charset; vPIC charsets are ASCII _|0-9A-Z, so the per-position other sets stay absent", "regions": 4},
     {"file": "errors.rs", "function": "<errors::Charset>::freeze::{closure#1}::{closure#0}", "reason": "non-ASCII members of a frozen correction charset; vPIC charsets are ASCII _|0-9A-Z, so the per-position other sets stay absent", "regions": 2},
     {"file": "errors.rs", "function": "<errors::Charset>::is_empty::{closure#0}", "reason": "non-ASCII members of a frozen correction charset; vPIC charsets are ASCII _|0-9A-Z, so the per-position other sets stay absent", "regions": 2},
-    {"file": "errors.rs", "function": "<errors::ValidChars as core::fmt::Display>::fmt", "reason": "the write! error-propagation arm in ValidChars::Display; it is only rendered via to_string() into a String, whose fmt::Write never fails", "regions": 5},
     {"file": "errors.rs", "function": "<errors::ValidChars>::insert", "reason": "ValidChars insert/contains of a non-ASCII byte; vPIC charsets are ASCII _|0-9A-Z", "regions": 2},
     {"file": "errors.rs", "function": "<errors::ValidCharsetCache>::get", "reason": "ValidChars::get miss for a position the charset never wrote", "regions": 3},
     {"file": "errors.rs", "function": "<errors::VinChars>::as_slice", "reason": "VinChars empty-slice arm for a VIN with no bytes", "regions": 2},
