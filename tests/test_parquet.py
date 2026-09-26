@@ -306,6 +306,17 @@ def test_a_caller_year_column_that_is_not_a_number_is_refused(
         columns(src, year_column="year", columns=[MAKE])
 
 
+def test_an_all_missing_caller_year_column_means_no_hint() -> None:
+    """A year column whose every value is missing infers Arrow's Null type (pyarrow
+    from `[None]`, pandas/polars from an all-null column): no hint on any row, not
+    a refusal."""
+    table = pa.table({"vin": [HONDA, FORD], "year": pa.array([None, None])})
+    out = columns(table, year_column="year", columns=[MAKE])
+    assert out["decoded_model_year"] == [2003, 2013]
+    assert out["year"] == [None, None]
+    assert out["Make"] == ["HONDA", "FORD"]
+
+
 def test_a_float_caller_year_column_decodes_and_nan_means_no_hint(tmp_path: Path) -> None:
     """float64 is what pandas gives an integer column holding a missing value, so
     it is how a real year column most often arrives — it must not be refused.

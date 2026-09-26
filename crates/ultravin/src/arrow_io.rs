@@ -483,12 +483,13 @@ pub(crate) fn is_intish(dt: &DataType) -> bool {
 /// pandas hands over for an integer column containing a missing value — the
 /// single most common way a real year column arrives. Casting those is lossless
 /// for the values that matter and yields null for `NaN`, which simply means "no
-/// hint for this row".
+/// hint for this row". A column whose every value is missing arrives as `Null`
+/// and casts to all-null: no hint anywhere.
 ///
 /// Wider than [`is_intish`] on purpose; see there for why autodetect stays narrow.
 pub(crate) fn is_yearish(dt: &DataType) -> bool {
     match dt {
-        DataType::Float16 | DataType::Float32 | DataType::Float64 => true,
+        DataType::Null | DataType::Float16 | DataType::Float32 | DataType::Float64 => true,
         DataType::Dictionary(_, inner) => is_yearish(inner),
         other => is_intish(other),
     }
