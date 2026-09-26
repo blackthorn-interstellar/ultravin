@@ -1191,19 +1191,20 @@ struct Defaults {
 }
 
 /// The embedded database's default rows as finished output records, per
-/// vehicle type and in template order (`None` when not projected), each with
-/// its output rank. They borrow only `'static` storage, so a full result can
-/// copy them instead of building an item and projecting it per VIN.
-type DefaultElements = hash::IntMap<i32, DefaultBlock>;
+/// vehicle type and by ascending output rank, each with its template row's
+/// mask bit. They borrow only `'static` storage, so a full result can copy
+/// them instead of building an item and projecting it per VIN.
+type DefaultElements = hash::IntMap<i32, Box<[RankedDefault]>>;
 
-struct DefaultBlock {
-    rows: Box<[Option<(u16, DecodedElement<'static>)>]>,
-    /// `(rank, row)` for every projected row, by ascending output rank.
-    by_rank: Box<[(u16, u8)]>,
+struct RankedDefault {
+    rank: u32,
+    /// `1 << row`, the row's bit in a default mask.
+    bit: u64,
+    record: DecodedElement<'static>,
 }
 
 /// One vehicle type's finished default records and the mask of those that apply.
-type DefaultRecords = Option<(&'static DefaultBlock, u64)>;
+type DefaultRecords = Option<(&'static [RankedDefault], u64)>;
 
 fn default_elements(db: &Db) -> Option<&'static DefaultElements> {
     static ELEMENTS: std::sync::OnceLock<DefaultElements> = std::sync::OnceLock::new();
@@ -1265,16 +1266,19 @@ fn default_elements(db: &Db) -> Option<&'static DefaultElements> {
                             },
                         ))
                     })
-                    .collect::<Box<[_]>>();
-                let mut by_rank: Vec<(u16, u8)> = rows
-                    .iter()
                     .enumerate()
-                    .filter_map(|(i, row)| Some((row.as_ref()?.0, u8::try_from(i).ok()?)))
-                    .filter(|&(rank, _)| rank != u16::MAX)
-                    .collect();
-                by_rank.sort_unstable();
-                let by_rank = by_rank.into_boxed_slice();
-                (vehicle_type, DefaultBlock { rows, by_rank })
+                    .filter_map(|(row, record)| {
+                        let (rank, record) = record?;
+                        (rank != u16::MAX).then(|| RankedDefault {
+                            rank: u32::from(rank),
+                            bit: 1u64.checked_shl(row as u32).unwrap_or(0),
+                            record,
+                        })
+                    })
+                    .collect::<Vec<_>>();
+                let mut rows = rows;
+                rows.sort_unstable_by_key(|row| row.rank);
+                (vehicle_type, rows.into_boxed_slice())
             })
             .collect()
     }))
@@ -1369,7 +1373,7 @@ impl<'a> RawResult<'a> {
             return None;
         };
         self.defaults = None;
-        Some((rows, d.mask))
+        Some((&rows[..], d.mask))
     }
 
     fn full(mut self) -> DecodeResult<'a> {
@@ -1942,39 +1946,28 @@ fn project_into<'a>(
 ) {
     let mut order = ProjectionOrderScratch::take();
     fill_projection_order(&mut order, db, items);
-    let (rows, by_rank, mask) = defaults.map_or((&[][..], &[][..], 0), |(block, mask)| {
-        (&block.rows[..], &block.by_rank[..], mask)
-    });
-    let applied = by_rank
-        .iter()
-        .filter(move |&&(_, row)| mask.checked_shr(u32::from(row)).is_some_and(|m| m & 1 != 0));
-    elements.reserve_exact(order.len() + applied.clone().count());
+    let (ranked, mask) = defaults.unwrap_or((&[], 0));
+    // Applied defaults are a subset of the mask's rows.
+    elements.reserve_exact(order.len() + mask.count_ones() as usize);
     let spare = elements.spare_capacity_mut();
     let mut written = 0;
     let projection_meta = db.projection_meta_lookup();
-    let mut applied = applied.peekable();
-    let default_record = |row: u8| {
-        let (_, record) = rows[usize::from(row)]
-            .as_ref()
-            .expect("ranked defaults are projected");
-        copy_default_record(record)
-    };
-    for &(rank, index) in order.iter() {
-        while let Some(&(_, row)) =
-            applied.next_if(|&&(default_rank, _)| u32::from(default_rank) < rank)
-        {
-            spare[written].write(default_record(row));
-            written += 1;
+    let mut next = 0;
+    for &(rank, index) in order.iter().chain([&(u32::MAX, usize::MAX)]) {
+        while let Some(default) = ranked.get(next).filter(|default| default.rank < rank) {
+            if mask & default.bit != 0 {
+                spare[written].write(copy_default_record(&default.record));
+                written += 1;
+            }
+            next += 1;
         }
-        let it = &mut items[index];
+        let Some(it) = items.get_mut(index) else {
+            break;
+        };
         if let Some(meta) = projection_meta(it.element_id) {
             spare[written].write(projected_item(meta, it));
             written += 1;
         }
-    }
-    for &(_, row) in applied {
-        spare[written].write(default_record(row));
-        written += 1;
     }
     // SAFETY: the first `written` spare slots were initialized above.
     unsafe { elements.set_len(elements.len() + written) };
