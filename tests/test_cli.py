@@ -104,6 +104,13 @@ def test_decode_batch_reports_non_utf8_input_without_a_traceback(tmp_path: Path)
     assert "not valid UTF-8" in result.output
 
 
+def test_decode_reports_a_non_utf8_vin_without_a_traceback() -> None:
+    # argv bytes that are not UTF-8 arrive as surrogates (surrogateescape).
+    result = cli("decode", "\udcff")
+    assert result.exit_code == 2
+    assert "not valid UTF-8" in result.output
+
+
 def test_non_utf8_stdin_is_reported_under_a_c_locale(monkeypatch: pytest.MonkeyPatch) -> None:
     # Under a C locale or PYTHONUTF8=1, Python decodes stdin with surrogateescape.
     stdin = io.TextIOWrapper(io.BytesIO(b"\xff\n"), encoding="utf-8", errors="surrogateescape")

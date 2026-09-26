@@ -32,7 +32,11 @@ def decode(
 ) -> None:
     """Decode a single VIN (JSON object on stdout)."""
     # Serialized in Rust — skips building (then re-dumping) a Python dict.
-    typer.echo(uv.decode_json(vin, year=year, full=full))
+    try:
+        decoded = uv.decode_json(vin, year=year, full=full)
+    except UnicodeEncodeError:
+        raise typer.BadParameter("VIN is not valid UTF-8") from None
+    typer.echo(decoded)
 
 
 @app.command(name="decode-batch")
