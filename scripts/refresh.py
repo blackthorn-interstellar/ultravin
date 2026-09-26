@@ -161,7 +161,6 @@ class Probe:
     url: str
     exists: bool
     last_modified: dt.datetime | None = None
-    etag: str = ""
     content_length: int = 0
 
 
@@ -182,7 +181,6 @@ def head(url: str, timeout: float = 30.0) -> Probe:
             url=url,
             exists=True,
             last_modified=email.utils.parsedate_to_datetime(lm) if lm else None,
-            etag=(resp.headers.get("ETag") or "").strip('"'),
             content_length=int(resp.headers.get("Content-Length") or 0),
         )
 
