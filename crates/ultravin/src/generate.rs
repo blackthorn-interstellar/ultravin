@@ -1107,6 +1107,7 @@ fn accepts_at(keys: &str, pos: usize, ch: u8) -> bool {
     while i < b.len() {
         let (accepts, next) = match b[i] {
             b'*' | b'_' => (true, i + 1),
+            b'#' => (ch.is_ascii_digit(), i + 1),
             b'[' => match crate::keyspec::class_body(b, i) {
                 Some((body, next)) => (crate::keyspec::class_contains(body, ch), next),
                 None => (b[i] == ch, i + 1),
@@ -1421,6 +1422,15 @@ fn emit(wmi: &str, classes: &[Vec<u8>], row: &[usize], year: i32) -> Option<Stri
 #[cfg(test)]
 mod seeded_tests {
     use super::*;
+
+    #[test]
+    fn a_formula_slot_accepts_only_digits() {
+        // `#` is a digit placeholder, not a literal: reading it as a literal
+        // merged digits with letters, so no seeded VIN met a `**###` rule.
+        assert!(accepts_at("**###", 2, b'5'));
+        assert!(!accepts_at("**###", 2, b'A'));
+        assert!(!accepts_at("**###", 2, b'#'));
+    }
 
     #[test]
     fn position_seven_classes_stay_in_the_target_year_cycle() {
