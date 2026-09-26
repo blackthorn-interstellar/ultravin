@@ -68,6 +68,7 @@ Test:
 - 2026-09-26 docs: DATA_REFRESH.md:61 said any jump past 500 newly stale cells fails; `stale_cache_gate` fails it only in the charset-regression shape (recompute-only rows up >500, or a nonzero stale count more than doubled and up >2,500) and reports schema-drop cache lag. Skeptic (Codex) accepted after the nonzero-previous-count fix.
 - 2026-09-26 performance: `test_answerkey.py::test_the_sample_keeps_roughly_one_in_n`, the slowest test (7s idle, 13s loaded), spent it all in `ultravin.generate(40_000)`; the blake2b sampler only needs strings, so it now draws 40,000 seeded VIN-alphabet strings (call 0.05s). Wrong-stride and `vin[9].isdigit()`-keyed sampler breaks still fail it. Skeptic (Codex) rejected a digits-only first cut, accepted this.
 - 2026-09-26 bug: `decode_stream()` on a StructArray with a null row panicked (`RecordBatch::from(&StructArray)` asserts no top-level nulls); the struct now goes through `StructArray::flatten`, so a masked row reads as a null VIN/year. Failing test written first; sliced masked structs checked. Found by a Codex scout; skeptic (Codex) accepted.
+- 2026-09-26 bug: `decode_stream(table["vin"])` — a ChunkedArray (or polars Series) — failed with "Unable to interpret C data struct as a Schema": `ArrowArrayStreamReader` only takes struct streams, though the stub promises a bare array is read as the VIN column. A non-struct C stream now goes through a small `BareStream` reader that wraps each chunk as the `vin` column (shared `column_batch` with the single-array path). Failing test written first. Found by a Codex scout; skeptic (Codex) accepted after a release-before-`get_schema` guard.
 
 ## Rejected
 
@@ -107,7 +108,7 @@ Test:
 
 ## Consecutive empty iterations
 
-1
+0
 
 Resumed 2026-09-25 after other agents' perf commits (8befaf6..2b7aeca). Previously converged at 8befaf6 on 2026-09-22. Includes another agent's decode-path perf commits 6712776 and fcfed22, which touch coverage-gated files this loop cannot verify locally (see open questions) and were not reviewed here.
 

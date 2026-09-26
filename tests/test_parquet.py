@@ -515,10 +515,16 @@ def test_a_pyarrow_table_decodes_without_touching_the_disk() -> None:
     }
 
 
-def test_a_bare_array_is_read_as_the_vin_column() -> None:
+@pytest.mark.parametrize(
+    "source",
+    [pa.array([HONDA, FORD]), pa.chunked_array([[HONDA], [FORD]])],
+    ids=["array", "chunked"],
+)
+def test_a_bare_array_is_read_as_the_vin_column(source: Any) -> None:
     """A single unnamed array carries no field name, and the only thing this
-    decoder could be handed is VINs."""
-    out = columns(pa.array([HONDA, FORD]), columns=[MAKE])
+    decoder could be handed is VINs — whether it arrives whole or, like a
+    table's column or a polars Series, as a stream of chunks."""
+    out = columns(source, columns=[MAKE])
     assert list(out) == ["vin", "decoded_model_year", "Make"]
     assert out["Make"] == ["HONDA", "FORD"]
 
