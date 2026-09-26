@@ -1,5 +1,6 @@
 """Incremental input parsing and chunking for the batch CLI."""
 
+import io
 import sys
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
@@ -31,6 +32,10 @@ def parse_batch_size(value: str) -> BatchSize:
 @contextmanager
 def input_lines(file: str) -> Iterator[TextIO]:
     if file == "-":
+        # A C locale or PYTHONUTF8=1 decodes stdin with surrogateescape, which
+        # would smuggle bad bytes past `rows()` as surrogates; read it strictly.
+        if isinstance(sys.stdin, io.TextIOWrapper):
+            sys.stdin.reconfigure(encoding="utf-8", errors="strict")
         yield sys.stdin
         return
     with ExitStack() as stack:

@@ -8,7 +8,9 @@ dataset command lives in test_parquet.py, next to the fixtures it needs.
 
 from __future__ import annotations
 
+import io
 import json
+import sys
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from io import StringIO
@@ -16,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+import typer
 import ultravin as uv
 import ultravin._batch_cli as batch_cli_module
 import ultravin.cli as cli_module
@@ -99,6 +102,14 @@ def test_decode_batch_reports_non_utf8_input_without_a_traceback(tmp_path: Path)
     result = cli("decode-batch", str(listing))
     assert result.exit_code == 2
     assert "not valid UTF-8" in result.output
+
+
+def test_non_utf8_stdin_is_reported_under_a_c_locale(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Under a C locale or PYTHONUTF8=1, Python decodes stdin with surrogateescape.
+    stdin = io.TextIOWrapper(io.BytesIO(b"\xff\n"), encoding="utf-8", errors="surrogateescape")
+    monkeypatch.setattr(sys, "stdin", stdin)
+    with batch_cli_module.input_lines("-") as lines, pytest.raises(typer.BadParameter, match="not valid UTF-8"):
+        list(batch_cli_module.rows(lines))
 
 
 def test_decode_batch_reports_a_missing_file_without_a_traceback(tmp_path: Path) -> None:

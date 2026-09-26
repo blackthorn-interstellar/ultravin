@@ -59,6 +59,7 @@ Test:
 - 2026-09-25 delete: `errors.rs` `ValidChars` render cache (`OnceLock` field, invalidation in `insert`) and its test-only `Display` impl plus coverage allowance (-18 lines). Since c9cafa6 `Charset::freeze` renders each set once and decode slices the frozen text, so the cache never hit twice. Skeptic (Codex) accepted.
 - 2026-09-25 bug (red `make coverage` on master since c54a2ee/56cf2e9, unpushed so CI never saw it): generator-only `allowed_chars` sat in gated `errors.rs` (16 uncovered regions) — moved to `generate.rs`; `resolve_xxx` duplicated `felement_attribute_value` (1 uncovered region there) — it now calls it, which scrubs via `lookup_scrubbed`. Allowances: `build_var_keys_stack` 2 regions with a corrected reason (the old one named the covered `<=3` return; really the 4-9 character arm and the new non-ASCII loop), two wmi.rs entries whose bodies left the report dropped, one count lowered. Gate: every uncovered region accounted for. Skeptic (Codex) accepted the code, and its objection to the allowance reason was fixed.
 - 2026-09-25 docs: crates/ultravin/README.md quoted the Sept 23 ~258,000 VIN/s one-core figure (a ~99.5%-invalid corpus); now ~205,000, the current headline. The `generate()` stub promised a correct check digit though the default `invalid_rate` deliberately breaks some, and now names the `invalid_rate` ValueError. Skeptic (Codex) accepted.
+- 2026-09-25 bug: `ultravin decode-batch -` on non-UTF-8 stdin under a C locale or `PYTHONUTF8=1` (stdin uses surrogateescape) dumped a UnicodeEncodeError traceback (exit 1); `input_lines` now reconfigures stdin to strict UTF-8, as the file route already reads, so it is the one-line error, exit 2. Failing test written first. Skeptic (Codex) accepted.
 
 ## Rejected
 
@@ -94,7 +95,7 @@ Test:
 
 ## Consecutive empty iterations
 
-1
+0
 
 Resumed 2026-09-25 after other agents' perf commits (8befaf6..2b7aeca). Previously converged at 8befaf6 on 2026-09-22. Includes another agent's decode-path perf commits 6712776 and fcfed22, which touch coverage-gated files this loop cannot verify locally (see open questions) and were not reviewed here.
 
@@ -116,5 +117,6 @@ Scout findings not yet through the skeptic. Re-verify before acting.
 - clean (do not re-probe): all six decode entry points agree on 3,562 VINs × 13 year hints, plain and full; empty/blank/CRLF stdin, zero-row parquet, dst-inside-src, duplicate columns, second use of a stream, generate filters and determinism all behave.
 
 - Left for the human: `docs/VISION.md:28` quotes September 15 benchmark numbers (164,316 / 521,234 / 1,147,742); the loop never edits the vision.
+- 2026-09-25 scout 3 (not yet through the skeptic): (a) bug: `ultravin decode $'\xff'` → traceback at `cli.py:35` (argv surrogateescape; `decode-parquet` already catches it as ValueError) — wrap in `except UnicodeEncodeError: raise typer.BadParameter`. (b) `make help` (`Makefile:167`, `column -t -s :`) splits the 7 descriptions containing "usage:"; use a `|` separator. (c) `Db::defaultvalues_for` (`db.rs:801`) has no caller since a82eeaa — public API, needs the human's compatibility waiver. (d) `scripts/refresh.py` `Probe.etag` written, never read (-2).
 - tooling note: when break-testing Rust, `touch` the restored file — `mv`-restoring an older mtime leaves cargo serving the broken build.
 - docs (low value, counts drift): `docs/CORPUS.md:143,155,162,164` allowance counts (39/138/26/16) vs `scripts/coverage_allowances.json` today (38/136/29/11); `docs/RELEASE.md:27` "~82MB" for an 83.4 MB artifact the same doc calls 83MB at :39; `docs/SCANNER-NOTES.md` cites `db.rs` unsafe-site line numbers, `.gitignore:120`, `BENCHMARKS.md:202`, `data-review.yaml:14` that have all moved.
