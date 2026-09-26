@@ -1006,10 +1006,34 @@ const ALPHABET: &[u8; 33] = b"ABCDEFGHJKLMNPRSTUVWXYZ0123456789";
 /// representatives turns 33 characters per position into a handful.
 ///
 /// A six-character (low-volume) WMI owns positions 12-14: they hold its suffix
-/// alone, or the VIN names an unregistered manufacturer.
-fn position_classes(db: &Db, schema: i32, wmi: &str, car_lt: bool) -> Vec<Vec<u8>> {
+/// alone, or the VIN names an unregistered manufacturer. A car/MPV/light truck's
+/// position 7 picks the 30-year cycle (a digit 1980-2009, a letter 2010-2039),
+/// so it only draws from a side the decoder resolves to `year` — the "wrong"
+/// side still qualifies when the WMI has no schema in the other cycle.
+fn position_classes(
+    db: &Db,
+    schema: i32,
+    wmi: &str,
+    car_lt: bool,
+    year: i32,
+    current_year: i32,
+) -> Vec<Vec<u8>> {
     let wb = wmi.as_bytes();
     let pos3 = *wb.get(2).unwrap_or(&b'A');
+    let resolves = |pos7: u8| {
+        let mut vin = [FILL; 17];
+        vin[..3].copy_from_slice(&wb[..3]);
+        vin[6] = pos7;
+        vin[9] = year_char(year) as u8;
+        let vin = std::str::from_utf8(&vin).unwrap_or_default();
+        crate::year::resolve_years_with_wmi(vin, db, db.wmi_any(wmi), current_year).rmy
+            == Some(year)
+    };
+    // Every digit reads one way and every letter the other, so one probe each.
+    let (digit_ok, letter_ok) = match (resolves(b'1'), resolves(FILL)) {
+        (false, false) => (true, true),
+        sides => sides,
+    };
     let keys: Vec<&str> = db
         .patterns_for(schema)
         .iter()
@@ -1029,6 +1053,14 @@ fn position_classes(db: &Db, schema: i32, wmi: &str, car_lt: bool) -> Vec<Vec<u8
                 .iter()
                 .copied()
                 .filter(|&c| crate::checkdigit::valid_at(vin_pos, c, pos3, car_lt))
+                .filter(|&c| {
+                    !(car_lt && vin_pos == 7)
+                        || if c.is_ascii_digit() {
+                            digit_ok
+                        } else {
+                            letter_ok
+                        }
+                })
                 .collect();
             // Signature of a character: which keys accept it here.
             let mut by_sig: Vec<(Vec<u16>, u8)> = Vec::new();
@@ -1166,9 +1198,9 @@ pub fn pairwise(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
             continue;
         };
         let car_lt = db.wmi_any(wmi).map(|w| w.is_car_mpv_lt()).unwrap_or(false);
-        let classes = position_classes(db, schema, wmi, car_lt);
-        let levels: Vec<usize> = classes.iter().map(|c| c.len()).collect();
         let year = pick_year(yearfrom, yearto, current_year);
+        let classes = position_classes(db, schema, wmi, car_lt, year, current_year);
+        let levels: Vec<usize> = classes.iter().map(|c| c.len()).collect();
         for row in covering_array(&levels) {
             out.extend(emit(wmi, &classes, &row, year));
         }
@@ -1335,9 +1367,9 @@ pub fn seeded(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
             continue;
         };
         let car_lt = db.wmi_any(wmi).map(|w| w.is_car_mpv_lt()).unwrap_or(false);
-        let classes = position_classes(db, schema, wmi, car_lt);
-        let levels: Vec<usize> = classes.iter().map(|c| c.len()).collect();
         let year = pick_year(yearfrom, yearto, current_year);
+        let classes = position_classes(db, schema, wmi, car_lt, year, current_year);
+        let levels: Vec<usize> = classes.iter().map(|c| c.len()).collect();
         let mut uncovered = all_pairs(&levels);
 
         // One row per distinct rule, seeded and then filled.
@@ -1389,6 +1421,36 @@ fn emit(wmi: &str, classes: &[Vec<u8>], row: &[usize], year: i32) -> Option<Stri
 #[cfg(test)]
 mod seeded_tests {
     use super::*;
+
+    #[test]
+    fn position_seven_classes_stay_in_the_target_year_cycle() {
+        // A car/MPV/LT's position 7 picks the 30-year cycle (digit: 1980-2009,
+        // letter: 2010-2039). A class representative the decoder reads into the
+        // other cycle sent whole pre-2010 schemas to 2026, missing every rule.
+        let Some(db) = Db::try_embedded() else {
+            eprintln!("skip: artifact not built");
+            return;
+        };
+        let index = WmiIndex::build(db);
+        let mut checked = 0;
+        for &(schema, wmiid, yearfrom, yearto) in index.schemas() {
+            let Some(wmi) = index.wmi(wmiid) else {
+                continue;
+            };
+            let w = db.wmi_any(wmi);
+            if !w.is_some_and(|w| w.is_car_mpv_lt()) {
+                continue;
+            }
+            let year = pick_year(yearfrom, yearto, 2026);
+            for &c in &position_classes(db, schema, wmi, true, year, 2026)[3] {
+                let vin = build_vin(wmi, &format!("***{}", c as char), year).unwrap();
+                let rmy = crate::year::resolve_years_with_wmi(&vin, db, w, 2026).rmy;
+                assert_eq!(rmy, Some(year), "schema {schema}: {vin}");
+            }
+            checked += 1;
+        }
+        assert!(checked > 0);
+    }
 
     #[test]
     fn a_seed_pins_only_what_its_rule_constrains() {
