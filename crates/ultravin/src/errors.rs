@@ -273,7 +273,7 @@ impl Charset {
         }
     }
 
-    fn is_empty(&self, i: usize) -> bool {
+    pub(crate) fn is_empty(&self, i: usize) -> bool {
         self.ascii[i] == 0 && self.other.as_ref().is_none_or(|other| other[i].is_empty())
     }
 
@@ -287,7 +287,7 @@ impl Charset {
         }
     }
 
-    fn rendered(&self, i: usize) -> &str {
+    pub(crate) fn rendered(&self, i: usize) -> &str {
         let start = if i == 0 { 0 } else { self.ends[i - 1] };
         &self.rendered[start as usize..self.ends[i] as usize]
     }
@@ -411,23 +411,13 @@ fn build_charset(db: &Db, wmi: &str, year: i32) -> Option<Charset> {
     any.then(|| Charset::freeze(map))
 }
 
-fn valid_charset<'a>(db: &'a Db, wmi: &str, model_year: Option<i32>) -> Option<&'a Charset> {
-    let year = model_year?;
-    db.valid_charset_cache().get(db, wmi, year)
-}
-
-/// The characters the WMI's patterns allow at VIN `position` (4..=14) for
-/// `year`, in reference order, or `None` when the data leaves it unconstrained.
-/// The same sets the E1/E2 scan checks, so a VIN drawn from them passes it.
-pub(crate) fn allowed_chars<'a>(
+pub(crate) fn valid_charset<'a>(
     db: &'a Db,
     wmi: &str,
-    year: i32,
-    position: usize,
-) -> Option<&'a str> {
-    let charset = valid_charset(db, wmi, Some(year))?;
-    let slot = position - 4;
-    (!charset.is_empty(slot)).then(|| charset.rendered(slot))
+    model_year: Option<i32>,
+) -> Option<&'a Charset> {
+    let year = model_year?;
+    db.valid_charset_cache().get(db, wmi, year)
 }
 
 /// `substring(vin,1,pos-1) || rep || substring(vin, pos+1, 17-pos)`.

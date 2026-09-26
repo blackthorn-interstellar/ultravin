@@ -278,6 +278,15 @@ fn year_to(link: &crate::tables::ArchivedWmiVinSchema) -> i32 {
 /// under every check-digit rule, letters only at some.
 struct Fills([Vec<u8>; 14]);
 
+/// The characters the WMI's patterns allow at VIN `position` (4..=14) for
+/// `year`, in reference order, or `None` when the data leaves it unconstrained.
+/// The same sets the E1/E2 scan checks, so a VIN drawn from them passes it.
+fn allowed_chars<'a>(db: &'a Db, wmi: &str, year: i32, position: usize) -> Option<&'a str> {
+    let charset = crate::errors::valid_charset(db, wmi, Some(year))?;
+    let slot = position - 4;
+    (!charset.is_empty(slot)).then(|| charset.rendered(slot))
+}
+
 impl Fills {
     fn new(db: &Db, wmi: &str, year: i32) -> Self {
         Fills(std::array::from_fn(|i| {
@@ -288,7 +297,7 @@ impl Fills {
                 DEFAULT_CLASS
             };
             let allowed: Vec<u8> = (position <= 14)
-                .then(|| crate::errors::allowed_chars(db, wmi, year, position))
+                .then(|| allowed_chars(db, wmi, year, position))
                 .flatten()
                 .map(|chars| chars.bytes().filter(|c| default.contains(c)).collect())
                 .unwrap_or_default();
