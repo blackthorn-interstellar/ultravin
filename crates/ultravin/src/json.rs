@@ -1,8 +1,6 @@
 //! Full JSON output directly from resolved items. Constant metadata is escaped
 //! once per database; each decode writes its variable fields into one buffer.
 
-use std::borrow::Cow;
-
 use crate::{public_decode, tables::ArchivedElement, Db, RawResult};
 
 pub(crate) struct ElementJson {
@@ -134,7 +132,7 @@ pub(crate) fn encode(mut result: RawResult<'_>) -> String {
             }
         }
         out.extend_from_slice(&template.before_value);
-        string(&mut out, &crate::scrub_value(Cow::Borrowed(&it.value)));
+        string(&mut out, &it.value);
         out.extend_from_slice(&template.before_attribute);
         string(&mut out, &it.attribute_id);
         out.extend_from_slice(&template.before_source);
@@ -168,6 +166,7 @@ mod tests {
     use super::*;
     use crate::decode::DecodingItem;
     use crate::tables::{serialize_artifact, Element, VpicData, NULL_I32, NULL_I64};
+    use std::borrow::Cow;
 
     fn fixture(name: &str) -> Db {
         let strings = ["", name, "Group\"\\\n日本語", "text\t", "Y\"", "code\\"];

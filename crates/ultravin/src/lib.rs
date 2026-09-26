@@ -301,14 +301,6 @@ fn opt_i64(v: i64) -> Option<i64> {
     }
 }
 
-/// `replace(value, [\t\r\n], ' ')` — but only allocate when a control char is
-/// actually present. The clean case (the overwhelming majority) moves the value's
-/// existing owned `String` straight through; a borrowed literal still pays one
-/// (rare, short) copy via `into_owned`.
-fn scrub(v: std::borrow::Cow<'_, str>) -> String {
-    scrub_value(v).into_owned()
-}
-
 /// Column builders can copy clean borrowed text directly into their final
 /// buffers; only values containing control characters need an intermediate.
 #[inline]
@@ -1426,7 +1418,7 @@ impl<'a> RawResult<'a> {
                     tables::group_rank(self.db.s(e.groupname.to_native())),
                     it.element_id,
                     self.db.s(e.name.to_native()),
-                    scrub(it.value),
+                    it.value.into_owned(),
                 ))
             })
             .collect();
