@@ -109,7 +109,7 @@ Test:
 
 ## Consecutive empty iterations
 
-0
+1
 
 Resumed 2026-09-25 after other agents' perf commits (8befaf6..2b7aeca). Previously converged at 8befaf6 on 2026-09-22. Includes another agent's decode-path perf commits 6712776 and fcfed22, which touch coverage-gated files this loop cannot verify locally (see open questions) and were not reviewed here.
 
@@ -136,5 +136,6 @@ Scout findings not yet through the skeptic. Re-verify before acting.
 
 - Left for the human: `docs/VISION.md:28` quotes September 15 benchmark numbers (164,316 / 521,234 / 1,147,742); the loop never edits the vision.
 - clean (2026-09-26, Codex hunt): Arrow numeric columns match `decode()` over 468k cells in both `column_names` modes; 491k sweep VINs give no unparseable numeric; empty readers and column layouts as documented; `decode-batch --full --jsonl` (auto and fixed batching) equals `decode(full=True)`. A reader mixing `string`/`large_string` batches corrupts in pyarrow's own export, not here.
+- clean (2026-09-26, Codex): the 12 remaining error-7 VINs in full `seeded()`/`pairwise()` are all WMI ABT, whose `publicavailabilitydate` is NULL in the dump (unpublished; `WmiIndex` includes unpublished WMIs on purpose). Fills stamp before the WMI suffix, `corrupt()` excludes low-volume positions 12-14, no low-volume VIS key conflicts with its suffix, and all 548,475 pattern-sweep VINs keep their WMI.
 - tooling note: when break-testing Rust, `touch` the restored file — `mv`-restoring an older mtime leaves cargo serving the broken build.
 - docs (low value, counts drift): `docs/CORPUS.md:143,155,162,164` allowance counts (39/138/26/16) vs `scripts/coverage_allowances.json` today (38/136/29/11); `docs/RELEASE.md:27` "~82MB" for an 83.4 MB artifact the same doc calls 83MB at :39; `docs/SCANNER-NOTES.md` cites `db.rs` unsafe-site line numbers, `.gitignore:120`, `BENCHMARKS.md:202`, `data-review.yaml:14` that have all moved.
