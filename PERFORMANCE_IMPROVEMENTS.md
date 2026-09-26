@@ -21,6 +21,7 @@ identified as such.
 - [September 10: direct full JSON output](#september-10-direct-full-json-output)
 - [September 11: check digits and result projection](#september-11-check-digits-and-result-projection)
 - [September 22-23: deferred defaults and retuned slot plans](#september-22-23-deferred-defaults-and-retuned-slot-plans)
+- [September 25: sorted-input instruction cuts](#september-25-sorted-input-instruction-cuts)
 - [Experiments we rejected or replaced](#experiments-we-rejected-or-replaced)
 - [SQL oracle and development resources](#sql-oracle-and-development-resources)
 - [Correctness and measurement rules](#correctness-and-measurement-rules)
@@ -601,6 +602,48 @@ expansion memo, and unchecked projection-order writes. Correctness: all
 1,862,306 full-result fingerprints and 298,507 headline-corpus fingerprints
 matched the baseline after every change; `make check` passed on each commit.
 
+## September 25: sorted-input instruction cuts
+
+Commits `03b82d3` through `56cf2e9`, against `c7cea32`. Sorted input decodes
+at about 3.5 instructions per cycle, so instruction cuts show up there almost
+one for one; shuffled input also waits on memory, which these changes do not
+address.
+
+- **Output projection.** Each vehicle type's default records are stored in
+  output-rank order with their mask bits, and items are ordered by rank (a
+  bitmap, or a small sort when notes repeat). A full result is a plain merge of
+  the two, including results with repeated elements, which previously sorted
+  items and default records together.
+- **Table lookups instead of searches.** Default masks are one OR per item over
+  a per-type element-to-row-bits table; element lookup tags come from an array
+  instead of comparing table names; each WMI row's make lists are computed
+  once; items no conversion reads skip the conversion scan.
+- **Scrub once.** Dense lookup indexes mark names holding a tab or line break,
+  and value resolution scrubs every value, so full results skip a second scan.
+- **Smaller costs.** Recycled native slots skip the drop checks of default
+  record copies (recognized by a uniquely addressed static source text); the
+  pattern-scan pool and the var-keys text avoid redundant clearing and UTF-8
+  validation.
+
+Steady-state instructions per VIN on the native path fell from 33.1k to 26.8k.
+Paired runs on 2M- and 8M-VIN slices of the realistic corpus, Apple M2 Max,
+one-minute load 3-5 from other work:
+
+| workers | input | before VIN/s | after VIN/s | ratio |
+|---:|---|---:|---:|---:|
+| 1 | sorted | 369,519 | 466,631 | 1.26× |
+| 1 | shuffled | 220,864 | 262,075 | 1.19× |
+| 4 | sorted | 1,413,126 | 1,769,212 | 1.25× |
+| 4 | shuffled | 840,795 | 959,682 | 1.14× |
+| 12 | sorted | 12.35k cycles/VIN | 10.42k cycles/VIN | 1.19× |
+| 12 | shuffled | 20.39k cycles/VIN | 18.29k cycles/VIN | 1.11× |
+
+Twelve-worker throughput swung with host load during the run, so that row
+compares cycles per VIN. All 1,862,306 compatibility fingerprints, 298,507
+headline-corpus fingerprints and 200,000 realistic-corpus fingerprints matched
+the baseline after every change; `make check` passed on each commit. The
+README headline was not re-measured.
+
 ## Experiments we rejected or replaced
 
 Keeping these failures is part of preserving the performance work. A compatible
@@ -620,6 +663,10 @@ rewrite with no established end-to-end benefit did not qualify for retention.
 | Extra VIN buffers, stack correction prefixes, bounded conversion-source writers, early conversion filters | No useful measured improvement in the combined candidate; not retained. |
 | Build all lookup/WMI indexes at first use | Startup regressed. Replaced with lazy per-table and per-prefix initialization. |
 | Inline schema maps with hash-map overflow | Final isolated experiment slowed single-core throughput 0.46% and four-worker throughput 0.76%; simpler maps remain. |
+| Compact per-schema pattern rows (September 25) | Copying each row's id, element, date and text spans into the lazy index kept hits out of the pattern table but added instructions and gained nothing on shuffled input. |
+| Bracket-key position masks for the unused-position check (September 25) | No instruction change: the regex-backed bracket keys are not where that check spends its time. |
+| Drop recycled elements as they are overwritten (September 25) | Cost 2.6k more instructions per VIN than dropping them in one pass. |
+| O(1) indexes for engine-model and vehicle-spec joins (September 25) | About 1%, below the bar for the extra indexes. |
 
 The earlier ablations and Python interning experiment are recorded in
 [BENCHMARKS.md](docs/BENCHMARKS.md). The September experiment outcomes above were
