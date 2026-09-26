@@ -66,6 +66,7 @@ Test:
 - 2026-09-26 delete: `lib.rs::check_digit_helper_still_works` made the identical assertion as `checkdigit.rs::canonical_vin_check_digit_is_3` on the same re-exported fn (-5 test lines). Skeptic (Codex) accepted.
 - 2026-09-26 simplify: `tests/decode.rs` identity helper `db_ref` (one call site) inlined as `&db` (-9 lines after rustfmt). Skeptic (Codex) accepted.
 - 2026-09-26 docs: DATA_REFRESH.md:61 said any jump past 500 newly stale cells fails; `stale_cache_gate` fails it only in the charset-regression shape (recompute-only rows up >500, or a nonzero stale count more than doubled and up >2,500) and reports schema-drop cache lag. Skeptic (Codex) accepted after the nonzero-previous-count fix.
+- 2026-09-26 performance: `test_answerkey.py::test_the_sample_keeps_roughly_one_in_n`, the slowest test (7s idle, 13s loaded), spent it all in `ultravin.generate(40_000)`; the blake2b sampler only needs strings, so it now draws 40,000 seeded VIN-alphabet strings (call 0.05s). Wrong-stride and `vin[9].isdigit()`-keyed sampler breaks still fail it. Skeptic (Codex) rejected a digits-only first cut, accepted this.
 
 ## Rejected
 
@@ -114,6 +115,8 @@ Resumed 2026-09-25 after other agents' perf commits (8befaf6..2b7aeca). Previous
 
 - `Db::defaultvalues_for` (`crates/ultravin/src/db.rs:801`) has had no caller anywhere, tests included, since a82eeaa moved decoding to `default_templates_for`. It is `pub` on the public `Db` type but not in the crate README. Options: (A) delete it (-6 lines) under the same undocumented-dead-API waiver that removed `vspecschemas_for_make` — recommended, nothing in or out of the repo is known to call it; (B) keep it as public API.
 
+- `crates/ultravin/examples/slot_budget_probe.rs:916-918` has a `#[cfg(test)]` call to `run_pass` with 8 arguments where the function takes 9 (`max_rows` was added), so `cargo test -p ultravin --all-features --example slot_budget_probe` fails to compile (E0061); `make check` never builds example test modules, so nothing noticed. The file's sha256 is recorded as `source_sha256` in `scripts/bench/slot_budget_sweep_2026_09_15.json:162`, so any edit breaks that experiment record. Options: (A) leave it — recommended, it is a frozen record and the broken test guards nothing shipped; (B) fix the call and re-hash the record, accepting that the JSON no longer describes the measured source byte-for-byte.
+
 ## Leads
 
 Scout findings not yet through the skeptic. Re-verify before acting.
@@ -126,5 +129,6 @@ Scout findings not yet through the skeptic. Re-verify before acting.
 - clean (do not re-probe): all six decode entry points agree on 3,562 VINs × 13 year hints, plain and full; empty/blank/CRLF stdin, zero-row parquet, dst-inside-src, duplicate columns, second use of a stream, generate filters and determinism all behave.
 
 - Left for the human: `docs/VISION.md:28` quotes September 15 benchmark numbers (164,316 / 521,234 / 1,147,742); the loop never edits the vision.
+- 2026-09-26 scout 5 (not yet through the skeptic): (a) perf: clippy and `maturin develop` invalidate each other's pyo3 build via `PYO3_CONFIG_FILE` (set by maturin, unset for cargo) — a tracked pyo3 config + `export PYO3_CONFIG_FILE` in the Makefile took clippy 2.5s→0.2s and maturin 5s→0.6s warm, but hard-codes the abi3-3.10 floor and needs a green Linux CI run. (b) perf: `cargo test` spends ~4.3s on Doc-tests with 0 doc-tests; `[lib] doctest = false` in crates/ultravin/Cargo.toml (keeps examples building, unlike the rejected `--lib --bins --tests`) — a future doc example would silently not run.
 - tooling note: when break-testing Rust, `touch` the restored file — `mv`-restoring an older mtime leaves cargo serving the broken build.
 - docs (low value, counts drift): `docs/CORPUS.md:143,155,162,164` allowance counts (39/138/26/16) vs `scripts/coverage_allowances.json` today (38/136/29/11); `docs/RELEASE.md:27` "~82MB" for an 83.4 MB artifact the same doc calls 83MB at :39; `docs/SCANNER-NOTES.md` cites `db.rs` unsafe-site line numbers, `.gitignore:120`, `BENCHMARKS.md:202`, `data-review.yaml:14` that have all moved.

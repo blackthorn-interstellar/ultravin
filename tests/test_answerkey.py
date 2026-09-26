@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 import subprocess
 import sys
 from pathlib import Path
@@ -76,7 +77,10 @@ def test_the_sample_does_not_depend_on_process_hash() -> None:
 
 
 def test_the_sample_keeps_roughly_one_in_n() -> None:
-    vins = ultravin.generate(40_000, seed=11)
+    # The sampler only hashes the string: seeded VIN-alphabet strings, varied at
+    # every position, are as good as real VINs and ~500x cheaper to make.
+    rng = random.Random(11)
+    vins = ["".join(rng.choices("0123456789ABCDEFGHJKLMNPRSTUVWXYZ", k=17)) for _ in range(40_000)]
     kept = sum(answerkey.sample_selected(v, 200) for v in vins)
     ratio = kept / len(vins)
     # 1/200 = 0.5%. A wide band around it absorbs binomial noise (~5 sigma over
