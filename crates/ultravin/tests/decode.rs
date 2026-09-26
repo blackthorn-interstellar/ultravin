@@ -108,12 +108,7 @@ fn embedded_loader_is_consistent() {
     }
     let art = std::fs::read(concat!(env!("CARGO_MANIFEST_DIR"), "/data/vpic.rkyv")).unwrap();
     let db = Db::from_bytes(&art).unwrap();
-    let a = ultravin::decode_with(
-        db_ref(&db),
-        "1HGCM82633A004352",
-        1_750_000_000_000_000,
-        2026,
-    );
+    let a = ultravin::decode_with(&db, "1HGCM82633A004352", 1_750_000_000_000_000, 2026);
     let b = decode("1HGCM82633A004352", None);
     let map = |r: &ultravin::DecodeResult<'_>| {
         let mut v: Vec<_> = r
@@ -125,10 +120,6 @@ fn embedded_loader_is_consistent() {
         v
     };
     assert_eq!(map(&a), map(&b));
-}
-
-fn db_ref(db: &Db) -> &Db {
-    db
 }
 
 // Caller-year expectations below are oracle-verified against
