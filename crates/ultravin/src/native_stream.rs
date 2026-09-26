@@ -304,7 +304,7 @@ fn prepare_slot_reuse(slot: &mut Slot<'_>, len: usize) {
         result.descriptor.clear();
         result.error_codes = Vec::new();
         result.corrected_vin = String::new();
-        result.elements.clear();
+        crate::clear_elements(&mut result.elements);
         if result.elements.capacity() > MAX_RETAINED_ELEMENTS {
             result.elements = Vec::new();
         }

@@ -738,7 +738,7 @@ fn used_key_positions<'a>(vin: &[char], matched_keys: impl Iterator<Item = &'a s
         if key.len() <= remaining.trailing_zeros() as usize {
             continue;
         }
-        if key.is_ascii() && !key.contains('[') {
+        if key.bytes().all(|b| b.is_ascii() && b != b'[') {
             let bytes = key.as_bytes();
             let mut todo = remaining;
             while todo != 0 {

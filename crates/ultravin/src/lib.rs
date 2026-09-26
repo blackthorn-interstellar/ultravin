@@ -311,6 +311,7 @@ fn scrub(v: std::borrow::Cow<'_, str>) -> String {
 
 /// Column builders can copy clean borrowed text directly into their final
 /// buffers; only values containing control characters need an intermediate.
+#[inline]
 fn scrub_value(v: std::borrow::Cow<'_, str>) -> std::borrow::Cow<'_, str> {
     if has_line_control(v.as_bytes()) {
         std::borrow::Cow::Owned(v.replace(['\t', '\r', '\n'], " "))
@@ -322,6 +323,7 @@ fn scrub_value(v: std::borrow::Cow<'_, str>) -> std::borrow::Cow<'_, str> {
 /// Whether `bytes` holds a tab, CR or LF. Values are short and almost never
 /// contain one, so test eight bytes at a time for any byte below 0x0E and
 /// look closer only then.
+#[inline]
 fn has_line_control(bytes: &[u8]) -> bool {
     const ONES: u64 = u64::from_ne_bytes([1; 8]);
     let below_0e = |word: [u8; 8]| {
@@ -1253,7 +1255,7 @@ fn default_elements(db: &Db) -> Option<&'static DefaultElements> {
                                 code: &meta.code,
                                 data_type: &meta.data_type,
                                 decode: &meta.decode,
-                                source: std::borrow::Cow::Borrowed("Default"),
+                                source: std::borrow::Cow::Borrowed(default_record_source()),
                                 pattern_id: None,
                                 vin_schema_id: None,
                                 keys: std::borrow::Cow::Borrowed(""),
@@ -1276,6 +1278,38 @@ fn default_elements(db: &Db) -> Option<&'static DefaultElements> {
             })
             .collect()
     }))
+}
+
+/// The `source` text of every default record. A static has its own address,
+/// so an element borrowing exactly these bytes is a record copy.
+static DEFAULT_RECORD_SOURCE: [u8; 7] = *b"Default";
+
+fn default_record_source() -> &'static str {
+    std::str::from_utf8(&DEFAULT_RECORD_SOURCE).expect("ASCII")
+}
+
+/// Empty `elements`, skipping the drop checks of default record copies: every
+/// field of a record borrows `'static` text (see [`copy_default_record`]), so
+/// dropping one frees nothing, and they are two thirds of a full result.
+pub(crate) fn clear_elements(elements: &mut Vec<DecodedElement<'_>>) {
+    let len = elements.len();
+    // SAFETY: the length is zeroed first, so each element is dropped at most
+    // once even if a drop panics; the skipped ones own no heap memory.
+    unsafe {
+        elements.set_len(0);
+        let base = elements.as_mut_ptr();
+        for i in 0..len {
+            let element = base.add(i);
+            let is_record = matches!(
+                &(*element).source,
+                std::borrow::Cow::Borrowed(source)
+                    if std::ptr::eq(source.as_ptr(), DEFAULT_RECORD_SOURCE.as_ptr())
+            );
+            if !is_record {
+                std::ptr::drop_in_place(element);
+            }
+        }
+    }
 }
 
 /// A default record as an independent output element, copied bitwise.
