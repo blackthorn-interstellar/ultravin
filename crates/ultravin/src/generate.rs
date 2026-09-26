@@ -368,26 +368,6 @@ impl Rng {
     }
 }
 
-/// Does `vin` carry the check digit the decoder will compute for it?
-///
-/// A pattern's `Keys` can pin a letter where the VIN standard demands a digit
-/// (positions 15-17 always, 13-14 for a 3-character WMI, and 13 for a car/MPV/
-/// light truck). `fVINCheckDigit2` then returns no digit at all, `build_vin`
-/// stamps its '0' fallback, and the VIN decodes to error 400 plus a check-digit
-/// failure — the opposite of what [`generate`] promises. About 8 of the 1.65M
-/// (schema, keys) combinations do this, so which seeds trip over one is luck.
-///
-/// The car/MPV/LT flag comes from `wmi_any` on the VIN's own descriptor WMI
-/// because that is where `compute_errors` gets it. Taking it from the row this
-/// candidate was drawn from would agree today and stop agreeing the month two
-/// rows share a WMI string — the case `wmi_by_str` already loops for.
-fn check_digit_agrees(db: &Db, vin: &str) -> bool {
-    let car_lt = db
-        .wmi_any(&crate::vin_wmi(vin))
-        .is_some_and(|w| w.is_car_mpv_lt());
-    crate::checkdigit::check_digit_with_flag(vin, car_lt) == Some(vin.as_bytes()[8] as char)
-}
-
 /// `n` random VINs matching `filter`, deterministic for a given `seed`.
 ///
 /// Each VIN is drawn from a real WMI, a schema that WMI actually uses, and one of
@@ -543,9 +523,6 @@ pub fn generate(
         let Some(mut vin) = build_vin_filled(wmi, keys, year, Some((&mut rng, fills))) else {
             continue;
         };
-        if !check_digit_agrees(db, &vin) {
-            continue;
-        }
         let mut full = crate::decode_full(db, &vin, now_micros, current_year, None);
         if !is_valid(&full.error_codes) {
             continue;
@@ -892,34 +869,6 @@ mod tests {
         assert_eq!(sample_year(&mut rng, 2028, 2028, 2026), 2028);
         assert_eq!(sample_year(&mut rng, 1995, 1998, 2026), 1998);
         assert_eq!(pick_year(1995, 1998, 2026), 1998);
-    }
-
-    #[test]
-    fn a_letter_in_a_numeric_only_position_fails_the_check_digit_gate() {
-        let Some(db) = Db::try_embedded() else {
-            eprintln!("skip: artifact not built");
-            return;
-        };
-        assert!(
-            db.wmi_any("1HG").is_some_and(|w| w.is_car_mpv_lt()),
-            "1HG is the passenger-car WMI this test's position-13 rule needs"
-        );
-        assert!(check_digit_agrees(
-            db,
-            &build_vin("1HG", "CM826", 2026).unwrap()
-        ));
-        // VIS index 4 is VIN position 14: numeric-only for any 3-character WMI.
-        // This is the real shape that leaked out — WMI 4BE with a `TAT` key tail.
-        assert!(!check_digit_agrees(
-            db,
-            &build_vin("1HG", "CM826|****T", 2026).unwrap()
-        ));
-        // VIS index 3 is position 13: numeric-only *only* for a car/MPV/LT, so
-        // this case also pins which flag the gate passes to `fVINCheckDigit2`.
-        assert!(!check_digit_agrees(
-            db,
-            &build_vin("1HG", "CM826|***T", 2026).unwrap()
-        ));
     }
 
     #[test]
