@@ -8,7 +8,10 @@ ultravin against those hashes with no Postgres anywhere.
 
 The corpus must come from NHTSA's data, never from ultravin's own behaviour.
 `ultravin.seeded()` qualifies: it enumerates the rules in the dump and the
-character classes those rules distinguish. `cover_vins()` does **not** — it is
+character classes those rules distinguish. It does decode its rows, but only to
+*add* a rule's own plain VIN where another rule beat it; nothing data-derived is
+ever dropped, so a decoder bug can at worst withhold an extra VIN. `cover_vins()`
+does **not** — it is
 chosen by decoding with ultravin and covering ultravin's own notion of what
 matters, so as an answer key it could only ever confirm what we already thought
 to test.

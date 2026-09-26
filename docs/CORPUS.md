@@ -32,7 +32,7 @@ the clock a fixture was generated against; the rest read the system clock.
 | | call | VINs | what it is for |
 | --- | --- | --- | --- |
 | **generate** | `ultravin.generate(n, seed=…)` | any | fixtures, fuzzing, load tests |
-| **seeded** | `ultravin.seeded(limit=…)` | ~1.75M | every rule *and* every 2-way pair, deduplicated |
+| **seeded** | `ultravin.seeded(limit=…)` | ~1.8M | every rule *and* every 2-way pair, deduplicated; a rule that matches but loses gets a VIN it wins |
 | **cover** | `ultravin.cover_vins()` | ~164 | CI, regressions, bisecting |
 | **sweep** | `ultravin.sweep()` | ~584k | every data row exercised once |
 | **pairwise** | `ultravin.pairwise()` | ~1.74M | every 2-way descriptor interaction |

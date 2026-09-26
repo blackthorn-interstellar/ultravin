@@ -16,6 +16,8 @@
 //!   plus the cases that are not rows at all. Hundreds of thousands of VINs.
 
 use std::collections::BTreeSet;
+
+use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 
 use crate::db::Db;
@@ -1350,8 +1352,14 @@ fn fill_and_retire(
 /// match — and only the positions it leaves free are chosen to knock out
 /// outstanding pairs. Sweeping and pairwise separately costs ~2.26M VINs and
 /// spends half of them on fill characters chosen so that *nothing else* matches;
-/// seeding costs ~1.75M and spends those same positions making sibling rules
+/// seeding costs ~1.8M and spends those same positions making sibling rules
 /// co-match, which is where the tiebreak logic lives.
+///
+/// Matching a rule's key is not the same as the rule winning: the fill can also
+/// trigger a competitor that takes the element. Each schema's rows are decoded,
+/// and a rule with a row that never won gets its plain VIN, at another year of
+/// the band if need be, when that one wins it — ~2k extra VINs, which bring all but
+/// ~100 of the rules the one-VIN-per-row pattern sweep can make win.
 pub fn seeded(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
     let index = WmiIndex::build(db);
     let mut out = Vec::new();
@@ -1359,47 +1367,24 @@ pub fn seeded(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
     // emit each unique VIN once so the answer key / equivalence compare don't
     // see duplicate rows. First occurrence wins, so order stays deterministic.
     let mut seen: HashSet<String> = HashSet::new();
-
-    for &(schema, wmiid, yearfrom, yearto) in index.schemas() {
+    // Schemas are independent until that dedup, so build them in parallel
+    // chunks and dedup in schema order: the corpus is identical to a serial
+    // run, and a small `limit` still stops after the first chunk.
+    for chunk in index.schemas().chunks(256) {
         if limit > 0 && out.len() >= limit {
             break;
         }
-        let Some(wmi) = index.wmi(wmiid) else {
-            continue;
-        };
-        let car_lt = db.wmi_any(wmi).map(|w| w.is_car_mpv_lt()).unwrap_or(false);
-        let year = pick_year(yearfrom, yearto, current_year);
-        let classes = position_classes(db, schema, wmi, car_lt, year, current_year);
-        let levels: Vec<usize> = classes.iter().map(|c| c.len()).collect();
-        let mut uncovered = all_pairs(&levels);
-
-        // One row per distinct rule, seeded and then filled.
-        let mut seen_keys: Vec<u32> = Vec::new();
-        for p in db.patterns_for(schema) {
-            let key_id = p.keys.to_native();
-            match seen_keys.binary_search(&key_id) {
-                Ok(_) => continue,
-                Err(pos) => seen_keys.insert(pos, key_id),
-            }
-            let mut row = seed_row(db.s(key_id), &classes);
-            let filled = fill_and_retire(&mut row, &levels, &mut uncovered);
-            if let Some(vin) = emit(wmi, &classes, &filled, year) {
-                if seen.insert(vin.clone()) {
-                    out.push(vin);
-                }
-            }
-        }
-        // Whatever the rules did not incidentally cover.
-        while !uncovered.is_empty() {
-            let &(p1, c1, p2, c2) = uncovered.iter().next().expect("non-empty");
-            let mut row: Vec<Option<usize>> = vec![None; levels.len()];
-            row[p1] = Some(c1);
-            row[p2] = Some(c2);
-            let filled = fill_and_retire(&mut row, &levels, &mut uncovered);
-            if let Some(vin) = emit(wmi, &classes, &filled, year) {
-                if seen.insert(vin.clone()) {
-                    out.push(vin);
-                }
+        let built: Vec<Vec<String>> = chunk
+            .par_iter()
+            .map(|&(schema, wmiid, yearfrom, yearto)| {
+                index.wmi(wmiid).map_or_else(Vec::new, |wmi| {
+                    seed_schema(db, schema, wmi, (yearfrom, yearto), current_year)
+                })
+            })
+            .collect();
+        for vin in built.into_iter().flatten() {
+            if seen.insert(vin.clone()) {
+                out.push(vin);
             }
         }
     }
@@ -1407,6 +1392,107 @@ pub fn seeded(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
         out.truncate(limit);
     }
     out
+}
+
+/// One schema's rows: a row per distinct rule, seeded and then filled, then
+/// rows for whatever pairs the rules did not incidentally cover, then any rule
+/// the fill let a competitor beat.
+fn seed_schema(
+    db: &Db,
+    schema: i32,
+    wmi: &str,
+    (yearfrom, yearto): (i32, i32),
+    current_year: i32,
+) -> Vec<String> {
+    let car_lt = db.wmi_any(wmi).map(|w| w.is_car_mpv_lt()).unwrap_or(false);
+    let year = pick_year(yearfrom, yearto, current_year);
+    let classes = position_classes(db, schema, wmi, car_lt, year, current_year);
+    let levels: Vec<usize> = classes.iter().map(|c| c.len()).collect();
+    let mut uncovered = all_pairs(&levels);
+
+    let mut seen_keys: Vec<u32> = Vec::new();
+    let mut built: Vec<String> = Vec::new();
+    for p in db.patterns_for(schema) {
+        let key_id = p.keys.to_native();
+        match seen_keys.binary_search(&key_id) {
+            Ok(_) => continue,
+            Err(pos) => seen_keys.insert(pos, key_id),
+        }
+        let mut row = seed_row(db.s(key_id), &classes);
+        let filled = fill_and_retire(&mut row, &levels, &mut uncovered);
+        built.extend(emit(wmi, &classes, &filled, year));
+    }
+    while !uncovered.is_empty() {
+        let &(p1, c1, p2, c2) = uncovered.iter().next().expect("non-empty");
+        let mut row: Vec<Option<usize>> = vec![None; levels.len()];
+        row[p1] = Some(c1);
+        row[p2] = Some(c2);
+        let filled = fill_and_retire(&mut row, &levels, &mut uncovered);
+        built.extend(emit(wmi, &classes, &filled, year));
+    }
+    let years = yearfrom.max(1981)..=yearto.min(current_year + 2);
+    repair_lost_rules(db, schema, wmi, year, years, current_year, &mut built);
+    built
+}
+
+/// A seeded row satisfies its rule's key, but the fill chosen for pair coverage
+/// can let a competing rule win the element. Decode the schema's rows, and for
+/// each rule with a row that never won, add the rule's plain VIN when that one
+/// wins it — ~2k VINs over the corpus, where a VIN per rule would add ~30%.
+///
+/// Only ever adds: every data-derived row above stays, so a decoder bug can at
+/// worst leave a rule without its extra VIN, never drop a row from the corpus.
+fn repair_lost_rules(
+    db: &Db,
+    schema: i32,
+    wmi: &str,
+    year: i32,
+    years: std::ops::RangeInclusive<i32>,
+    current_year: i32,
+    built: &mut Vec<String>,
+) {
+    // Far enough ahead that every dated WMI is public: the question is whether
+    // the rule can win at all, not whether it has by today.
+    const NOW: i64 = 4_102_444_800_000_000; // 2100-01-01
+    let winners = |vin: &str| -> Vec<i32> {
+        crate::decode_with(db, vin, NOW, current_year)
+            .elements
+            .iter()
+            .filter_map(|e| e.pattern_id)
+            .collect()
+    };
+    let mut won: HashSet<i32> = built.iter().flat_map(|v| winners(v)).collect();
+    let patterns = db.patterns_for(schema);
+    let key_of: HashMap<i32, u32> = patterns
+        .iter()
+        .map(|p| (p.id.to_native(), p.keys.to_native()))
+        .collect();
+    let mut tried: HashSet<u32> = HashSet::new();
+    for p in patterns {
+        let key_id = p.keys.to_native();
+        if won.contains(&p.id.to_native()) || !tried.insert(key_id) {
+            continue;
+        }
+        // The schema's own year first; another schema sharing the WMI can own
+        // the element there and not in the rest of the band.
+        let tries = std::iter::once(year).chain(years.clone().filter(|&y| y != year));
+        for y in tries {
+            let Some(vin) = build_vin(wmi, db.s(key_id), y) else {
+                continue;
+            };
+            let wins = winners(&vin);
+            if wins
+                .iter()
+                .any(|id| key_of.get(id) == Some(&key_id) && !won.contains(id))
+            {
+                // Everything it wins counts, so a rule it covers in passing is
+                // not repaired again.
+                won.extend(wins);
+                built.push(vin);
+                break;
+            }
+        }
+    }
 }
 
 /// A chosen class per position -> a VIN, or `None` if `build_vin` skips it.
@@ -1422,6 +1508,34 @@ fn emit(wmi: &str, classes: &[Vec<u8>], row: &[usize], year: i32) -> Option<Stri
 #[cfg(test)]
 mod seeded_tests {
     use super::*;
+
+    #[test]
+    fn a_rule_the_pair_fill_lets_a_competitor_beat_still_gets_a_winning_vin() {
+        // Schema 3585's `**084` rule (Body Class: Coupe) is satisfied by its
+        // seeded row, but the fill chosen for pair coverage also triggers a newer
+        // Roadster rule that wins; the repair adds the rule's plain VIN.
+        let Some(db) = Db::try_embedded() else {
+            eprintln!("skip: artifact not built");
+            return;
+        };
+        let index = WmiIndex::build(db);
+        let Some(&(schema, wmiid, from, to)) = index.schemas().iter().find(|s| s.0 == 3585) else {
+            eprintln!("skip: schema 3585 not in this data month");
+            return;
+        };
+        let wmi = index.wmi(wmiid).expect("wmi");
+        let vins = seed_schema(db, schema, wmi, (from, to), 2026);
+        let wins = vins.iter().any(|v| {
+            crate::decode_with(db, v, 4_102_444_800_000_000, 2026)
+                .elements
+                .iter()
+                .any(|e| e.pattern_id == Some(127759))
+        });
+        assert!(
+            wins,
+            "no seeded VIN of schema 3585 makes pattern 127759 win"
+        );
+    }
 
     #[test]
     fn a_formula_slot_accepts_only_digits() {
