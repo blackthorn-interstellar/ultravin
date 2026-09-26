@@ -69,6 +69,7 @@ Test:
 - 2026-09-26 performance: `test_answerkey.py::test_the_sample_keeps_roughly_one_in_n`, the slowest test (7s idle, 13s loaded), spent it all in `ultravin.generate(40_000)`; the blake2b sampler only needs strings, so it now draws 40,000 seeded VIN-alphabet strings (call 0.05s). Wrong-stride and `vin[9].isdigit()`-keyed sampler breaks still fail it. Skeptic (Codex) rejected a digits-only first cut, accepted this.
 - 2026-09-26 bug: `decode_stream()` on a StructArray with a null row panicked (`RecordBatch::from(&StructArray)` asserts no top-level nulls); the struct now goes through `StructArray::flatten`, so a masked row reads as a null VIN/year. Failing test written first; sliced masked structs checked. Found by a Codex scout; skeptic (Codex) accepted.
 - 2026-09-26 bug: `decode_stream(table["vin"])` — a ChunkedArray (or polars Series) — failed with "Unable to interpret C data struct as a Schema": `ArrowArrayStreamReader` only takes struct streams, though the stub promises a bare array is read as the VIN column. A non-struct C stream now goes through a small `BareStream` reader that wraps each chunk as the `vin` column (shared `column_batch` with the single-array path). Failing test written first. Found by a Codex scout; skeptic (Codex) accepted after a release-before-`get_schema` guard.
+- 2026-09-26 bug: `seeded()`/`pairwise()` varied VIN positions 12-14 like any other, overwriting a six-character (low-volume) WMI's suffix, so every low-volume schema's VINs decoded as error 7 and matched none of its rules (0 of 1,722,279 seeded VINs kept WMI 1F9434). `position_classes` now pins those positions to the suffix. Full `seeded()`: 1,804,525 VINs, 12 error-7, 0 error-400. Failing test written first. Found by a Codex scout; skeptic (Codex) accepted. `answerkey verify` checks the VINs stored in the key, so the pinned key stays valid; the next monthly build sends the low-volume VINs to the oracle for the first time.
 
 ## Rejected
 
@@ -108,7 +109,7 @@ Test:
 
 ## Consecutive empty iterations
 
-1
+0
 
 Resumed 2026-09-25 after other agents' perf commits (8befaf6..2b7aeca). Previously converged at 8befaf6 on 2026-09-22. Includes another agent's decode-path perf commits 6712776 and fcfed22, which touch coverage-gated files this loop cannot verify locally (see open questions) and were not reviewed here.
 

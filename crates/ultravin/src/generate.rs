@@ -982,7 +982,12 @@ const ALPHABET: &[u8; 33] = b"ABCDEFGHJKLMNPRSTUVWXYZ0123456789";
 /// schema's keys accept both — no pattern can tell them apart, so no VIN built
 /// from one differs from the same VIN built from the other. Collapsing to
 /// representatives turns 33 characters per position into a handful.
-fn position_classes(db: &Db, schema: i32, pos3: u8, car_lt: bool) -> Vec<Vec<u8>> {
+///
+/// A six-character (low-volume) WMI owns positions 12-14: they hold its suffix
+/// alone, or the VIN names an unregistered manufacturer.
+fn position_classes(db: &Db, schema: i32, wmi: &str, car_lt: bool) -> Vec<Vec<u8>> {
+    let wb = wmi.as_bytes();
+    let pos3 = *wb.get(2).unwrap_or(&b'A');
     let keys: Vec<&str> = db
         .patterns_for(schema)
         .iter()
@@ -992,6 +997,9 @@ fn position_classes(db: &Db, schema: i32, pos3: u8, car_lt: bool) -> Vec<Vec<u8>
     VARYING
         .iter()
         .map(|&(vin_pos, var_idx)| {
+            if wb.len() == 6 && (12..=14).contains(&vin_pos) {
+                return vec![wb[vin_pos - 9]];
+            }
             // Only characters the VIN standard permits here: positions 14-17 are
             // numeric, and a car/MPV/light truck also has a numeric position 13.
             // Filling them with letters produces error 400, not vehicle variety.
@@ -1135,10 +1143,8 @@ pub fn pairwise(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
         let Some(wmi) = index.wmi(wmiid) else {
             continue;
         };
-        let wb = wmi.as_bytes();
-        let pos3 = *wb.get(2).unwrap_or(&b'A');
         let car_lt = db.wmi_any(wmi).map(|w| w.is_car_mpv_lt()).unwrap_or(false);
-        let classes = position_classes(db, schema, pos3, car_lt);
+        let classes = position_classes(db, schema, wmi, car_lt);
         let levels: Vec<usize> = classes.iter().map(|c| c.len()).collect();
         let year = pick_year(yearfrom, yearto, current_year);
         for row in covering_array(&levels) {
@@ -1306,10 +1312,8 @@ pub fn seeded(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
         let Some(wmi) = index.wmi(wmiid) else {
             continue;
         };
-        let wb = wmi.as_bytes();
-        let pos3 = *wb.get(2).unwrap_or(&b'A');
         let car_lt = db.wmi_any(wmi).map(|w| w.is_car_mpv_lt()).unwrap_or(false);
-        let classes = position_classes(db, schema, pos3, car_lt);
+        let classes = position_classes(db, schema, wmi, car_lt);
         let levels: Vec<usize> = classes.iter().map(|c| c.len()).collect();
         let year = pick_year(yearfrom, yearto, current_year);
         let mut uncovered = all_pairs(&levels);

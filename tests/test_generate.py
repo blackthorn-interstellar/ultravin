@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
+from collections.abc import Callable
 from datetime import date, datetime, timedelta, timezone
 
 import pytest
@@ -237,6 +238,15 @@ def test_pairwise_vins_are_valid_and_match_patterns() -> None:
     assert not [r for r in results if 400 in r["error_codes"]]
     matched = sum(1 for r in results if any(e.get("pattern_id") for e in r["elements"]))
     assert matched > len(sample) * 0.9, f"only {matched}/{len(sample)} matched a pattern"
+
+
+@pytest.mark.parametrize("build", [ultravin.seeded, ultravin.pairwise])
+def test_low_volume_vins_keep_their_manufacturer(build: Callable[..., list[str]]) -> None:
+    # A six-character WMI's suffix lives in positions 12-14. Varying those
+    # positions like any other overwrote it, so every low-volume schema came out
+    # as "manufacturer not registered" (error 7) and matched none of its rules.
+    results = ultravin.decode_batch(build(limit=2000))
+    assert not [r["vin"] for r in results if 7 in r["error_codes"]]
 
 
 def test_limit_is_an_exact_cap() -> None:
