@@ -63,6 +63,7 @@ Test:
 - 2026-09-25 bug: `ultravin decode $'\xff'` (argv not UTF-8, arrives as surrogates) dumped a UnicodeEncodeError traceback (exit 1); now `VIN is not valid UTF-8`, exit 2, as `decode-parquet` already reports it. Failing test written first. Skeptic (Codex) accepted.
 - 2026-09-25 bug: `make help` split descriptions on every colon (`column -t -s :`), so the 7 containing "usage:" printed their usage 50 columns away; the help pipeline now separates name and description with `|`. Checked on BSD and GNU sed. Skeptic (Codex) accepted.
 - 2026-09-25 delete: `scripts/refresh.py` `Probe.etag` was written from the HEAD response and never read (detection compares Content-Length; the report shows url/size/last-modified) (-2 lines). Skeptic (Codex) accepted.
+- 2026-09-26 delete: `lib.rs::check_digit_helper_still_works` made the identical assertion as `checkdigit.rs::canonical_vin_check_digit_is_3` on the same re-exported fn (-5 test lines). Skeptic (Codex) accepted.
 
 ## Rejected
 
@@ -95,6 +96,7 @@ Test:
 - inline `lib.rs` `project` / `project_reusing` into their one caller each (-18 lines, checks green): skeptic — fails the reversal test; a value-returning `project` is an equally defensible encapsulation, and no perf or behavior gain.
 - delete `checkdigit.rs` tests `short_vin_returns_none` / `x_check_digit`: skeptic — the mutation test calls the kernel, not the public `check_digit` wrapper, so a wrapper break (`.or(Some('?'))` conflating the sentinels; a uniform-VIN rejection) fails only these.
 - delete `test_generate.py::test_generated_vins_are_well_formed`'s `check_digit_valid` loop: skeptic — it is the only test asserting the returned flag's value across diverse VINs; deriving the flag from `codes == [0]` would mark off-road `[0, 10]` VINs (seed 1 makes one) false and fail only this loop.
+- delete `lib.rs::canonical_honda_decodes` as a twin of `tests/decode.rs::canonical_honda`: skeptic — it is the only test pinning `decode_with`'s model year; a wrapper bug stamping `current_year` fails only it (`embedded_loader_is_consistent` compares elements only).
 
 ## Consecutive empty iterations
 
@@ -122,5 +124,6 @@ Scout findings not yet through the skeptic. Re-verify before acting.
 - clean (do not re-probe): all six decode entry points agree on 3,562 VINs × 13 year hints, plain and full; empty/blank/CRLF stdin, zero-row parquet, dst-inside-src, duplicate columns, second use of a stream, generate filters and determinism all behave.
 
 - Left for the human: `docs/VISION.md:28` quotes September 15 benchmark numbers (164,316 / 521,234 / 1,147,742); the loop never edits the vision.
+- 2026-09-26 scout 4 (not yet through the skeptic): (a) `crates/ultravin/tests/decode.rs:130` `fn db_ref(db: &Db) -> &Db { db }` identity helper, one call site (-4). (b) docs `DATA_REFRESH.md:61` says a jump past 500 newly stale cells fails; `refresh.py:356-369` rejects it only in the charset-regression shape (the doc's own :220-227 says so).
 - tooling note: when break-testing Rust, `touch` the restored file — `mv`-restoring an older mtime leaves cargo serving the broken build.
 - docs (low value, counts drift): `docs/CORPUS.md:143,155,162,164` allowance counts (39/138/26/16) vs `scripts/coverage_allowances.json` today (38/136/29/11); `docs/RELEASE.md:27` "~82MB" for an 83.4 MB artifact the same doc calls 83MB at :39; `docs/SCANNER-NOTES.md` cites `db.rs` unsafe-site line numbers, `.gitignore:120`, `BENCHMARKS.md:202`, `data-review.yaml:14` that have all moved.

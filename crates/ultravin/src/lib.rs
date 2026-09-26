@@ -2127,11 +2127,6 @@ mod tests {
     }
 
     #[test]
-    fn check_digit_helper_still_works() {
-        assert_eq!(check_digit("1HGCM82633A004352"), Some('3'));
-    }
-
-    #[test]
     fn value_cleanup_preserves_text_and_ownership_across_vector_boundaries() {
         use std::borrow::Cow;
         for offset in 0..65 {
