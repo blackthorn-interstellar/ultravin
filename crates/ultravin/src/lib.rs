@@ -1769,55 +1769,44 @@ fn cmp_year_nulls_last(a: Option<i32>, b: Option<i32>) -> std::cmp::Ordering {
 
 fn projection_order(db: &Db, items: &[decode::DecodingItem<'_>]) -> Vec<(u32, usize)> {
     let mut order = Vec::new();
-    fill_projection_order(&mut order, db, items, None);
+    fill_projection_order(&mut order, db, items);
     order
 }
 
-/// Output order as `(_, index)`; an index past `items` names default record
-/// `index - items.len()`. Default elements never repeat an item's element, so
-/// their unique keys place them without any tie.
+/// Projected items as `(output rank, item index)` in output order. Each
+/// projected element has a fixed rank; when no element repeats, marking ranks
+/// in a bitmap and reading it back in order is the sort. Repeated elements
+/// (notes) keep insertion order.
 fn fill_projection_order(
     order: &mut Vec<(u32, usize)>,
     db: &Db,
     items: &[decode::DecodingItem<'_>],
-    defaults: DefaultRecords,
 ) {
-    let (records, mask) = defaults.map_or((&[][..], 0), |(block, mask)| (&block.rows[..], mask));
-    let applied = || {
-        records
-            .iter()
-            .enumerate()
-            .filter(move |(i, _)| mask >> i & 1 != 0)
-            .filter_map(|(i, record)| Some((items.len() + i, record.as_ref()?)))
-    };
     order.clear();
-    // Each projected element has a fixed output rank. When no element repeats,
-    // marking ranks in a bitmap and reading it back in order is the sort.
     const RANK_WORDS: usize = 4;
     let mut ranked = [0u64; RANK_WORDS];
     let mut item_at = [0u16; RANK_WORDS * 64];
     let ranks = db.output_ranks();
-    let mut place = |index: usize, rank: u16| {
-        if rank == u16::MAX {
-            return true;
-        }
-        let (word, bit) = (usize::from(rank / 64), rank % 64);
-        if word >= RANK_WORDS || ranked[word] >> bit & 1 != 0 {
-            return false;
-        }
-        ranked[word] |= 1 << bit;
-        item_at[usize::from(rank)] = index as u16;
-        true
+    let rank = |it: &decode::DecodingItem<'_>| {
+        usize::try_from(it.element_id)
+            .ok()
+            .and_then(|id| ranks.get(id).copied())
+            .unwrap_or(u16::MAX)
     };
-    let placed = items.len() + records.len() <= usize::from(u16::MAX)
+    let placed = items.len() <= usize::from(u16::MAX)
         && items.iter().enumerate().all(|(index, it)| {
-            let rank = usize::try_from(it.element_id)
-                .ok()
-                .and_then(|id| ranks.get(id).copied())
-                .unwrap_or(u16::MAX);
-            place(index, rank)
-        })
-        && applied().all(|(index, &(rank, _))| place(index, rank));
+            let rank = rank(it);
+            if rank == u16::MAX {
+                return true;
+            }
+            let (word, bit) = (usize::from(rank / 64), rank % 64);
+            if word >= RANK_WORDS || ranked[word] >> bit & 1 != 0 {
+                return false;
+            }
+            ranked[word] |= 1 << bit;
+            item_at[usize::from(rank)] = index as u16;
+            true
+        });
     if placed {
         for (word, mut bits) in ranked.into_iter().enumerate() {
             while bits != 0 {
@@ -1828,17 +1817,15 @@ fn fill_projection_order(
         }
         return;
     }
-    // Repeated elements (notes) keep insertion order: sort (key, item index).
     order.extend(
         items
             .iter()
             .enumerate()
-            .map(|(index, it)| (index, it.element_id))
-            .chain(applied().map(|(index, (_, record))| (index, record.element_id)))
-            .filter_map(|(index, id)| Some((db.output_sort_key(id)?, index))),
+            .map(|(index, it)| (u32::from(rank(it)), index))
+            .filter(|&(rank, _)| rank != u32::from(u16::MAX)),
     );
-    // One u64 comparison orders (key, index) exactly; item counts fit in 32 bits.
-    order.sort_unstable_by_key(|&(key, index)| u64::from(key) << 32 | index as u64);
+    // One u64 comparison orders (rank, index) exactly; item counts fit in 32 bits.
+    order.sort_unstable_by_key(|&(rank, index)| u64::from(rank) << 32 | index as u64);
 }
 
 const MAX_PROJECTION_SCRATCH_ENTRIES: usize = 256;
@@ -1911,56 +1898,23 @@ fn project<'a>(
     elements
 }
 
-/// Project into `elements`. Each element has a fixed output rank and applied
-/// defaults are stored by rank, so when no item element repeats, the output is
-/// a merge of the items' rank bitmap with the defaults; repeats (notes) take
-/// the general ordering.
+/// Project into `elements`: the items in output order merged with the applied
+/// defaults, which are stored by rank and never share an item's element.
 fn project_into<'a>(
     db: &'a Db,
     items: &mut [decode::DecodingItem<'a>],
     defaults: DefaultRecords,
     elements: &mut Vec<DecodedElement<'a>>,
 ) {
-    const RANK_WORDS: usize = 4;
-    let mut ranked = [0u64; RANK_WORDS];
-    let mut item_at = [0u16; RANK_WORDS * 64];
-    let ranks = db.output_ranks();
-    let placed = items.len() <= usize::from(u16::MAX)
-        && items.iter().enumerate().all(|(index, it)| {
-            let rank = usize::try_from(it.element_id)
-                .ok()
-                .and_then(|id| ranks.get(id).copied())
-                .unwrap_or(u16::MAX);
-            if rank == u16::MAX {
-                return true;
-            }
-            let (word, bit) = (usize::from(rank / 64), rank % 64);
-            if word >= RANK_WORDS || ranked[word] >> bit & 1 != 0 {
-                return false;
-            }
-            ranked[word] |= 1 << bit;
-            item_at[usize::from(rank)] = index as u16;
-            true
-        });
-    if !placed {
-        let mut order = ProjectionOrderScratch::take();
-        fill_projection_order(&mut order, db, items, defaults);
-        elements.reserve_exact(order.len());
-        append_projected(db, items, defaults, &order, elements);
-        return;
-    }
+    let mut order = ProjectionOrderScratch::take();
+    fill_projection_order(&mut order, db, items);
     let (rows, by_rank, mask) = defaults.map_or((&[][..], &[][..], 0), |(block, mask)| {
         (&block.rows[..], &block.by_rank[..], mask)
     });
     let applied = by_rank
         .iter()
         .filter(move |&&(_, row)| mask.checked_shr(u32::from(row)).is_some_and(|m| m & 1 != 0));
-    let upper = ranked
-        .iter()
-        .map(|w| w.count_ones() as usize)
-        .sum::<usize>()
-        + applied.clone().count();
-    elements.reserve_exact(upper);
+    elements.reserve_exact(order.len() + applied.clone().count());
     let spare = elements.spare_capacity_mut();
     let mut written = 0;
     let projection_meta = db.projection_meta_lookup();
@@ -1971,19 +1925,17 @@ fn project_into<'a>(
             .expect("ranked defaults are projected");
         copy_default_record(record)
     };
-    for (word, mut bits) in ranked.into_iter().enumerate() {
-        while bits != 0 {
-            let rank = (word * 64) as u16 + bits.trailing_zeros() as u16;
-            bits &= bits - 1;
-            while let Some(&(_, row)) = applied.next_if(|&&(default_rank, _)| default_rank < rank) {
-                spare[written].write(default_record(row));
-                written += 1;
-            }
-            let it = &mut items[usize::from(item_at[usize::from(rank)])];
-            if let Some(meta) = projection_meta(it.element_id) {
-                spare[written].write(projected_item(meta, it));
-                written += 1;
-            }
+    for &(rank, index) in order.iter() {
+        while let Some(&(_, row)) =
+            applied.next_if(|&&(default_rank, _)| u32::from(default_rank) < rank)
+        {
+            spare[written].write(default_record(row));
+            written += 1;
+        }
+        let it = &mut items[index];
+        if let Some(meta) = projection_meta(it.element_id) {
+            spare[written].write(projected_item(meta, it));
+            written += 1;
         }
     }
     for &(_, row) in applied {
@@ -2017,38 +1969,6 @@ fn projected_item<'a>(
         wmi_id: opt_i32(it.wmi_id),
         to_be_qced: it.to_be_qced,
     }
-}
-
-fn append_projected<'a>(
-    db: &'a Db,
-    items: &mut [decode::DecodingItem<'a>],
-    defaults: DefaultRecords,
-    order: &[(u32, usize)],
-    elements: &mut Vec<DecodedElement<'a>>,
-) {
-    let records = defaults.map_or(&[][..], |(block, _)| &block.rows[..]);
-    // Write each 224-byte record straight into reserved capacity; `push`
-    // builds it on the stack and copies it in.
-    elements.reserve(order.len());
-    let spare = elements.spare_capacity_mut();
-    let mut written = 0;
-    let projection_meta = db.projection_meta_lookup();
-    for (_, index) in order.iter().copied() {
-        let Some(it) = items.get_mut(index) else {
-            if let Some((_, record)) = &records[index - items.len()] {
-                spare[written].write(copy_default_record(record));
-                written += 1;
-            }
-            continue;
-        };
-        let Some(meta) = projection_meta(it.element_id) else {
-            continue;
-        };
-        spare[written].write(projected_item(meta, it));
-        written += 1;
-    }
-    // SAFETY: the first `written` spare slots were initialized above.
-    unsafe { elements.set_len(elements.len() + written) };
 }
 
 fn project_reusing<'a>(
