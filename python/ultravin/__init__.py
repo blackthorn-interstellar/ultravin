@@ -70,3 +70,8 @@ def __getattr__(name: str) -> Any:
         raise AttributeError(msg)
     globals()[name] = value  # __getattr__ only runs on a miss, so this caches it
     return value
+
+
+def __dir__() -> list[str]:
+    """List the lazy tables before their first use, for help() and completion."""
+    return sorted(set(globals()) | set(__all__))

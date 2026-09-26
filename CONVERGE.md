@@ -73,6 +73,7 @@ Test:
 - 2026-09-26 bug: a `decode_stream(..., batch_size="auto")` built before `os.fork()` hung forever in the child: `BatchFeedback::new_predictive` eagerly builds a 1-thread rayon calibration pool whose worker does not survive fork. The calibration now records the pool's pid and rebuilds it in a child; every release of an inherited pool (rebuild, calibration done, drop) leaks it instead of dropping it, since rayon's Drop wakes the missing worker through a lock fork may have left held — `lib.rs::batch_pool`'s replacement now leaks too. Failing test written first (`test_fork.py`). Found by a Codex scout; skeptic (Codex) accepted after three rounds.
 - 2026-09-26 bug: `decode_stream` refused a caller-year column whose values are all missing (Arrow `Null` type — pyarrow `[None]`, an all-null pandas/polars column) with "holds Null, not a number", though the same values typed int32 decode with no hint; `is_yearish` now accepts `Null`, which casts to an all-null Int32 hint. Failing test written first. Found by a Codex scout; skeptic (Codex) accepted (autodetect still skips unrelated Null columns).
 - 2026-09-26 bug: `decode_stream` refused a VIN column whose values are all missing (Arrow `Null` type, e.g. an all-null partition) with "holds Null, not text", though the same nulls typed string decode; the resolved-VIN validation now accepts `Null` (cast to Utf8), while `is_stringish` and value sniffing still never pick a Null column. Failing test written first. Found by a Codex scout; skeptic (Codex) accepted.
+- 2026-09-26 bug: a fresh `dir(ultravin)`/`help(ultravin)`/tab completion omitted the public lazy constants `ELEMENTS` and `MULTI_VALUED` (PEP 562 `__getattr__` without `__dir__`); a module `__dir__` now lists `__all__`. Bare import stays lazy; `help()` rendering the values loads the artifact, which counts as first use. Failing test written first. Found by a Codex scout; skeptic (Codex) accepted. Same hunt: 2,000 generated VINs' 132,869 full rows match flat values; default stream columns, ELEMENTS ids/names and provenance all consistent.
 
 ## Rejected
 
@@ -112,7 +113,7 @@ Test:
 
 ## Consecutive empty iterations
 
-1
+0
 
 Resumed 2026-09-25 after other agents' perf commits (8befaf6..2b7aeca). Previously converged at 8befaf6 on 2026-09-22. Includes another agent's decode-path perf commits 6712776 and fcfed22, which touch coverage-gated files this loop cannot verify locally (see open questions) and were not reviewed here.
 
