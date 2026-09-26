@@ -306,6 +306,13 @@ def test_a_caller_year_column_that_is_not_a_number_is_refused(
         columns(src, year_column="year", columns=[MAKE])
 
 
+def test_an_all_missing_vin_column_decodes_like_typed_null_vins() -> None:
+    """A partition whose every VIN is missing infers Arrow's Null type; its rows
+    must come out exactly as the same nulls typed as text do, not be refused."""
+    typed = columns(pa.table({"vin": pa.array([None, None], pa.string())}), columns=[MAKE])
+    assert columns(pa.table({"vin": pa.array([None, None])}), columns=[MAKE]) == typed
+
+
 def test_an_all_missing_caller_year_column_means_no_hint() -> None:
     """A year column whose every value is missing infers Arrow's Null type (pyarrow
     from `[None]`, pandas/polars from an all-null column): no hint on any row, not

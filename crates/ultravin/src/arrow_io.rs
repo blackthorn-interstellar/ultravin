@@ -220,8 +220,9 @@ impl ArrowDecoder {
         }
         // A VIN column holding numbers would be cast to text and decoded as
         // garbage — silently, since an undecodable VIN is a null row by design.
+        // An all-missing column arrives as Null and casts to all-null text.
         let vin_type = in_schema.field(vin_idx).data_type();
-        if !is_stringish(vin_type) {
+        if !matches!(vin_type, DataType::Null) && !is_stringish(vin_type) {
             return Err(ArrowError::Config(format!(
                 "VIN column {:?} holds {vin_type}, not text",
                 in_schema.field(vin_idx).name()
