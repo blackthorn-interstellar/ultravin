@@ -65,6 +65,7 @@ Test:
 - 2026-09-25 delete: `scripts/refresh.py` `Probe.etag` was written from the HEAD response and never read (detection compares Content-Length; the report shows url/size/last-modified) (-2 lines). Skeptic (Codex) accepted.
 - 2026-09-26 delete: `lib.rs::check_digit_helper_still_works` made the identical assertion as `checkdigit.rs::canonical_vin_check_digit_is_3` on the same re-exported fn (-5 test lines). Skeptic (Codex) accepted.
 - 2026-09-26 simplify: `tests/decode.rs` identity helper `db_ref` (one call site) inlined as `&db` (-9 lines after rustfmt). Skeptic (Codex) accepted.
+- 2026-09-26 docs: DATA_REFRESH.md:61 said any jump past 500 newly stale cells fails; `stale_cache_gate` fails it only in the charset-regression shape (recompute-only rows up >500, or a nonzero stale count more than doubled and up >2,500) and reports schema-drop cache lag. Skeptic (Codex) accepted after the nonzero-previous-count fix.
 
 ## Rejected
 
@@ -125,6 +126,5 @@ Scout findings not yet through the skeptic. Re-verify before acting.
 - clean (do not re-probe): all six decode entry points agree on 3,562 VINs × 13 year hints, plain and full; empty/blank/CRLF stdin, zero-row parquet, dst-inside-src, duplicate columns, second use of a stream, generate filters and determinism all behave.
 
 - Left for the human: `docs/VISION.md:28` quotes September 15 benchmark numbers (164,316 / 521,234 / 1,147,742); the loop never edits the vision.
-- 2026-09-26 scout 4 (not yet through the skeptic): (b) docs `DATA_REFRESH.md:61` says a jump past 500 newly stale cells fails; `refresh.py:356-369` rejects it only in the charset-regression shape (the doc's own :220-227 says so).
 - tooling note: when break-testing Rust, `touch` the restored file — `mv`-restoring an older mtime leaves cargo serving the broken build.
 - docs (low value, counts drift): `docs/CORPUS.md:143,155,162,164` allowance counts (39/138/26/16) vs `scripts/coverage_allowances.json` today (38/136/29/11); `docs/RELEASE.md:27` "~82MB" for an 83.4 MB artifact the same doc calls 83MB at :39; `docs/SCANNER-NOTES.md` cites `db.rs` unsafe-site line numbers, `.gitignore:120`, `BENCHMARKS.md:202`, `data-review.yaml:14` that have all moved.

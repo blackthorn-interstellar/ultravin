@@ -59,9 +59,12 @@ oracle onto the new dump, re-freezes `tests/parity_corpus.json`, and gates:
   pattern rows, with the VIN positions they disagree at. The list *changing*
   month to month is the point, not a failure — it self-documents in the PR diff.
   What fails is a list that contradicts its own summary, a jump past 500 newly
-  stale cells (upstream churn moves tens; a decoder charset regression re-lists
-  thousands), or a non-empty cacheexceptions table, which would mean the proc no
-  longer reads the cache the way the scan assumes. Policy: `docs/ACCEPTANCE.md`;
+  stale cells in the charset-regression shape (recompute-only rows up by more
+  than 500, or a nonzero stale count more than doubled and up by over 2,500;
+  upstream churn moves tens, a decoder charset regression re-lists thousands,
+  and schema-drop cache lag is reported, not failed), or a non-empty
+  cacheexceptions table, which would mean the proc no longer reads the cache
+  the way the scan assumes. Policy: `docs/ACCEPTANCE.md`;
   evidence: `docs/KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache`.
 - **known-problems** — the converse of the three above: every registered VIN
   still *reproduces* its documented problem. See below.
