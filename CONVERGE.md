@@ -103,10 +103,11 @@ Test:
 - delete `lib.rs::canonical_honda_decodes` as a twin of `tests/decode.rs::canonical_honda`: skeptic — it is the only test pinning `decode_with`'s model year; a wrapper bug stamping `current_year` fails only it (`embedded_loader_is_consistent` compares elements only).
 - perf: `[lib] doctest = false` to skip `cargo test`'s empty Doc-tests pass: re-measured idle at 0.5s (the scout's 4.3s was under load); too small to trade away running any future doc example.
 - perf: tracked pyo3 config + Makefile-wide `export PYO3_CONFIG_FILE` to stop clippy and `maturin develop` rebuilding each other's pyo3 (measured 2.8s + 4.9s per warm check): the export would also steer `maturin build --release` (Makefile:49) and CI's Linux/Windows wheels onto a macOS-generated config, and it hard-codes the abi3-3.10 floor — new machinery with release risk for a local-only saving.
+- bug: `decode_stream(struct_array.slice(1, 3))` panics (`end <= self.len()` in arrow-data 59.3 `ArrayData::slice`, via `make_array` of the FFI import) when the struct has a nested struct child. pyarrow's export is well-formed (parent len 3 off 1, children len 4 off 0), so the fault is arrow-rs's import of nested sliced structs; the same data as a sliced `pa.Table` or `pa.RecordBatch` goes through the C stream and decodes fine. Only a bare sliced StructArray with a nested struct column reaches it; the fix belongs upstream, and wrapping it here would only swap PanicException for ValueError.
 
 ## Consecutive empty iterations
 
-0
+1
 
 Resumed 2026-09-25 after other agents' perf commits (8befaf6..2b7aeca). Previously converged at 8befaf6 on 2026-09-22. Includes another agent's decode-path perf commits 6712776 and fcfed22, which touch coverage-gated files this loop cannot verify locally (see open questions) and were not reviewed here.
 
@@ -132,6 +133,5 @@ Scout findings not yet through the skeptic. Re-verify before acting.
 - clean (do not re-probe): all six decode entry points agree on 3,562 VINs × 13 year hints, plain and full; empty/blank/CRLF stdin, zero-row parquet, dst-inside-src, duplicate columns, second use of a stream, generate filters and determinism all behave.
 
 - Left for the human: `docs/VISION.md:28` quotes September 15 benchmark numbers (164,316 / 521,234 / 1,147,742); the loop never edits the vision.
-- 2026-09-26 skeptic side-find (unverified by the loop): a StructArray with a nested struct child, `.slice(1,3)`, panics in `decode_stream` even without a mask, inside `make_array(data)` after `from_ffi` (crates/ultravin-py/src/lib.rs ~725) — before this loop's flatten change. Reproduce and root-cause (arrow-rs FFI import of sliced nested structs?) before fixing.
 - tooling note: when break-testing Rust, `touch` the restored file — `mv`-restoring an older mtime leaves cargo serving the broken build.
 - docs (low value, counts drift): `docs/CORPUS.md:143,155,162,164` allowance counts (39/138/26/16) vs `scripts/coverage_allowances.json` today (38/136/29/11); `docs/RELEASE.md:27` "~82MB" for an 83.4 MB artifact the same doc calls 83MB at :39; `docs/SCANNER-NOTES.md` cites `db.rs` unsafe-site line numbers, `.gitignore:120`, `BENCHMARKS.md:202`, `data-review.yaml:14` that have all moved.
