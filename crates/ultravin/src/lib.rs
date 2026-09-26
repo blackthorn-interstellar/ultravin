@@ -1982,7 +1982,8 @@ fn projected_item<'a>(
     DecodedElement {
         group_name: &meta.group_name,
         variable: &meta.variable,
-        value: scrub_value(std::mem::take(&mut it.value)),
+        // `resolve_xxx` already scrubbed it.
+        value: std::mem::take(&mut it.value),
         element_id: it.element_id,
         attribute_id: std::mem::take(&mut it.attribute_id),
         code: &meta.code,

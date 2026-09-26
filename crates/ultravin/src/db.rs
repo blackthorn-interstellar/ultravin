@@ -1087,20 +1087,41 @@ impl Db {
 
     /// Resolve a lookup (`tag`, numeric id) to its name.
     pub fn lookup(&self, tag: u16, id: i32) -> Option<&str> {
+        self.lookup_entry(tag, id).map(|(name, _)| self.s(name))
+    }
+
+    /// [`Db::lookup`] with tabs and line breaks replaced by spaces, as every
+    /// output shape shows a value. Dense tables record which names need it.
+    pub(crate) fn lookup_scrubbed(&self, tag: u16, id: i32) -> Option<Cow<'_, str>> {
+        let (name, clean) = self.lookup_entry(tag, id)?;
+        let name = Cow::Borrowed(self.s(name));
+        Some(if clean {
+            name
+        } else {
+            crate::scrub_value(name)
+        })
+    }
+
+    /// A lookup's name id, and whether the name is known to have no tab or
+    /// line break (`false` when unknown).
+    fn lookup_entry(&self, tag: u16, id: i32) -> Option<(u32, bool)> {
         let rows = self.a().lookups.as_slice();
         let indexes = self.lookup_index.get_or_init(|| {
             (0..crate::tables::LOOKUP_TABLES.len())
                 .map(|_| OnceLock::new())
                 .collect()
         });
-        let name = if let Some(slot) = indexes.get(usize::from(tag)) {
-            slot.get_or_init(|| LookupIndex::build(rows, tag))
-                .name(rows, id)
+        if let Some(slot) = indexes.get(usize::from(tag)) {
+            slot.get_or_init(|| {
+                LookupIndex::build(rows, tag, |name| {
+                    crate::has_line_control(self.s(name).as_bytes())
+                })
+            })
+            .name(rows, id)
         } else {
             // Custom tags retain the original lower-bound lookup.
-            lookup_name(rows, tag, id)
-        };
-        name.map(|name| self.s(name))
+            lookup_name(rows, tag, id).map(|name| (name, false))
+        }
     }
 
     /// Cache immutable correction strings by a validated 18-bit code/flag key.
@@ -1149,7 +1170,14 @@ enum LookupIndex {
 }
 
 impl LookupIndex {
-    fn build(rows: &[crate::tables::ArchivedLookupRow], tag: u16) -> Self {
+    /// Set on a dense name that contains a tab or line break.
+    const DIRTY: u64 = 1 << 63;
+
+    fn build(
+        rows: &[crate::tables::ArchivedLookupRow],
+        tag: u16,
+        dirty: impl Fn(u32) -> bool,
+    ) -> Self {
         let start = rows.partition_point(|r| r.tag.to_native() < tag);
         let end = start + rows[start..].partition_point(|r| r.tag.to_native() == tag);
         let table = &rows[start..end];
@@ -1165,7 +1193,9 @@ impl LookupIndex {
                 for row in table {
                     let offset = (i64::from(row.id.to_native()) - i64::from(first)) as usize;
                     if names[offset] == 0 {
-                        names[offset] = u64::from(row.name.to_native()) + 1;
+                        let name = row.name.to_native();
+                        names[offset] =
+                            (u64::from(name) + 1) | if dirty(name) { Self::DIRTY } else { 0 };
                     }
                 }
                 return Self::Dense {
@@ -1177,7 +1207,7 @@ impl LookupIndex {
         Self::Sparse { start, end }
     }
 
-    fn name(&self, rows: &[crate::tables::ArchivedLookupRow], id: i32) -> Option<u32> {
+    fn name(&self, rows: &[crate::tables::ArchivedLookupRow], id: i32) -> Option<(u32, bool)> {
         match self {
             Self::Dense { first, names } => {
                 let offset = usize::try_from(i64::from(id) - i64::from(*first)).ok()?;
@@ -1185,14 +1215,14 @@ impl LookupIndex {
                     .get(offset)
                     .copied()
                     .filter(|&n| n != 0)
-                    .map(|n| (n - 1) as u32)
+                    .map(|n| (((n & !Self::DIRTY) - 1) as u32, n & Self::DIRTY == 0))
             }
             Self::Sparse { start, end } => {
                 let rows = &rows[*start..*end];
                 let i = rows.partition_point(|r| r.id.to_native() < id);
                 rows.get(i)
                     .filter(|r| r.id.to_native() == id)
-                    .map(|r| r.name.to_native())
+                    .map(|r| (r.name.to_native(), false))
             }
         }
     }
@@ -1428,22 +1458,26 @@ mod tests {
             .unwrap()
             .as_slice();
         for tag in [0, 1, 2, u16::MAX] {
-            let index = LookupIndex::build(rows, tag);
+            let index = LookupIndex::build(rows, tag, |_| false);
             for id in [i32::MIN, -4, -3, -2, -1, 0, 1, 7, i32::MAX] {
                 let expected = data
                     .iter()
                     .find(|r| r.tag == tag && r.id == id)
                     .map(|r| r.name);
-                assert_eq!(index.name(rows, id), expected, "tag {tag}, id {id}");
+                assert_eq!(
+                    index.name(rows, id).map(|(name, _)| name),
+                    expected,
+                    "tag {tag}, id {id}"
+                );
                 assert_eq!(lookup_name(rows, tag, id), expected);
             }
         }
         assert!(matches!(
-            LookupIndex::build(rows, 0),
+            LookupIndex::build(rows, 0, |_| false),
             LookupIndex::Dense { .. }
         ));
         assert!(matches!(
-            LookupIndex::build(rows, 1),
+            LookupIndex::build(rows, 1, |_| false),
             LookupIndex::Sparse { .. }
         ));
     }
@@ -1457,6 +1491,11 @@ mod tests {
             let (tag, id) = key(row);
             let first = rows.partition_point(|r| key(r) < (tag, id));
             assert_eq!(db.lookup(tag, id), Some(db.s(rows[first].name.to_native())));
+            assert_eq!(
+                db.lookup_scrubbed(tag, id),
+                db.lookup(tag, id)
+                    .map(|name| crate::scrub_value(Cow::Borrowed(name)))
+            );
         }
         for tag in [0, 1, 26, 27, 39, u16::MAX] {
             for id in [i32::MIN, -1, 0, 1, 100_000, i32::MAX] {
