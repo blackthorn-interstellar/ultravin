@@ -78,6 +78,7 @@ Test:
 - 2026-09-26 bug: `seeded()`/`pairwise()` built position-7 classes with no regard to the target year, so a car/MPV/LT schema could get a representative the decoder reads into the other 30-year cycle (all 8 seeded VINs of Ford schema 7401, a 1996 schema, decoded as 2026 and missed its rules). `position_classes` now keeps a position-7 side only if the decoder's own `resolve_years_with_wmi` (±30 schema swap included) lands it on the target year — a strict digits/letters split was rejected by the skeptic for losing Tesla schema 2480's digit rules, which the swap makes reachable. First 300k: seeded error-8 3,884->3,577, pairwise 4,426->4,007. Test written first, break-tested. Found by a Codex scout; skeptic (Codex) accepted the revision.
 - 2026-09-26 bug: `accepts_at` (equivalence classes and row seeds for `seeded()`/`pairwise()`) read `#` in pattern Keys as a literal, but the decoder's formula pass matches it as any digit, so digit-formula rules like `**###` (pattern 23220, WMI 1F9434) were never seeded. `#` now accepts exactly ASCII digits. First 300k: pattern-matched +276 seeded / +104 pairwise; error-0 93k->123k is mostly the prefix's changed composition, since splitting classes keeps full pair coverage by construction. Scan of September's 74,588 keys found no other misread metacharacter. Test written first. Found by a Codex scout; skeptic (Codex) accepted.
 - 2026-09-26 improvement (human asked): `seeded()` let pair-coverage fill hand a rule's element to a competitor, so 1,763 rows the pattern sweep makes win never won in seeded. Each schema's rows are now decoded and a rule with a row that never won gets its plain key VIN (retrying the band's other years) only when that VIN wins it — additive, so the corpus stays data-derived. Full corpus: 1,811,940 -> 1,813,886 VINs (+0.11%), winning pattern rows 1,313,485 -> 1,316,972, reachable misses 1,763 -> 109; schemas now build in parallel (19.4s -> ~7s release, output byte-identical at 1 vs all threads). Most never-winning rows are private elements or keys duplicated in an overlapping schema that always takes the tiebreak. Test break-tested; skeptic (Codex) accepted after two fixes.
+- 2026-09-27 bug: since fc7cf5a `seeded()` built schemas with `par_iter` on rayon's global pool, so after a warm parent `fork()`ed, the child's `seeded()` hung forever (SIGALRM in the repro). The chunk build now runs through `install_batch_work`, the pid-aware batch pool every other batch path uses; order and dedup unchanged. Failing test written first (`test_fork.py::test_seeded_survives_fork`). Found by a Codex scout; skeptic (Codex) accepted, and found `pairwise`/`sweep`/`cover_vins`/`generate` already survive fork.
 
 ## Rejected
 
@@ -117,9 +118,9 @@ Test:
 
 ## Consecutive empty iterations
 
-3
+0
 
-Converged at ae5e6ad on 2026-09-26 (resumed 2026-09-25 after other agents' perf commits 8befaf6..2b7aeca; previously converged at 8befaf6 on 2026-09-22).
+Resumed 2026-09-27 after fc7cf5a and cfa2ebe (previously converged at ae5e6ad on 2026-09-26, 8befaf6 on 2026-09-22).
 
 ## Open questions
 
@@ -138,6 +139,7 @@ Converged at ae5e6ad on 2026-09-26 (resumed 2026-09-25 after other agents' perf 
 
 Scout findings not yet through the skeptic. Re-verify before acting.
 
+- docs (2026-09-27 Codex scout, not yet through the skeptic): `_ultravin.pyi:252` says a losing rule gets a winning VIN "when one exists" and `docs/CORPUS.md:35` says a rule that matches but loses "gets a VIN it wins", while `generate.rs` `seeded` doc says ~100 sweep-winnable rules still miss. `scripts/bench/results.json:12` says each process times one full unique pass, but the new-build sorted 12-worker trials record `"rows": 40000000` (`headline_2026_09_25.json:515,656`) for a 20M corpus.
 - bug (boundary inputs, same shape as the rejected `columns=[2**31]`; probably reject): `--year 2147483648` (`decode`, `decode-batch`) → `OverflowError` traceback exit 1 while `--year 99999` is a clean error-12 decode; `decode_stream` with an int64 year column value ≥ 2³¹ silently nulls both the passthrough and the hint (`arrow_io.rs:373` safe cast) where `decode(year=2**31)` raises; `--columns 2147483648` → TypeError "got int"; `--batch-size 2**63` → pyo3 enum TypeError instead of the unreachable "too large" ValueError at `ultravin-py/src/lib.rs:1021`; `--batch-memory-mb`/`--sample-rows` ≥ 2⁶⁴ → OverflowError. Note spVinDecode's `@modelyear` is SQL `int`, so the i32 bound itself is oracle-faithful.
 - checked, not a contradiction: `generate(-1)`, `seeded(limit=-1)`, `decode_stream(sample_rows=-1)` etc. raise `OverflowError` from the unsigned conversion; the stub promises `ValueError` only for `n > 10,000,000` and for unknown column / element id / ambiguous autodetect, never for negatives. Changing the exception type would be speculative hardening.
 - delete test (coverage-gated file, skip unless the human installs `cargo-llvm-cov`): `checkdigit.rs::short_vin_returns_none` — the mutation test's inline reference already hard-codes `len != 17 → None` for 0/16/18-char inputs.

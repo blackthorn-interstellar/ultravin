@@ -1369,19 +1369,22 @@ pub fn seeded(db: &Db, current_year: i32, limit: usize) -> Vec<String> {
     let mut seen: HashSet<String> = HashSet::new();
     // Schemas are independent until that dedup, so build them in parallel
     // chunks and dedup in schema order: the corpus is identical to a serial
-    // run, and a small `limit` still stops after the first chunk.
+    // run, and a small `limit` still stops after the first chunk. The batch pool,
+    // not rayon's global one, so a forked child does not hang.
     for chunk in index.schemas().chunks(256) {
         if limit > 0 && out.len() >= limit {
             break;
         }
-        let built: Vec<Vec<String>> = chunk
-            .par_iter()
-            .map(|&(schema, wmiid, yearfrom, yearto)| {
-                index.wmi(wmiid).map_or_else(Vec::new, |wmi| {
-                    seed_schema(db, schema, wmi, (yearfrom, yearto), current_year)
+        let built: Vec<Vec<String>> = crate::install_batch_work(|| {
+            chunk
+                .par_iter()
+                .map(|&(schema, wmiid, yearfrom, yearto)| {
+                    index.wmi(wmiid).map_or_else(Vec::new, |wmi| {
+                        seed_schema(db, schema, wmi, (yearfrom, yearto), current_year)
+                    })
                 })
-            })
-            .collect();
+                .collect()
+        });
         for vin in built.into_iter().flatten() {
             if seen.insert(vin.clone()) {
                 out.push(vin);

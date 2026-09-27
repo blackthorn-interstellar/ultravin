@@ -65,3 +65,9 @@ def test_a_stream_built_before_fork_decodes_in_the_child() -> None:
     pa = pytest.importorskip("pyarrow")
     stream = uv.decode_stream(pa.table({"vin": FORK_BATCH}), columns=["Make"])
     run_in_forked_child(lambda: pa.table(stream).num_rows == len(FORK_BATCH), "calibration")
+
+
+@pytest.mark.skipif(not hasattr(os, "fork"), reason="fork() is POSIX-only")
+def test_seeded_survives_fork() -> None:
+    assert len(uv.seeded(limit=1)) == 1
+    run_in_forked_child(lambda: len(uv.seeded(limit=1)) == 1, "seeded()")
