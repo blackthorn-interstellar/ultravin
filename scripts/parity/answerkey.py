@@ -45,6 +45,7 @@ from __future__ import annotations
 import hashlib
 import json
 import multiprocessing as mp
+import re
 import subprocess
 import time
 from collections import Counter
@@ -584,6 +585,11 @@ def fetch(
         raise typer.Exit(1)
     if asset.suffix == ".zst":
         subprocess.run(["zstd", "-df", str(asset), "-o", str(asset.with_suffix(""))], check=True)
+    # `verify` reads every key in the directory, so an earlier month's would block it.
+    for stale in out.glob("answerkey-*.jsonl*"):
+        month = re.fullmatch(r"answerkey-(\d{4}_\d{2})\.jsonl(?:\.zst)?", stale.name)
+        if month and month[1] != pinned["month"]:
+            stale.unlink()
     typer.echo(f"{pinned['count']:,} answers ready in {out}")
 
 

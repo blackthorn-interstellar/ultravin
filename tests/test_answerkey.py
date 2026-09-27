@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import random
@@ -518,3 +519,29 @@ def test_compare_rejects_keys_with_no_overlap(tmp_path: Path) -> None:
     with pytest.raises(typer.Exit) as exc:
         answerkey.compare(a=str(a), b=str(b))
     assert exc.value.exit_code == 2
+
+
+def test_fetching_a_new_month_leaves_the_directory_verifiable(tmp_path: Path, monkeypatch) -> None:
+    # `make answerkey-fetch` then `make answerkey-verify` reads the whole directory,
+    # so last month's key left beside the new one must not block it.
+    month = json.loads(answerkey.MANIFEST.read_text())["month"]
+    _write_key(tmp_path / "answerkey-1999_01.jsonl", [], month="1999_01")
+    (tmp_path / "answerkey-1999_01.jsonl.zst").write_bytes(b"old")
+    vins = ultravin.generate(3, seed=23)
+    fresh = _real_key(tmp_path / "fresh", list(zip(vins, answerkey.ultravin_hashes(vins), strict=True))).read_bytes()
+    (tmp_path / "fresh").unlink()
+    asset = f"answerkey-{month}.jsonl"
+    pin = tmp_path / "pin.json"
+    pin.write_text(
+        json.dumps({"month": month, "asset": asset, "sha256": hashlib.sha256(fresh).hexdigest(), "count": 3})
+    )
+    monkeypatch.setattr(answerkey, "PIN", pin)
+    monkeypatch.setattr(
+        answerkey.subprocess,
+        "run",
+        lambda *_a, **_k: (tmp_path / asset).write_bytes(fresh) and subprocess.CompletedProcess([], 0),
+    )
+    (tmp_path / "answerkey-1999_01.jsonl.bak").write_bytes(b"mine")
+    answerkey.fetch(dest=str(tmp_path), tag="")
+    answerkey.verify(key=str(tmp_path), strict_artifact=True, workers=1)  # no raise == green
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["answerkey-1999_01.jsonl.bak", asset, "pin.json"]
