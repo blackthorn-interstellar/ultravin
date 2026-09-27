@@ -249,8 +249,10 @@ def seeded(*, limit: int = 0) -> list[str]:
     Each rule's own key seeds a VIN — the positions it pins stay pinned, so the
     rule is guaranteed to match — and the positions it leaves free are chosen to
     knock out outstanding class pairs. Every row is then decoded, and a rule that
-    matched but lost to a competitor gets one more VIN on which it wins, when one
-    exists. ``limit`` caps the result at that many VINs (0 = all ~1.8M).
+    matched but lost to a competitor gets its plain key VIN, at another year of
+    the schema's band if need be, when that VIN wins it; a few pattern rows that
+    :func:`sweep` makes win still never win here. ``limit`` caps the result at
+    that many VINs (0 = all ~1.8M).
 
     Deduplicated: filler-heavy rows from different schemas collide on the same
     17 characters, and only the first occurrence is kept. This is the corpus
