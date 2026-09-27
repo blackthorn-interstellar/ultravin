@@ -706,19 +706,9 @@ pub(crate) fn len_no_star(keys: &str) -> usize {
 /// Keys are ASCII, so byte order matches `str`'s lexicographic ordering — this
 /// is equivalent to `keys_no_brackets(a).cmp(&keys_no_brackets(b))`.
 fn cmp_keys_no_brackets(a: &str, b: &str) -> Ordering {
-    let mut ai = a.bytes().filter(|&c| c != b'[' && c != b']');
-    let mut bi = b.bytes().filter(|&c| c != b'[' && c != b']');
-    loop {
-        match (ai.next(), bi.next()) {
-            (Some(x), Some(y)) => match x.cmp(&y) {
-                Ordering::Equal => continue,
-                other => return other,
-            },
-            (None, None) => return Ordering::Equal,
-            (None, Some(_)) => return Ordering::Less,
-            (Some(_), None) => return Ordering::Greater,
-        }
-    }
+    let ai = a.bytes().filter(|&c| c != b'[' && c != b']');
+    let bi = b.bytes().filter(|&c| c != b'[' && c != b']');
+    ai.cmp(bi)
 }
 
 /// RANK dedup: keep the best item per non-exempt element id.
