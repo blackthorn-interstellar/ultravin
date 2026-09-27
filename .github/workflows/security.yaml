@@ -12,10 +12,12 @@
 # gitleaks-action hard-fails on organization-owned repos without a paid
 # GITLEAKS_LICENSE — so the job below downloads and runs the binary directly.
 # Trivy, CodeQL, Semgrep, Scorecard, and Snyk upload SARIF to GitHub Code
-# Scanning (Security tab); every other job — gitleaks included — reports in the
-# job log only. Every job hard-fails on a finding, with no soft-fail left in the
-# file: Snyk skips green off master or without a token, but wherever it does run
-# it gates like the rest, on tool errors as well as findings.
+# Scanning (Security tab); the other jobs report in the job log. Jobs hard-fail
+# on a finding, with these exceptions: CodeQL and Scorecard publish findings
+# without failing their jobs; a scheduled cargo-audit passes on advisories
+# that already have an issue (cargo-deny gates RustSec vulnerabilities on every
+# event); and Snyk skips green off master or without a token, but wherever it
+# does run it gates on tool errors as well as findings.
 name: Security
 
 on:
