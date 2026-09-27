@@ -39,9 +39,9 @@ runs:
         # source hash) the build steps that would notice even a cross-year edit
         # never run. Assert it against the pinned dump's own filename here: first
         # step, no cache-hit guard, so a PR cannot desync month from the dump it
-        # names. That desync is not cosmetic — ci.yaml's answerkey job decides
-        # whether to run the parity gate by comparing the answer-key pin against
-        # this month, so a bogus month skips the gate outright.
+        # names. That desync is not cosmetic — CI requires the answer-key pin's
+        # month to match this month and fetches the pinned asset from
+        # data-<month>, so this month must name the dump actually built.
         case "$url" in
           *"/vPICList_lite_${month}.plain.zip") ;;
           *)
