@@ -94,6 +94,7 @@ Test:
 - 2026-09-27 docs: `security.yaml`'s header said every job hard-fails on a finding with no soft-fail left; CodeQL and Scorecard only publish findings, and a scheduled cargo-audit (rustsec/audit-check) passes on advisories that already have an issue. The header now names those exceptions and that cargo-deny gates RustSec vulnerabilities on every event, so there is no coverage gap. Found by a Codex scout (filed as a cargo-audit bug; cargo-deny's advisories check makes it docs-only); skeptic (Codex) rejected a first wording that claimed scheduled cargo-audit never fails, accepted this.
 - 2026-09-27 bug: `decode_stream(pa.chunked_array([struct]))` decoded a masked struct row's hidden children (VIN + year 1995 → HONDA) where the same StructArray unchunked gives a null row: struct C streams went through arrow-rs `ArrowArrayStreamReader`, which drops parent validity. Every C stream now goes through `BareStream` → `column_batch` (`StructArray::flatten`), with struct columns made uniformly nullable so a masked later chunk of non-nullable fields still rebatches, and `BareStream` now carries the producer's `get_last_error` message. Tests written first. Found by a Codex scout; skeptic (Codex) rejected a first cut that broke a clean-then-masked non-nullable stream, accepted this (passthrough struct columns are now always nullable).
 - 2026-09-27 delete: `adaptive.rs` `BatchTuner::memory_limit`'s `memory_bytes == 0 || bytes_per_row == 0.0` early return (-3 lines): both fields are private, `memory_bytes` is only set via `.max(1)`, every `bytes_per_row` write is positive (and `predict_batch` rejects a nonpositive width first), and a zero width would saturate to the same `max_rows` anyway. Found by a Codex scout; skeptic (Codex) accepted.
+- 2026-09-27 bug (parity): NHTSA's `fvincheckdigit2`/`fvincheckdigit` classes are written `[a-h,j-n,p,r-z,0-9]`, so a literal comma passes them and weighs -1 (`ELSE CalcTemp = -1`), but checkdigit.rs returned '?' and ultravin added error 1 where the oracle does not (`1HGCM82693,004352`: oracle check digit 9). The weight table now gives a comma -weight outside the numbers-only positions, with a signed sum and floor-based (`rem_euclid`) remainder; the generator's alphabet is unchanged. Evidence: NHTSA's two functions run in a throwaway postgres:16; post-fix fuzz of 4,000 VINs (1,126 with commas) vs the real SQL, 0 mismatches. Test written first. Found by a Codex scout; skeptic (Codex) accepted.
 
 ## Rejected
 
@@ -133,7 +134,7 @@ Test:
 
 ## Consecutive empty iterations
 
-1
+0
 
 Resumed 2026-09-27 after fc7cf5a and cfa2ebe (previously converged at ae5e6ad on 2026-09-26, 8befaf6 on 2026-09-22).
 
@@ -154,6 +155,7 @@ Resumed 2026-09-27 after fc7cf5a and cfa2ebe (previously converged at ae5e6ad on
 
 Scout findings not yet through the skeptic. Re-verify before acting.
 
+- simplify (2026-09-27 Codex scout, not yet through the skeptic): `decode.rs` ~708 `cmp_keys_no_brackets` hand-rolls lexicographic comparison of two filtered byte iterators; `ai.cmp(bi)` is the same ordering (-10 lines).
 - bug (boundary inputs, same shape as the rejected `columns=[2**31]`; probably reject): `--year 2147483648` (`decode`, `decode-batch`) → `OverflowError` traceback exit 1 while `--year 99999` is a clean error-12 decode; `decode_stream` with an int64 year column value ≥ 2³¹ silently nulls both the passthrough and the hint (`arrow_io.rs:373` safe cast) where `decode(year=2**31)` raises; `--columns 2147483648` → TypeError "got int"; `--batch-size 2**63` → pyo3 enum TypeError instead of the unreachable "too large" ValueError at `ultravin-py/src/lib.rs:1021`; `--batch-memory-mb`/`--sample-rows` ≥ 2⁶⁴ → OverflowError. Note spVinDecode's `@modelyear` is SQL `int`, so the i32 bound itself is oracle-faithful.
 - checked, not a contradiction: `generate(-1)`, `seeded(limit=-1)`, `decode_stream(sample_rows=-1)` etc. raise `OverflowError` from the unsigned conversion; the stub promises `ValueError` only for `n > 10,000,000` and for unknown column / element id / ambiguous autodetect, never for negatives. Changing the exception type would be speculative hardening.
 - delete test (coverage-gated file, skip unless the human installs `cargo-llvm-cov`): `checkdigit.rs::short_vin_returns_none` — the mutation test's inline reference already hard-codes `len != 17 → None` for 0/16/18-char inputs.

@@ -65,11 +65,17 @@ enum PosRule {
     V1,
 }
 
-// The largest valid weighted sum is 9 * 89 = 801. An invalid byte contributes
-// 1024, so one final comparison detects invalid positions without a branch for
-// every character. The WMI-dependent rules for positions 13/14 stay per-call.
-const INVALID: u16 = 1024;
-const WEIGHTED: [[u16; 256]; 17] = {
+// The largest valid weighted sum is 9 * 89 = 801 and the smallest is -89. An
+// invalid byte contributes 1024, so one final comparison detects invalid
+// positions without a branch for every character. The WMI-dependent rules for
+// positions 13/14 stay per-call.
+//
+// The SQL's character classes are written `[a-h,j-n,...]`, so a literal comma
+// passes them wherever they apply, and its transliteration `CASE` falls to
+// `ELSE -1`. Only the check digit sees this; `is_default_char` (the generator's
+// alphabet) stays comma-free.
+const INVALID: i16 = 1024;
+const WEIGHTED: [[i16; 256]; 17] = {
     let weights = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
     let mut values = [[INVALID; 256]; 17];
     let mut pos = 0;
@@ -86,8 +92,10 @@ const WEIGHTED: [[u16; 256]; 17] = {
             };
             if allowed {
                 if let Some(value) = translit(c) {
-                    values[pos][byte] = value as u16 * weights[pos];
+                    values[pos][byte] = value as i16 * weights[pos];
                 }
+            } else if c == b',' && pos < 14 {
+                values[pos][byte] = -weights[pos];
             }
             byte += 1;
         }
@@ -122,15 +130,16 @@ fn check_digit_kernel(vin: &str, rule: PosRule) -> Option<char> {
     if pos3 != b'9' && (!b[13].is_ascii_digit() || numeric13 && !b[12].is_ascii_digit()) {
         return Some('?');
     }
-    let sum: u16 = b
+    let sum: i16 = b
         .iter()
         .enumerate()
         .map(|(i, &c)| WEIGHTED[i][c as usize])
         .sum();
-    if sum >= INVALID {
+    if sum >= INVALID - 89 {
         return Some('?');
     }
-    let r = sum % 11;
+    // The SQL's `temp - floor(temp)` remainder is non-negative for a negative sum.
+    let r = sum.rem_euclid(11);
     Some(if r == 10 {
         'X'
     } else {
@@ -185,24 +194,30 @@ mod tests {
                 return None;
             }
             let weights = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
-            let mut sum = 0;
+            let valid = |i: usize, byte: u8| match rule {
+                PosRule::V1 => valid_at_v1(i + 1, byte, bytes[2]),
+                PosRule::V2 { is_car_mpv_lt } => valid_at(i + 1, byte, bytes[2], is_car_mpv_lt),
+            };
+            let mut sum: i32 = 0;
             for (i, &byte) in bytes.iter().enumerate() {
-                let valid = match rule {
-                    PosRule::V1 => valid_at_v1(i + 1, byte, bytes[2]),
-                    PosRule::V2 { is_car_mpv_lt } => valid_at(i + 1, byte, bytes[2], is_car_mpv_lt),
-                };
-                if !valid {
+                // A comma is in every class but the numbers-only one, worth -1.
+                let value = if byte == b',' && valid(i, b'A') {
+                    -1
+                } else if !valid(i, byte) {
                     return Some('?');
-                }
-                let Some(value) = translit(byte) else {
-                    return Some('?');
+                } else {
+                    let Some(value) = translit(byte) else {
+                        return Some('?');
+                    };
+                    value as i32
                 };
                 sum += weights[i] * value;
             }
-            Some(if sum % 11 == 10 {
+            let r = sum.rem_euclid(11);
+            Some(if r == 10 {
                 'X'
             } else {
-                (b'0' + (sum % 11) as u8) as char
+                (b'0' + r as u8) as char
             })
         }
 
@@ -252,6 +267,27 @@ mod tests {
     #[test]
     fn canonical_vin_check_digit_is_3() {
         assert_eq!(check_digit("1HGCM82633A004352"), Some('3'));
+    }
+
+    #[test]
+    fn a_comma_weighs_minus_one_as_in_the_sql() {
+        // `patternDefault`/`patternMY` are written `[a-h,j-n,...]`, so a literal
+        // comma passes the regex and its CASE falls to `ELSE -1`. Expected values
+        // are the oracle's own vpic.fvincheckdigit2 / fvincheckdigit, run on
+        // postgres:16; a negative sum takes the floor-based remainder.
+        for (vin, v2, v2_car, v1) in [
+            ("1HGCM82693,004352", '9', '9', '9'),
+            ("1HGCM8,633A004352", '8', '8', '8'),
+            ("1HG,M8,6,3A,04352", '3', '3', '3'),
+            ("1,,,,,,,,,,,,1111", 'X', '?', '?'),
+            ("A,,,,,,,,,,,,0000", '7', '?', '?'),
+            (",,9,,,,,,,,,,,000", '2', '2', '2'),
+            (",,,,,,,,0,,,,,,11", '?', '?', '?'),
+        ] {
+            assert_eq!(check_digit(vin), Some(v2), "{vin}");
+            assert_eq!(check_digit_with_flag(vin, true), Some(v2_car), "{vin}");
+            assert_eq!(check_digit_v1(vin), Some(v1), "{vin}");
+        }
     }
 
     #[test]
