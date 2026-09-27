@@ -136,9 +136,9 @@ Test:
 
 ## Consecutive empty iterations
 
-2
+3
 
-Resumed 2026-09-27 after fc7cf5a and cfa2ebe (previously converged at ae5e6ad on 2026-09-26, 8befaf6 on 2026-09-22).
+Converged at 28d3c00 on 2026-09-27 (resumed 2026-09-27 after fc7cf5a and cfa2ebe; previously converged at ae5e6ad on 2026-09-26 and 8befaf6 on 2026-09-22).
 
 ## Open questions
 
@@ -173,6 +173,7 @@ Scout findings not yet through the skeptic. Re-verify before acting.
 - clean (2026-09-26, Codex): `decode_batch`/`decode_batch_json` with `years=` (None/int/bool/`__index__` mixes, 8,194 rows across the chunk boundary, both `full` settings) match per-VIN `decode`; length mismatch is the documented ValueError; tuples and str subclasses work, iterators/bytes/floats are refused consistently; documented bad inputs raise the promised types.
 - clean (2026-09-27, Codex broad sweep): `scripts/bump_deps.py`, `coverage.py`, `transform_readme.py`, `wheel_smoke.py`; benchmark runners and doc reproduction commands; every `make help` target's referenced script and flags; remaining CLI behavior probes; September dump COPY escapes and function basenames.
 - note (2026-09-27): reversing `cmp_keys_no_brackets` (the tied-rule keys tiebreak) passes every Rust and Python test in `make check`; only `answerkey verify` / parity runs guard it, so break-test changes there against the answer key.
+- clean (2026-09-27, Codex final sweep): tests/ helpers and fixtures all used, no exact duplicate test among 467 bodies; python/ultravin and the stub match the extension; cover.rs/generate.rs/wmi.rs items all have callers.
 - tooling note: `.github/zizmor.yml` pins artipacked ignores to checkout line numbers; after any workflow edit run `uvx zizmor --config .github/zizmor.yml --offline .github/` and re-pin drifted lines.
 - tooling note: when break-testing Rust, `touch` the restored file — `mv`-restoring an older mtime leaves cargo serving the broken build.
 - docs (low value, counts drift): `docs/CORPUS.md:143,155,162,164` allowance counts (39/138/26/16) vs `scripts/coverage_allowances.json` today (38/136/29/11); `docs/RELEASE.md:27` "~82MB" for an 83.4 MB artifact the same doc calls 83MB at :39; `docs/SCANNER-NOTES.md` cites `db.rs` unsafe-site line numbers, `.gitignore:120`, `BENCHMARKS.md:202`, `data-review.yaml:14` that have all moved.
