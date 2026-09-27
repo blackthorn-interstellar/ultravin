@@ -135,7 +135,7 @@ Test:
 
 ## Consecutive empty iterations
 
-0
+1
 
 Resumed 2026-09-27 after fc7cf5a and cfa2ebe (previously converged at ae5e6ad on 2026-09-26, 8befaf6 on 2026-09-22).
 
@@ -151,6 +151,8 @@ Resumed 2026-09-27 after fc7cf5a and cfa2ebe (previously converged at ae5e6ad on
 
 
 - A displacement taken from a formula pattern (source "Formula Pattern", e.g. `1A9HS40A4DA329205`: Displacement (CI) `40`) converts to `0` in the other units (CC `0`, L `0`) instead of 655.48 cc / 0.655 L, because conversion reads the row's `attribute_id` (`TBD`) rather than its extracted value (crates/ultravin/src/decode.rs ~635/~857, conversion.rs ~19). NHTSA's own `spvindecode_core.sql:252` does the same (`value = cursor_item."AttributeId"`), so today this is exact spVinDecode parity, and fixing it is a deliberate deviation. Options: (A) keep parity — recommended by the vision's "spVinDecode parity is the correctness oracle" and non-goal "reinterpret NHTSA's decoding rules"; (B) correct it and register it in docs/KNOWN_DEVIATIONS.md like the other documented upstream corrections, accepting that the answer key must pin ultravin's answer for those VINs.
+
+- Input that is not a clean VIN diverges from the Postgres oracle in five ways (found 2026-09-27 by reading vpic/procs against the Rust port; #2 and #3 confirmed on postgres:16). (1) A space at position 9: the SQL's `char(1)` → `varchar` assignment in `spvindecode_errorcode.sql:76` strips it, shifting the corrected VIN; Rust keeps it (errors.rs ~574). (2) A newline inside a VIN: Postgres regex `.` matches `\n`, so Audi `TRU7\nAF56JA111111` decodes Model A5 there, but ultravin's matcher, fallback `Regex`, errors.rs regex and test reference models all use Rust regex `.` semantics and return no Model (matcher.rs ~274/290 even claims "excludes \n; honoured for exactness"). (3) A leading/trailing tab: Postgres `trim` removes spaces only; ultravin trims all ASCII whitespace. (4) Non-ASCII characters: ultravin maps them to `&` (deliberate, lib.rs `sanitize_into`); the SQL keeps them. (5) Longer than 17 characters: the SQL's `vin varchar(17)` assignment raises (an oracle crash); ultravin decodes with error 400. Options: (A) keep ultravin's cleanup and document these as input-normalisation deviations in docs/KNOWN_DEVIATIONS.md — recommended, since none is a decodable VIN and matching them would make ultravin worse on messy input for no real VIN; (B) chase exact parity case by case (e.g. (2) is ~5 small edits to make `.` match `\n` everywhere); (C) leave undocumented.
 
 ## Leads
 
