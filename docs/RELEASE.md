@@ -18,9 +18,11 @@ materializes the embedded data artifact, builds wheels for every platform plus
 the sdist, generates build-provenance attestations, and publishes to PyPI via
 trusted publishing. Nothing is published if the gate or any build fails.
 
-A `workflow_dispatch` run builds the full wheel matrix as artifacts **without**
-publishing — untagged builds carry version `0.0.0` and the release job runs only
-for tags. Use it to dry-run the matrix.
+A `workflow_dispatch` run on a branch builds the full wheel matrix as artifacts
+**without** publishing — untagged builds carry version `0.0.0` and the release
+job runs only for tag refs. Use it to dry-run the matrix. Dispatched on a tag
+(`gh workflow run release.yaml --ref vX.Y.Z`, as `merge-data-pr` does after a
+data month when autorelease is enabled) it publishes exactly like a tag push.
 
 ## The embedded data artifact
 

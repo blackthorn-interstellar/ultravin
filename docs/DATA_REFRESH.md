@@ -143,8 +143,8 @@ with `needs-human` + diagnosis if it can't get there honestly).
 
 `data-review.yaml` publishes a `review-verdict` check run on the PR head —
 a **required status check** on master, so nothing merges without it. It gates
-the two branch prefixes the automation merges by itself, `data/*` and
-`deps/*`; every other PR passes in seconds for $0. Data PRs whose diff is pure
+PRs from the three branch prefixes the automation uses, `data/*`, `deps/*` and
+the nightly parity lane's `fix/*`; every other PR passes in seconds for $0. Data PRs whose diff is pure
 regeneration (`vpic/**` + the corpus) pass a deterministic allowlist, also
 $0; any data PR carrying code or doc changes — i.e. agent-fixed months — must
 be approved by an adversarial Grok reviewer (read-only, verdict-only) that

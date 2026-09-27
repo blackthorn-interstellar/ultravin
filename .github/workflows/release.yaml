@@ -7,8 +7,9 @@ name: Release
 # rebuilt deterministically from the pinned dump before any wheel compiles.
 #
 # Versions come solely from git tags: the repo carries 0.0.0 and CI stamps the
-# tag's vX.Y.Z before building. workflow_dispatch dry-runs the full matrix
-# (artifacts only, version stays 0.0.0); only tags publish. See docs/RELEASE.md.
+# tag's vX.Y.Z before building. workflow_dispatch on a branch dry-runs the full
+# matrix (artifacts only, version stays 0.0.0); only tag refs publish, whether
+# pushed or dispatched. See docs/RELEASE.md.
 
 on:
   push:
@@ -34,9 +35,9 @@ jobs:
   # commit — so a tag at an arbitrary, unreviewed commit would otherwise ship to
   # PyPI, bypassing code review. Refuse unless the built commit is reachable from
   # master. Every job on the publish path needs this, so an unauthorized tag
-  # never even starts the wheel matrix. Only tag pushes publish (the release job
-  # is tag-gated); a workflow_dispatch dry-run runs on a branch ref, never
-  # publishes, and is exempt — enforcing ancestry there would only wrongly block
+  # never even starts the wheel matrix. Only tag refs publish (the release job
+  # is tag-gated), pushed or dispatched; a workflow_dispatch dry-run runs on a
+  # branch ref, never publishes, and is exempt — enforcing ancestry there would only wrongly block
   # a legit dry-run from an unmerged branch.
   authorize:
     name: authorize (tag reachable from master)
