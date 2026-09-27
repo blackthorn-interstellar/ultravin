@@ -152,7 +152,7 @@ security-rust:  ## cargo-audit + cargo-deny (installs tools via cargo if missing
 
 security-python:  ## pip-audit the synced venv (incl. dev deps from the lock).
 	@uv sync --frozen --all-extras
-	@uv run --with pip-audit pip-audit --local --progress-spinner off
+	@uv run --with pip-audit pip-audit --progress-spinner off
 
 security-osv:  ## Google OSV-Scanner over the tree (needs `osv-scanner` on PATH).
 	@command -v osv-scanner >/dev/null || { echo "install: brew install osv-scanner (or go install github.com/google/osv-scanner/v2/cmd/osv-scanner@latest)"; exit 1; }

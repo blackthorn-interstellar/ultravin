@@ -141,12 +141,12 @@ jobs:
           enable-cache: false
       - name: Sync env + audit installed packages
         run: |
-          # Audit the resolved env (incl. dev deps). Prefer --local over
-          # requirements-file mode: pip-audit's venv resolver fights uv-managed
-          # Pythons that ship without ensurepip.
+          # Audit the resolved env (incl. dev deps), not a requirements file:
+          # pip-audit's venv resolver fights uv-managed Pythons that ship without
+          # ensurepip. No --local: under `uv run --with` it audited 0 packages.
           echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
           uv sync --frozen --all-extras
-          uv run --with pip-audit pip-audit --local --progress-spinner off
+          uv run --with pip-audit pip-audit --progress-spinner off
 
   osv:
     name: sca (osv-scanner)
