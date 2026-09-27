@@ -297,6 +297,9 @@ jobs:
 
   publish:
     needs: assemble
+    # A `limit` smoke test builds a sample key; publishing it would clobber the
+    # month's real asset and pin CI to the sample.
+    if: (inputs.limit || '0') == '0'
     runs-on: ubuntu-latest
     timeout-minutes: 40 # merge-data-pr retries the merge for ~22 min
     permissions:
