@@ -256,6 +256,10 @@ def cmd_run(args: argparse.Namespace) -> int:
             if statef.exists()
             else {"counter": 0, "since_new": 0, "saturated": False, "tested": 0, "failures": 0}
         )
+        # Saturation holds for one run: the checkpoint outlives decoder changes,
+        # which can open coverage the previous decoder lacked.
+        if state["saturated"]:
+            state |= {"saturated": False, "since_new": 0}
         covf = d / "coverage.json"
         cov = _load_cov(covf)
         prod = covfuzz_producer(state, cov, pending, deadline)
