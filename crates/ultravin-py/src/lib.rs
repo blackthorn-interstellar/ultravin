@@ -11,13 +11,13 @@ use std::time::{Duration, Instant};
 
 use arrow_array::array::make_array;
 use arrow_array::ffi::{from_ffi, from_ffi_and_data_type, FFI_ArrowArray};
-use arrow_array::ffi_stream::{ArrowArrayStreamReader, FFI_ArrowArrayStream};
+use arrow_array::ffi_stream::FFI_ArrowArrayStream;
 use arrow_array::{
     Array, ArrayRef, RecordBatch, RecordBatchIterator, RecordBatchOptions, RecordBatchReader,
     StructArray,
 };
 use arrow_schema::ffi::FFI_ArrowSchema;
-use arrow_schema::{ArrowError as ArrowRsError, DataType, Field, Schema, SchemaRef};
+use arrow_schema::{ArrowError as ArrowRsError, DataType, Field, Fields, Schema, SchemaRef};
 use pyo3::exceptions::{PyImportError, PyOSError, PyRuntimeError, PyTypeError, PyValueError};
 use pyo3::intern;
 use pyo3::prelude::*;
@@ -730,13 +730,26 @@ fn batch_from_capsules(
         .map_err(|e| PyValueError::new_err(format!("importing an Arrow array: {e}")))
 }
 
+/// `fields`, every one nullable.
+fn nullable(fields: &Fields) -> Fields {
+    fields
+        .iter()
+        .map(|f| f.as_ref().clone().with_nullable(true))
+        .collect()
+}
+
 /// A struct array as the batch of its columns; any other array as the lone,
 /// unnamed VIN column.
 fn column_batch(array: ArrayRef) -> Result<RecordBatch, ArrowRsError> {
     let (fields, columns) = match array.as_any().downcast_ref::<StructArray>() {
         // `flatten` folds a null struct row into every child, so a masked row
-        // reads as nulls instead of exposing whatever its children hold.
-        Some(st) => st.flatten(),
+        // reads as nulls instead of exposing whatever its children hold. It
+        // widens nullability only where a chunk has a masked row, so every
+        // column is nullable here: a stream's batches must share one schema.
+        Some(st) => {
+            let (_, columns) = st.flatten();
+            (nullable(st.fields()), columns)
+        }
         None => (
             vec![Field::new(
                 BARE_ARRAY_COLUMN,
@@ -751,9 +764,10 @@ fn column_batch(array: ArrayRef) -> Result<RecordBatch, ArrowRsError> {
     RecordBatch::try_new_with_options(Arc::new(Schema::new(fields)), columns, &options)
 }
 
-/// A C stream of bare arrays — a chunked column, a polars Series — read as the
-/// VIN column one chunk at a time, as a single bare array is.
-/// `ArrowArrayStreamReader` only takes a stream of structs.
+/// A C stream read one array at a time exactly as a single array is: a struct
+/// chunk as the batch of its columns, a bare one (a chunked column, a polars
+/// Series) as the VIN column. `ArrowArrayStreamReader` takes only structs, and
+/// drops a chunked StructArray's own nulls, exposing the masked rows' children.
 struct BareStream {
     stream: FFI_ArrowArrayStream,
     data_type: DataType,
@@ -768,8 +782,21 @@ impl Iterator for BareStream {
         // SAFETY: a live stream's `get_next` fills `array` or reports an error.
         let code = unsafe { self.stream.get_next?(&mut self.stream, &mut array) };
         if code != 0 {
+            // SAFETY: after a failed call, `get_last_error` returns null or a
+            // message that lives until the next call on this stream.
+            let message = self
+                .stream
+                .get_last_error
+                .map(|last| unsafe { last(&mut self.stream) })
+                .filter(|p| !p.is_null())
+                .map(|p| {
+                    unsafe { std::ffi::CStr::from_ptr(p) }
+                        .to_string_lossy()
+                        .into_owned()
+                })
+                .unwrap_or_else(|| format!("error code {code}"));
             return Some(Err(ArrowRsError::CDataInterface(format!(
-                "reading an Arrow stream: error code {code}"
+                "reading an Arrow stream: {message}"
             ))));
         }
         if array.is_released() {
@@ -808,19 +835,16 @@ fn arrow_input(source: &Bound<'_, PyAny>) -> PyResult<Box<dyn RecordBatchReader 
         }
         let field = Field::try_from(&schema)
             .map_err(|e| PyValueError::new_err(format!("importing an Arrow stream: {e}")))?;
-        if !matches!(field.data_type(), DataType::Struct(_)) {
-            let data_type = field.data_type().clone();
-            let vin = Field::new(BARE_ARRAY_COLUMN, data_type.clone(), true);
-            let schema = Arc::new(Schema::new(vec![vin]));
-            return Ok(Box::new(BareStream {
-                stream,
-                data_type,
-                schema,
-            }));
-        }
-        let reader = ArrowArrayStreamReader::try_new(stream)
-            .map_err(|e| PyValueError::new_err(format!("importing an Arrow stream: {e}")))?;
-        return Ok(Box::new(reader));
+        let data_type = field.data_type().clone();
+        let schema = Arc::new(match &data_type {
+            DataType::Struct(fields) => Schema::new(nullable(fields)),
+            _ => Schema::new(vec![Field::new(BARE_ARRAY_COLUMN, data_type.clone(), true)]),
+        });
+        return Ok(Box::new(BareStream {
+            stream,
+            data_type,
+            schema,
+        }));
     }
     let capsules = source.call_method0(intern!(source.py(), "__arrow_c_array__"))?;
     let (schema_cap, array_cap): (Bound<'_, PyAny>, Bound<'_, PyAny>) = capsules.extract()?;

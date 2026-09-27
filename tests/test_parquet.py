@@ -694,13 +694,16 @@ def test_a_struct_array_is_read_as_its_named_columns() -> None:
     }
 
 
-def test_a_null_struct_row_decodes_as_a_null_row() -> None:
+@pytest.mark.parametrize("chunked", [False, True], ids=["array", "chunked"])
+def test_a_null_struct_row_decodes_as_a_null_row(chunked: bool) -> None:
     """A masked struct row hides whatever its children hold; it must read as a
-    null VIN and year, not panic and not decode the hidden values."""
+    null VIN and year, not panic and not decode the hidden values — whether the
+    struct arrives as one array or as a chunked stream."""
     vins = pa.array([HONDA, HONDA])
     years = pa.array([2013, 2013], pa.int32())
     struct = pa.StructArray.from_arrays([vins, years], names=["vin", "year"], mask=pa.array([True, False]))
-    assert columns(struct, columns=[MAKE]) == {
+    source = pa.chunked_array([struct]) if chunked else struct
+    assert columns(source, columns=[MAKE]) == {
         "vin": [None, HONDA],
         "year": [None, 2013],
         "decoded_model_year": [None, 2013],
@@ -914,3 +917,13 @@ def test_peak_memory_is_bounded_by_the_columns_the_decode_reads(tmp_path: Path) 
     written, peak = decode_peak(src, tmp_path / "out.parquet", columns=[MAKE], batch_size=batch_size)
     assert written == rows
     assert peak < cap, f"peak RSS {peak / 1e6:.0f}MB decoding {rows} rows of 401 columns"
+
+
+def test_a_masked_row_in_a_later_chunk_of_non_nullable_fields_decodes() -> None:
+    # `flatten` makes the masked chunk's columns nullable; every batch has to agree,
+    # or rebatching against the first chunk's schema rejects the later nulls.
+    fields = [pa.field("vin", pa.string(), nullable=False), pa.field("year", pa.int32(), nullable=False)]
+    arrays = [pa.array([HONDA]), pa.array([2013], pa.int32())]
+    clean = pa.StructArray.from_arrays(arrays, fields=fields)
+    masked = pa.StructArray.from_arrays(arrays, fields=fields, mask=pa.array([True]))
+    assert columns(pa.chunked_array([clean, masked]), columns=[MAKE])["Make"] == ["HONDA", None]
