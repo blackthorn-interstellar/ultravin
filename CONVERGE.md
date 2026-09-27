@@ -133,7 +133,7 @@ Test:
 
 ## Consecutive empty iterations
 
-0
+1
 
 Resumed 2026-09-27 after fc7cf5a and cfa2ebe (previously converged at ae5e6ad on 2026-09-26, 8befaf6 on 2026-09-22).
 
@@ -166,6 +166,7 @@ Scout findings not yet through the skeptic. Re-verify before acting.
 - clean (2026-09-26, Codex): the 12 remaining error-7 VINs in full `seeded()`/`pairwise()` are all WMI ABT, whose `publicavailabilitydate` is NULL in the dump (unpublished; `WmiIndex` includes unpublished WMIs on purpose). Fills stamp before the WMI suffix, `corrupt()` excludes low-volume positions 12-14, no low-volume VIS key conflicts with its suffix, and all 548,475 pattern-sweep VINs keep their WMI.
 - clean (2026-09-26): the DecodeStream object (requested_schema, double export, post-exhaustion, cross-thread, GC mid-stream) behaves; every CLI `--help` and exercised flag matches; a parquet directory whose files differ in column order, VIN type (utf8/dictionary/large_string), year type (int32/int64 with nulls) and an extra column decodes correctly through both `decode_stream` and `decode-parquet`; a destination that is a directory is a clean exit-2 error.
 - clean (2026-09-26, Codex): `decode_batch`/`decode_batch_json` with `years=` (None/int/bool/`__index__` mixes, 8,194 rows across the chunk boundary, both `full` settings) match per-VIN `decode`; length mismatch is the documented ValueError; tuples and str subclasses work, iterators/bytes/floats are refused consistently; documented bad inputs raise the promised types.
+- clean (2026-09-27, Codex broad sweep): `scripts/bump_deps.py`, `coverage.py`, `transform_readme.py`, `wheel_smoke.py`; benchmark runners and doc reproduction commands; every `make help` target's referenced script and flags; remaining CLI behavior probes; September dump COPY escapes and function basenames.
 - tooling note: `.github/zizmor.yml` pins artipacked ignores to checkout line numbers; after any workflow edit run `uvx zizmor --config .github/zizmor.yml --offline .github/` and re-pin drifted lines.
 - tooling note: when break-testing Rust, `touch` the restored file — `mv`-restoring an older mtime leaves cargo serving the broken build.
 - docs (low value, counts drift): `docs/CORPUS.md:143,155,162,164` allowance counts (39/138/26/16) vs `scripts/coverage_allowances.json` today (38/136/29/11); `docs/RELEASE.md:27` "~82MB" for an 83.4 MB artifact the same doc calls 83MB at :39; `docs/SCANNER-NOTES.md` cites `db.rs` unsafe-site line numbers, `.gitignore:120`, `BENCHMARKS.md:202`, `data-review.yaml:14` that have all moved.
