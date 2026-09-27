@@ -72,7 +72,7 @@ runs:
           cls="schema-change"
         elif printf '%s\n' "$files" | grep -qE '^vpic/(schema|procs)/'; then
           cls="schema-change"   # structural: mirrors refresh.py classify()
-        elif printf '%s\n' "$files" | grep -qvE '^(vpic/|tests/parity_corpus\.json$|tests/answerkey\.json$|scripts/stale_cache_cells\.json$)'; then
+        elif printf '%s\n' "$files" | grep -qvE '^(vpic/|crates/ultravin/data/manifest\.json$|tests/parity_corpus\.json$|tests/answerkey\.json$|scripts/stale_cache_cells\.json$)'; then
           cls="schema-change"   # decoder code / scripts / packaging / .github
         else
           cls="data-only"
