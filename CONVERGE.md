@@ -132,10 +132,11 @@ Test:
 - perf: `[lib] doctest = false` to skip `cargo test`'s empty Doc-tests pass: re-measured idle at 0.5s (the scout's 4.3s was under load); too small to trade away running any future doc example.
 - perf: tracked pyo3 config + Makefile-wide `export PYO3_CONFIG_FILE` to stop clippy and `maturin develop` rebuilding each other's pyo3 (measured 2.8s + 4.9s per warm check): the export would also steer `maturin build --release` (Makefile:49) and CI's Linux/Windows wheels onto a macOS-generated config, and it hard-codes the abi3-3.10 floor — new machinery with release risk for a local-only saving.
 - bug: `decode_stream(struct_array.slice(1, 3))` panics (`end <= self.len()` in arrow-data 59.3 `ArrayData::slice`, via `make_array` of the FFI import) when the struct has a nested struct child. pyarrow's export is well-formed (parent len 3 off 1, children len 4 off 0), so the fault is arrow-rs's import of nested sliced structs; the same data as a sliced `pa.Table` or `pa.RecordBatch` goes through the C stream and decodes fine. Only a bare sliced StructArray with a nested struct column reaches it; the fix belongs upstream, and wrapping it here would only swap PanicException for ValueError.
+- perf: fill `test_batch_memory.py`'s 8,194 rows with unregistered-WMI VINs (6 elements each), keeping real vehicles only at the four checked indices (test 3.1 s → 0.63 s alone; suite 18.7 s → 17.0 s mean of 3, noisy): skeptic — it removes most real decoding (repeated registered VINs with mixed year hints per chunk) from a decode test, and three noisy suite runs do not prove a critical-path saving.
 
 ## Consecutive empty iterations
 
-1
+2
 
 Resumed 2026-09-27 after fc7cf5a and cfa2ebe (previously converged at ae5e6ad on 2026-09-26, 8befaf6 on 2026-09-22).
 
