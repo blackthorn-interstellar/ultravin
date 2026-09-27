@@ -9,7 +9,7 @@
     "corpus_sha256": "03b610da26b5f1f270422858e4e412c062a7d31f8d7156fb6500224843fb5ea9",
     "binary_sha256": "883e57958310f3a73e2c6c919fa3f8dc78e0ed5b85da29180dcaa39458cb9f73",
     "command": "RAYON_NUM_THREADS=$N ULTRAVIN_NOW_MICROS=1788220800000000 target/release/examples/throughput target/bench/realistic-corpus.txt 10 batch full auto",
-    "method": "Median of two fresh-process trials per worker count, run 1/4/12 then 12/4/1, each paired back to back with the previous headline's decoder on the same corpus. Each process warms one full unique pass, then times one full unique pass including calibration, live tuning, full native results, order restoration and synchronous cleanup. The host was shared: each trial waited up to five minutes for a one-minute load average of at most 3.5 (2.9-3.5 at start). Raw runs in scripts/bench/headline_2026_09_25.json.",
+    "method": "Median of two fresh-process trials per worker count, run 1/4/12 then 12/4/1, each paired back to back with the previous headline's decoder on the same corpus. Each process warms one full unique pass, then times complete unique passes until at least ten seconds have elapsed (one pass, except two for the faster twelve-worker sorted runs) including calibration, live tuning, full native results, order restoration and synchronous cleanup. The host was shared: each trial waited up to five minutes for a one-minute load average of at most 3.5 (2.9-3.5 at start). Raw runs in scripts/bench/headline_2026_09_25.json.",
     "ultravin_rows": {
       "ultravin": 1,
       "ultravin-batch": 4,

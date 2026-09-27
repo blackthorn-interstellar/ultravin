@@ -68,7 +68,11 @@ this build's twelve-worker figures sit just below the earlier headline's. Other
 work swung single trials widely (the previous decoder's sorted twelve-worker
 trials were 2,543,365 and 1,614,086), so the throughput ratios are noisy; the
 cycle ratios are the steadier comparison. Each run waited up to five minutes for
-a one-minute load average of at most 3.5; this build's runs started at 2.9–3.5.
+a one-minute load average of at most 3.5; this build's runs started at 2.9–3.5. Each
+process times complete passes until at least ten seconds have elapsed; both of
+this build's sorted twelve-worker trials, and the previous decoder's first,
+finished a pass sooner and timed two. Throughput is total timed rows divided by
+elapsed time.
 
 Trials, this build, in run order: random 214,162 / 238,368 (one worker),
 858,497 / 924,576 (four), 1,546,341 / 1,332,796 (twelve); sorted 460,210 /
