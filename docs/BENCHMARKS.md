@@ -1,13 +1,18 @@
 # ultravin benchmarks
 
-The README uses the [September 25 headline benchmark](#headline-throughput-september-25-2026):
-**1,464,108 VIN/s on twelve workers**, **795,694 VIN/s on four**, and
-**205,035 VIN/s on one**, all with automatic batching over twenty million unique
+The README uses the [September 25 headline benchmark at commit
+`56cf2e9`](#headline-throughput-september-25-2026-commit-56cf2e9):
+**1,439,568 VIN/s on twelve workers**, **891,536 VIN/s on four**, and
+**226,265 VIN/s on one**, all with automatic batching over twenty million unique
 VINs, ~95% of them valid, on an Apple M2 Max. That section compares every engine
 against one baseline — NHTSA MSSQL `spVinDecode` at 22.5 VIN/s — so one ultravin
-core is **~9,113× the baseline** and twelve are **~65,072×**. The same VINs
-sorted reach 2,452,450 VIN/s on twelve workers. The [September 23
-headline](#headline-throughput-september-23-2026) it replaces measured
+core is **~10,056× the baseline** and twelve are **~63,981×**. The same VINs
+sorted reach 2,375,066 VIN/s on twelve workers. It replaces the [earlier
+September 25 headline](#headline-throughput-september-25-2026) at `c54a2ee`
+(1,464,108, 795,694 and 205,035 VIN/s), measured on a quieter host; run back to
+back on this session's host, that decoder needed 1.12–1.30× more CPU cycles per
+VIN. The [September 23
+headline](#headline-throughput-september-23-2026) before that measured
 1,853,346, 935,066, and 257,709 VIN/s, but ~99.5% of that corpus's VINs were
 invalid, so it timed the decoder's error path rather than real traffic.
 The [September 15
@@ -37,6 +42,39 @@ The [shipped predictor](BATCH_PREDICTOR.md) adds worker-count and single-core
 calibration, batch-size and memory heatmaps, and a separate validation of the
 current automatic defaults at 4, 8, and 12 workers.
 The comparison tables below preserve their dated measurement sessions.
+
+## Headline throughput (September 25, 2026, commit 56cf2e9)
+
+Commit `56cf2e9` (the [September 25 instruction
+cuts](../PERFORMANCE_IMPROVEMENTS.md#september-25-sorted-input-instruction-cuts)),
+the same host, corpus, command and method as the section below. Each worker
+count and input order ran this build and the previous headline's decoder
+(`c7cea32`, the same decoder as `c54a2ee`) back to back, twice: 1/4/12, then
+12/4/1 with the order reversed. Medians of the two trials:
+
+| workers | input | previous VIN/s | this build VIN/s | cycles/VIN, previous → this | vs NHTSA MSSQL |
+|---:|---|---:|---:|---:|---:|
+| 12 | sorted | 2,078,726 | **2,375,066** | 11.96k → 10.34k (1.16×) | ~105,559× faster |
+| 12 | random | 1,111,145 | **1,439,568** | 21.39k → 19.15k (1.12×) | ~63,981× faster |
+| 4 | sorted | 1,405,328 | **1,606,742** | 9.31k → 7.92k (1.18×) | ~71,411× faster |
+| 4 | random | 709,574 | **891,536** | 17.34k → 14.51k (1.19×) | ~39,624× faster |
+| 1 | sorted | 329,203 | **473,698** | 9.21k → 7.06k (1.30×) | ~21,053× faster |
+| 1 | random | 203,475 | **226,265** | 16.30k → 14.16k (1.15×) | ~10,056× faster |
+
+Instructions per VIN fell from about 33.6k to 27.3k in every run. The host was
+busier than in the earlier September 25 session: the unchanged previous decoder
+reached only 1,111,145 VIN/s at twelve workers here against 1,464,108 then, so
+this build's twelve-worker figures sit just below the earlier headline's. Other
+work swung single trials widely (the previous decoder's sorted twelve-worker
+trials were 2,543,365 and 1,614,086), so the throughput ratios are noisy; the
+cycle ratios are the steadier comparison. Each run waited up to five minutes for
+a one-minute load average of at most 3.5; this build's runs started at 2.9–3.5.
+
+Trials, this build, in run order: random 214,162 / 238,368 (one worker),
+858,497 / 924,576 (four), 1,546,341 / 1,332,796 (twelve); sorted 460,210 /
+487,186, 1,507,617 / 1,705,866, 2,280,257 / 2,469,875. Binary SHA-256
+`883e5795…9f73`. Raw runs:
+[`scripts/bench/headline_2026_09_25.json`](../scripts/bench/headline_2026_09_25.json).
 
 ## Headline throughput (September 25, 2026)
 

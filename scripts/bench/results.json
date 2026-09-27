@@ -1,15 +1,15 @@
 {
   "provenance": {
-    "commit": "c54a2ee908ca6b1b78583453fc820b10d9bee07e",
-    "version": "v3.0.1-6-gc54a2ee",
+    "commit": "56cf2e92300ca408feb98db042dd07eede12352e",
+    "version": "v3.0.1-14-g56cf2e9",
     "date": "September 25, 2026",
     "machine": "Apple M2 Max (8 performance + 4 efficiency cores)",
     "corpus": "twenty million unique synthetic VINs, ~95% valid and ~5% with one realistic defect",
     "corpus_path": "target/bench/realistic-corpus.txt",
     "corpus_sha256": "03b610da26b5f1f270422858e4e412c062a7d31f8d7156fb6500224843fb5ea9",
-    "binary_sha256": "033f911858d1f886463ee6425d1c34a9614c1ac5554779461ec8464686b421de",
+    "binary_sha256": "883e57958310f3a73e2c6c919fa3f8dc78e0ed5b85da29180dcaa39458cb9f73",
     "command": "RAYON_NUM_THREADS=$N ULTRAVIN_NOW_MICROS=1788220800000000 target/release/examples/throughput target/bench/realistic-corpus.txt 10 batch full auto",
-    "method": "Median of two fresh-process trials per worker count, run 1/4/12 then 12/4/1, each worker count running the previous corpus, this corpus and this corpus sorted back to back. Each process warms one full unique pass, then times one full unique pass including calibration, live tuning, full native results, order restoration and synchronous cleanup. The host was shared: each trial waited up to five minutes for a one-minute load average of at most 3.5 (2.9-3.5 at start, one 6.0). Raw runs in scripts/bench/realistic_corpus_2026_09_25.json.",
+    "method": "Median of two fresh-process trials per worker count, run 1/4/12 then 12/4/1, each paired back to back with the previous headline's decoder on the same corpus. Each process warms one full unique pass, then times one full unique pass including calibration, live tuning, full native results, order restoration and synchronous cleanup. The host was shared: each trial waited up to five minutes for a one-minute load average of at most 3.5 (2.9-3.5 at start). Raw runs in scripts/bench/headline_2026_09_25.json.",
     "ultravin_rows": {
       "ultravin": 1,
       "ultravin-batch": 4,
@@ -17,16 +17,16 @@
     },
     "ultravin_trials": {
       "ultravin": [
-        214913,
-        195157
+        214162,
+        238368
       ],
       "ultravin-batch": [
-        827598,
-        763791
+        858497,
+        924576
       ],
       "ultravin-auto-12": [
-        1465817,
-        1462398
+        1546341,
+        1332796
       ]
     },
     "other_engines": "corgi and NHTSA rows are their earlier published or measured figures; they were not re-run for this session.",
@@ -38,33 +38,33 @@
       },
       "ultravin_trials": {
         "ultravin-sorted-1": [
-          374740,
-          374243
+          460210,
+          487186
         ],
         "ultravin-sorted-4": [
-          1396814,
-          1361221
+          1507617,
+          1705866
         ],
         "ultravin-sorted-12": [
-          2535811,
-          2369090
+          2280257,
+          2469875
         ]
       },
-      "commit": "c54a2ee",
-      "binary_sha256": "033f911858d1f886463ee6425d1c34a9614c1ac5554779461ec8464686b421de",
+      "commit": "56cf2e92300ca408feb98db042dd07eede12352e",
+      "binary_sha256": "883e57958310f3a73e2c6c919fa3f8dc78e0ed5b85da29180dcaa39458cb9f73",
       "corpus": "the same twenty million VINs, byte-sorted (LC_ALL=C sort)",
       "corpus_path": "target/bench/realistic-corpus-sorted.txt",
       "corpus_sha256": "358c7b6996ac732e1d6e20cd6eec22bc9b077577e5e34a5de3a8be877da85995",
-      "method": "Same session, command and two-trial median as the random-order rows; raw runs in scripts/bench/realistic_corpus_2026_09_25.json."
+      "method": "Same session, command and two-trial median as the random-order rows; raw runs in scripts/bench/headline_2026_09_25.json."
     }
   },
   "engines": {
-    "ultravin-sorted-12": 2452450,
-    "ultravin-auto-12": 1464108,
-    "ultravin-sorted-4": 1379018,
-    "ultravin-batch": 795694,
-    "ultravin-sorted-1": 374492,
-    "ultravin": 205035,
+    "ultravin-sorted-12": 2375066,
+    "ultravin-auto-12": 1439568,
+    "ultravin-sorted-4": 1606742,
+    "ultravin-batch": 891536,
+    "ultravin-sorted-1": 473698,
+    "ultravin": 226265,
     "corgi-v3": 83,
     "corgi-v2": 33,
     "mssql": 22.5,

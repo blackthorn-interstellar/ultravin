@@ -642,7 +642,8 @@ Twelve-worker throughput swung with host load during the run, so that row
 compares cycles per VIN. All 1,862,306 compatibility fingerprints, 298,507
 headline-corpus fingerprints and 200,000 realistic-corpus fingerprints matched
 the baseline after every change; `make check` passed on each commit. The
-README headline was not re-measured.
+full 20M-VIN [headline rerun](docs/BENCHMARKS.md#headline-throughput-september-25-2026-commit-56cf2e9)
+paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
 
 ## Experiments we rejected or replaced
 

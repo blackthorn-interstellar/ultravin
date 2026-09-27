@@ -14,23 +14,23 @@
 <line class="grid" x1="643.0" y1="14" x2="643.0" y2="346"/>
 <line class="grid" x1="690.0" y1="14" x2="690.0" y2="346"/>
 <text class="label strong" x="210" y="35.0" text-anchor="end">ultravin — 12 cores, sorted</text>
-<rect class="bar-hi" x="220" y="22.0" width="461.1" height="18" rx="2"/>
-<text class="value strong" x="687.1" y="35.0">2,452,450</text>
+<rect class="bar-hi" x="220" y="22.0" width="446.5" height="18" rx="2"/>
+<text class="value strong" x="672.5" y="35.0">2,375,066</text>
 <text class="label strong" x="210" y="65.0" text-anchor="end">ultravin — 12 cores, random</text>
-<rect class="bar-hi" x="220" y="52.0" width="275.3" height="18" rx="2"/>
-<text class="value strong" x="501.3" y="65.0">1,464,108</text>
+<rect class="bar-hi" x="220" y="52.0" width="270.6" height="18" rx="2"/>
+<text class="value strong" x="496.6" y="65.0">1,439,568</text>
 <text class="label strong" x="210" y="95.0" text-anchor="end">ultravin — 4 cores, sorted</text>
-<rect class="bar-hi" x="220" y="82.0" width="259.3" height="18" rx="2"/>
-<text class="value strong" x="485.3" y="95.0">1,379,018</text>
+<rect class="bar-hi" x="220" y="82.0" width="302.1" height="18" rx="2"/>
+<text class="value strong" x="528.1" y="95.0">1,606,742</text>
 <text class="label strong" x="210" y="125.0" text-anchor="end">ultravin — 4 cores, random</text>
-<rect class="bar-hi" x="220" y="112.0" width="149.6" height="18" rx="2"/>
-<text class="value strong" x="375.6" y="125.0">795,694</text>
+<rect class="bar-hi" x="220" y="112.0" width="167.6" height="18" rx="2"/>
+<text class="value strong" x="393.6" y="125.0">891,536</text>
 <text class="label strong" x="210" y="155.0" text-anchor="end">ultravin — 1 core, sorted</text>
-<rect class="bar-hi" x="220" y="142.0" width="70.4" height="18" rx="2"/>
-<text class="value strong" x="296.4" y="155.0">374,492</text>
+<rect class="bar-hi" x="220" y="142.0" width="89.1" height="18" rx="2"/>
+<text class="value strong" x="315.1" y="155.0">473,698</text>
 <text class="label strong" x="210" y="185.0" text-anchor="end">ultravin — 1 core, random</text>
-<rect class="bar-hi" x="220" y="172.0" width="38.5" height="18" rx="2"/>
-<text class="value strong" x="264.5" y="185.0">205,035</text>
+<rect class="bar-hi" x="220" y="172.0" width="42.5" height="18" rx="2"/>
+<text class="value strong" x="268.5" y="185.0">226,265</text>
 <text class="label" x="210" y="215.0" text-anchor="end">corgi v3</text>
 <rect class="bar" x="220" y="202.0" width="2.0" height="18" rx="2"/>
 <text class="value" x="226.0" y="215.0">83</text>
