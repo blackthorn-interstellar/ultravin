@@ -58,18 +58,18 @@ def _winit(q: Queue) -> None:
     _conn = psycopg.connect(q.get(), row_factory=dict_row, autocommit=True)  # ty: ignore[invalid-argument-type]
 
 
-def _check(case: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
+def _check(case: dict[str, Any]) -> tuple[str, dict[str, Any] | None]:
     vin, eng = case["vin"], case["engine"]
     try:
         o = [normalize.from_oracle(r) for r in oracle.decode(_conn, vin)]
         m = normalize.ultravin_rows(ultravin.decode(vin, full=True))
         d = normalize.diff_rows(o, m)
     except Exception as e:  # noqa: BLE001
-        return (eng, {"vin": vin, "engine": eng, "error": repr(e)[:200]})
+        return (vin, {"vin": vin, "engine": eng, "error": repr(e)[:200]})
     if d["ok"]:
-        return None
+        return (vin, None)
     return (
-        eng,
+        vin,
         {
             "vin": vin,
             "engine": eng,
@@ -157,7 +157,7 @@ def _save_cov(covf: Path, cov: dict[str, Any]) -> None:
     covf.write_text(json.dumps({"seen": sorted(cov["seen"]), "corpus": cov["corpus"]}))
 
 
-def covfuzz_producer(state: dict[str, Any], cov: dict[str, Any], deadline: float):
+def covfuzz_producer(state: dict[str, Any], cov: dict[str, Any], pending: dict[str, set[int]], deadline: float):
     rng = random.Random(98765 + state["counter"])
     if not cov["corpus"]:
         cov["corpus"] = brutal._seed_corpus(800)
@@ -186,6 +186,7 @@ def covfuzz_producer(state: dict[str, Any], cov: dict[str, Any], deadline: float
         new = {_edge_key(e) for e in edges} - cov["seen"]
         if new:
             cov["seen"] |= new
+            pending[cand] = new
             if len(cand) == 17:
                 cov["corpus"].append(cand)
                 if len(cov["corpus"]) > 60000:
@@ -236,6 +237,9 @@ def cmd_run(args: argparse.Namespace) -> int:
     deadline = time.time() + args.max_seconds
 
     cov: dict[str, Any] | None = None
+    # Edges of VINs yielded but not yet answered: Pool.imap drains the producer far
+    # ahead of the oracle, so these are not checkpointed as seen until a result lands.
+    pending: dict[str, set[int]] = {}
     state: dict[str, Any]
     if eng == "systematic":
         state = (
@@ -254,13 +258,13 @@ def cmd_run(args: argparse.Namespace) -> int:
         )
         covf = d / "coverage.json"
         cov = _load_cov(covf)
-        prod = covfuzz_producer(state, cov, deadline)
+        prod = covfuzz_producer(state, cov, pending, deadline)
         done_fn = lambda: state["saturated"]  # noqa: E731
 
     def persist() -> None:
         statef.write_text(json.dumps(state))
         if cov is not None:
-            _save_cov(d / "coverage.json", cov)
+            _save_cov(d / "coverage.json", {**cov, "seen": cov["seen"].difference(*pending.values())})
         (d / f"status-{eng}.json").write_text(json.dumps(_status(eng, state, cov, tested, time.time() - t0)))
 
     fh = open(faill, "a")  # noqa: SIM115
@@ -269,13 +273,15 @@ def cmd_run(args: argparse.Namespace) -> int:
     infra_streak = 0
     try:
         with _pool(ports, args.workers) as pool:
-            for res in pool.imap_unordered(_check, prod, chunksize=4):
+            for vin, fail in pool.imap_unordered(_check, prod, chunksize=4):
                 tested += 1
                 state["tested"] += 1
-                if res is not None:
+                if fail is None or not is_infra_error(fail):
+                    pending.pop(vin, None)
+                if fail is not None:
                     state["failures"] += 1
-                    fh.write(json.dumps(res[1]) + "\n")
-                    infra_streak = infra_streak + 1 if is_infra_error(res[1]) else 0
+                    fh.write(json.dumps(fail) + "\n")
+                    infra_streak = infra_streak + 1 if is_infra_error(fail) else 0
                     if infra_streak >= INFRA_STREAK_ABORT:
                         print(
                             f"[campaign:{eng}] aborting chunk: {infra_streak} consecutive oracle "

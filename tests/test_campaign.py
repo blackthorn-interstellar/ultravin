@@ -1,5 +1,9 @@
+import argparse
 import json
 
+import ultravin
+
+from scripts.parity import brutal, campaign
 from scripts.parity.campaign import _edge_key, _load_cov, _save_cov, is_infra_error
 
 
@@ -31,3 +35,30 @@ def test_coverage_checkpoint_round_trips_through_json(tmp_path):
     _save_cov(covf, cov)
     assert _load_cov(covf) == cov
     assert json.loads(covf.read_text())["seen"] == sorted(cov["seen"])
+
+
+def test_the_checkpoint_credits_only_coverage_the_oracle_checked(tmp_path, monkeypatch):
+    # Pool.imap drains the producer far ahead of the oracle, so at the deadline most
+    # yielded VINs have no result. Saving their edges as seen would make every later
+    # resume skip that coverage without the oracle ever checking it.
+    queued: list[str] = []
+
+    class EagerPool:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_):
+            return False
+
+        def imap_unordered(self, _fn, cases, chunksize):
+            queued.extend(case["vin"] for case in cases)
+            return ((vin, None) for vin in queued)
+
+    monkeypatch.setattr(campaign, "_pool", lambda *_: EagerPool())
+    monkeypatch.setattr(brutal, "_seed_corpus", lambda _n: ultravin.generate(50, seed=3))
+    args = argparse.Namespace(dir=str(tmp_path), engine="covfuzz", ports="1", workers=1, max_seconds=1)
+    campaign.cmd_run(args)
+    assert len(queued) > 1
+    assert json.loads((tmp_path / "state-covfuzz.json").read_text())["tested"] == 1
+    seen = _load_cov(tmp_path / "coverage.json")["seen"]
+    assert seen == {_edge_key(e) for e in brutal.ultravin_coverage(queued[0])}
