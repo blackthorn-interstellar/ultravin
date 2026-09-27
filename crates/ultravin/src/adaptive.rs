@@ -480,9 +480,6 @@ impl BatchTuner {
     }
 
     fn memory_limit(&self) -> usize {
-        if self.memory_bytes == 0 || self.bytes_per_row == 0.0 {
-            return self.max_rows;
-        }
         // Input and output coexist while a batch is decoded. Treat the measured
         // output size as one half of that working set rather than pretending it
         // is process RSS.
