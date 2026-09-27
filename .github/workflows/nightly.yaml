@@ -1578,10 +1578,6 @@ jobs:
           mkdir -p "$RUNNER_TEMP/fix-bundle"
           git diff --binary --cached "$BASE" > "$RUNNER_TEMP/fix-bundle/fix.patch"
           git log --format='%B' "$BASE"..HEAD > "$RUNNER_TEMP/fix-bundle/fix-notes.md" || true
-          # The publish job branches from this exact commit: the deps lane can
-          # merge to master while this lane runs, and the patch belongs on the
-          # tree the agent actually worked from.
-          echo "$BASE" > "$RUNNER_TEMP/fix-bundle/fix-base.txt"
           cp -r target/fixes "$RUNNER_TEMP/fix-bundle/meta" 2>/dev/null || true
           echo "has_changes=true" >> "$GITHUB_OUTPUT"
           git diff --stat --cached "$BASE" >> "$GITHUB_STEP_SUMMARY" || true
@@ -1640,7 +1636,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           # Root the branch at LIVE master. Branching from the agent's own base
-          # (fix/fix-base.txt) used to guard against the deps lane merging
+          # used to guard against the deps lane merging
           # mid-run, but a pinned base also carries an older .github/workflows/
           # whenever master moved there, and GitHub refuses that branch push as
           # a workflow update the GITHUB_TOKEN has no `workflows` scope for.

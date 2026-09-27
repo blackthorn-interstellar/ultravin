@@ -47,7 +47,6 @@ jobs:
       pull-requests: read
     outputs:
       month: ${{ steps.pick.outputs.month }}
-      reason: ${{ steps.detect.outputs.reason }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
