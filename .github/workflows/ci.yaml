@@ -143,9 +143,8 @@ jobs:
         enable-cache: ${{ matrix.python-version == '3.15' }}
     # pyarrow publishes no cp315 wheels yet, so on 3.15 uv builds it from
     # sdist, which needs an Arrow C++ whose major version matches pyarrow's.
-    # apt installs the repo's newest; when Arrow's next major lands there ahead
-    # of the locked pyarrow, this row goes red (it doesn't block merges) — pin
-    # libarrow-dev to the locked major if that gap ever matters. Drop this
+    # Match the exact locked PyArrow release: installing apt's newest Arrow
+    # can introduce a newer, incompatible C++ API before uv.lock moves. Drop this
     # step, the cache exception above, and allow-prereleases once 3.15.0 final
     # is out and cp315 wheels ship.
     - name: Install Arrow C++ (pyarrow sdist build)
@@ -154,7 +153,13 @@ jobs:
         wget -q "https://packages.apache.org/artifactory/arrow/$(lsb_release --id --short | tr '[:upper:]' '[:lower:]')/apache-arrow-apt-source-latest-$(lsb_release --codename --short).deb"
         sudo apt-get install -y -V ./apache-arrow-apt-source-latest-*.deb
         sudo apt-get update
-        sudo apt-get install -y -V libarrow-dev libarrow-dataset-dev libparquet-dev
+        pyarrow_version=$(python -c 'import tomllib; print(next(p["version"] for p in tomllib.load(open("uv.lock", "rb"))["package"] if p["name"] == "pyarrow"))')
+        arrow_version=$(apt-cache madison libarrow-dev | awk -v prefix="$pyarrow_version-" 'index($3, prefix) == 1 && !found { print $3; found = 1 }')
+        if [ -z "$arrow_version" ]; then
+          echo "::error::No Arrow C++ package matches locked PyArrow $pyarrow_version"
+          exit 1
+        fi
+        sudo apt-get install -y -V "libarrow-dev=$arrow_version" "libarrow-dataset-dev=$arrow_version" "libparquet-dev=$arrow_version"
         # pyarrow's AUTO component options inherit the flags of apt's
         # kitchen-sink Arrow build, and every inherited component whose
         # separate -dev package is missing dies in find_package (first
