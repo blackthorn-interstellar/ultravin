@@ -205,7 +205,7 @@ fn run(cli: &Cli) -> Result<(), Box<dyn Error>> {
     let (reader, dump_file): (Box<dyn BufRead>, String) = if is_zip {
         let mut archive = zip::ZipArchive::new(File::open(&cli.dump)?)?;
         let entry = archive.by_index(0)?;
-        let name = entry.name().to_string();
+        let name = entry.name()?.into_owned();
         // Read the entry fully (the SQL part is ~320MB; the zip reader is not Send).
         let mut buf = Vec::new();
         let mut e = entry;
