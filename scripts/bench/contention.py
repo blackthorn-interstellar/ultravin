@@ -17,7 +17,7 @@ import re
 import subprocess
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -71,7 +71,7 @@ def _stop_burners(processes: list[subprocess.Popen[str]]) -> None:
 
 
 @contextmanager
-def cpu_burners(count: int, lifetime: float, duty_on: float, duty_off: float) -> Iterator[dict[str, Any]]:
+def cpu_burners(count: int, lifetime: float, duty_on: float, duty_off: float) -> Generator[dict[str, Any], None, None]:
     """Start bounded burners, require every ready signal, and reap our handles."""
     if count == 0:
         yield {"requested": 0, "ready": 0, "alive_before_benchmark": 0, "alive_after_benchmark": 0}
