@@ -159,7 +159,12 @@ jobs:
           echo "::error::No Arrow C++ package matches locked PyArrow $pyarrow_version"
           exit 1
         fi
-        sudo apt-get install -y -V "libarrow-dev=$arrow_version" "libarrow-dataset-dev=$arrow_version" "libarrow-acero-dev=$arrow_version" "libparquet-dev=$arrow_version"
+        # Dataset -> Acero -> Compute -> Arrow all require the same release.
+        # Pin every -dev package so apt cannot select a newer transitive API.
+        sudo apt-get install -y -V \
+          "libarrow-dev=$arrow_version" "libarrow-compute-dev=$arrow_version" \
+          "libarrow-acero-dev=$arrow_version" "libarrow-dataset-dev=$arrow_version" \
+          "libparquet-dev=$arrow_version"
         # pyarrow's AUTO component options inherit the flags of apt's
         # kitchen-sink Arrow build, and every inherited component whose
         # separate -dev package is missing dies in find_package (first
