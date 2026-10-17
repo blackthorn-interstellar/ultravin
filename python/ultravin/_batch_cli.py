@@ -1,7 +1,7 @@
 """Incremental input parsing and chunking for the batch CLI."""
 
 import sys
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from contextlib import ExitStack, contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -29,7 +29,7 @@ def parse_batch_size(value: str) -> BatchSize:
 
 
 @contextmanager
-def input_lines(file: str) -> Iterator[TextIO]:
+def input_lines(file: str) -> Generator[TextIO, None, None]:
     if file == "-":
         yield sys.stdin
         return
