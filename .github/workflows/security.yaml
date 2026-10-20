@@ -141,14 +141,14 @@ jobs:
       - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: false
-      - name: Sync env + audit installed packages
+      - name: Audit the locked packages
         run: |
-          # Audit the resolved env (incl. dev deps), not a requirements file:
-          # pip-audit's venv resolver fights uv-managed Pythons that ship without
-          # ensurepip. No --local: under `uv run --with` it audited 0 packages.
-          echo "UV_PYTHON=$pythonLocation" >> "$GITHUB_ENV"
-          uv sync --frozen --all-extras
-          uv run --with pip-audit pip-audit --progress-spinner off
+          # Audit uv.lock (incl. dev deps), not an env: auditing the project env
+          # under `uv run --with pip-audit` also audited pip-audit's own deps
+          # (a stale certifi went red) and looked up the unpublished project on
+          # PyPI. Hashed pins + --disable-pip skip pip-audit's venv resolver.
+          uv export --frozen --all-extras --no-emit-project --format requirements-txt -o requirements-audit.txt
+          uvx pip-audit -r requirements-audit.txt --disable-pip --progress-spinner off
 
   osv:
     name: sca (osv-scanner)
