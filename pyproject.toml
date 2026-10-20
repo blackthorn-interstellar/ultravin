@@ -43,6 +43,10 @@ Source = "https://github.com/blackthorn-interstellar/ultravin"
 requires = ["maturin>=1.7,<2"]
 build-backend = "maturin"
 
+[tool.uv]
+# An older uv rewrites uv.lock in a format CI did not write. setup-uv reads this too.
+required-version = ">=0.13"
+
 [tool.maturin]
 python-source = "python"
 module-name = "ultravin._ultravin"
