@@ -22,7 +22,6 @@
     {"file": "decode.rs", "function": "decode::append_make", "reason": "the single-WMI-make else branch", "regions": 1},
     {"file": "decode.rs", "function": "decode::append_vehicle_specs", "reason": "spec rows whose IsKey elimination leaves two survivors for one element - see docs/CORPUS.md", "regions": 3},
     {"file": "decode.rs", "function": "decode::build_var_keys_stack", "reason": "the skipped second part for a 4-9 character VIN (the cover corpus has only <=3 and 17 character VINs), and the non-ASCII byte replacement; decode VINs are sanitized to ASCII", "regions": 2},
-    {"file": "decode.rs", "function": "decode::cmp_keys_no_brackets", "reason": "arms needing two tied keys of equal star-free length but different bracket-stripped length", "regions": 3},
     {"file": "decode.rs", "function": "decode::created_desc_nulls_first", "reason": "the NULL CreatedOn arms; only append_make emits NULL, and 0 models have two makes to compare", "regions": 3},
     {"file": "decode.rs", "function": "decode::decode_core_into", "reason": "guards against dump shapes this month does not contain: 0 tobeqced schemas, 0 orphan wmi_vinschema rows, 0 patterns on elements 26/27/29/39, 0 patterns whose element is missing; plus the append_default_values arm, taken only when Db::defaults_independent is false", "regions": 9},
     {"file": "decode.rs", "function": "decode::dedup_cmp::{closure#3}", "reason": "the insertion-index tiebreak, reached only when two patterns share (schema, element, keys); the data has 0 such duplicates", "regions": 3},

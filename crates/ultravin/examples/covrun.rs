@@ -26,6 +26,7 @@ fn main() {
         elements += ultravin::decode(vin, None).elements.len();
         bytes +=
             ultravin::decode_json(vin, None).len() + ultravin::decode_json_flat(vin, None).len();
+        bytes += ultravin::vin_wmi(vin).len() + ultravin::vin_descriptor(vin).len();
     }
     elements += ultravin::decode_batch(&vins, None).len();
     elements += ultravin::decode_batch_flat(&vins, None).len();
