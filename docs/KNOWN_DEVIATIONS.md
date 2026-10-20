@@ -251,8 +251,8 @@ gate — control 3 further down — rejects the month when that counter is non-z
 (`crates/ultravin-build/src/stalecache.rs`) diffs every `(wmi, year)` cell of the
 dump's cache against the recompute from that same dump's pattern rows — the
 decoder's own `ultravin::recompute_valid_chars` — and **`scripts/stale_cache_cells.json`
-is the resulting `[wmi, year, positions]` list**: **5,519 stale cells in dump
-2026_09** (`summary.stale_cells`; 4,967 in 2026_08). That file is the authoritative membership list
+is the resulting `[wmi, year, positions]` list**: **5,706 stale cells in dump
+2026_10** (`summary.stale_cells`; 5,519 in 2026_09). That file is the authoritative membership list
 for this class. Every monthly refresh reruns the scan and rewrites the file from
 it — `scripts/refresh.py` invokes `vpic-import --stale-cache-report` and hands the
 report to `stale_cache.write_cells`, and the `stale-cache` gate then validates the
@@ -262,13 +262,14 @@ expected signal, not a failure — it self-documents in the refresh PR diff.
 
 Two cells worked through, the ones two still-registered `clean-decode` VINs
 land on. (Dump 2026_09 rebuilt the Honda `MLH`/`JH2` cache cells that this
-section originally walked through; those VINs now match the oracle and were
-retired.)
+section originally walked through; dump 2026_10 rebuilt the Kawasaki
+`JKA`/`JKB` cells — the 23 restrictive and omitted-row members now match the
+oracle and were retired.)
 
 | cell (`wmi`, `year`) | position | cache | recomputed from `pattern` | stale extras / missing |
 |---|---:|---|---|---|
 | `10T`, 2024 | 6, 8 | digits leftover | no digits | extra `0123456789` at 6, `12345` at 8 |
-| `JKA`, 2025 | 11 | `ABJT` | `ABDJT` | cache missing `D` |
+| `10T`, 2020 | 7, 11 | leftover digits / `CDP` | no digits / no `CDP` | extra `0123456789` at 7, `CDP` at 11 |
 
 Both columns come out of the same loaded dump, one query apart:
 
@@ -287,7 +288,6 @@ including the two whose whole decode changes:
 
 ```
 10TAK8H20RSAA0000  delete cache rows for (10T,2024) -> oracle MY=1994  parity_now=True
-JKAAFCL12SDAA0000  delete cache rows for (JKA,2025) -> oracle MY=2025  parity_now=True
 10T2CE2A?LPY1111S  delete 111 cache rows for (10T,2020) -> oracle MY=1990 codes='5,14,400'  parity_now=True
 1HFTKS3B?RD1111I1  delete 80 cache rows for (1HF,2024) -> oracle MY=1994 codes='5,14,400'  parity_now=True
 ```
@@ -315,9 +315,10 @@ at, and the registry records it as each entry's `scope`:
    observation names no VIN position, so the cell list cannot excuse it; those
    VINs are registered individually (see §4).
 
-3. **The whole decode** (`clean-decode`, 25 VINs still registered individually
-   after 2026_09 healed 160 Honda/Yamaha/JYA members; the two worked through
-   here are `10TAK8H20RSAA0000` and `JKAAFCL12SDAA0000`). Same cells, but these
+3. **The whole decode** (`clean-decode`, 2 VINs still registered individually
+   after 2026_09 healed 160 Honda/Yamaha/JYA members and 2026_10 healed 23
+   Kawasaki `JKA`/`JKB` members; the two worked through here are
+   `10TAK8H20RSAA0000` and `10T2CE2A?LPY1111S`). Same cells, but these
    VINs have an *inconclusive* model year — `fVinModelYear2` cannot choose
    between the two halves of position 10's 30-year cycle, so both years get a
    decode pass and the best-of scoring picks one. Running the oracle's own
@@ -328,9 +329,11 @@ at, and the registry records it as each entry's `scope`:
    `0,14`), so it beats 1994; the pattern source flags those positions (code 4)
    and the 1994-schema vehicle wins.
 
-   `JKAAFCL12SDAA0000` is the **restrictive** shape on `(JKA, 2025)`: the cache
-   is missing `D` at position 11 (`ABJT` vs recomputed `ABDJT`), so the oracle
-   penalizes its own 2025 pass and falls back to 1995 while ultravin keeps 2025.
+   The **restrictive** shape on `(JKA, 2025)` (healed in dump 2026_10, when
+   NHTSA rebuilt the `JKA`/`JKB` cells so they match the recompute) was: the
+   cache missing `D` at position 11 (`ABJT` vs recomputed `ABDJT`), so the
+   oracle penalized its own 2025 pass and fell back to 1995 while ultravin
+   kept 2025.
 
    Note what is *not* different: both engines consider exactly the same two
    candidate years and run a pass for each. Only the error code one of those
@@ -350,10 +353,13 @@ at, and the registry records it as each entry's `scope`:
      position 11 with cache `ABJT` against recompute `ABDJT`. Each VIN carries
      `D` there, so the oracle penalizes its own 2025 pass and falls back to 1995
      while ultravin keeps 2025 — the flip runs the *other* way, and the
-     defective cell is the one keyed by ultravin's year.
+     defective cell is the one keyed by ultravin's year. **Healed in dump
+     2026_10:** those cells are gone from `scripts/stale_cache_cells.json` and
+     the 18 VINs now decode in exact parity.
    - **omitted-row**, 5 VINs on `(JKA, 2021)`, whose 69 rows cover only positions
      4–8. The recompute yields `ABDJ` at position 11; each VIN carries `C`, which
-     ultravin rejects and the oracle never looks at.
+     ultravin rejects and the oracle never looks at. **Healed in dump 2026_10**
+     with the same `JKA`/`JKB` rebuild.
 
    Each was admitted only after a machine check appropriate to its shape — the
    deciding position's character on the expected side of the cache/recompute

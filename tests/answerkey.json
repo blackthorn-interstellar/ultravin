@@ -1,9 +1,9 @@
 {
   "_about": "Pointer to the frozen oracle answer key. `make answerkey-verify` fetches and checks it.",
-  "month": "2026_09",
-  "dump_sha256": "1ee4a1e22526a606b492ce4ab301894465afbf43dc00946df6d503c3102d5911",
-  "artifact_blake3": "4f0241cac22b2da89cbb299cb4f8d33d0cae03ea7d0f8e4928bb74a14d25a67b",
-  "asset": "answerkey-2026_09.jsonl.zst",
-  "sha256": "00d736de7c91bf60939a665b1c62de5317175dc6958c233552558b4b0c04018d",
-  "count": 1722279
+  "month": "2026_10",
+  "dump_sha256": "863445dfd77807c1acee59d5991d54b0c8add802f9402dfa696d540f548c2282",
+  "artifact_blake3": "6630690d9e1a3158121382362936ed73442fcc401c5fc15326267dadbbc41ca6",
+  "asset": "answerkey-2026_10.jsonl.zst",
+  "sha256": "c332add16b7a7e0daa419d50140c810e5a46c835d081449f8da33a9de2f36992",
+  "count": 1818023
 }
