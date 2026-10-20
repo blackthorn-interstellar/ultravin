@@ -2,7 +2,7 @@
 
 import io
 import sys
-from collections.abc import Iterator
+from collections.abc import Generator, Iterator
 from contextlib import ExitStack, contextmanager
 from datetime import datetime
 from pathlib import Path
@@ -30,7 +30,7 @@ def parse_batch_size(value: str) -> BatchSize:
 
 
 @contextmanager
-def input_lines(file: str) -> Iterator[TextIO]:
+def input_lines(file: str) -> Generator[TextIO]:
     if file == "-":
         # A C locale or PYTHONUTF8=1 decodes stdin with surrogateescape, which
         # would smuggle bad bytes past `rows()` as surrogates; read it strictly.

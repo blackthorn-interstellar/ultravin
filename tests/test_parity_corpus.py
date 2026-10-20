@@ -11,7 +11,7 @@ The full live-oracle sweep is `scripts/parity/sweep.py`, NOT part of make check.
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 import json
 from pathlib import Path
 
@@ -31,7 +31,7 @@ def test_corpus_present() -> None:
 
 def test_corpus_year_not_stale() -> None:
     frozen = _DATA["oracle_current_year"]
-    now = datetime.datetime.now().year  # noqa: DTZ005
+    now = dt.datetime.now().year  # noqa: DTZ005
     assert now == frozen, (
         f"parity corpus was frozen for {frozen} but the clock now reads {now}: "
         "ultravin caps the model year using the system year, so test_parity_unchanged "
@@ -41,7 +41,7 @@ def test_corpus_year_not_stale() -> None:
 
 
 @pytest.mark.skipif(
-    datetime.datetime.now().year != _DATA["oracle_current_year"],  # noqa: DTZ005
+    dt.datetime.now().year != _DATA["oracle_current_year"],  # noqa: DTZ005
     reason="ultravin uses the system year for the model-year cap; corpus was frozen in a different year",
 )
 @pytest.mark.parametrize("entry", _ENTRIES, ids=[e["vin"] for e in _ENTRIES])
