@@ -296,6 +296,18 @@ def test_plan_ships_a_young_security_fix_and_its_dependent():
     assert (reverts, pinned, blockers) == ([], {}, [])
 
 
+def test_plan_does_not_blame_a_mover_for_a_young_crate_behind_an_unmoved_one():
+    """2026-10-20: the rustls-webpki fix was held back for a young `cc` reached via `ring`, which never moved."""
+    clean = [("rustls-webpki", "0.103.15", "0.103.16"), ("cc", "1.5.1", "1.9.0")]
+    ages: dict[tuple[str, str], datetime | None] = {
+        ("rustls-webpki", "0.103.16"): YOUNG_AGE,
+        ("cc", "1.9.0"): YOUNG_AGE,
+    }
+    graph = {"rustls-webpki": {"ring"}, "ring": {"cc"}}
+    reverts, pinned, blockers = plan(clean, [], ages, CUTOFF, graph, fixes={"rustls-webpki"})
+    assert (reverts, pinned, blockers) == ([("cc", "1.5.1", "1.9.0")], {}, [])
+
+
 def _osv(monkeypatch: pytest.MonkeyPatch, payload: object) -> list[dict]:
     sent: list[dict] = []
 

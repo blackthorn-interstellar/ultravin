@@ -98,15 +98,19 @@ def _young(key: tuple[str, str], ages: dict[tuple[str, str], datetime | None], c
     return ts is None or ts > cutoff  # unknown age fails closed
 
 
-def _reaches(graph: dict[str, set[str]], name: str) -> set[str]:
-    """Every name `name` depends on, directly or transitively (cycle-safe)."""
+def _reaches(graph: dict[str, set[str]], name: str, moved: set[str]) -> set[str]:
+    """Every name `name` can force a new pin on: its deps, and theirs only through
+    crates that moved too (cycle-safe). An unmoved crate keeps the requirements
+    HEAD already satisfied, so the walk stops there — `ring` holding still means
+    `rustls-webpki` cannot be what drags in a young `cc`."""
     seen: set[str] = set()
     stack = list(graph.get(name, ()))
     while stack:
         n = stack.pop()
         if n not in seen:
             seen.add(n)
-            stack += graph.get(n, ())
+            if n in moved:
+                stack += graph.get(n, ())
     return seen
 
 
@@ -138,7 +142,8 @@ def plan(
     young_unclean = [(n, v) for n, added in unclean for v in sorted(added) if _young((n, v), ages, cutoff)]
     young = {n: f"{n} {v}" for n, _, v in young_clean} | {n: f"{n} {v}" for n, v in young_unclean}
 
-    reach = {name: _reaches(graph, name) for name, _, _ in clean}
+    moved = {n for n, *_ in clean} | {n for n, _ in unclean}
+    reach = {name: _reaches(graph, name, moved) for name, _, _ in clean}
     pinned: dict[str, list[str]] = {}
     for m in clean:
         pins = sorted(young[n] for n in reach[m[0]] & young.keys())
