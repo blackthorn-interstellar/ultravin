@@ -46,6 +46,9 @@ build-backend = "maturin"
 [tool.uv]
 # An older uv rewrites uv.lock in a format CI did not write. setup-uv reads this too.
 required-version = ">=0.13"
+# Supply-chain cooldown: never be the first installer of a fresh release. The
+# nightly lifts it per package for security fixes (scripts/bump_deps.py uv-fixes).
+exclude-newer = "7 days"
 
 [tool.maturin]
 python-source = "python"

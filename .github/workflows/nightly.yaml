@@ -1,7 +1,7 @@
 # Nightly autonomous maintenance, two independent lanes:
 #
 #   deps   mechanical dependency bump inside a 7-day publication cooldown
-#          (uv --exclude-newer natively; scripts/bump_deps.py enforces it for
+#          (uv natively via pyproject's exclude-newer; scripts/bump_deps.py enforces it for
 #          cargo against crates.io publish dates, failing closed). Green ->
 #          lockfile PR; broken -> a Grok agent fixes the fallout (with
 #          judgment: new tool rules may be config-disabled rather than
@@ -96,8 +96,7 @@ jobs:
         id: bump
         run: |
           # shellcheck disable=SC2046 # one flag per line, package names have no spaces
-          uv lock --upgrade --exclude-newer "$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)" $(python3 scripts/bump_deps.py uv-fixes)
-          uv lock  # drop the [options] cutoff stamp; a local `uv run` would strip it and dirty the tree
+          uv lock --upgrade $(python3 scripts/bump_deps.py uv-fixes) # cooldown: pyproject's exclude-newer
           cargo update
           python3 scripts/bump_deps.py cooldown --days 7 --report target/deps/report.md
           stray=$(git diff --name-only | grep -vE '^(Cargo\.lock|uv\.lock)$' || true)

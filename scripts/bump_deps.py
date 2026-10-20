@@ -1,8 +1,8 @@
 """Nightly dependency bump with a publication cooldown (default 7 days).
 
 Freshly published releases are where supply-chain compromises live; an
-unattended nightly bump should never be the first installer. `uv lock
---exclude-newer` enforces the cooldown natively for Python, but cargo has no
+unattended nightly bump should never be the first installer. pyproject's
+`exclude-newer` enforces the cooldown natively for Python, but cargo has no
 equivalent, so `cooldown` post-processes a `cargo update`: every crate whose
 new version was published inside the window is reverted to the version HEAD
 pins (`cargo update -p crate@<new> --precise <old>`), and so is any freshly
@@ -311,7 +311,7 @@ def cmd_cooldown(args: argparse.Namespace) -> int:
         [
             f"## deps: nightly bump {datetime.now(timezone.utc):%Y-%m-%d}",
             "",
-            f"### Python (uv — cooldown enforced natively via `--exclude-newer`, {args.days} days)",
+            "### Python (uv — cooldown enforced natively via pyproject's `exclude-newer`)",
             "",
             markdown_moves(py_clean, py_unclean),
             *(f"- {n}" for n in fix_notes(py_fixes, py_clean)),

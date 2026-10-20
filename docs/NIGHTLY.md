@@ -52,7 +52,7 @@ reach are `XAI_API_KEY` and a read-only `GITHUB_TOKEN`.
 `uv lock --upgrade` and `cargo update`, both under a **7-day publication
 cooldown**: an unattended nightly bump must never be the first installer of a
 freshly published (possibly freshly compromised) release. uv enforces this
-natively (`--exclude-newer`); cargo has no equivalent, so
+natively (`exclude-newer` in `pyproject.toml`); cargo has no equivalent, so
 `scripts/bump_deps.py cooldown` post-processes the lockfile against crates.io
 publish dates and reverts young arrivals (`--precise` back to HEAD's pin).
 Anything it cannot revert safely — a crate new to the tree, a young transitive
