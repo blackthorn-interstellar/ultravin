@@ -5,7 +5,6 @@ __pycache__/
 *.so
 .venv
 .env
-.python-version
 
 # Test / coverage / lint caches
 .pytest_cache/
