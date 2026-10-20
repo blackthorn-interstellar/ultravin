@@ -91,6 +91,18 @@ runs:
           gh api "repos/$GITHUB_REPOSITORY/commits/$head/status" \
             --jq '[.statuses[] | select(.context == "review-verdict")] | last | .state // ""' 2>/dev/null || true
         }
+        # The bot's push spawns approval-gated pull_request runs whose queued
+        # check suites hold the required contexts in "expected" state. GitHub
+        # creates them asynchronously, so the caller's one-shot approval right
+        # after the push can miss them (run 39432766373 stalled this way).
+        # Approve on every pass until the merge goes through.
+        approve_gated() {
+          for rid in $(gh api "repos/$GITHUB_REPOSITORY/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml") | .id' 2>/dev/null); do
+            gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$rid/approve" >/dev/null \
+              && echo "approved gated run $rid" \
+              || echo "::warning::could not approve gated run $rid"
+          done
+        }
         merged=""
         for _ in $(seq 1 45); do
           if gh pr merge "$pr" --squash --delete-branch 2>/tmp/merge-err; then
@@ -110,6 +122,7 @@ runs:
               --jq '[.statuses[] | select(.context == "review-verdict")] | last | "review-verdict \(.state): \(.description // "no summary published")"' || true
             exit 1
           fi
+          approve_gated
           sleep 30
         done
         if [ -z "$merged" ]; then
