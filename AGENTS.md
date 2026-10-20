@@ -8,6 +8,11 @@
  - `make test` run tests
  - `make check` run all checks (format, lint, typecheck, test)
 
+### Git
+
+- Push your own work straight to `master`; don't open a PR for it.
+- Never name a hand-made branch `data/*`, `deps/*` or `fix/*`. Those belong to the automation, and the review gate judges them as unattended bot work.
+
 ### Code Conventions
 
 - Always run `make checku` after making changes.
