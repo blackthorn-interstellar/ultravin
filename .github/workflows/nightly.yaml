@@ -95,7 +95,8 @@ jobs:
       - name: Bump inside the cooldown
         id: bump
         run: |
-          uv lock --upgrade --exclude-newer "$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)"
+          # shellcheck disable=SC2046 # one flag per line, package names have no spaces
+          uv lock --upgrade --exclude-newer "$(date -u -d '7 days ago' +%Y-%m-%dT%H:%M:%SZ)" $(python3 scripts/bump_deps.py uv-fixes)
           cargo update
           python3 scripts/bump_deps.py cooldown --days 7 --report target/deps/report.md
           stray=$(git diff --name-only | grep -vE '^(Cargo\.lock|uv\.lock)$' || true)

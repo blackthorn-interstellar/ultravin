@@ -12,6 +12,12 @@ it, a multi-version shuffle, a version crates.io does not report — fails
 closed: Cargo.lock is restored wholesale and the bump waits for a cleaner
 night.
 
+The one exception is a security fix: a package whose current pin has an open
+OSV advisory (RustSec, GHSA, PyPI) skips the cooldown. Waiting out the window
+would keep a known vulnerability to dodge a hypothetical one, and every PR's
+security scan stays red until the fix lands. `uv-fixes` prints the uv flags
+for that; `cooldown` exempts the cargo moves itself.
+
 The written report covers both ecosystems and becomes the PR body.
 """
 
@@ -23,6 +29,7 @@ import subprocess
 import sys
 import time
 import urllib.request
+from collections.abc import Collection
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -34,7 +41,7 @@ Move = tuple[str, str, str]  # (name, old_version, new_version)
 
 
 def log(msg: str) -> None:
-    print(f"[deps] {msg}", flush=True)
+    print(f"[deps] {msg}", file=sys.stderr, flush=True)
 
 
 def sh(cmd: list[str], *, capture: bool = False) -> subprocess.CompletedProcess[str]:
@@ -109,6 +116,7 @@ def plan(
     ages: dict[tuple[str, str], datetime | None],
     cutoff: datetime,
     graph: dict[str, set[str]],
+    fixes: Collection[str] = (),
 ) -> tuple[list[Move], dict[str, list[str]], list[tuple[str, str]]]:
     """Decide the reverts, say which of them are dependents, and name the blockers.
 
@@ -122,8 +130,11 @@ def plan(
     A blocker is a young unclean arrival — new to the tree, or a multi-version
     shuffle — that no revert reaches, so nothing can withdraw it and nothing
     can revert it in place. The whole Cargo.lock bump is abandoned tonight.
+
+    A clean move named in `fixes` (its old pin has an open advisory) is never
+    young: it ships tonight, and so does anything bumped only to pin it.
     """
-    young_clean = [m for m in clean if _young((m[0], m[2]), ages, cutoff)]
+    young_clean = [m for m in clean if m[0] not in fixes and _young((m[0], m[2]), ages, cutoff)]
     young_unclean = [(n, v) for n, added in unclean for v in sorted(added) if _young((n, v), ages, cutoff)]
     young = {n: f"{n} {v}" for n, _, v in young_clean} | {n: f"{n} {v}" for n, v in young_unclean}
 
@@ -170,6 +181,37 @@ def crates_io_ages(pairs: list[tuple[str, str]]) -> dict[tuple[str, str], dateti
     return ages
 
 
+def advisories(ecosystem: str, pairs: list[tuple[str, str]]) -> dict[str, list[str]]:
+    """name -> open OSV advisory ids, for each pinned (name, version) that has any.
+
+    A failed lookup returns {}: no exemptions, the cooldown holds.
+    """
+    if not pairs:
+        return {}
+    queries = [{"package": {"name": n, "ecosystem": ecosystem}, "version": v} for n, v in pairs]
+    req = urllib.request.Request(
+        "https://api.osv.dev/v1/querybatch",
+        data=json.dumps({"queries": queries}).encode(),
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        # Fixed https://api.osv.dev endpoint; only the body varies.
+        # nosemgrep: dynamic-urllib-use-detected
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            results = json.load(resp)["results"]
+    except (OSError, TimeoutError, KeyError, json.JSONDecodeError) as e:
+        log(f"OSV lookup failed: {e} — no advisory exemptions tonight")
+        return {}
+    found: dict[str, list[str]] = {}
+    for (name, _), r in zip(pairs, results, strict=True):
+        found.setdefault(name, []).extend(v["id"] for v in r.get("vulns", []))
+    return {n: ids for n, ids in found.items() if ids}
+
+
+def fix_notes(fixes: dict[str, list[str]], clean: list[Move]) -> list[str]:
+    return [f"`{n}` {o} → {v} skipped the cooldown: {o} has {', '.join(fixes[n])}" for n, o, v in clean if n in fixes]
+
+
 def lock_moves(path: str) -> tuple[list[Move], list[tuple[str, set[str]]]]:
     old_text = sh(["git", "show", f"HEAD:{path}"], capture=True).stdout
     new_text = (ROOT / path).read_text()
@@ -201,6 +243,7 @@ def cmd_cooldown(args: argparse.Namespace) -> int:
     cutoff = datetime.now(timezone.utc) - timedelta(days=args.days)
     cargo_notes: list[str] = []
     last_young: list[str] = []
+    fixes = advisories("crates.io", [(n, o) for n, o, _ in lock_moves("Cargo.lock")[0]])
 
     # Up to four passes: a precise revert shuffles transitive pins of its own,
     # and a dependent revert can uncover the next young crate above it.
@@ -210,7 +253,7 @@ def cmd_cooldown(args: argparse.Namespace) -> int:
             break
         pairs = [(n, v) for n, _, v in clean] + [(n, v) for n, added in unclean for v in added]
         graph = deps((ROOT / "Cargo.lock").read_text())
-        reverts, pinned, blockers = plan(clean, unclean, crates_io_ages(pairs), cutoff, graph)
+        reverts, pinned, blockers = plan(clean, unclean, crates_io_ages(pairs), cutoff, graph, fixes)
         last_young = [f"`{n} {v}`" for n, _, v in reverts if n not in pinned]
         last_young += [f"`{n} {v}`" for n, v in blockers]
         if blockers:
@@ -263,6 +306,7 @@ def cmd_cooldown(args: argparse.Namespace) -> int:
 
     py_clean, py_unclean = lock_moves("uv.lock")
     cargo_clean, cargo_unclean = lock_moves("Cargo.lock")
+    py_fixes = advisories("PyPI", [(n, o) for n, o, _ in py_clean])
     report = "\n".join(
         [
             f"## deps: nightly bump {datetime.now(timezone.utc):%Y-%m-%d}",
@@ -270,10 +314,11 @@ def cmd_cooldown(args: argparse.Namespace) -> int:
             f"### Python (uv — cooldown enforced natively via `--exclude-newer`, {args.days} days)",
             "",
             markdown_moves(py_clean, py_unclean),
+            *(f"- {n}" for n in fix_notes(py_fixes, py_clean)),
             f"### Cargo (cooldown {args.days} days, enforced against crates.io publish dates)",
             "",
             markdown_moves(cargo_clean, cargo_unclean),
-            *(f"- {n}" for n in cargo_notes),
+            *(f"- {n}" for n in fix_notes(fixes, cargo_clean) + cargo_notes),
             "",
         ]
     )
@@ -284,6 +329,15 @@ def cmd_cooldown(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_uv_fixes(args: argparse.Namespace) -> int:
+    """Print an --exclude-newer-package flag for every uv.lock pin with an open advisory."""
+    pins = sorted((n, v) for n, vs in versions((ROOT / "uv.lock").read_text()).items() for v in vs)
+    now = f"{datetime.now(timezone.utc):%Y-%m-%dT%H:%M:%SZ}"
+    for name in sorted(advisories("PyPI", pins)):
+        print(f"--exclude-newer-package={name}={now}")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -291,6 +345,8 @@ def main(argv: list[str] | None = None) -> int:
     c.add_argument("--days", type=int, default=7)
     c.add_argument("--report", default="target/deps/report.md")
     c.set_defaults(fn=cmd_cooldown)
+    u = sub.add_parser("uv-fixes", help="print uv flags exempting vulnerable pins from the cooldown")
+    u.set_defaults(fn=cmd_uv_fixes)
     args = ap.parse_args(argv)
     return args.fn(args)
 

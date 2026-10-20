@@ -59,6 +59,11 @@ Anything it cannot revert safely — a crate new to the tree, a young transitive
 dep whose kept parent requires it — abandons the whole Cargo.lock bump for the
 night, by name, in the report. Fail closed; tomorrow retries.
 
+One exception: a package whose current pin has an open OSV advisory skips the
+cooldown (`bump_deps.py uv-fixes` for uv, built into `cooldown` for cargo), and
+the report names the advisories. Otherwise a fresh security fix waits a week
+while every PR's security scan stays red. An OSV outage means no exemptions.
+
 A green bump becomes a lockfile-only PR on the rolling `deps/nightly` branch
 (body = the bump report). A broken bump banks the evidence (bumped lockfiles,
 `check.log`, report) and hands it to the agent, whose contract is: fix the

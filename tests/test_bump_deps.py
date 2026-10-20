@@ -1,3 +1,5 @@
+import io
+import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -6,7 +8,17 @@ import pytest
 # library floor (3.10) predates tomllib, so skip rather than fail collection.
 pytest.importorskip("tomllib")
 
-from scripts.bump_deps import deps, markdown_moves, moves, only_metadata_changed, plan, versions  # noqa: E402
+from scripts import bump_deps  # noqa: E402
+from scripts.bump_deps import (  # noqa: E402
+    advisories,
+    deps,
+    fix_notes,
+    markdown_moves,
+    moves,
+    only_metadata_changed,
+    plan,
+    versions,
+)
 
 NOW = datetime(2026, 8, 7, tzinfo=timezone.utc)
 CUTOFF = NOW - timedelta(days=7)
@@ -272,3 +284,55 @@ def test_markdown_moves_renders_table_and_empty_case():
     assert "| serde | 1.0.100 | 1.0.200 |" in md
     assert "| brandnew | — | 0.1.0 |" in md
     assert markdown_moves([], []) == "nothing to bump\n"
+
+
+def test_plan_ships_a_young_security_fix_and_its_dependent():
+    clean = [("rustls", "0.23.45", "0.23.46"), ("ureq", "3.4.1", "3.4.2")]
+    ages: dict[tuple[str, str], datetime | None] = {("rustls", "0.23.46"): YOUNG_AGE, ("ureq", "3.4.2"): OLD_AGE}
+    graph = {"ureq": {"rustls"}}
+    reverts, pinned, _ = plan(clean, [], ages, CUTOFF, graph)
+    assert {n for n, *_ in reverts} == {"rustls", "ureq"}  # without the exemption both wait
+    reverts, pinned, blockers = plan(clean, [], ages, CUTOFF, graph, fixes={"rustls"})
+    assert (reverts, pinned, blockers) == ([], {}, [])
+
+
+def _osv(monkeypatch: pytest.MonkeyPatch, payload: object) -> list[dict]:
+    sent: list[dict] = []
+
+    def urlopen(req, timeout):
+        sent.append(json.loads(req.data))
+        if isinstance(payload, Exception):
+            raise payload
+        return io.BytesIO(json.dumps(payload).encode())
+
+    monkeypatch.setattr(bump_deps.urllib.request, "urlopen", urlopen)
+    return sent
+
+
+def test_advisories_names_only_the_vulnerable_pins(monkeypatch):
+    sent = _osv(monkeypatch, {"results": [{"vulns": [{"id": "RUSTSEC-1"}, {"id": "RUSTSEC-2"}]}, {}]})
+    found = advisories("crates.io", [("rustls", "0.23.45"), ("serde", "1.0.200")])
+    assert found == {"rustls": ["RUSTSEC-1", "RUSTSEC-2"]}
+    assert sent[0]["queries"][0] == {"package": {"name": "rustls", "ecosystem": "crates.io"}, "version": "0.23.45"}
+
+
+def test_advisories_keeps_the_cooldown_when_osv_is_down(monkeypatch):
+    _osv(monkeypatch, OSError("unreachable"))
+    assert advisories("PyPI", [("jinja2", "3.1.2")]) == {}
+
+
+def test_fix_notes_name_the_advisories_behind_each_exemption():
+    notes = fix_notes({"rustls": ["RUSTSEC-1"]}, [("rustls", "0.23.45", "0.23.46"), ("serde", "1", "2")])
+    assert notes == ["`rustls` 0.23.45 → 0.23.46 skipped the cooldown: 0.23.45 has RUSTSEC-1"]
+
+
+def test_uv_fixes_prints_one_flag_per_vulnerable_package(monkeypatch, tmp_path, capsys):
+    (tmp_path / "uv.lock").write_text(
+        '[[package]]\nname = "jinja2"\nversion = "3.1.2"\n\n[[package]]\nname = "ruff"\nversion = "0.17.0"\n'
+    )
+    monkeypatch.setattr(bump_deps, "ROOT", tmp_path)
+    _osv(monkeypatch, {"results": [{"vulns": [{"id": "GHSA-x"}]}, {}]})
+    assert bump_deps.main(["uv-fixes"]) == 0
+    out = capsys.readouterr().out.splitlines()
+    assert len(out) == 1
+    assert out[0].startswith("--exclude-newer-package=jinja2=")
