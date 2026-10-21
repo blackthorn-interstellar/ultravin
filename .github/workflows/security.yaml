@@ -47,6 +47,11 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # The scan walks every commit, not just the tip.
@@ -81,6 +86,11 @@ jobs:
     name: secrets (trufflehog)
     runs-on: ubuntu-latest
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -108,6 +118,11 @@ jobs:
     name: sca (cargo-audit)
     runs-on: ubuntu-latest
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -119,6 +134,11 @@ jobs:
     name: sca (cargo-deny)
     runs-on: ubuntu-latest
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -132,6 +152,11 @@ jobs:
     name: sca (pip-audit)
     runs-on: ubuntu-latest
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -154,6 +179,11 @@ jobs:
     name: sca (osv-scanner)
     runs-on: ubuntu-latest
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -174,6 +204,11 @@ jobs:
       contents: read
       security-events: write
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -217,6 +252,11 @@ jobs:
         # Free on public repos. actions catches workflow injection patterns.
         language: [python, rust, actions]
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -280,6 +320,11 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -303,6 +348,11 @@ jobs:
     name: actions (actionlint)
     runs-on: ubuntu-latest
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
@@ -320,6 +370,11 @@ jobs:
       security-events: write
       id-token: write
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - name: Run OpenSSF Scorecard
         uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
         with:
@@ -367,6 +422,11 @@ jobs:
     env:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - name: Skip when unconfigured
         if: env.SNYK_TOKEN == ''
         run: echo "SNYK_TOKEN not set — skipping (add repo secret to enable free-tier Snyk)"

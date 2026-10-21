@@ -76,6 +76,11 @@ jobs:
     outputs:
       changed: ${{ steps.bump.outputs.changed }}
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -147,6 +152,11 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -239,6 +249,11 @@ jobs:
     env:
       HAS_KEY: ${{ secrets.XAI_API_KEY != '' }}
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - name: Require XAI_API_KEY
         if: env.HAS_KEY != 'true'
         run: |
@@ -395,6 +410,11 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -514,6 +534,11 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - name: Wait for checks
         id: wait
         timeout-minutes: 50
@@ -684,6 +709,11 @@ jobs:
     env:
       HAS_KEY: ${{ secrets.XAI_API_KEY != '' }}
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - name: Require XAI_API_KEY
         if: env.HAS_KEY != 'true'
         run: |
@@ -837,6 +867,11 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: deps/nightly
@@ -944,6 +979,11 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       # deps-watch found the adversarial gate had rejected this bump's content.
       # The pipeline does not remediate a verdict — it labels and stops.
       - name: A review rejection ends the night
@@ -1125,6 +1165,11 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - name: Label the PR the lane could not merge
         run: |
           state=$(gh pr view deps/nightly --repo "$REPO" --json state --jq .state 2>/dev/null || true)
@@ -1161,6 +1206,11 @@ jobs:
       HAS_KEY: ${{ secrets.XAI_API_KEY != '' }}
       VINS: ${{ inputs.vins }}
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
@@ -1624,6 +1674,11 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       BRANCH: ${{ needs.fixes.outputs.branch }}
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0

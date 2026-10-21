@@ -67,6 +67,11 @@ jobs:
       number: ${{ steps.pr.outputs.number }}
       verdict: ${{ steps.scope.outputs.verdict }}
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # base repo @ master — never the PR's code
@@ -208,6 +213,11 @@ jobs:
       agent_deps: ${{ steps.agent_deps.outputs.structured_output }}
       agent_deps_retry: ${{ steps.agent_deps_retry.outputs.structured_output }}
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # base repo @ master — never the PR's code
@@ -577,6 +587,11 @@ jobs:
       pull-requests: write # findings comment on rejection
       statuses: write # post the terminal review-verdict commit status
     steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
       - name: Publish verdict
         env:
           GH_TOKEN: ${{ github.token }}
