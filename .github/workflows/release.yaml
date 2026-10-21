@@ -262,9 +262,13 @@ jobs:
           args: --release --locked --out dist
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
           manylinux: ${{ matrix.manylinux || 'auto' }}
-          # Linux wheels build in a container with its own, unpatched CA store.
-          # Lend it the runner's cleaned one (CVE-2026-111943); ignored off Linux.
-          docker-options: -v /etc/ssl/certs:/etc/ssl/certs:ro
+          # Linux wheels build in a container with its own CA store. The Ubuntu-
+          # based rust-cross images still trust the leaked eMudhra keys
+          # (CVE-2026-111943), so lend them the runner's cleaned one. Not the
+          # pypa CentOS/Alma images (linux x86_64 and x86): they already refuse,
+          # and there /etc/ssl/certs links into /etc/pki, which the mount would
+          # hide from yum. Ignored off Linux.
+          docker-options: ${{ !(matrix.kind == 'linux' && (matrix.target == 'x86_64' || matrix.target == 'x86')) && '-v /etc/ssl/certs:/etc/ssl/certs:ro' || '' }}
           before-script-linux: |
             for h in dv-g3b-emudhra.we-have-a-problem.com dv-g3b-aaa-emudhra.we-have-a-problem.com github.com; do
               curl -sS -o /dev/null --max-time 20 "https://$h/" && echo "container curl $h CONNECTED" || echo "container curl $h refused"
