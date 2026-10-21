@@ -9,6 +9,12 @@ on:
 # Keyed on the event too, not just the ref: automation dispatches this workflow
 # and then blocks on the contexts that run produces, so a plain ref-keyed group
 # would let an ordinary push cancel the run something is still waiting on.
+env:
+  # CVE-2026-111943: Node runs every action and has its own compiled-in roots,
+  # which still trust the leaked eMudhra keys. Make it read this bundle instead,
+  # which each job's first step cleans.
+  NODE_OPTIONS: --use-openssl-ca
+  SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
 concurrency:
   group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true

@@ -8,6 +8,12 @@ name: Data Refresh Selfcheck
 on:
   workflow_dispatch:
 
+env:
+  # CVE-2026-111943: Node runs every action and has its own compiled-in roots,
+  # which still trust the leaked eMudhra keys. Make it read this bundle instead,
+  # which each job's first step cleans.
+  NODE_OPTIONS: --use-openssl-ca
+  SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
 permissions: {}
 
 jobs:
