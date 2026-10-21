@@ -14,7 +14,7 @@ rules:
     # Every one is a publish job: a clean VM that runs no untrusted code and no
     # local actions, which is precisely why it is the job trusted with a token.
     # The real fix is persist-credentials: false + `gh auth setup-git` (the
-    # pattern in data-refresh-selfcheck.yaml, L27+L52); porting it here is
+    # pattern in data-refresh-selfcheck.yaml, L32+L57); porting it here is
     # deferred, not rejected.
     #
     # Pinned to the checkout's line so a NEW job that persists credentials still
@@ -24,10 +24,10 @@ rules:
     # finding at one of the checkouts below after an unrelated edit, the pin
     # drifted — re-pin it rather than widening these to bare filenames.
     ignore:
-      - answer-key.yaml:318   # job `publish` — pushes the pin onto the data branch (L401) or a pin branch (L462)
-      - data-refresh.yaml:97  # job `refresh` — pushes data/$MONTH (L139)
-      - data-refresh.yaml:443 # job `fix-publish` — re-pushes data/$MONTH after an agent fix (L494)
-      - nightly.yaml:150      # job `deps-publish` — pushes deps/nightly (L176)
-      - nightly.yaml:398      # job `deps-fix-publish` — re-pushes deps/nightly after a fix (L444)
-      - nightly.yaml:840      # job `deps-remedy-publish` — re-pushes deps/nightly after the check-remediation agent (L879)
-      - nightly.yaml:1627     # job `fixes-publish` — pushes the parity-fix branch (L1670)
+      - answer-key.yaml:343   # job `publish` — pushes the pin onto the data branch (L426) or a pin branch (L487)
+      - data-refresh.yaml:107 # job `refresh` — pushes data/$MONTH (L149)
+      - data-refresh.yaml:463 # job `fix-publish` — re-pushes data/$MONTH after an agent fix (L514)
+      - nightly.yaml:160      # job `deps-publish` — pushes deps/nightly (L186)
+      - nightly.yaml:418      # job `deps-fix-publish` — re-pushes deps/nightly after a fix (L464)
+      - nightly.yaml:875      # job `deps-remedy-publish` — re-pushes deps/nightly after the check-remediation agent (L914)
+      - nightly.yaml:1682     # job `fixes-publish` — pushes the parity-fix branch (L1725)
