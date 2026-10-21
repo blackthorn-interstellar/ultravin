@@ -18,6 +18,11 @@ on:
   workflow_dispatch:
 
 env:
+  # CVE-2026-111943: Node runs every action and has its own compiled-in roots,
+  # which still trust the leaked eMudhra keys. Make it read this bundle instead,
+  # which each job's first step cleans.
+  NODE_OPTIONS: --use-openssl-ca
+  SSL_CERT_FILE: /etc/ssl/certs/ca-certificates.crt
   CARGO_TERM_COLOR: always
   # Retry crates.io fetches: the registry occasionally drops a download mid-build.
   CARGO_NET_RETRY: "10"
@@ -142,6 +147,10 @@ jobs:
     name: wheels (${{ matrix.kind }}, ${{ matrix.target }})
     needs: [authorize, build-data]
     runs-on: ${{ matrix.runner }}
+    env:
+      # The cleaned bundle per OS (CVE-2026-111943): see the workflow env and
+      # scripts/distrust_emudhra.py, which writes the Windows one.
+      SSL_CERT_FILE: ${{ (matrix.kind == 'windows' && 'C:\emudhra-ca.pem') || (matrix.kind == 'macos' && '/etc/ssl/cert.pem') || '/etc/ssl/certs/ca-certificates.crt' }}
     strategy:
       fail-fast: false
       matrix:
@@ -181,6 +190,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Distrust the leaked eMudhra CA keys (macOS, Windows)
+        if: runner.os != 'Linux'
+        shell: bash
+        run: |
+          if command -v python3 >/dev/null 2>&1; then
+            python3 scripts/distrust_emudhra.py
+          else
+            python scripts/distrust_emudhra.py
+          fi
       - name: Stamp version from tag
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
@@ -231,6 +249,13 @@ jobs:
           args: --release --locked --out dist
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
           manylinux: ${{ matrix.manylinux || 'auto' }}
+          # Linux wheels build in a container with its own CA store. The Ubuntu-
+          # based rust-cross images still trust the leaked eMudhra keys
+          # (CVE-2026-111943), so lend them the runner's cleaned one. Not the
+          # pypa CentOS/Alma images (linux x86_64 and x86): they already refuse,
+          # and there /etc/ssl/certs links into /etc/pki, which the mount would
+          # hide from yum. Ignored off Linux.
+          docker-options: ${{ !(matrix.kind == 'linux' && (matrix.target == 'x86_64' || matrix.target == 'x86')) && '-v /etc/ssl/certs:/etc/ssl/certs:ro' || '' }}
       # Fingerprint dist/ the moment it's built and stash the digest OUTSIDE
       # dist/. The smoke steps below run pip/docker with network access; a
       # compromised action or PyPI dependency could rewrite an already-built
