@@ -101,7 +101,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: trufflesecurity/trufflehog@cc1fe982afc515d2991365ce8d4d0dd07170fcad # v3.97.2
+      - uses: trufflesecurity/trufflehog@4dd8831c5f12599465d4d45c3c447b4018a34c85 # v3.97.9
         with:
           # Verified findings only — unverified is mostly noise for this purpose.
           #
@@ -169,7 +169,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version-file: .python-version
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: false
       - name: Audit the locked packages
@@ -194,7 +194,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Scan lockfiles
-        uses: google/osv-scanner-action/osv-scanner-action@6e4298ebc4db23e847df9b2e2de2939d6f066c67 # v2.5.1
+        uses: google/osv-scanner-action/osv-scanner-action@a345acffa64b0eaede81a3d9aae6141214d9c8fc # v2.6.0
         with:
           # Cargo.lock + uv.lock (and any other supported manifests). v2 dropped
           # --skip-git and already excludes .git by default.
@@ -239,7 +239,7 @@ jobs:
       # exactly the runs whose SARIF Code Scanning needs.
       - name: Upload Trivy SARIF
         if: always() && hashFiles('trivy.sarif') != ''
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           sarif_file: trivy.sarif
           category: trivy
@@ -267,7 +267,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/init@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           languages: ${{ matrix.language }}
           # security-extended catches more of what commercial SAST reports
@@ -278,9 +278,9 @@ jobs:
         with:
           python-version-file: .python-version
       - name: Autobuild
-        uses: github/codeql-action/autobuild@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/autobuild@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
       - name: Analyze
-        uses: github/codeql-action/analyze@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/analyze@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           category: "/language:${{ matrix.language }}"
 
@@ -314,7 +314,7 @@ jobs:
             .
       - name: Upload Semgrep SARIF
         if: always() && hashFiles('semgrep.sarif') != ''
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           sarif_file: semgrep.sarif
           category: semgrep
@@ -337,7 +337,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version-file: .python-version
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           enable-cache: false
       # A real gate: zizmor exits non-zero on findings, so no second pass is
@@ -391,7 +391,7 @@ jobs:
           # Code Scanning; only the scheduled/manual runs publish.
           publish_results: ${{ github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
       - name: Upload Scorecard SARIF
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           sarif_file: results.sarif
           category: openssf-scorecard
@@ -443,9 +443,9 @@ jobs:
       # snyk/actions does publish tags, but they're stale — v1.0.0 is from
       # 2025-10-03 and every example in upstream's README still says @master.
       # So pin the commit master pointed at rather than a tag nobody maintains.
-      - uses: snyk/actions/setup@b075801f26076be9bb50521154cafab73f44da0c # master @ 2026-08-03
+      - uses: snyk/actions/setup@11b673cfb4b0dc0d860a1323caa199d54950dcce # master @ 2026-08-03
         if: env.SNYK_TOKEN != ''
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         if: env.SNYK_TOKEN != ''
         with:
           enable-cache: false
@@ -517,13 +517,13 @@ jobs:
           snyk code test --severity-threshold=medium --sarif-file-output=snyk-code.sarif
       - name: Upload Snyk OSS SARIF
         if: always() && env.SNYK_TOKEN != '' && hashFiles('snyk-oss.sarif') != ''
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           sarif_file: snyk-oss.sarif
           category: snyk-oss
       - name: Upload Snyk Code SARIF
         if: always() && env.SNYK_TOKEN != '' && hashFiles('snyk-code.sarif') != ''
-        uses: github/codeql-action/upload-sarif@cdf488f595d80d6e07e03d4674febd5ab45fa938 # v4.37.9
+        uses: github/codeql-action/upload-sarif@2892aa5e19bbd11bc0cff5427e3b750a04d9e3c2 # v4.38.2
         with:
           sarif_file: snyk-code.sarif
           category: snyk-code
