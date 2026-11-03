@@ -36,13 +36,24 @@ def select(target: int) -> list[generator.VinCase]:
     return sample + errs
 
 
-def _recover(conn: Any) -> None:
+class OracleDiedError(RuntimeError):
+    """The oracle connection closed mid-freeze, so no later VIN can be answered."""
+
+
+def _recover(conn: Any, error: Exception) -> None:
     """Clear a failed decode off the connection, as sweep.py and known_problems.py do.
 
     A raised decode poisons its transaction: on a batched (autocommit-off) oracle
     every later decode then fails with `InFailedSqlTransaction` and the whole
     corpus would come back "skipped" from one crash VIN. Autocommit connections —
-    the default — end the transaction themselves and need nothing."""
+    the default — end the transaction themselves and need nothing.
+
+    A *closed* connection is not a skippable VIN but a dead oracle (its tmpfs
+    filling up PANICs the backend, docs/NIGHTLY.md): every remaining VIN would
+    be "skipped" and the corpus would shrink behind a green exit, so stop."""
+    if conn.closed:
+        msg = f"oracle connection closed mid-freeze: {error!r}"
+        raise OracleDiedError(msg) from error
     if not conn.autocommit:
         conn.rollback()
         conn.uv_pending = 0
@@ -92,7 +103,7 @@ def build(
                 # reversed bracket range and spvindecode returns nothing, so
                 # there is no oracle answer to snapshot. See KNOWN_DEVIATIONS.md.
                 skipped.append((c.vin, repr(e)[:90]))
-                _recover(conn)
+                _recover(conn, e)
         if add_vins:
             data = json.loads(Path(add_vins).read_text())
             vins = [v["vin"] for v in data["vins"]] if isinstance(data, dict) else list(data)
@@ -103,7 +114,7 @@ def build(
                     entries[vin] = _entry(conn, vin, "brutal-repro", "brutal")
                 except psycopg.Error as e:  # oracle crashes on some malformed-regex VINs
                     skipped.append((vin, repr(e)[:90]))
-                    _recover(conn)
+                    _recover(conn, e)
     corpus = {
         "_about": "Frozen oracle snapshot + current ultravin-diff baseline. Regenerate with "
         "`uv run python -m scripts.parity.freeze` after intentional decode changes.",

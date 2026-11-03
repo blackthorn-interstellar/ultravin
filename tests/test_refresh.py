@@ -692,8 +692,7 @@ def test_followups_no_longer_warns_about_healed_deviations() -> None:
 
 
 def test_corpus_vins_file_writes_the_committed_corpus_vin_list(tmp_path) -> None:
-    corpus = tmp_path / "parity_corpus.json"
-    corpus.write_text(json.dumps({"entries": [{"vin": "AAA"}, {"vin": "BBB"}]}))
+    corpus = {"entries": [{"vin": "AAA"}, {"vin": "BBB"}]}
     out = refresh.corpus_vins_file(corpus, tmp_path / "vins.txt")
     assert out is not None
     written = out.read_text().splitlines()
@@ -704,8 +703,7 @@ def test_corpus_vins_file_writes_the_committed_corpus_vin_list(tmp_path) -> None
 
 
 def test_corpus_vins_file_does_not_duplicate_a_deviation_already_in_the_corpus(tmp_path) -> None:
-    corpus = tmp_path / "parity_corpus.json"
-    corpus.write_text(json.dumps({"entries": [{"vin": DEVIATION_VIN}]}))
+    corpus = {"entries": [{"vin": DEVIATION_VIN}]}
     out = refresh.corpus_vins_file(corpus, tmp_path / "vins.txt")
     assert out is not None
     assert out.read_text().splitlines().count(DEVIATION_VIN) == 1
@@ -713,10 +711,8 @@ def test_corpus_vins_file_does_not_duplicate_a_deviation_already_in_the_corpus(t
 
 def test_corpus_vins_file_is_none_without_a_corpus(tmp_path) -> None:
     """First-ever refresh: there is nothing to preserve, so sampling is correct."""
-    assert refresh.corpus_vins_file(tmp_path / "missing.json", tmp_path / "vins.txt") is None
-    empty = tmp_path / "parity_corpus.json"
-    empty.write_text(json.dumps({"entries": []}))
-    assert refresh.corpus_vins_file(empty, tmp_path / "vins.txt") is None
+    assert refresh.corpus_vins_file(None, tmp_path / "vins.txt") is None
+    assert refresh.corpus_vins_file({"entries": []}, tmp_path / "vins.txt") is None
 
 
 def test_freeze_command_refreezes_the_existing_corpus_not_a_new_sample(tmp_path) -> None:

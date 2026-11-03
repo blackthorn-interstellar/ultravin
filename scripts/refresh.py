@@ -794,8 +794,12 @@ def parse_freeze_skips(stdout: str) -> list[str]:
     return re.findall(r"skipped \(oracle error[^)]*\): (\S+):", stdout)
 
 
-def corpus_vins_file(corpus: Path = CORPUS, out: Path | None = None) -> Path | None:
+def corpus_vins_file(corpus: dict | None, out: Path | None = None) -> Path | None:
     """The committed corpus's VIN list, written out for freeze.py's `--vins`.
+
+    `corpus` is HEAD's copy (`head_json`), never the working tree: a freeze that
+    lost VINs to an oracle crash would otherwise hand its shrunken list to every
+    re-run, and the loss would stick.
 
     freeze.py's default is a *fresh* manufacturer-diverse sample, so an unpinned
     monthly re-freeze silently replaces the curated corpus rather than updating
@@ -815,9 +819,7 @@ def corpus_vins_file(corpus: Path = CORPUS, out: Path | None = None) -> Path | N
     out: freeze skips whatever the oracle errors on, so listing them would buy a
     skipped-VIN follow-up every month and nothing else.
     """
-    if not corpus.exists():
-        return None
-    vins = [e["vin"] for e in json.loads(corpus.read_text())["entries"]]
+    vins = [e["vin"] for e in (corpus or {}).get("entries", [])]
     if not vins:
         return None
     vins += sorted(KNOWN_DEVIATION_VINS.difference(vins))
@@ -948,7 +950,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     # overwrites the file.
     head_corpus = head_json("tests/parity_corpus.json")
     head_registry = (head_json("scripts/known_problems.json") or {}).get("entries")
-    freeze = sh(freeze_command(corpus_vins_file()), capture=True)
+    freeze = sh(freeze_command(corpus_vins_file(head_corpus)), capture=True)
     print(freeze.stdout, end="")
     skipped = parse_freeze_skips(freeze.stdout)
     corpus = json.loads(CORPUS.read_text())
