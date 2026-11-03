@@ -294,7 +294,7 @@ pub(crate) fn decode_chunks_at<I: AsRef<str> + Sync, C: ColumnWriter>(
     // Bound the worker's typed buffers. A whole-batch row-major enum matrix
     // duplicates the final columns and costs 210 MiB at 65,536 x 140 cells.
     const CHUNK_ROWS: usize = 256;
-    crate::batch_pool().install(|| {
+    crate::install_batch_work(|| {
         inputs
             .par_chunks(CHUNK_ROWS)
             .enumerate()
@@ -369,6 +369,45 @@ mod tests {
     /// they skip the way the rest of the crate's tests do.
     fn db() -> Option<&'static Db> {
         Db::try_embedded()
+    }
+
+    #[test]
+    fn private_calibration_scope_keeps_chunked_decode_serial() {
+        // The Arrow/parquet calibration sample decodes through this path; on the
+        // shared pool it ran on every core and inflated the single-core rate.
+        use std::collections::HashSet;
+        use std::sync::Mutex;
+
+        let Some(d) = db() else {
+            return;
+        };
+        let metas = resolve_ids(d, &[MAKE]).unwrap();
+        let inputs: Vec<String> = (0..1_024).map(|_| HONDA.to_string()).collect();
+        let workers = Mutex::new(Vec::new());
+        let threads = Mutex::new(HashSet::new());
+        let pool = rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .build()
+            .expect("private calibration pool");
+        pool.install(|| {
+            crate::with_private_calibration_pool_scope(|| {
+                decode_chunks_at(
+                    &inputs,
+                    None,
+                    &metas,
+                    |_, rows| {
+                        workers.lock().unwrap().push(rayon::current_num_threads());
+                        threads.lock().unwrap().insert(std::thread::current().id());
+                        ColumnValues::Str(Vec::with_capacity(rows))
+                    },
+                    1_750_000_000_000_000,
+                )
+            })
+        });
+        let workers = workers.into_inner().unwrap();
+        assert_eq!(workers.len(), inputs.len() / 256);
+        assert!(workers.iter().all(|&n| n == 1), "{workers:?}");
+        assert_eq!(threads.into_inner().unwrap().len(), 1);
     }
 
     fn strs(c: &ColumnValues) -> &[Option<String>] {
