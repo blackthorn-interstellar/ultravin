@@ -79,6 +79,7 @@ jobs:
     timeout-minutes: 75
     permissions:
       contents: read
+      pull-requests: read # the human-hold check below
     outputs:
       changed: ${{ steps.bump.outputs.changed }}
     steps:
@@ -105,6 +106,8 @@ jobs:
       - uses: ./.github/actions/build-data
       - name: Bump inside the cooldown
         id: bump
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           # shellcheck disable=SC2046 # one flag per line, package names have no spaces
           uv lock --upgrade $(python3 scripts/bump_deps.py uv-fixes) # cooldown: pyproject's exclude-newer
@@ -115,9 +118,23 @@ jobs:
             echo "::error::bump touched more than the lockfiles: $stray"
             exit 1
           fi
+          # deps-publish rebuilds deps/nightly from master and force-pushes. The
+          # needs-human comments ask a human to push a fix to that branch, so
+          # while its PR is open and holds a commit the bot did not make, hold
+          # the lane rather than wipe that work. Closing the PR releases it.
+          bot="41898282+github-actions[bot]@users.noreply.github.com"
+          human=""
+          if [ "$(gh pr list --repo "$GITHUB_REPOSITORY" --head deps/nightly --state open --json number --jq length)" != "0" ]; then
+            git fetch -q origin +refs/heads/master:refs/remotes/origin/master \
+              +refs/heads/deps/nightly:refs/remotes/origin/deps/nightly
+            human=$(git log --format='%h %ae %ce' origin/master..origin/deps/nightly | grep -vF " $bot $bot" || true)
+          fi
           if git diff --quiet -- Cargo.lock uv.lock; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "no dependency changes tonight (cooldown applied)" >> "$GITHUB_STEP_SUMMARY"
+          elif [ -n "$human" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            printf 'deps/nightly holds human commits, so the bump is held:\n%s\n' "$human" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi

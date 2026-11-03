@@ -24,10 +24,10 @@ rules:
     # finding at one of the checkouts below after an unrelated edit, the pin
     # drifted — re-pin it rather than widening these to bare filenames.
     ignore:
-      - answer-key.yaml:348   # job `publish` — pushes the pin onto the data branch (L431) or a pin branch (L492)
+      - answer-key.yaml:353   # job `publish` — pushes the pin onto the data branch (L441) or a pin branch (L502)
       - data-refresh.yaml:113 # job `refresh` — pushes data/$MONTH (L155)
       - data-refresh.yaml:469 # job `fix-publish` — re-pushes data/$MONTH after an agent fix (L520)
-      - nightly.yaml:166      # job `deps-publish` — pushes deps/nightly (L192)
-      - nightly.yaml:424      # job `deps-fix-publish` — re-pushes deps/nightly after a fix (L470)
-      - nightly.yaml:881      # job `deps-remedy-publish` — re-pushes deps/nightly after the check-remediation agent (L920)
-      - nightly.yaml:1688     # job `fixes-publish` — pushes the parity-fix branch (L1731)
+      - nightly.yaml:183      # job `deps-publish` — pushes deps/nightly (L209)
+      - nightly.yaml:441      # job `deps-fix-publish` — re-pushes deps/nightly after a fix (L487)
+      - nightly.yaml:898      # job `deps-remedy-publish` — re-pushes deps/nightly after the check-remediation agent (L937)
+      - nightly.yaml:1705     # job `fixes-publish` — pushes the parity-fix branch (L1748)
