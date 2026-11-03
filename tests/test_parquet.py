@@ -438,6 +438,19 @@ def test_a_refused_destination_leaves_the_stream_usable(tmp_path: Path) -> None:
     assert stream.to_parquet(tmp_path / "out.parquet") == len(CORPUS)
 
 
+def test_an_unwritable_destination_leaves_a_one_shot_stream_usable(tmp_path: Path) -> None:
+    """The output file is opened before the input is taken, so a destination
+    whose directory is missing fails without consuming a stream that can be read
+    only once."""
+    table = pa.table({"vin": text([HONDA] * 5)})
+    reader = pa.RecordBatchReader.from_batches(table.schema, table.to_batches(max_chunksize=2))
+    stream = uv.decode_stream(reader, columns=[MAKE])
+    with pytest.raises(OSError, match="no-such-dir"):
+        stream.to_parquet(tmp_path / "no-such-dir" / "out.parquet")
+    assert stream.to_parquet(tmp_path / "out.parquet") == 5
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["out.parquet"]
+
+
 def test_a_dictionary_encoded_vin_column_is_autodetected(tmp_path: Path) -> None:
     """What pandas writes for a categorical column — text under an index."""
     src = tmp_path / "in.parquet"

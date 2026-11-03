@@ -622,7 +622,7 @@ pub fn write_parquet(
     dst: &Path,
     row_group: usize,
 ) -> Result<usize, ParquetError> {
-    write_parquet_inner(batches, schema, dst, row_group, None)
+    ParquetSink::create(schema, dst, row_group)?.write_all(batches)
 }
 
 pub fn write_parquet_adaptive(
@@ -631,77 +631,119 @@ pub fn write_parquet_adaptive(
     dst: &Path,
     feedback: BatchFeedback,
 ) -> Result<usize, ParquetError> {
-    write_parquet_inner(batches, schema, dst, 65_536, Some(feedback))
+    ParquetSink::create_adaptive(schema, dst, feedback)?.write_all(batches)
 }
 
-fn write_parquet_inner(
-    batches: impl Iterator<Item = Result<RecordBatch, ParquetError>>,
-    schema: SchemaRef,
-    dst: &Path,
-    row_group: usize,
+/// A parquet destination that is ready to take batches: the temporary file
+/// beside `dst` is reserved and the writer built. Opening it before taking a
+/// one-shot source means a bad destination fails while the source is unread.
+pub struct ParquetSink {
+    writer: ArrowWriter<std::fs::File>,
+    tmp: TempOutput,
+    dst: PathBuf,
+    destination_permissions: Option<std::fs::Permissions>,
     feedback: Option<BatchFeedback>,
-) -> Result<usize, ParquetError> {
-    static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
+}
 
-    let parent = dst.parent().unwrap_or_else(|| Path::new("."));
-    let (tmp, out) = (0..100)
-        .find_map(|_| {
-            let nonce = NEXT_TEMP.fetch_add(1, Ordering::Relaxed);
-            let tmp = parent.join(format!(".ultravin-{}-{nonce}.tmp", std::process::id()));
-            match OpenOptions::new().write(true).create_new(true).open(&tmp) {
-                Ok(file) => Some(Ok((tmp, file))),
-                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => None,
-                Err(e) => Some(Err(ParquetError::Io(format!("{}: {e}", tmp.display())))),
-            }
+impl ParquetSink {
+    /// One row group per `row_group` rows, as [`write_parquet`] writes.
+    pub fn create(schema: SchemaRef, dst: &Path, row_group: usize) -> Result<Self, ParquetError> {
+        Self::open(schema, dst, row_group, None)
+    }
+
+    /// As [`write_parquet_adaptive`] writes, timing each flush into `feedback`.
+    pub fn create_adaptive(
+        schema: SchemaRef,
+        dst: &Path,
+        feedback: BatchFeedback,
+    ) -> Result<Self, ParquetError> {
+        Self::open(schema, dst, 65_536, Some(feedback))
+    }
+
+    fn open(
+        schema: SchemaRef,
+        dst: &Path,
+        row_group: usize,
+        feedback: Option<BatchFeedback>,
+    ) -> Result<Self, ParquetError> {
+        static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
+
+        let parent = dst.parent().unwrap_or_else(|| Path::new("."));
+        let (tmp, out) = (0..100)
+            .find_map(|_| {
+                let nonce = NEXT_TEMP.fetch_add(1, Ordering::Relaxed);
+                let tmp = parent.join(format!(".ultravin-{}-{nonce}.tmp", std::process::id()));
+                match OpenOptions::new().write(true).create_new(true).open(&tmp) {
+                    Ok(file) => Some(Ok((tmp, file))),
+                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => None,
+                    Err(e) => Some(Err(ParquetError::Io(format!("{}: {e}", tmp.display())))),
+                }
+            })
+            .unwrap_or_else(|| {
+                Err(ParquetError::Io(format!(
+                    "could not reserve a temporary file next to {}",
+                    dst.display()
+                )))
+            })?;
+        let tmp = TempOutput(tmp);
+        let destination_permissions = std::fs::metadata(dst)
+            .ok()
+            .filter(|metadata| metadata.is_file())
+            .map(|metadata| metadata.permissions());
+        let props = WriterProperties::builder()
+            .set_compression(Compression::SNAPPY)
+            .set_max_row_group_row_count(Some(row_group.max(1)))
+            .build();
+        let writer = ArrowWriter::try_new(out, schema, Some(props))
+            .map_err(|e| ParquetError::Io(format!("{}: {e}", tmp.0.display())))?;
+        Ok(Self {
+            writer,
+            tmp,
+            dst: dst.to_path_buf(),
+            destination_permissions,
+            feedback,
         })
-        .unwrap_or_else(|| {
-            Err(ParquetError::Io(format!(
-                "could not reserve a temporary file next to {}",
-                dst.display()
-            )))
-        })?;
-    let cleanup = TempOutput(tmp.clone());
-    let destination_permissions = std::fs::metadata(dst)
-        .ok()
-        .filter(|metadata| metadata.is_file())
-        .map(|metadata| metadata.permissions());
-    let props = WriterProperties::builder()
-        .set_compression(Compression::SNAPPY)
-        .set_max_row_group_row_count(Some(row_group.max(1)))
-        .build();
-    let mut writer = ArrowWriter::try_new(out, schema, Some(props))
-        .map_err(|e| ParquetError::Io(format!("{}: {e}", tmp.display())))?;
-    let mut rows = 0usize;
-    for batch in batches {
-        let batch = batch?;
-        rows += batch.num_rows();
-        let started = Instant::now();
-        writer
-            .write(&batch)
-            .map_err(|e| ParquetError::Io(format!("writing row group: {e}")))?;
-        if let Some(feedback) = &feedback {
-            writer
-                .flush()
-                .map_err(|e| ParquetError::Io(format!("flushing row group: {e}")))?;
-            feedback.add_output_time(started.elapsed());
+    }
+
+    /// Write every batch, then install the finished file at `dst`; returns the
+    /// rows written. Any error leaves `dst` untouched and removes the temp file.
+    pub fn write_all(
+        mut self,
+        batches: impl Iterator<Item = Result<RecordBatch, ParquetError>>,
+    ) -> Result<usize, ParquetError> {
+        let mut rows = 0usize;
+        for batch in batches {
+            let batch = batch?;
+            rows += batch.num_rows();
+            let started = Instant::now();
+            self.writer
+                .write(&batch)
+                .map_err(|e| ParquetError::Io(format!("writing row group: {e}")))?;
+            if let Some(feedback) = &self.feedback {
+                self.writer
+                    .flush()
+                    .map_err(|e| ParquetError::Io(format!("flushing row group: {e}")))?;
+                feedback.add_output_time(started.elapsed());
+            }
         }
-    }
-    writer
-        .close()
-        .map_err(|e| ParquetError::Io(format!("finalizing {}: {e}", tmp.display())))?;
-    if let Some(permissions) = destination_permissions {
-        std::fs::set_permissions(&tmp, permissions).map_err(|e| {
-            ParquetError::Io(format!("setting permissions on {}: {e}", tmp.display()))
+        let tmp = &self.tmp.0;
+        self.writer
+            .close()
+            .map_err(|e| ParquetError::Io(format!("finalizing {}: {e}", tmp.display())))?;
+        if let Some(permissions) = self.destination_permissions {
+            std::fs::set_permissions(tmp, permissions).map_err(|e| {
+                ParquetError::Io(format!("setting permissions on {}: {e}", tmp.display()))
+            })?;
+        }
+        std::fs::rename(tmp, &self.dst).map_err(|e| {
+            ParquetError::Io(format!(
+                "installing completed parquet at {}: {e}",
+                self.dst.display()
+            ))
         })?;
+        self.tmp.keep();
+        Ok(rows)
     }
-    std::fs::rename(&tmp, dst).map_err(|e| {
-        ParquetError::Io(format!(
-            "installing completed parquet at {}: {e}",
-            dst.display()
-        ))
-    })?;
-    cleanup.keep();
-    Ok(rows)
 }
 
 /// Removes an incomplete output on every error path. The destination itself is

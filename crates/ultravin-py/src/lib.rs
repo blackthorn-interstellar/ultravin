@@ -25,8 +25,8 @@ use pyo3::types::{PyBool, PyCapsule, PyDateTime, PyDict, PyList, PyString};
 
 use ultravin::adaptive::{BatchFeedback, BatchRebatcher};
 use ultravin::parquet_io::{
-    check_dst_outside_src, open_chunks_at, open_chunks_auto_at, write_parquet,
-    write_parquet_adaptive, ParquetChunkIter, ParquetOpts,
+    check_dst_outside_src, open_chunks_at, open_chunks_auto_at, ParquetChunkIter, ParquetOpts,
+    ParquetSink,
 };
 use ultravin::predictor::{predict_batch, BatchFormat, BatchPrediction};
 use ultravin::{
@@ -1087,19 +1087,20 @@ impl DecodeStream {
     fn to_parquet(&self, py: Python<'_>, dst: PathBuf) -> PyResult<usize> {
         // Refused before the reader is taken, so a rejected destination leaves
         // the stream usable — and, more to the point, leaves the source intact.
+        // The sink is opened before the reader is taken too, so an unwritable
+        // destination (a missing directory, no permission) also fails here.
         if let Some(src) = &self.src {
             check_dst_outside_src(src, &dst).map_err(arrow_err)?;
         }
-        let reader = self.take()?;
         let schema = self.schema.clone();
-        py.detach(|| {
-            let batches = reader.map(|r| r.map_err(ArrowError::from));
-            match &self.feedback {
-                Some(feedback) => write_parquet_adaptive(batches, schema, &dst, feedback.clone()),
-                None => write_parquet(batches, schema, &dst, self.row_group),
-            }
-        })
-        .map_err(arrow_err)
+        let sink = match &self.feedback {
+            Some(feedback) => ParquetSink::create_adaptive(schema, &dst, feedback.clone()),
+            None => ParquetSink::create(schema, &dst, self.row_group),
+        }
+        .map_err(arrow_err)?;
+        let reader = self.take()?;
+        py.detach(|| sink.write_all(reader.map(|r| r.map_err(ArrowError::from))))
+            .map_err(arrow_err)
     }
 
     /// The decode as a pandas `DataFrame`, via pyarrow.
