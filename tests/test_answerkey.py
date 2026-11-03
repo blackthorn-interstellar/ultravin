@@ -523,14 +523,16 @@ def test_compare_rejects_keys_with_no_overlap(tmp_path: Path) -> None:
 
 def test_fetching_a_new_month_leaves_the_directory_verifiable(tmp_path: Path, monkeypatch) -> None:
     # `make answerkey-fetch` then `make answerkey-verify` reads the whole directory,
-    # so last month's key left beside the new one must not block it.
+    # so last month's key — or an earlier build of this month's — left beside the
+    # new one must not block it.
     month = json.loads(answerkey.MANIFEST.read_text())["month"]
     _write_key(tmp_path / "answerkey-1999_01.jsonl", [], month="1999_01")
     (tmp_path / "answerkey-1999_01.jsonl.zst").write_bytes(b"old")
+    _write_key(tmp_path / f"answerkey-{month}-aaaaaaaaaaaa.jsonl", [], month=month)
     vins = ultravin.generate(3, seed=23)
     fresh = _real_key(tmp_path / "fresh", list(zip(vins, answerkey.ultravin_hashes(vins), strict=True))).read_bytes()
     (tmp_path / "fresh").unlink()
-    asset = f"answerkey-{month}.jsonl"
+    asset = f"answerkey-{month}-{hashlib.sha256(fresh).hexdigest()[:12]}.jsonl"
     pin = tmp_path / "pin.json"
     pin.write_text(
         json.dumps({"month": month, "asset": asset, "sha256": hashlib.sha256(fresh).hexdigest(), "count": 3})

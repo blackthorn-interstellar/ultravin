@@ -307,10 +307,15 @@ jobs:
           sha=$(sha256sum "$out.zst" | cut -d' ' -f1)
           count=$(grep -vc '^{' "$out" || true)
           [ "$count" -gt 0 ] || { echo "::error::combined key has 0 answers"; exit 1; }
+          # The hash is in the name so a rebuild of the same month (a re-issued
+          # dump, a forced re-run) uploads beside master's pinned key instead of
+          # clobbering the file whose checksum master's pin holds.
+          asset="answerkey-$month-${sha:0:12}.jsonl.zst"
+          mv "$out.zst" "$asset"
           uv run -- python -m scripts.parity.answerkey pin \
-            --key "$out.zst" --sha256 "$sha" --count "$count"
+            --key "$asset" --sha256 "$sha" --count "$count"
           mkdir -p "$RUNNER_TEMP/keydist"
-          mv "$out.zst" "$RUNNER_TEMP/keydist/"
+          mv "$asset" "$RUNNER_TEMP/keydist/"
           cp tests/answerkey.json "$RUNNER_TEMP/keydist/answerkey.json"
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -360,6 +365,7 @@ jobs:
           pin="$RUNNER_TEMP/keydist/answerkey.json"
           month=$(jq -r .month "$pin")
           count=$(jq -r .count "$pin")
+          sha=$(jq -r .sha256 "$pin")
           # The pin is assemble-produced data; sanity-check it against this
           # checkout's manifest (also data) before acting on it with a token.
           current=$(jq -r .month vpic/manifest.json)
@@ -373,12 +379,16 @@ jobs:
           case "$count" in
             ''|*[!0-9]*) echo "::error::pin count $count is not an integer"; exit 1 ;;
           esac
+          case "$sha" in
+            *[!0123456789abcdef]*) echo "::error::pin sha256 $sha is not lowercase hex"; exit 1 ;;
+          esac
+          [ "${#sha}" -eq 64 ] || { echo "::error::pin sha256 $sha is not 64 digits"; exit 1; }
           # Derive the asset name from the validated month rather than trusting
           # the branch-produced .asset field as an upload path: a poisoned pin
           # (the fix agent may edit scripts/**) could otherwise set asset to a
           # traversal like ../../<repo>/<repo>/.git/config and exfiltrate this
           # credential-persisting checkout via `gh release upload`.
-          asset="answerkey-$month.jsonl.zst"
+          asset="answerkey-$month-${sha:0:12}.jsonl.zst"
           [ -f "$RUNNER_TEMP/keydist/$asset" ] || { echo "::error::assemble did not produce $asset"; exit 1; }
           {
             echo "month=$month"

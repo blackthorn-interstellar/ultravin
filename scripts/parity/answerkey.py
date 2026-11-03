@@ -585,10 +585,13 @@ def fetch(
         raise typer.Exit(1)
     if asset.suffix == ".zst":
         subprocess.run(["zstd", "-df", str(asset), "-o", str(asset.with_suffix(""))], check=True)
-    # `verify` reads every key in the directory, so an earlier month's would block it.
+    # `verify` reads every key in the directory, so any other key — an earlier
+    # month's, or an earlier build of this one — would block it.
+    keep = {asset.name, asset.with_suffix("").name}
     for stale in out.glob("answerkey-*.jsonl*"):
-        month = re.fullmatch(r"answerkey-(\d{4}_\d{2})\.jsonl(?:\.zst)?", stale.name)
-        if month and month[1] != pinned["month"]:
+        if stale.name not in keep and re.fullmatch(
+            r"answerkey-\d{4}_\d{2}(?:-[0-9a-f]{12})?\.jsonl(?:\.zst)?", stale.name
+        ):
             stale.unlink()
     typer.echo(f"{pinned['count']:,} answers ready in {out}")
 
