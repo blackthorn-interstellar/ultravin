@@ -145,8 +145,11 @@ jobs:
           # flow commits the key pin into the data PR; the pin is self-verifying
           # in CI (month vs manifest, sha256 of the downloaded asset, and the
           # key's artifact hash vs the manifest), so a tampered pin can only
-          # make CI redder, never greener.
-          if printf '%s\n' "$files" | grep -qvE '^(vpic/|tests/parity_corpus\.json$|tests/answerkey\.json$)'; then
+          # make CI redder, never greener. The crate manifest moves with every
+          # month and merge-data-pr already treats it as data. Deliberately NOT
+          # here: scripts/stale_cache_cells.json, the cells whose divergences the
+          # nightly fuzzer excuses — the model checks it for implausible growth.
+          if printf '%s\n' "$files" | grep -qvE '^(vpic/|crates/ultravin/data/manifest\.json$|tests/parity_corpus\.json$|tests/answerkey\.json$)'; then
             echo "verdict=model-review" >> "$GITHUB_OUTPUT"
           else
             echo "verdict=pass" >> "$GITHUB_OUTPUT"
