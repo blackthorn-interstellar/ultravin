@@ -588,7 +588,7 @@ impl Db {
                 let consumed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     let mut waiting = BTreeMap::new();
                     let mut next = 0;
-                    while next < batches {
+                    'consume: while next < batches {
                         match published_rx.recv() {
                             Ok(Published::Ready { batch, owner, slot }) => {
                                 waiting.insert(batch, (owner, slot));
@@ -597,6 +597,14 @@ impl Db {
                                     let state = std::mem::replace(&mut slot.state, SlotState::Free);
                                     let (len, permit) = match state {
                                         SlotState::Published { len, permit } => (len, permit),
+                                        // Cancelled workers clear slots they already
+                                        // published, so a panicking worker's `Panicked`
+                                        // can trail this `Ready`. Stop; the drain after
+                                        // the join reports that panic, not this symptom.
+                                        _ if coordinator.cancelled() => {
+                                            stream_error = Some(NativeStreamError::WorkerStopped);
+                                            break 'consume;
+                                        }
                                         _ => panic!("native worker published an unavailable slot"),
                                     };
                                     let consumed = std::panic::catch_unwind(
@@ -643,6 +651,12 @@ impl Db {
                     }
                 }
             }
+            if panic_payload.is_none() {
+                panic_payload = published_rx.try_iter().find_map(|message| match message {
+                    Published::Panicked(payload) => Some(payload),
+                    Published::Ready { .. } => None,
+                });
+            }
             debug_assert_eq!(lock(&coordinator.state).inflight_rows, 0);
             debug_assert!(all_slots.iter().flatten().all(|mutex| {
                 let slot = lock(mutex);
@@ -664,6 +678,9 @@ mod tests {
     use super::*;
 
     const NOW: i64 = 1_767_225_600_000_000;
+
+    /// `PANIC_DECODE_*` are process-wide, so tests that arm them take turns.
+    static DECODE_PANIC: Mutex<()> = Mutex::new(());
 
     fn inputs() -> Vec<String> {
         [
@@ -884,7 +901,51 @@ mod tests {
     }
 
     #[test]
+    fn decode_panic_is_reported_even_when_a_cancelled_peer_cleared_its_published_slot() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
+        // The slow first callback lets a peer publish batch 1 while batch 2's
+        // decode panics; the peer then clears batch 1 on cancellation, and the
+        // consumer used to report that cleared slot instead of the real panic.
+        let _turn = lock(&DECODE_PANIC);
+        let inputs: Vec<_> = inputs().into_iter().cycle().take(31).collect();
+        let config = NativeStreamConfig {
+            workers: 2,
+            batch_size: 2,
+            slots_per_worker: 2,
+            max_inflight_rows: 64,
+        };
+        PANIC_DECODE_INPUT.store(
+            inputs.as_ptr() as usize,
+            std::sync::atomic::Ordering::SeqCst,
+        );
+        // The interleaving is timing-dependent, so give it many chances.
+        for _ in 0..25 {
+            PANIC_DECODE_BATCH.store(2, std::sync::atomic::Ordering::SeqCst);
+            let panic = std::panic::catch_unwind(|| {
+                decode_native_stream_at(&inputs, None, NOW, config, |batch| {
+                    if batch.batch_index == 0 {
+                        std::thread::sleep(std::time::Duration::from_millis(20));
+                    }
+                })
+                .unwrap();
+            });
+            let payload = panic.expect_err("the injected decode panic propagates");
+            let message = payload
+                .downcast_ref::<&str>()
+                .copied()
+                .or_else(|| payload.downcast_ref::<String>().map(String::as_str));
+            assert_eq!(message, Some("injected partial native decode panic"));
+        }
+        PANIC_DECODE_BATCH.store(usize::MAX, std::sync::atomic::Ordering::SeqCst);
+        PANIC_DECODE_INPUT.store(usize::MAX, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    #[test]
     fn partial_decode_panic_clears_slot_and_releases_credit() {
+        let _turn = lock(&DECODE_PANIC);
         let inputs: Vec<_> = inputs().into_iter().cycle().take(31).collect();
         PANIC_DECODE_INPUT.store(
             inputs.as_ptr() as usize,
