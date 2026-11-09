@@ -468,13 +468,17 @@ jobs:
       - name: Export the locked Python closure for snyk
         if: env.SNYK_TOKEN != ''
         run: |
+          set -o pipefail
           uv export --frozen --no-hashes --no-emit-project \
             --format requirements-txt -o requirements-locked.txt
           # One pin per package, markers stripped (why: below). Where uv.lock
           # splits a package by Python version (pyarrow 25.0.1 on 3.10, 26.0.0
           # above) one venv cannot hold both, so keep the newest; osv-scanner
           # and trivy still read every pin from uv.lock.
-          sed 's/ ;.*//' requirements-locked.txt | grep '==' | sort -t= -k1,1 -k3,3V \
+          # `-t '='`, not `-t=`: Ubuntu 26's uutils sort reads `-t=` as an empty
+          # separator and exits 2, which (before pipefail) emptied this file and
+          # surfaced only as snyk's SNYK-OS-0012 "Empty manifest file".
+          sed 's/ ;.*//' requirements-locked.txt | grep '==' | sort -t '=' -k1,1 -k3,3V \
             | awk -F'==' '{v[$1] = $0} END {for (n in v) print v[n]}' | sort > requirements-snyk.txt
       # snyk's pip scanner reads the manifest but resolves versions from an
       # INSTALLED environment, so it needs a venv holding the closure. Two
