@@ -22,6 +22,26 @@
       "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
     },
     {
+      "vin": "10TAA68Y6J1111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (10T, 1988) cell is missing 8 at position 7 while vpic.fextractvalidcharsperwmiyear over the same dump's pattern rows allows 89ABCDEFGHJKLMNPRS — schema 12403 key ***8 contributes 8 at key index 4 (VIN position 7), so the cache contradicts the pattern rows the same dump ships. The VIN has 8 at position 7, so ultravin's 1988 pass sees one error (position 4) and takes the check-digit auto-correct rung (error code 3), while the oracle, reading the cache, sees two errors and takes the multi-position rung (error code 5). Position 10 is J, an inconclusive 30-year cycle, so both 1988 and 2018 get a decode pass; the extra error makes the 1988 pass lose the best-of scoring and the whole decode resolves to a different vehicle (2018 Fire Pumper vs 1988 A-Series). This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_11",
+      "evidence": "cache cell (wmiyearvalidchars, 10T, 1988) pos 7 = '9ABCDEFGHJKLMNPRS' vs fextractvalidcharsperwmiyear '89ABCDEFGHJKLMNPRS'; schema 12403 key ***8 is the pattern row that contributes 8 at key index 4 (VIN position 7) and the cache dropped it. Deleting the cell's 91 rows inside a rolled-back transaction makes the dump's own fallback run and the oracle then answers model year 1988, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
+      "vin": "10TAA68L0J1111111",
+      "kind": "deviation",
+      "class": "stale-wmiyearvalidchars-cache",
+      "scope": "clean-decode",
+      "cause": "vpic.wmiyearvalidchars is a derived snapshot of the pattern table, and the (10T, 1988) cell is missing 8 at position 7 while vpic.fextractvalidcharsperwmiyear over the same dump's pattern rows allows 89ABCDEFGHJKLMNPRS — schema 12403 key ***8 contributes 8 at key index 4 (VIN position 7), so the cache contradicts the pattern rows the same dump ships. The VIN has 8 at position 7, so ultravin's 1988 pass sees one error (position 4) and takes the check-digit auto-correct rung (error code 3), while the oracle, reading the cache, sees two errors and takes the multi-position rung (error code 5). Position 10 is J, an inconclusive 30-year cycle, so both 1988 and 2018 get a decode pass; the extra error makes the 1988 pass lose the best-of scoring and the whole decode resolves to a different vehicle (2018 Fire Pumper vs 1988 A-Series). This class is otherwise enumerated by machine — scripts/stale_cache_cells.json lists every stale (wmi, year) cell — but that list excuses only error-field divergences, so a VIN whose whole decode changes stays registered individually.",
+      "first_observed": "2026_11",
+      "evidence": "cache cell (wmiyearvalidchars, 10T, 1988) pos 7 = '9ABCDEFGHJKLMNPRS' vs fextractvalidcharsperwmiyear '89ABCDEFGHJKLMNPRS'; schema 12403 key ***8 is the pattern row that contributes 8 at key index 4 (VIN position 7) and the cache dropped it. Deleting the cell's 91 rows inside a rolled-back transaction makes the dump's own fallback run and the oracle then answers model year 1988, reproducing ultravin byte-for-byte.",
+      "doc": "KNOWN_DEVIATIONS.md#stale-wmiyearvalidchars-cache"
+    },
+    {
       "vin": "1GD67MHFXPA077111",
       "kind": "deviation",
       "class": "stale-cache-code-3-vs-5",
