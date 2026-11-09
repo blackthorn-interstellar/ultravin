@@ -123,6 +123,13 @@ jobs:
   cargo-audit:
     name: sca (cargo-audit)
     runs-on: ubuntu-latest
+    # audit-check reports any finding (even an informational "unsound" warning)
+    # as a check run on push/PR and as an issue on the weekly schedule; without
+    # these the report call 403s and fails a job that found no vulnerability.
+    permissions:
+      contents: read
+      checks: write
+      issues: write
     steps:
       - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
         # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
