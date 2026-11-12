@@ -6,9 +6,7 @@
 //! (element 156). Every intentional bug is preserved (see comments).
 
 use std::borrow::Cow;
-use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
-use std::rc::Rc;
 use std::sync::OnceLock;
 
 use crate::checkdigit::{check_digit_v1, check_digit_with_flag, is_default_char, is_my_char};
@@ -197,47 +195,6 @@ pub fn valid_chars_in_key(key: &str) -> Vec<(i32, char)> {
         }
     }
     out
-}
-
-/// One key's expanded `(key index, allowed char)` pairs — the [`valid_chars_in_key`]
-/// result, shared by `Rc` so a memo hit hands out a pointer, not a copy.
-type KeyChars = Rc<[(i32, char)]>;
-
-/// High-water mark for [`KEY_CHARS`]. The archive holds ~74k distinct pattern
-/// keys, so a long-running batch that spans every WMI would otherwise grow the
-/// memo into double-digit megabytes *per worker thread*. Past the cap it resets;
-/// a decode's keys all come from one WMI, so the working set refills at once.
-const KEY_CHARS_CAP: usize = 16_384;
-
-thread_local! {
-    /// Per-thread memo of [`valid_chars_in_key`] for the E6 unused-position scan,
-    /// which expands every matched pattern key on every pass — and, for a bracket
-    /// key, compiles a regex to do it (see [`valid_chars_in_regex`]). The
-    /// expansion is a pure function of the key text and the keys come from the
-    /// immutable archive, so a hit is byte-identical to recomputing; this is the
-    /// same trade as the shared valid-charset cache below.
-    /// Not shared with [`valid_charset`], which sweeps *every* key of a WMI-year
-    /// (already memoized as a whole) and would flood the memo with keys E6 never
-    /// asks about. Keys are archive-derived, never caller-derived, so the fast
-    /// hasher is safe here for the same reason it is in `hash.rs`.
-    static KEY_CHARS: RefCell<HashMap<String, KeyChars, FxBuildHasher>> =
-        RefCell::new(HashMap::default());
-}
-
-/// [`valid_chars_in_key`], memoized per thread.
-fn key_chars(key: &str) -> KeyChars {
-    if let Some(hit) = KEY_CHARS.with(|c| c.borrow().get(key).cloned()) {
-        return hit;
-    }
-    let expansion: KeyChars = valid_chars_in_key(key).into();
-    KEY_CHARS.with(|c| {
-        let mut memo = c.borrow_mut();
-        if memo.len() >= KEY_CHARS_CAP {
-            memo.clear();
-        }
-        memo.insert(key.to_string(), Rc::clone(&expansion));
-    });
-    expansion
 }
 
 /// The correction charset for VIN positions 4..14 (the only ones the helper
@@ -673,6 +630,55 @@ fn errorcode<'a>(
     }
 }
 
+/// Whether the single key character `s` admits VIN character `c`: `#` is any
+/// digit, and `*` and `|` admit nothing.
+fn literal_allows(s: char, c: char) -> bool {
+    match s {
+        '#' => c.is_ascii_digit(),
+        '*' | '|' => false,
+        _ => s == c,
+    }
+}
+
+/// Whether bracket group `[body]` admits `c`, exactly as E6 filters the
+/// [`valid_chars_in_regex`] expansion — without building it.
+fn class_allows(body: &str, c: char) -> bool {
+    if c == '*' || c == '|' {
+        return false;
+    }
+    let bytes = body.as_bytes();
+    if !bytes.iter().any(|&b| b == b'-' || b == b'^') {
+        return c != '[' && body.chars().any(|k| k.to_ascii_uppercase() == c);
+    }
+    // A regex class only ever yields `VALIDCHARS`.
+    let Ok(c) = u8::try_from(c) else { return false };
+    if !is_default_char(c) {
+        return false;
+    }
+    range_class_allows(bytes, c)
+        .unwrap_or_else(|| valid_chars_in_regex(&format!("[{body}]")).contains(char::from(c)))
+}
+
+/// The `-` classes the archive holds: single alphanumerics or ascending `X-Y`
+/// ranges. `None` for any other shape (a `^`, a stray `-`, punctuation), which
+/// keeps the regex.
+fn range_class_allows(mut items: &[u8], c: u8) -> Option<bool> {
+    let mut hit = false;
+    while let [lo, rest @ ..] = items {
+        let (hi, rest) = match rest {
+            [b'-', hi, rest @ ..] => (hi, rest),
+            _ => (lo, rest),
+        };
+        let (lo, hi) = (lo.to_ascii_uppercase(), hi.to_ascii_uppercase());
+        if !lo.is_ascii_alphanumeric() || !hi.is_ascii_alphanumeric() || lo > hi {
+            return None;
+        }
+        hit |= (lo..=hi).contains(&c);
+        items = rest;
+    }
+    Some(hit)
+}
+
 /// The VIN positions E6 reports as unused, in report order.
 const UNUSED_CHECKED: [i32; 6] = [4, 5, 6, 7, 8, 11];
 
@@ -711,34 +717,44 @@ fn used_key_positions<'a>(vin: &[char], matched_keys: impl Iterator<Item = &'a s
         if key.len() <= remaining.trailing_zeros() as usize {
             continue;
         }
-        if key.bytes().all(|b| b.is_ascii() && b != b'[') {
-            let bytes = key.as_bytes();
+        let bytes = key.as_bytes();
+        if bytes.iter().all(|&b| b.is_ascii() && b != b'[') {
+            // One byte per index: visit only the positions still open.
             let mut todo = remaining;
             while todo != 0 {
                 let i = todo.trailing_zeros() as usize;
                 todo &= todo - 1;
-                if let Some(&byte) = bytes.get(i) {
-                    let c = vin[i + 3];
-                    if byte != b'*'
-                        && byte != b'|'
-                        && (if byte == b'#' {
-                            c.is_ascii_digit()
-                        } else {
-                            c == char::from(byte)
-                        })
-                    {
-                        used[i] = true;
-                        remaining &= !(1 << i);
-                    }
+                if bytes
+                    .get(i)
+                    .is_some_and(|&b| literal_allows(char::from(b), vin[i + 3]))
+                {
+                    used[i] = true;
+                    remaining &= !(1 << i);
                 }
             }
         } else {
-            for &(pos, c) in key_chars(key).iter() {
-                if matches!(pos, 1..=5 | 8) && c != '|' && vin.get((pos + 2) as usize) == Some(&c) {
-                    let index = (pos - 1) as usize;
-                    used[index] = true;
-                    remaining &= !(1 << index);
+            // Walk the key as `fValidCharsInKey` does: index `i` covers VIN
+            // position `i + 4`, a `[...]` group (closed by its first `]`) is
+            // one index, and an unclosed group ends the key.
+            let mut rest = key;
+            let mut i = 0;
+            while u32::from(remaining) >> i != 0 {
+                let Some(s) = rest.chars().next() else { break };
+                let wanted = remaining >> i & 1 != 0;
+                let allowed = if s == '[' {
+                    let Some(end) = rest.find(']') else { break };
+                    let body = &rest[1..end];
+                    rest = &rest[end + 1..];
+                    wanted && class_allows(body, vin[i + 3])
+                } else {
+                    rest = &rest[s.len_utf8()..];
+                    wanted && literal_allows(s, vin[i + 3])
+                };
+                if allowed {
+                    used[i] = true;
+                    remaining &= !(1 << i);
                 }
+                i += 1;
             }
         }
         if remaining == 0 {
@@ -861,6 +877,29 @@ mod tests {
         }
     }
 
+    /// The key walk reproduces the `fValidCharsInKey` expansion for every
+    /// distinct pattern key in the archive, at every E6 position.
+    #[test]
+    fn position_flags_equal_the_expansion_for_every_archive_key() {
+        let Some(db) = Db::try_embedded() else { return };
+        let keys: BTreeSet<&str> = db
+            .patterns()
+            .iter()
+            .map(|p| db.s(p.keys.to_native()))
+            .collect();
+        let probes: Vec<char> = (0..=127u8).map(char::from).chain(['é']).collect();
+        for key in keys {
+            let expansion: IntSet<(i32, char)> = valid_chars_in_key(key).into_iter().collect();
+            for &c in &probes {
+                let actual = used_key_positions(&[c; 11], std::iter::once(key));
+                for i in [0, 1, 2, 3, 4, 7] {
+                    let expected = c != '|' && expansion.contains(&(i as i32 + 1, c));
+                    assert_eq!(actual[i], expected, "key {key:?}, char {c:?}, position {i}");
+                }
+            }
+        }
+    }
+
     #[test]
     fn position_flags_equal_the_full_character_set() {
         let key_sets: &[&[&str]] = &[
@@ -871,6 +910,12 @@ mod tests {
             &["|", "abc", "é"],
             &["#_]*|A#_", "AB#***|#"],
             &["[", "[ABC", "]_#", "***#***#"],
+            &[
+                "[1-A-JT]", "[^A-C]", "[C-A]", "[a-c]", "[-A]", "[A-]", "[^]", "[]",
+            ],
+            &[
+                "[A[B]", "*[Z-A]", "[^Z9]", "[0-Z]", "[*|#]", "[ab^]", "[é]", "[\\D]",
+            ],
         ];
         for keys in key_sets {
             let expected: IntSet<(i32, char)> = keys
@@ -885,6 +930,8 @@ mod tests {
                 "123é",
                 "1239_]5|A9_",
                 "123#*|_]2",
+                "123IBQ0Z9AB",
+                "123[*|#ab-é",
                 "",
             ] {
                 let vin: Vec<char> = vin.chars().collect();

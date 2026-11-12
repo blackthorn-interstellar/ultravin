@@ -22,6 +22,7 @@ identified as such.
 - [September 11: check digits and result projection](#september-11-check-digits-and-result-projection)
 - [September 22-23: deferred defaults and retuned slot plans](#september-22-23-deferred-defaults-and-retuned-slot-plans)
 - [September 25: sorted-input instruction cuts](#september-25-sorted-input-instruction-cuts)
+- [November 11: precomputed key positions and batch prefetch](#november-11-precomputed-key-positions-and-batch-prefetch)
 - [Experiments we rejected or replaced](#experiments-we-rejected-or-replaced)
 - [SQL oracle and development resources](#sql-oracle-and-development-resources)
 - [Correctness and measurement rules](#correctness-and-measurement-rules)
@@ -644,6 +645,27 @@ headline-corpus fingerprints and 200,000 realistic-corpus fingerprints matched
 the baseline after every change; `make check` passed on each commit. The
 full 20M-VIN [headline rerun](docs/BENCHMARKS.md#headline-throughput-september-25-2026-commit-56cf2e9)
 paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
+
+## November 11: precomputed key positions and batch prefetch
+
+- **E6 unused-position check without the key memo.** On shuffled input the
+  check spent its time in a per-thread `HashMap<String, Rc<[(i32, char)]>>`
+  of expanded pattern keys: a string-keyed probe about 1.2 times per VIN, and
+  a regex compile on each of ~93k misses per 4M VINs, because every job starts
+  on a fresh worker thread. The memo is gone. Literal keys still index their
+  bytes; a key with `[...]` groups is walked in place, a group admitting the
+  VIN character by list membership or, for `-` ranges, by comparing against
+  the ranges over `VALIDCHARS`, which is the answer the regex gave. Any other
+  class shape (`^`, a stray `-`, reversed ranges; the archive has none) still
+  goes to the regex. No new tables, no load-time work, and no per-thread
+  memory. A unit test checks the walk against the `fValidCharsInKey`
+  expansion for all 74,849 distinct archive keys, at every E6 position and
+  for 129 probe characters. All 1,862,306 compatibility fingerprints, 298,507
+  headline-corpus fingerprints and 200,000 realistic-corpus fingerprints
+  matched the baseline. Paired run on a 2M-VIN shuffled slice, one worker,
+  four alternating runs each, Apple M2 Max, load about 2: 270.5k → 282.2k
+  VIN/s (+4.3%), 12.37k → 11.85k cycles/VIN (−4.2%), 28.24k → 27.52k
+  instructions/VIN (−2.5%). Every candidate run beat every baseline run.
 
 ## Experiments we rejected or replaced
 
