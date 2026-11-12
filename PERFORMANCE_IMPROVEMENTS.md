@@ -22,7 +22,7 @@ identified as such.
 - [September 11: check digits and result projection](#september-11-check-digits-and-result-projection)
 - [September 22-23: deferred defaults and retuned slot plans](#september-22-23-deferred-defaults-and-retuned-slot-plans)
 - [September 25: sorted-input instruction cuts](#september-25-sorted-input-instruction-cuts)
-- [November 11: precomputed key positions and batch prefetch](#november-11-precomputed-key-positions-and-batch-prefetch)
+- [November 11: key positions checked in place](#november-11-key-positions-checked-in-place)
 - [Experiments we rejected or replaced](#experiments-we-rejected-or-replaced)
 - [SQL oracle and development resources](#sql-oracle-and-development-resources)
 - [Correctness and measurement rules](#correctness-and-measurement-rules)
@@ -646,7 +646,7 @@ the baseline after every change; `make check` passed on each commit. The
 full 20M-VIN [headline rerun](docs/BENCHMARKS.md#headline-throughput-september-25-2026-commit-56cf2e9)
 paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
 
-## November 11: precomputed key positions and batch prefetch
+## November 11: key positions checked in place
 
 - **E6 unused-position check without the key memo.** On shuffled input the
   check spent its time in a per-thread `HashMap<String, Rc<[(i32, char)]>>`
@@ -690,6 +690,8 @@ rewrite with no established end-to-end benefit did not qualify for retention.
 | Bracket-key position masks for the unused-position check (September 25) | No instruction change: the regex-backed bracket keys are not where that check spends its time. |
 | Drop recycled elements as they are overwritten (September 25) | Cost 2.6k more instructions per VIN than dropping them in one pass. |
 | O(1) indexes for engine-model and vehicle-spec joins (September 25) | About 1%, below the bar for the extra indexes. |
+| Warm upcoming batch rows to overlap cache misses (November 11) | Lookahead of 1-8 rows and staged passes across the batch, with real loads down the WMI, schema and pattern-index chain. Warming cost as many cycles (0.5-0.8k per VIN, mostly the lookups needed to find the index) as the misses it hid; pattern-index misses are only about a sixth of the ~6k-cycle shuffled penalty. Best variant: +0.3% cycles at one worker, -1.6% at four, +5% on sorted input. |
+| Memoize results by structure instead of by VIN (November 11, measured, not built) | The headline corpus fills descriptor positions at random, so choices multiply. Over 20M VINs a result keyed by positions 1-8, 10, 11 or by the set of matched patterns repeats only 22-26% of the time late in the run. Splitting off independent per-pattern records, keyed by pattern and WMI row (exact, 0 mismatches in 5M), leaves a remainder that still misses 35% on regular WMIs and 12% on small-volume ones and needs 4.4 GB at 5M VINs. Only the WMI-and-year context (99.6%) and single output records repeat. Input with repeated descriptors, such as a real fleet, is a different case and was not measured. |
 
 The earlier ablations and Python interning experiment are recorded in
 [BENCHMARKS.md](docs/BENCHMARKS.md). The September experiment outcomes above were
