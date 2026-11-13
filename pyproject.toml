@@ -118,4 +118,4 @@ unresolved-reference = "ignore"
 include = ["scripts/bench/**"]
 
 [tool.ty.overrides.rules]
-unresolved-import = "ignore"
+import-not-found = "ignore"
