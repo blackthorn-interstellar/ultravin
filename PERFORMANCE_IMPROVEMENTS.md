@@ -23,6 +23,7 @@ identified as such.
 - [September 22-23: deferred defaults and retuned slot plans](#september-22-23-deferred-defaults-and-retuned-slot-plans)
 - [September 25: sorted-input instruction cuts](#september-25-sorted-input-instruction-cuts)
 - [November 11: key positions checked in place](#november-11-key-positions-checked-in-place)
+- [November 13: native stream wakes only the worker that can go on](#november-13-native-stream-wakes-only-the-worker-that-can-go-on)
 - [Experiments we rejected or replaced](#experiments-we-rejected-or-replaced)
 - [SQL oracle and development resources](#sql-oracle-and-development-resources)
 - [Correctness and measurement rules](#correctness-and-measurement-rules)
@@ -852,6 +853,58 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
   against 25%, because its slots come back sooner), while the grid had 64×4
   ahead by 1-3%. One plan everywhere was kept. Peak RSS is unchanged at one
   worker and +0.06-0.12 GB at twelve on NY.
+
+## November 13: native stream wakes only the worker that can go on
+
+- **Bottleneck.** With cache hits a 64-row batch takes ~100 µs, so twelve
+  sorted-NY workers hand off ~100k batches a second, and every hand-off
+  went through one mutex: a claim, a cancel check, the permit drop (with a
+  `notify_all`), and the consumer's per-batch `notify_all`. A `sample`
+  profile put 16% of worker wall time in `psynch_mutexwait`/`cvwait`/
+  `mutexdrop` and 17% of the consumer's in `mutexwait`; the process spent
+  12-13 s of system CPU per 10 s pass. Temporary counters over one run
+  (1.06M batches): workers slept 182k times on their own four full slots,
+  0 times on the row cap, and the consumer slept in `recv` on 9.4% of
+  batches; each sleeper woke about once, but on any event, not its own.
+- **Mechanism** ([native_stream.rs](crates/ultravin/src/native_stream.rs)).
+  Each worker has its own wake token (a `Mutex<bool>` + `Condvar`, padded to
+  a cache line, `park`-like: a wake sent before the wait makes the wait
+  return), and waits only on that. The consumer marking a slot reusable wakes
+  that slot's owner; cancellation wakes all. `cancelled` is an `AtomicBool`,
+  in-flight rows an `AtomicUsize` that only grows under the claim lock (so
+  claims still reserve rows in batch order and the cap holds) and shrinks
+  lock-free when a permit drops. A worker blocked on the cap registers in a
+  waiter count and re-checks before it sleeps; a dropped permit wakes workers
+  only while that count is non-zero. The claim lock is the one shared lock
+  left, taken once per batch.
+- **Correctness.** `result_cache_check` at 12 workers: 0 mismatches over
+  all of sorted and shuffled NY (11.9M rows each). A new test has the
+  consumer panic while the other workers are asleep on full slots and on
+  the row cap (it hangs if cancellation does not wake everyone). The
+  native-stream tests passed 200 consecutive runs at 12 test threads.
+- **Results.** `throughput ... full auto`, Apple Silicon 8P+4E, shared host,
+  back to back with b784805 (12-worker sorted: three alternating pairs, all
+  candidate runs above all baseline runs; shuffled 12: four pairs):
+
+  | workers | input | VIN/s | cycles/VIN | busy cores | system CPU s |
+  |---:|---|---:|---:|---:|---:|
+  | 12 | NY sorted 2M | 6.47-6.51M → **7.05-7.16M** (+10%) | 4,578-4,597 → 4,198-4,206 | 9.8-9.9 → 9.9-10.0 | 12.4-13.0 → 4.7-5.1 |
+  | 12 | NY shuffled | 1.095-1.106M → 1.088-1.102M | 30.7k → 30.7k | 11.2-11.3 → 11.1-11.3 | 2.1-2.2 → 2.1 |
+  | 12 | synthetic 2M | 1,869,512 → 1,864,204 | 17,903 → 17,954 | 11.2 → 11.2 | 1.9 → 1.8 |
+  | 1 | NY sorted 2M | 1,735,654/1,734,533 → 1,724,701/1,733,160 | 1,974 → 1,960-1,971 | 1.0 | 0.8 |
+  | 1 | NY shuffled | 157,088 → 156,790 | 21.3k → 21.4k | 1.0 | 1.6 → 1.8 |
+  | 1 | synthetic 2M | 277,489/280,191 → 274,854/281,190 | 12.0-12.1k → 12.0-12.2k | 1.0 | 0.3-0.5 |
+
+  One shuffled 12-worker candidate run under a load spike (1.02M) is left
+  out of the range; its three reruns matched the baseline.
+- **Shared slot pool (rejected).** After the change workers still slept on
+  their own full slots after 9% of batches while about 11 of the other 44
+  slots were free, so one pool of the same 48 slots that any worker takes
+  from was tried on top. Workers got busier (10.1-10.2 cores) and the
+  uncopied-hit share held (4.4% against 4.2%), but cycles rose to ~4,520
+  per VIN and throughput fell to 6.72-6.75M, below targeted wakes alone:
+  a slot last written on another core (often the other cluster) costs more
+  than the stalls it fills.
 
 ## Experiments we rejected or replaced
 

@@ -3,6 +3,7 @@
 use std::any::Any;
 use std::collections::BTreeMap;
 use std::fmt;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::SeqCst};
 use std::sync::{mpsc, Arc, Condvar, Mutex, MutexGuard};
 
 use crate::result_cache::Filled;
@@ -173,17 +174,49 @@ impl<'db> Slot<'db> {
     }
 }
 
-struct State {
-    next_batch: usize,
-    inflight_rows: usize,
-    generation: u64,
-    cancelled: bool,
+/// The next batch to claim and the rows that claims hold until recycled.
+/// Rows are only added under the `next_batch` lock, so claims reserve them in
+/// batch order and an earlier batch never waits on rows a later one holds.
+struct Coordinator {
+    next_batch: Mutex<usize>,
+    inflight_rows: AtomicUsize,
+    max_inflight_rows: usize,
+    /// Workers waiting for `inflight_rows` to fall.
+    row_waiters: AtomicUsize,
+    cancelled: AtomicBool,
+    /// One per worker: everything a worker can wait on wakes only it.
+    wakes: Vec<Wake>,
 }
 
-struct Coordinator {
-    state: Mutex<State>,
+/// A worker's wake-up token, like `thread::park`: `wake` leaves it set and
+/// `wait` takes it, so a worker that looks, finds nothing to do, and then
+/// waits cannot miss a wake sent after it looked. Each worker waits only on
+/// its own, and only when it has nothing to do, so the consumer marking a
+/// slot reusable wakes that slot's owner and no one else.
+#[repr(align(128))]
+#[derive(Default)]
+struct Wake {
+    set: Mutex<bool>,
     changed: Condvar,
-    max_inflight_rows: usize,
+}
+
+impl Wake {
+    fn wake(&self) {
+        let mut set = lock(&self.set);
+        if !*set {
+            *set = true;
+            self.changed.notify_one();
+        }
+    }
+
+    fn wait(&self) {
+        let set = lock(&self.set);
+        let mut set = self
+            .changed
+            .wait_while(set, |set| !*set)
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        *set = false;
+    }
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -194,22 +227,23 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 impl Coordinator {
     fn claim(self: &Arc<Self>, rows: usize, batch_size: usize) -> Claim {
-        let mut state = lock(&self.state);
-        if state.cancelled {
+        let mut next_batch = lock(&self.next_batch);
+        if self.cancelled() {
             return Claim::Cancelled;
         }
-        let start = match state.next_batch.checked_mul(batch_size) {
+        let start = match next_batch.checked_mul(batch_size) {
             Some(start) if start < rows => start,
             _ => return Claim::Finished,
         };
         let end = start.saturating_add(batch_size).min(rows);
         let len = end - start;
-        if state.inflight_rows > self.max_inflight_rows - len {
-            return Claim::Blocked(state.generation);
+        // Other threads only subtract, so the cap still holds after the add.
+        if self.inflight_rows.load(SeqCst) > self.max_inflight_rows - len {
+            return Claim::Blocked(len);
         }
-        let batch = state.next_batch;
-        state.next_batch += 1;
-        state.inflight_rows += len;
+        let batch = *next_batch;
+        *next_batch += 1;
+        self.inflight_rows.fetch_add(len, SeqCst);
         Claim::Work {
             batch,
             start,
@@ -221,36 +255,25 @@ impl Coordinator {
         }
     }
 
-    fn generation(&self) -> u64 {
-        lock(&self.state).generation
-    }
-
-    fn wait(&self, generation: u64) {
-        let state = lock(&self.state);
-        drop(
-            self.changed
-                .wait_while(state, |state| {
-                    !state.cancelled && state.generation == generation
-                })
-                .unwrap_or_else(|poisoned| poisoned.into_inner()),
-        );
-    }
-
-    fn notify(&self) {
-        let mut state = lock(&self.state);
-        state.generation = state.generation.wrapping_add(1);
-        self.changed.notify_all();
+    /// Wait until `rows` more fit under the cap, or anything else wakes `owner`.
+    fn wait_for_rows(&self, owner: usize, rows: usize) {
+        self.row_waiters.fetch_add(1, SeqCst);
+        // Look again now that a dropped permit will wake us.
+        if !self.cancelled() && self.inflight_rows.load(SeqCst) > self.max_inflight_rows - rows {
+            self.wakes[owner].wait();
+        }
+        self.row_waiters.fetch_sub(1, SeqCst);
     }
 
     fn cancel(&self) {
-        let mut state = lock(&self.state);
-        state.cancelled = true;
-        state.generation = state.generation.wrapping_add(1);
-        self.changed.notify_all();
+        self.cancelled.store(true, SeqCst);
+        for wake in &self.wakes {
+            wake.wake();
+        }
     }
 
     fn cancelled(&self) -> bool {
-        lock(&self.state).cancelled
+        self.cancelled.load(SeqCst)
     }
 }
 
@@ -261,10 +284,13 @@ struct Permit {
 
 impl Drop for Permit {
     fn drop(&mut self) {
-        let mut state = lock(&self.coordinator.state);
-        state.inflight_rows -= self.rows;
-        state.generation = state.generation.wrapping_add(1);
-        self.coordinator.changed.notify_all();
+        let coordinator = &self.coordinator;
+        coordinator.inflight_rows.fetch_sub(self.rows, SeqCst);
+        if coordinator.row_waiters.load(SeqCst) > 0 {
+            for wake in &coordinator.wakes {
+                wake.wake();
+            }
+        }
     }
 }
 
@@ -275,7 +301,7 @@ enum Claim {
         end: usize,
         permit: Permit,
     },
-    Blocked(u64),
+    Blocked(usize),
     Finished,
     Cancelled,
 }
@@ -386,11 +412,7 @@ fn worker<'db>(
             return;
         }
         if free.is_empty() {
-            let generation = coordinator.generation();
-            recycle(slots, &mut free, false, retain_results);
-            if free.is_empty() {
-                coordinator.wait(generation);
-            }
+            coordinator.wakes[owner].wait();
             continue;
         }
         match coordinator.claim(inputs.len(), batch_size) {
@@ -481,23 +503,13 @@ fn worker<'db>(
                     }
                 }
             }
-            Claim::Blocked(generation) => {
-                recycle(slots, &mut free, false, retain_results);
-                coordinator.wait(generation);
-            }
+            Claim::Blocked(rows) => coordinator.wait_for_rows(owner, rows),
             Claim::Finished => {
                 if free.len() == slots.len() {
                     clear_all_slots(slots);
                     return;
                 }
-                let generation = coordinator.generation();
-                recycle(slots, &mut free, false, retain_results);
-                if free.len() != slots.len() {
-                    coordinator.wait(generation);
-                } else {
-                    clear_all_slots(slots);
-                    return;
-                }
+                coordinator.wakes[owner].wait();
             }
             Claim::Cancelled => {}
         }
@@ -549,14 +561,12 @@ impl Db {
             .and_then(|slots| slots.checked_mul(slot_capacity))
             .is_some_and(|physical_rows| physical_rows <= config.max_inflight_rows);
         let coordinator = Arc::new(Coordinator {
-            state: Mutex::new(State {
-                next_batch: 0,
-                inflight_rows: 0,
-                generation: 0,
-                cancelled: false,
-            }),
-            changed: Condvar::new(),
+            next_batch: Mutex::new(0),
+            inflight_rows: AtomicUsize::new(0),
             max_inflight_rows: config.max_inflight_rows,
+            row_waiters: AtomicUsize::new(0),
+            cancelled: AtomicBool::new(false),
+            wakes: (0..active_workers).map(|_| Wake::default()).collect(),
         });
         let all_slots = (0..active_workers)
             .map(|_| {
@@ -645,7 +655,7 @@ impl Db {
                                     );
                                     slot.state = SlotState::Recycle { len, permit };
                                     drop(slot);
-                                    coordinator.notify();
+                                    coordinator.wakes[owner].wake();
                                     if let Err(payload) = consumed {
                                         std::panic::resume_unwind(payload);
                                     }
@@ -684,7 +694,7 @@ impl Db {
                     Published::Ready { .. } => None,
                 });
             }
-            debug_assert_eq!(lock(&coordinator.state).inflight_rows, 0);
+            debug_assert_eq!(coordinator.inflight_rows.load(SeqCst), 0);
             debug_assert!(all_slots.iter().flatten().all(|mutex| {
                 let slot = lock(mutex);
                 matches!(slot.state, SlotState::Free) && slot.results.iter().all(Option::is_none)
@@ -897,6 +907,36 @@ mod tests {
         })
         .unwrap();
         assert_eq!(indices, (0..inputs.len()).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn consumer_panic_wakes_every_waiting_worker() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
+        // The slow consumer lets the other workers fill every slot (a wide
+        // cap) or block on the cap (one batch in flight) before it panics;
+        // the stream must still wake and join them all.
+        let inputs: Vec<_> = inputs().into_iter().cycle().take(31).collect();
+        for max_inflight_rows in [2, 64] {
+            let config = NativeStreamConfig {
+                workers: 4,
+                batch_size: 2,
+                slots_per_worker: 2,
+                max_inflight_rows,
+            };
+            let panic = std::panic::catch_unwind(|| {
+                decode_native_stream_at(&inputs, None, NOW, config, |batch| {
+                    std::thread::sleep(std::time::Duration::from_millis(20));
+                    if batch.batch_index() == 1 {
+                        panic!("consumer stopped");
+                    }
+                })
+                .unwrap();
+            });
+            assert!(panic.is_err());
+        }
     }
 
     #[test]
