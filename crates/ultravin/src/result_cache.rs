@@ -35,6 +35,11 @@
 //! shared cache line, and a store swaps in a fresh entry; the one it displaces
 //! is freed when its last reader lets go. Two workers missing the same key
 //! both decode and both store, and the last one wins.
+//!
+//! Each output row of a stream remembers, as [`Filled`], the id of the entry
+//! it last received. Ids are never reused, so a hit on that same entry finds
+//! the row already holding the result and writes only `vin`; anything else
+//! that writes the row forgets the id.
 
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 use std::sync::{Arc, OnceLock};
@@ -56,11 +61,19 @@ pub(crate) fn configured_entries() -> usize {
 
 static HITS: AtomicU64 = AtomicU64::new(0);
 static PROBES: AtomicU64 = AtomicU64::new(0);
+static UNCOPIED: AtomicU64 = AtomicU64::new(0);
+/// The next entry id; 0 is never an id.
+static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 
-/// Process-wide `(hits, probes)` of finished stream workers, for tuning.
+/// Process-wide `(hits, probes, uncopied hits)` of finished stream workers,
+/// for tuning; an uncopied hit found its row already holding the entry.
 #[doc(hidden)]
-pub fn result_cache_counters() -> (u64, u64) {
-    (HITS.load(Relaxed), PROBES.load(Relaxed))
+pub fn result_cache_counters() -> (u64, u64, u64) {
+    (
+        HITS.load(Relaxed),
+        PROBES.load(Relaxed),
+        UNCOPIED.load(Relaxed),
+    )
 }
 
 /// VIN bytes 1-16, then byte 17 with the caller year above it.
@@ -88,7 +101,21 @@ impl Key {
 /// A clean result, its `vin` left empty, and the key it answers.
 struct Entry<'a> {
     key: Key,
+    /// Unique in the process, so no other entry is ever mistaken for this one.
+    id: u64,
     result: DecodeResult<'a>,
+}
+
+/// The entry an output row was last filled from, 0 for none: when set, the
+/// row holds that entry's result in every field but `vin`. Whatever else
+/// writes the row must reset it.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Filled(u64);
+
+impl Filled {
+    pub(crate) fn is_set(self) -> bool {
+        self.0 != 0
+    }
 }
 
 /// One stream's results, shared by its workers; disabled at capacity 0. It
@@ -122,10 +149,16 @@ impl<'a> Table<'a> {
 pub(crate) struct Hit<'a>(Guard<Option<Arc<Entry<'a>>>>);
 
 impl<'a> Hit<'a> {
-    /// Write the entry's result into `out`, reusing its buffers; `out.vin`
-    /// already holds the sanitized VIN.
-    pub(crate) fn fill(&self, out: &mut DecodeResult<'a>) {
-        let stored = &self.0.as_ref().expect("a hit holds an entry").result;
+    /// Write the entry's result into `out`, reusing its buffers, unless
+    /// `filled` says `out` already holds it; `out.vin` already holds the
+    /// sanitized VIN. Returns whether it copied.
+    pub(crate) fn fill(&self, out: &mut DecodeResult<'a>, filled: &mut Filled) -> bool {
+        let entry = self.0.as_ref().expect("a hit holds an entry");
+        if filled.0 == entry.id {
+            return false;
+        }
+        filled.0 = entry.id;
+        let stored = &entry.result;
         out.wmi.clone_from(&stored.wmi);
         out.descriptor.clone_from(&stored.descriptor);
         out.model_year = stored.model_year;
@@ -134,6 +167,7 @@ impl<'a> Hit<'a> {
         out.corrected_vin.clear();
         clear_elements(&mut out.elements);
         out.elements.extend_from_slice(&stored.elements);
+        true
     }
 }
 
@@ -158,6 +192,7 @@ pub(crate) struct Worker {
     seen: u64,
     hits: u64,
     probes: u64,
+    pub(crate) uncopied: u64,
 }
 
 impl Drop for Worker {
@@ -165,6 +200,7 @@ impl Drop for Worker {
         if self.probes != 0 {
             HITS.fetch_add(self.hits, Relaxed);
             PROBES.fetch_add(self.probes, Relaxed);
+            UNCOPIED.fetch_add(self.uncopied, Relaxed);
         }
     }
 }
@@ -251,16 +287,17 @@ impl Worker {
         }
     }
 
-    /// Publish a clean result for the probed key; anything else is not stored.
+    /// Publish a clean result for the probed key; anything else is not
+    /// stored. Returns what `result` now holds: the new entry, if stored.
     pub(crate) fn store<'a>(
         &mut self,
         table: &Table<'a>,
         index: usize,
         key: Key,
         result: &DecodeResult<'a>,
-    ) {
+    ) -> Filled {
         if result.error_codes != [0] || !result.corrected_vin.is_empty() {
-            return;
+            return Filled::default();
         }
         debug_assert!(result.check_digit_valid);
         self.recent_stores += 1;
@@ -280,9 +317,11 @@ impl Worker {
             corrected_vin: String::new(),
             elements,
         };
+        let id = NEXT_ID.fetch_add(1, Relaxed);
         table
             .slot(index)
-            .store(Some(Arc::new(Entry { key, result })));
+            .store(Some(Arc::new(Entry { key, id, result })));
+        Filled(id)
     }
 }
 
@@ -369,14 +408,14 @@ mod tests {
     }
 
     /// Stream `inputs` and compare every row to an uncached full decode;
-    /// returns the hits the stream's workers made.
+    /// returns the hits and the uncopied hits the stream's workers made.
     fn assert_stream_matches(
         db: &Db,
         inputs: &[String],
         year: Option<i32>,
         entries: usize,
         workers: usize,
-    ) -> u64 {
+    ) -> (u64, u64) {
         let config = NativeStreamConfig {
             workers,
             batch_size: 8,
@@ -384,7 +423,7 @@ mod tests {
             max_inflight_rows: 16 * workers,
         };
         let current_year = current_year_at(NOW);
-        let (hits, _) = result_cache_counters();
+        let (hits, _, uncopied) = result_cache_counters();
         let mut checked = 0;
         db.decode_native_stream_cached_at(inputs, year, NOW, config, entries, |batch| {
             for (offset, actual) in batch.iter().enumerate() {
@@ -397,8 +436,9 @@ mod tests {
         .expect("native stream");
         assert_eq!(checked, inputs.len());
         // Counters only grow, so another test running alongside can inflate
-        // this but never hide that this stream made no hits.
-        result_cache_counters().0 - hits
+        // this but never hide that this stream made none.
+        let (after_hits, _, after_uncopied) = result_cache_counters();
+        (after_hits - hits, after_uncopied - uncopied)
     }
 
     #[test]
@@ -408,7 +448,7 @@ mod tests {
         for entries in [0, 1, 2, DEFAULT_ENTRIES] {
             for year in [None, Some(2015)] {
                 // A debug build also checked each hit against a full decode.
-                let hits = assert_stream_matches(db, &inputs, year, entries, 1);
+                let (hits, _) = assert_stream_matches(db, &inputs, year, entries, 1);
                 if entries > 0 {
                     assert!(hits > 0, "{entries} entries");
                 }
@@ -422,8 +462,39 @@ mod tests {
         let inputs = inputs(db);
         for entries in [1, 2] {
             for _ in 0..16 {
-                let hits = assert_stream_matches(db, &inputs, None, entries, 4);
+                let (hits, _) = assert_stream_matches(db, &inputs, None, entries, 4);
                 assert!(hits > 0, "{entries} entries");
+            }
+        }
+    }
+
+    #[test]
+    fn recycled_rows_alternating_uncopied_hits_copies_and_decodes_stay_exact() {
+        let Some(db) = Db::try_embedded() else { return };
+        // Each batch-sized chunk of `inputs` four times, every other time
+        // rotated by one: a recycled row meets the entry it holds (under the
+        // same or a sibling VIN), then another entry, an error, an exception
+        // or malformed input, and the next chunk.
+        let mut inputs_ = Vec::new();
+        for chunk in inputs(db).chunks(8) {
+            for turn in 0..4 {
+                inputs_.extend(
+                    chunk
+                        .iter()
+                        .cycle()
+                        .skip(turn % 2)
+                        .take(chunk.len())
+                        .cloned(),
+                );
+            }
+        }
+        for workers in [1, 4] {
+            for entries in [1, 2, DEFAULT_ENTRIES] {
+                let (hits, uncopied) = assert_stream_matches(db, &inputs_, None, entries, workers);
+                assert!(hits > uncopied, "{workers} workers, {entries} entries");
+                if workers == 1 && entries == DEFAULT_ENTRIES {
+                    assert!(uncopied > 0);
+                }
             }
         }
     }
@@ -442,6 +513,7 @@ mod tests {
                 current_year,
                 None,
                 None,
+                &mut Filled::default(),
                 &table,
                 &mut workspace,
             );

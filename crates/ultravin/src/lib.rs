@@ -1075,7 +1075,7 @@ pub(crate) fn decode_full_reusing<'a>(
         ..
     } = previous;
     drop((error_codes, corrected_vin));
-    elements.clear();
+    clear_elements(&mut elements);
     decode_items_with_pruning_and_buffers_workspace(
         db,
         input,
@@ -1115,7 +1115,8 @@ pub(crate) fn decode_full_with_workspace<'a>(
 }
 
 /// Full decode into `previous`'s storage, answered from the stream's result
-/// table when an earlier VIN differing only by serial was clean.
+/// table when an earlier VIN differing only by serial was clean. `filled`
+/// names the entry `previous` was last filled from and is kept current.
 // The decode inputs, the reused output, then the shared and per-worker state.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn decode_full_cached<'a>(
@@ -1125,9 +1126,12 @@ pub(crate) fn decode_full_cached<'a>(
     current_year: i32,
     caller_year: Option<i32>,
     previous: Option<DecodeResult<'a>>,
+    filled: &mut result_cache::Filled,
     table: &result_cache::Table<'a>,
     workspace: &mut DecodeWorkspace<'a>,
 ) -> DecodeResult<'a> {
+    // Only a hit on a reused row keeps what it held; all else rewrites it.
+    let held = std::mem::take(filled);
     if !workspace.results.wants_probe(table) {
         return match previous {
             Some(previous) => decode_full_reusing(
@@ -1149,12 +1153,18 @@ pub(crate) fn decode_full_cached<'a>(
             ),
         };
     }
-    let mut out = previous.unwrap_or_else(empty_result);
+    let (mut out, held) = match previous {
+        Some(previous) => (previous, held),
+        None => (empty_result(), result_cache::Filled::default()),
+    };
     out.vin = sanitize_into(input, std::mem::take(&mut out.vin));
     let probe = workspace.results.probe(table, db, &out.vin, caller_year);
     match probe {
         result_cache::Probe::Hit(hit) => {
-            hit.fill(&mut out);
+            *filled = held;
+            if !hit.fill(&mut out, filled) {
+                workspace.results.uncopied += 1;
+            }
             #[cfg(debug_assertions)]
             assert_eq!(
                 out,
@@ -1173,7 +1183,7 @@ pub(crate) fn decode_full_cached<'a>(
                 out,
                 workspace,
             );
-            workspace.results.store(table, index, key, &result);
+            *filled = workspace.results.store(table, index, key, &result);
             result
         }
         result_cache::Probe::Skip => decode_full_reusing(

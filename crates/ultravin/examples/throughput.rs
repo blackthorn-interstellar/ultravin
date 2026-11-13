@@ -210,6 +210,7 @@ fn benchmark_auto_native(owned: &[String], budget: Duration, job_now_micros: i64
             "elapsed_seconds": elapsed,
             "result_cache_hits": cache.0 - cache_started.0,
             "result_cache_probes": cache.1 - cache_started.1,
+            "result_cache_uncopied_hits": cache.2 - cache_started.2,
         })
     );
 }

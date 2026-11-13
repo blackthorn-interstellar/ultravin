@@ -701,8 +701,9 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
   entries the policy hits 49.5% against 50.7% with it disabled.
 - **Correctness.** Debug builds re-decode every hit and assert equality, so
   the Rust suite is a differential test (unit tests stream cover VINs and
-  serial siblings at 1, 2 and 16,384 entries, and four workers overwrite a
-  1- and 2-entry table sixteen times over). Release whole-corpus equality
+  serial siblings at 1, 2 and 16,384 entries, four workers overwrite a
+  1- and 2-entry table sixteen times over, and recycled rows alternate
+  uncopied hits, copies, errors and malformed input). Release whole-corpus equality
   (`examples/result_cache_check.rs`) against uncached `decode_full`: zero
   mismatches over sorted and shuffled NY and 5M realistic VINs at 1 and 12
   workers and 1, 2, 64 and 16,384 entries, plus the admission policy
@@ -759,6 +760,31 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
   `Vec::clone` made the copy loop call `DecodedElement::clone` per element
   (+1.4k instructions per VIN). A bitwise-copied compact entry would cut most
   of the rest.
+- **Uncopied hits.** Output slots are recycled, so a row often already holds
+  the very result a hit would copy into it. Each entry gets an id that is
+  never reused, and each row of a worker's slots remembers the id it was last
+  filled from (or stored as, after a miss); a hit on that id writes only
+  `vin`. Recycling leaves such rows intact, and every other write (a decode,
+  a cleared slot, a fresh `None` row) forgets the id. The id is compared, not
+  a pointer, so nothing holds or bumps a shared refcount. Debug builds still
+  compare every hit's whole row with a full decode. On sorted NY 35% of hits
+  skip the copy at one worker but only 11% at twelve: a worker's three slots
+  come back after about 36 batches (1,152 VINs) instead of 3 (96), so a row
+  has usually moved on to another key. Same host, one run per cell, back to
+  back with the build before:
+
+  | workers | input | VIN/s | cycles/VIN | instr/VIN | uncopied share of hits |
+  |---:|---|---:|---:|---:|---:|
+  | 1 | sorted | 1,138,308 → 1,453,707 | 3,006 → 2,390 (−20%) | 9.93k → 7.62k | 35.0% |
+  | 12 | sorted | 4,251,676 → 4,196,910 | 7,370 → 7,372 | 10.72k → 10.01k | 10.9% |
+  | 1 | shuffled | 151,416 → 152,295 | 22.1k → 22.0k | 45.1k → 45.1k | 0.02% |
+  | 12 | shuffled | 945,892 → 1,012,612 | 34.1k → 33.3k | 46.6k → 46.4k | 0.02% |
+  | 12 | shuffled, 65,536 | 1,475,617 → 1,543,946 | 21.8k → 21.5k | 26.5k → 26.3k | 0.01% |
+
+  Twelve sorted workers save 7% of instructions but no cycles: what remains
+  there is still the copy's memory traffic. The no-repeat overhead on the
+  synthetic 2M slice is unchanged within noise (+13 instructions per VIN;
+  two alternating pairs +2.6%/+2.3% cycles against +2.1%/+0.8% before).
 
 ## Experiments we rejected or replaced
 

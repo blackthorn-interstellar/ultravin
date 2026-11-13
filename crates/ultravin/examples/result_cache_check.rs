@@ -26,7 +26,7 @@ fn main() {
         slots_per_worker: 3,
         max_inflight_rows: workers * 32 * 3,
     };
-    let (hits_before, probes_before) = ultravin::result_cache_counters();
+    let (hits_before, probes_before, uncopied_before) = ultravin::result_cache_counters();
     let mut pending = Vec::new();
     let mut mismatches = 0_usize;
     let mut verify = |pending: &mut Vec<(usize, ultravin::DecodeResult<'static>)>| {
@@ -58,11 +58,12 @@ fn main() {
     })
     .expect("native stream");
     verify(&mut pending);
-    let (hits, probes) = ultravin::result_cache_counters();
+    let (hits, probes, uncopied) = ultravin::result_cache_counters();
     println!(
-        "checked {} rows, {mismatches} mismatches, {} hits / {} probes",
+        "checked {} rows, {mismatches} mismatches, {} hits ({} uncopied) / {} probes",
         inputs.len(),
         hits - hits_before,
+        uncopied - uncopied_before,
         probes - probes_before
     );
     assert_eq!(mismatches, 0);

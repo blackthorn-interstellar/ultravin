@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::{mpsc, Arc, Condvar, Mutex, MutexGuard};
 
+use crate::result_cache::Filled;
 use crate::{current_year_at, decode_full_cached, Db, DecodeResult, DecodeWorkspace};
 
 const MAX_RETAINED_VIN_BYTES: usize = 64;
@@ -157,6 +158,8 @@ enum SlotState {
 
 struct Slot<'db> {
     results: Vec<Option<DecodeResult<'db>>>,
+    /// Per row, the result-table entry it was last filled from.
+    filled: Vec<Filled>,
     state: SlotState,
 }
 
@@ -164,6 +167,7 @@ impl<'db> Slot<'db> {
     fn new(batch_size: usize) -> Self {
         Self {
             results: (0..batch_size).map(|_| None).collect(),
+            filled: vec![Filled::default(); batch_size],
             state: SlotState::Free,
         }
     }
@@ -286,16 +290,24 @@ enum Published {
 }
 
 fn clear_slot(slot: &mut Slot<'_>, len: usize) {
-    for result in &mut slot.results[..len] {
+    for (result, filled) in slot.results[..len].iter_mut().zip(&mut slot.filled) {
         drop(result.take());
+        *filled = Filled::default();
     }
 }
 
+/// Empty each row but keep its buffers. A row filled from a result-table
+/// entry keeps that result too: a hit on the same entry then rewrites only
+/// `vin`, and any other decode resets every field itself.
 fn prepare_slot_reuse(slot: &mut Slot<'_>, len: usize) {
-    for result in slot.results[..len].iter_mut().flatten() {
+    for (result, filled) in slot.results[..len].iter_mut().zip(&slot.filled) {
+        let Some(result) = result else { continue };
         result.vin.clear();
         if result.vin.capacity() > MAX_RETAINED_VIN_BYTES {
             result.vin = String::new();
+        }
+        if filled.is_set() {
+            continue;
         }
         result.wmi.clear();
         result.descriptor.clear();
@@ -410,8 +422,11 @@ fn worker<'db>(
                         (start..end).map(|index| (crate::locality_key(&inputs[index]), index)),
                     );
                     order.sort_unstable_by_key(|&(key, _)| key);
+                    let Slot {
+                        results, filled, ..
+                    } = &mut *slot;
                     for (_, index) in order.iter().copied() {
-                        let result_slot = &mut slot.results[index - start];
+                        let result_slot = &mut results[index - start];
                         *result_slot = Some(decode_full_cached(
                             db,
                             &inputs[index],
@@ -419,6 +434,7 @@ fn worker<'db>(
                             current_year,
                             model_year,
                             result_slot.take(),
+                            &mut filled[index - start],
                             result_table,
                             &mut decode_workspace,
                         ));
