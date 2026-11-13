@@ -667,6 +667,47 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
   VIN/s (+4.3%), 12.37k → 11.85k cycles/VIN (−4.2%), 28.24k → 27.52k
   instructions/VIN (−2.5%). Every candidate run beat every baseline run.
 
+## November 12: result reuse cache
+
+- **Bottleneck.** Real fleets repeat: in New York's 11.9M-VIN registration
+  file about 320k keys occur and 97% of VINs share theirs with an earlier
+  VIN, yet every VIN paid a full decode (~21k cycles in file order).
+- **Mechanism.** Each native-stream worker owns a direct-mapped table
+  ([result_cache.rs](crates/ultravin/src/result_cache.rs)) of clean full
+  results. A hit copies the stored result into the recycled output slot and
+  patches `vin`. No locks, no shared mutable state. Entries per worker come
+  from `ULTRAVIN_RESULT_CACHE` (0 disables), default 1024.
+- **Key.** The sanitized VIN with position 9 masked; positions 12-17 with
+  digits collapsed to `#`, except positions 12-14 of a `9` WMI and any
+  position up to `Db::wmi_key_depth` (the deepest position any pattern key of
+  any schema of any row of that WMI constrains, computed lazily per WMI;
+  53 WMIs reach 12-14, none reach 15-17); the caller year. The table empties
+  when the database, `now_micros` or current year changes. Only 17 valid
+  characters, a valid check digit (computed without the car flag: a car WMI
+  with a letter at 13 is never clean, so never stored) and not a check-digit
+  exception are probed; only results with codes exactly `[0]` are stored.
+- **Admission.** A store costs about a fifth of a decode. While fewer than a
+  quarter of recent stores paid off, only every 64th VIN is probed. On the
+  shuffled 2M synthetic slice this cut the overhead from +35% to +1-2% cycles.
+- **Correctness.** Debug builds re-decode every hit and assert equality, so
+  the Rust suite is a differential test (a unit test streams cover VINs and
+  serial siblings at 1, 2 and 1024 entries). Release whole-corpus equality
+  (`examples/result_cache_check.rs`) against uncached `decode_full`: zero
+  mismatches over NY file, sorted and shuffled orders and 5M realistic VINs at
+  1 and 4 workers and 1, 64 and 1024 entries, plus the admission policy
+  disabled (8.97M hits on shuffled NY at 65536 entries). Fingerprints
+  unchanged.
+- **Results (1 worker).** NY file order at 1024 entries: 158k → 1.17M VIN/s,
+  21.2k → 2.9k cycles/VIN, 94.7% hits. Shuffled NY: 1024 entries is too small
+  (the admission policy keeps it at +2%); 16384 entries reached 50.6% hits
+  and 21.7k cycles/VIN against 32.5k.
+- **Memory.** About 13-15 KB per entry (56-66 elements of 224 bytes plus
+  8-11 owned strings): 1024 entries ≈ 15 MB per worker, 65536 ≈ 1 GB.
+- **Hit cost.** About 2k cycles: element clone ~60%, dropping the slot's old
+  elements ~20%, probe and bookkeeping ~12%, allocation ~5%, exception filter,
+  sanitize and check digit the rest. A bitwise-copied compact entry would cut
+  most of it.
+
 ## Experiments we rejected or replaced
 
 Keeping these failures is part of preserving the performance work. A compatible

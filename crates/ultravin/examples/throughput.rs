@@ -164,6 +164,7 @@ fn benchmark_auto_native(owned: &[String], budget: Duration, job_now_micros: i64
     let workers = ultravin::predictor::worker_count();
     let cpu_started = cpu::snapshot();
     let counters_started = counters::snapshot();
+    let cache_started = ultravin::result_cache_counters();
     let started = Instant::now();
     let mut rows = 0_u64;
     let mut selected_batches = BTreeMap::<usize, u64>::new();
@@ -186,6 +187,7 @@ fn benchmark_auto_native(owned: &[String], budget: Duration, job_now_micros: i64
     let elapsed = started.elapsed().as_secs_f64();
     let counter_usage = counters::elapsed(counters_started, counters::snapshot());
     let cpu_usage = cpu::elapsed(cpu_started, cpu::snapshot());
+    let cache = ultravin::result_cache_counters();
     report("batch", rows, elapsed, workers);
     println!(
         "{}",
@@ -206,6 +208,8 @@ fn benchmark_auto_native(owned: &[String], budget: Duration, job_now_micros: i64
             "selected_size_rows": selected_rows,
             "rows": rows,
             "elapsed_seconds": elapsed,
+            "result_cache_hits": cache.0 - cache_started.0,
+            "result_cache_probes": cache.1 - cache_started.1,
         })
     );
 }

@@ -32,6 +32,7 @@ mod native_stream;
 pub mod parquet_io;
 pub mod predictor;
 mod resolve;
+mod result_cache;
 #[cfg(feature = "stage-trace")]
 #[doc(hidden)]
 pub mod stage_trace;
@@ -64,6 +65,8 @@ pub use native_auto::{
 pub use native_stream::{
     decode_native_stream_at, NativeBatch, NativeStreamConfig, NativeStreamError,
 };
+#[doc(hidden)]
+pub use result_cache::result_cache_counters;
 pub use wmi::{vin_descriptor, vin_wmi};
 
 /// Identity of the decoder and the embedded NHTSA data artifact.
@@ -1111,23 +1114,116 @@ pub(crate) fn decode_full_with_workspace<'a>(
     .full_into_workspace(Vec::new(), workspace)
 }
 
+/// Full decode into `previous`'s storage, answered from the workspace's
+/// result cache when an earlier VIN differing only by serial was clean.
+pub(crate) fn decode_full_cached<'a>(
+    db: &'a Db,
+    input: &str,
+    now_micros: i64,
+    current_year: i32,
+    caller_year: Option<i32>,
+    previous: Option<DecodeResult<'a>>,
+    workspace: &mut DecodeWorkspace<'a>,
+) -> DecodeResult<'a> {
+    if !workspace.results.wants_probe() {
+        return match previous {
+            Some(previous) => decode_full_reusing(
+                db,
+                input,
+                now_micros,
+                current_year,
+                caller_year,
+                previous,
+                workspace,
+            ),
+            None => decode_full_with_workspace(
+                db,
+                input,
+                now_micros,
+                current_year,
+                caller_year,
+                workspace,
+            ),
+        };
+    }
+    let mut out = previous.unwrap_or_else(empty_result);
+    out.vin = sanitize_into(input, std::mem::take(&mut out.vin));
+    let probe = workspace
+        .results
+        .probe(db, &out.vin, now_micros, current_year, caller_year);
+    match probe {
+        result_cache::Probe::Hit(index) => {
+            workspace.results.fill(index, &mut out);
+            #[cfg(debug_assertions)]
+            assert_eq!(
+                out,
+                decode_full(db, input, now_micros, current_year, caller_year),
+                "result cache hit differs from a full decode of {input:?}"
+            );
+            out
+        }
+        result_cache::Probe::Miss(index, key) => {
+            let result = decode_full_reusing(
+                db,
+                input,
+                now_micros,
+                current_year,
+                caller_year,
+                out,
+                workspace,
+            );
+            workspace.results.store(index, key, &result);
+            result
+        }
+        result_cache::Probe::Skip => decode_full_reusing(
+            db,
+            input,
+            now_micros,
+            current_year,
+            caller_year,
+            out,
+            workspace,
+        ),
+    }
+}
+
+fn empty_result<'a>() -> DecodeResult<'a> {
+    DecodeResult {
+        vin: String::new(),
+        wmi: String::new(),
+        descriptor: String::new(),
+        model_year: None,
+        error_codes: Vec::new(),
+        check_digit_valid: false,
+        corrected_vin: String::new(),
+        elements: Vec::new(),
+    }
+}
+
 pub(crate) struct DecodeWorkspace<'a> {
     item_vectors: [Vec<decode::DecodingItem<'a>>; 3],
     item_vectors_len: usize,
     passes: Vec<Pass<'a>>,
+    results: result_cache::ResultCache<'a>,
 }
 
 impl Default for DecodeWorkspace<'_> {
     fn default() -> Self {
-        Self {
-            item_vectors: std::array::from_fn(|_| Vec::new()),
-            item_vectors_len: 0,
-            passes: Vec::new(),
-        }
+        Self::with_result_cache(0)
     }
 }
 
 impl<'a> DecodeWorkspace<'a> {
+    /// A workspace whose full decodes reuse up to `entries` clean results.
+    pub(crate) fn with_result_cache(entries: usize) -> Self {
+        Self {
+            item_vectors: std::array::from_fn(|_| Vec::new()),
+            item_vectors_len: 0,
+            passes: Vec::new(),
+            results: result_cache::ResultCache::with_capacity(entries),
+        }
+    }
+
     fn take_items(&mut self) -> Vec<decode::DecodingItem<'a>> {
         if self.item_vectors_len == 0 {
             Vec::new()

@@ -152,6 +152,9 @@ pub struct Db {
     make_texts: OnceLock<Option<MakeTexts>>,
     /// Elements some conversion reads: most items have none to look up.
     conversion_sources: OnceLock<crate::hash::ElementSet>,
+    /// Per WMI string (slot = its first row), the deepest VIN position any of
+    /// its pattern keys constrains, filled on first use; `0` = not yet known.
+    wmi_key_depths: OnceLock<Box<[std::sync::atomic::AtomicU8]>>,
 }
 
 /// The Make table's first id and one lazily filled slot per id in its span.
@@ -244,6 +247,7 @@ impl Db {
             vinexception_filter: OnceLock::new(),
             make_texts: OnceLock::new(),
             conversion_sources: OnceLock::new(),
+            wmi_key_depths: OnceLock::new(),
         }
     }
 
@@ -1019,6 +1023,35 @@ impl Db {
 
     /// All `Wmi.id`s whose string equals `wmi` (no availability filter), for the
     /// `fExtractValidCharsPerWmiYear` join (correction charset).
+    /// The deepest 1-based VIN position (at least 11) that any pattern key of
+    /// any schema linked to any row of `wmi` constrains, or `None` for a WMI the
+    /// archive lacks. This covers every key the decode reads for `wmi`: the
+    /// pattern scan, formula values and the correction charset (which unions QC
+    /// and orphan schemas too). Key index `k` (1-based, a `[...]` class counts
+    /// once) is VIN position `k + 3`; only `*` leaves a position unread.
+    pub(crate) fn wmi_key_depth(&self, wmi: &str) -> Option<u8> {
+        use std::sync::atomic::{AtomicU8, Ordering};
+        let rows = self.wmi_rows(wmi);
+        let first = rows.first()?;
+        let position = (std::ptr::from_ref(first) as usize - self.wmis().as_ptr() as usize)
+            / std::mem::size_of::<ArchivedWmi>();
+        let slots = self
+            .wmi_key_depths
+            .get_or_init(|| (0..self.wmis().len()).map(|_| AtomicU8::new(0)).collect());
+        let known = slots[position].load(Ordering::Relaxed);
+        if known != 0 {
+            return Some(known);
+        }
+        let depth = rows
+            .iter()
+            .flat_map(|row| self.wmi_vinschema_for(row.id.to_native()))
+            .flat_map(|link| self.patterns_for(link.vinschemaid.to_native()))
+            .map(|p| key_vin_depth(self.s(p.keys.to_native())))
+            .fold(11, u8::max);
+        slots[position].store(depth, Ordering::Relaxed);
+        Some(depth)
+    }
+
     pub fn wmi_ids_for_str(&self, wmi: &str) -> Vec<i32> {
         self.wmi_rows(wmi)
             .iter()
@@ -1249,6 +1282,31 @@ fn wmi_prefix_bucket(wmi: &str) -> Option<usize> {
 }
 
 /// Keep length in the last byte so embedded NULs and short strings cannot alias.
+/// The deepest VIN position a pattern key constrains (see
+/// [`Db::wmi_key_depth`]): all 17 for any shape whose positions are not one
+/// byte or one closed `[...]` class each, or that contains a LIKE `%`.
+fn key_vin_depth(key: &str) -> u8 {
+    if !key.is_ascii() || key.contains('%') {
+        return 17;
+    }
+    let mut rest = key.as_bytes();
+    let (mut index, mut deepest) = (0, 0);
+    while let [first, tail @ ..] = rest {
+        index += 1;
+        rest = tail;
+        if *first == b'[' {
+            let Some(end) = tail.iter().position(|&b| b == b']') else {
+                return 17;
+            };
+            rest = &tail[end + 1..];
+        } else if *first == b'*' {
+            continue;
+        }
+        deepest = index;
+    }
+    u8::try_from(deepest + 3).unwrap_or(17).min(17)
+}
+
 fn packed_wmi(wmi: &str) -> Option<u64> {
     let bytes = wmi.as_bytes();
     if bytes.len() > 7 {
@@ -1641,6 +1699,43 @@ mod tests {
         }
         for text in ["", "A", "aB", "Aé", "éA", "A\0"] {
             assert_eq!(wmi_prefix_bucket(text), None);
+        }
+    }
+
+    #[test]
+    fn key_depth_counts_classes_once_and_skips_wildcards() {
+        assert_eq!(key_vin_depth(""), 3);
+        assert_eq!(key_vin_depth("CM8*"), 6);
+        assert_eq!(key_vin_depth("CM8**|***"), 9);
+        assert_eq!(key_vin_depth("[A-C]M8**|*A"), 11);
+        assert_eq!(key_vin_depth("*****|**[0-9]"), 12);
+        assert_eq!(key_vin_depth("*****|***##"), 14);
+        assert_eq!(key_vin_depth("*****|**_"), 12);
+        assert_eq!(key_vin_depth("*****|*********9"), 17);
+        assert_eq!(key_vin_depth("[AB"), 17);
+        assert_eq!(key_vin_depth("A%"), 17);
+        assert_eq!(key_vin_depth("Ł"), 17);
+    }
+
+    #[test]
+    fn wmi_key_depth_reaches_the_deepest_key_of_every_linked_schema() {
+        let Some(db) = Db::try_embedded() else { return };
+        assert_eq!(db.wmi_key_depth("1B9UT0"), None);
+        let low_volume = db.wmis().iter().map(|row| db.s(row.wmi.to_native()));
+        let low_volume = low_volume.filter(|wmi| wmi.len() == 6).take(3);
+        for wmi in ["1HG", "JAL", "1UJ"].into_iter().chain(low_volume) {
+            let deepest = db
+                .wmi_ids_for_str(wmi)
+                .into_iter()
+                .flat_map(|id| db.wmi_vinschema_for(id))
+                .flat_map(|link| db.patterns_for(link.vinschemaid.to_native()))
+                .flat_map(|p| crate::errors::valid_chars_in_key(db.s(p.keys.to_native())))
+                .map(|(position, _)| position + 3)
+                .max()
+                .unwrap_or(0)
+                .max(11);
+            assert_eq!(db.wmi_key_depth(wmi), Some(deepest as u8), "{wmi}");
+            assert_eq!(db.wmi_key_depth(wmi), Some(deepest as u8), "{wmi} memo");
         }
     }
 

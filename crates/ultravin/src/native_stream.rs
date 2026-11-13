@@ -5,10 +5,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::sync::{mpsc, Arc, Condvar, Mutex, MutexGuard};
 
-use crate::{
-    current_year_at, decode_full_reusing, decode_full_with_workspace, Db, DecodeResult,
-    DecodeWorkspace,
-};
+use crate::{current_year_at, decode_full_cached, Db, DecodeResult, DecodeWorkspace};
 
 const MAX_RETAINED_VIN_BYTES: usize = 64;
 const MAX_RETAINED_ELEMENTS: usize = 256;
@@ -361,13 +358,14 @@ fn worker<'db>(
     current_year: i32,
     batch_size: usize,
     retain_results: bool,
+    result_cache_entries: usize,
     slots: &[Mutex<Slot<'db>>],
     coordinator: &Arc<Coordinator>,
     published: &mpsc::Sender<Published>,
 ) {
     let mut free = (0..slots.len()).rev().collect::<Vec<_>>();
     let mut order = Vec::<(u64, usize)>::with_capacity(batch_size.min(inputs.len()));
-    let mut decode_workspace = DecodeWorkspace::default();
+    let mut decode_workspace = DecodeWorkspace::with_result_cache(result_cache_entries);
     loop {
         let cancelled = coordinator.cancelled();
         recycle(slots, &mut free, cancelled, retain_results);
@@ -414,26 +412,15 @@ fn worker<'db>(
                     order.sort_unstable_by_key(|&(key, _)| key);
                     for (_, index) in order.iter().copied() {
                         let result_slot = &mut slot.results[index - start];
-                        let decoded = match result_slot.take() {
-                            Some(previous) => decode_full_reusing(
-                                db,
-                                &inputs[index],
-                                now_micros,
-                                current_year,
-                                model_year,
-                                previous,
-                                &mut decode_workspace,
-                            ),
-                            None => decode_full_with_workspace(
-                                db,
-                                &inputs[index],
-                                now_micros,
-                                current_year,
-                                model_year,
-                                &mut decode_workspace,
-                            ),
-                        };
-                        *result_slot = Some(decoded);
+                        *result_slot = Some(decode_full_cached(
+                            db,
+                            &inputs[index],
+                            now_micros,
+                            current_year,
+                            model_year,
+                            result_slot.take(),
+                            &mut decode_workspace,
+                        ));
                         #[cfg(test)]
                         if PANIC_DECODE_INPUT.load(std::sync::atomic::Ordering::SeqCst)
                             == inputs.as_ptr() as usize
@@ -508,6 +495,25 @@ impl Db {
         model_year: Option<i32>,
         now_micros: i64,
         config: NativeStreamConfig,
+        consume: F,
+    ) -> Result<(), NativeStreamError>
+    where
+        F: for<'batch> FnMut(NativeBatch<'batch, 'db>),
+    {
+        let entries = crate::result_cache::configured_entries();
+        self.decode_native_stream_cached_at(
+            inputs, model_year, now_micros, config, entries, consume,
+        )
+    }
+
+    /// [`Db::decode_native_stream_at`] with `result_cache_entries` per worker.
+    pub(crate) fn decode_native_stream_cached_at<'db, F>(
+        &'db self,
+        inputs: &[String],
+        model_year: Option<i32>,
+        now_micros: i64,
+        config: NativeStreamConfig,
+        result_cache_entries: usize,
         mut consume: F,
     ) -> Result<(), NativeStreamError>
     where
@@ -562,6 +568,7 @@ impl Db {
                                 current_year_at(now_micros),
                                 config.batch_size,
                                 retain_results,
+                                result_cache_entries,
                                 owner_slots,
                                 &coordinator_ref,
                                 &tx,
