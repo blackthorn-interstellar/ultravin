@@ -33,7 +33,7 @@ from collections.abc import Collection
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-import tomllib  # ty: ignore[unresolved-import]  (3.11+; CI-only tooling, never shipped to the 3.10 floor)
+import tomllib  # ty: ignore[import-not-found]  (3.11+; CI-only tooling, never shipped to the 3.10 floor)
 
 ROOT = Path(__file__).resolve().parent.parent
 
