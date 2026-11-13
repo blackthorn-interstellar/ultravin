@@ -43,6 +43,48 @@ calibration, batch-size and memory heatmaps, and a separate validation of the
 current automatic defaults at 4, 8, and 12 workers.
 The comparison tables below preserve their dated measurement sessions.
 
+## Real fleet: New York registrations (November 12, 2026, commit a758e6d)
+
+The headline corpus below is synthetic: one random vehicle per VIN, 78% of them
+from low-volume makers. A real fleet looks different, so this corpus is every
+17-character VIN in New York's public [Vehicle, Snowmobile, and Boat
+Registrations](https://data.ny.gov/d/w4pv-hbkt)
+file: **11,926,226 unique VINs**, 0.5% from low-volume makers, 0.3% with a wrong
+check digit. Only 317,515 distinct combinations of positions 1-8, 10 and 11
+occur (plus 12-14 for low-volume makers), so 97% of the VINs describe a
+vehicle the decoder has already seen; 4,153 combinations cover half the fleet.
+
+Real VINs are also dearer to decode. They come from large manufacturers with
+large schemas: about 79.5k instructions per VIN against 27.5k on the synthetic
+corpus. Same host and command as the headline, one run per cell, load average
+2-3 before the twelve-worker runs:
+
+| workers | input | VIN/s | cycles/VIN |
+|---:|---|---:|---:|
+| 12 | published order | 1,410,887 | 24.8k |
+| 12 | sorted | 1,382,942 | 25.0k |
+| 12 | shuffled | 881,072 | 39.6k |
+| 4 | published order | 619,707 | 21.5k |
+| 4 | sorted | 620,870 | 21.5k |
+| 4 | shuffled | 397,427 | 33.2k |
+| 1 | published order | 158,115 | 21.2k |
+| 1 | sorted | 159,869 | 21.0k |
+| 1 | shuffled | 102,890 | 32.5k |
+
+The file is published nearly sorted, so the first two orders match. Build the
+corpus (a 12.5M-row download) and run one cell:
+
+```bash
+uv run -- python -m scripts.bench.ny_corpus
+cargo build -p ultravin --release --locked --example throughput
+RAYON_NUM_THREADS=1 ULTRAVIN_NOW_MICROS=1788220800000000 \
+  target/release/examples/throughput target/bench/ny/ny-corpus.txt 10 batch full auto
+```
+
+The dataset is refreshed by the state, so a later download differs; the
+manifest written beside the corpus records its SHA-256 (this run:
+`be72f287…03d7` for the published order).
+
 ## Headline throughput (September 25, 2026, commit 56cf2e9)
 
 Commit `56cf2e9` (the [September 25 instruction
