@@ -1,0 +1,3441 @@
+{
+  "date": "2026-11-12",
+  "host": "Apple M2 Max (8P+4E), shared host with other agents; 1-minute load average 6-15 during the runs (recorded per run); no load gating. Prefer cycles/VIN and within-session ordering over absolute VIN/s.",
+  "corpora": {
+    "ny_sorted": {
+      "path": "target/bench/ny/ny-corpus-sorted.txt",
+      "sha256": "75b520c9445d142a217a57487af9403a24ed16504d185b60c4c2e4f09e6291b2",
+      "rows": 11926226,
+      "regime": "result reuse cache hitting (~94%)"
+    },
+    "ny_shuffled": {
+      "path": "target/bench/ny/ny-corpus-shuffled.txt",
+      "sha256": "59210c894a29449cd529ea4c4acb3702382d50641efc759186c09949ab57c3c6",
+      "rows": 11926226,
+      "regime": "result reuse cache hitting ~50%"
+    },
+    "synthetic_8m": {
+      "path": "first 8,000,000 lines of target/bench/realistic-corpus.txt",
+      "sha256": "a676ebb4f9455ce85f355b17d16c119cdb968456622c32a016d30ec6764f1cee",
+      "rows": 8000000,
+      "regime": "never repeats; cache missing"
+    },
+    "synthetic_2m": {
+      "path": "first 2,000,000 lines of target/bench/realistic-corpus.txt (one-worker runs only, to keep them short)",
+      "sha256": "0105a270b5ba8839acb8fd340ffc6b1a0ae291cd484ed24f7361d89402820f1d",
+      "rows": 2000000,
+      "regime": "never repeats; cache missing"
+    }
+  },
+  "probe": "crates/ultravin/examples/native_slot_grid.rs: warm whole-corpus pass, then one timed whole-corpus pass; fixed clock 1788220800000000; ULTRAVIN_RESULT_CACHE at its default (16,384 entries)",
+  "build": "0c212a2 (release, fat LTO)",
+  "rounds": "two rounds per cell; plan order reversed in the second round",
+  "plans": [
+    {
+      "corpus": "ny_shuffled",
+      "workers": 12,
+      "batch": 24,
+      "slots": 4,
+      "median_rows_per_second": 1141237,
+      "median_cycles_per_vin": 30435,
+      "median_system_cpu_seconds": 2.09,
+      "median_busy_cores": 11.61,
+      "samples": [
+        1138025,
+        1144449
+      ]
+    },
+    {
+      "corpus": "ny_shuffled",
+      "workers": 12,
+      "batch": 64,
+      "slots": 4,
+      "median_rows_per_second": 1138249,
+      "median_cycles_per_vin": 30514,
+      "median_system_cpu_seconds": 1.33,
+      "median_busy_cores": 11.6,
+      "samples": [
+        1139042,
+        1137456
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 1,
+      "batch": 32,
+      "slots": 3,
+      "median_rows_per_second": 1864730,
+      "median_cycles_per_vin": 2082,
+      "median_system_cpu_seconds": 1.01,
+      "median_busy_cores": 1.13,
+      "samples": [
+        1867876,
+        1861583
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 1,
+      "batch": 64,
+      "slots": 4,
+      "median_rows_per_second": 1896555,
+      "median_cycles_per_vin": 1886,
+      "median_system_cpu_seconds": 0.57,
+      "median_busy_cores": 1.08,
+      "samples": [
+        1878686,
+        1914423
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 1,
+      "batch": 96,
+      "slots": 4,
+      "median_rows_per_second": 1906802,
+      "median_cycles_per_vin": 1894,
+      "median_system_cpu_seconds": 0.46,
+      "median_busy_cores": 1.06,
+      "samples": [
+        1911571,
+        1902034
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 1,
+      "batch": 128,
+      "slots": 4,
+      "median_rows_per_second": 1923118,
+      "median_cycles_per_vin": 1883,
+      "median_system_cpu_seconds": 0.39,
+      "median_busy_cores": 1.05,
+      "samples": [
+        1923207,
+        1923030
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 4,
+      "batch": 32,
+      "slots": 3,
+      "median_rows_per_second": 4579642,
+      "median_cycles_per_vin": 2852,
+      "median_system_cpu_seconds": 1.53,
+      "median_busy_cores": 4.05,
+      "samples": [
+        4579788,
+        4579495
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 4,
+      "batch": 48,
+      "slots": 4,
+      "median_rows_per_second": 5089101,
+      "median_cycles_per_vin": 2600,
+      "median_system_cpu_seconds": 1.0,
+      "median_busy_cores": 4.07,
+      "samples": [
+        5132242,
+        5045960
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 4,
+      "batch": 64,
+      "slots": 3,
+      "median_rows_per_second": 5130530,
+      "median_cycles_per_vin": 2560,
+      "median_system_cpu_seconds": 0.8,
+      "median_busy_cores": 4.06,
+      "samples": [
+        5107324,
+        5153736
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 4,
+      "batch": 64,
+      "slots": 4,
+      "median_rows_per_second": 5207981,
+      "median_cycles_per_vin": 2538,
+      "median_system_cpu_seconds": 0.77,
+      "median_busy_cores": 4.06,
+      "samples": [
+        5195092,
+        5220871
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 4,
+      "batch": 96,
+      "slots": 4,
+      "median_rows_per_second": 5431962,
+      "median_cycles_per_vin": 2434,
+      "median_system_cpu_seconds": 0.58,
+      "median_busy_cores": 4.05,
+      "samples": [
+        5382677,
+        5481247
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 4,
+      "batch": 128,
+      "slots": 4,
+      "median_rows_per_second": 5515948,
+      "median_cycles_per_vin": 2394,
+      "median_system_cpu_seconds": 0.47,
+      "median_busy_cores": 4.04,
+      "samples": [
+        5463506,
+        5568390
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 8,
+      "batch": 16,
+      "slots": 4,
+      "median_rows_per_second": 4087203,
+      "median_cycles_per_vin": 5538,
+      "median_system_cpu_seconds": 8.03,
+      "median_busy_cores": 7.1,
+      "samples": [
+        3967597,
+        4206808
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 8,
+      "batch": 48,
+      "slots": 4,
+      "median_rows_per_second": 7346569,
+      "median_cycles_per_vin": 3386,
+      "median_system_cpu_seconds": 1.5,
+      "median_busy_cores": 7.76,
+      "samples": [
+        7289236,
+        7403902
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 8,
+      "batch": 64,
+      "slots": 3,
+      "median_rows_per_second": 7362951,
+      "median_cycles_per_vin": 3323,
+      "median_system_cpu_seconds": 1.11,
+      "median_busy_cores": 7.56,
+      "samples": [
+        7380912,
+        7344990
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 8,
+      "batch": 64,
+      "slots": 4,
+      "median_rows_per_second": 7663938,
+      "median_cycles_per_vin": 3273,
+      "median_system_cpu_seconds": 1.03,
+      "median_busy_cores": 7.77,
+      "samples": [
+        7531675,
+        7796202
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 8,
+      "batch": 96,
+      "slots": 4,
+      "median_rows_per_second": 8017673,
+      "median_cycles_per_vin": 3171,
+      "median_system_cpu_seconds": 0.87,
+      "median_busy_cores": 7.89,
+      "samples": [
+        8000321,
+        8035025
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 8,
+      "batch": 128,
+      "slots": 4,
+      "median_rows_per_second": 7664308,
+      "median_cycles_per_vin": 3306,
+      "median_system_cpu_seconds": 0.64,
+      "median_busy_cores": 7.85,
+      "samples": [
+        7444471,
+        7884145
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 12,
+      "batch": 24,
+      "slots": 4,
+      "median_rows_per_second": 4357756,
+      "median_cycles_per_vin": 6658,
+      "median_system_cpu_seconds": 11.08,
+      "median_busy_cores": 9.52,
+      "samples": [
+        4410276,
+        4305236
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 12,
+      "batch": 48,
+      "slots": 4,
+      "median_rows_per_second": 6792020,
+      "median_cycles_per_vin": 4551,
+      "median_system_cpu_seconds": 3.22,
+      "median_busy_cores": 10.21,
+      "samples": [
+        6860945,
+        6723096
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 12,
+      "batch": 64,
+      "slots": 3,
+      "median_rows_per_second": 6952280,
+      "median_cycles_per_vin": 4375,
+      "median_system_cpu_seconds": 2.75,
+      "median_busy_cores": 10.01,
+      "samples": [
+        7098986,
+        6805573
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 12,
+      "batch": 64,
+      "slots": 4,
+      "median_rows_per_second": 7319007,
+      "median_cycles_per_vin": 4279,
+      "median_system_cpu_seconds": 1.96,
+      "median_busy_cores": 10.36,
+      "samples": [
+        7299218,
+        7338796
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 12,
+      "batch": 96,
+      "slots": 4,
+      "median_rows_per_second": 7626557,
+      "median_cycles_per_vin": 4282,
+      "median_system_cpu_seconds": 1.14,
+      "median_busy_cores": 10.86,
+      "samples": [
+        7550644,
+        7702471
+      ]
+    },
+    {
+      "corpus": "ny_sorted",
+      "workers": 12,
+      "batch": 128,
+      "slots": 4,
+      "median_rows_per_second": 7405731,
+      "median_cycles_per_vin": 4406,
+      "median_system_cpu_seconds": 0.98,
+      "median_busy_cores": 10.85,
+      "samples": [
+        7358012,
+        7453451
+      ]
+    },
+    {
+      "corpus": "synthetic_2m",
+      "workers": 1,
+      "batch": 32,
+      "slots": 3,
+      "median_rows_per_second": 272814,
+      "median_cycles_per_vin": 12084,
+      "median_system_cpu_seconds": 0.21,
+      "median_busy_cores": 1.02,
+      "samples": [
+        280602,
+        265025
+      ]
+    },
+    {
+      "corpus": "synthetic_2m",
+      "workers": 1,
+      "batch": 64,
+      "slots": 4,
+      "median_rows_per_second": 286899,
+      "median_cycles_per_vin": 11795,
+      "median_system_cpu_seconds": 0.1,
+      "median_busy_cores": 1.01,
+      "samples": [
+        288979,
+        284818
+      ]
+    },
+    {
+      "corpus": "synthetic_2m",
+      "workers": 1,
+      "batch": 96,
+      "slots": 4,
+      "median_rows_per_second": 285403,
+      "median_cycles_per_vin": 11965,
+      "median_system_cpu_seconds": 0.08,
+      "median_busy_cores": 1.01,
+      "samples": [
+        286539,
+        284267
+      ]
+    },
+    {
+      "corpus": "synthetic_2m",
+      "workers": 1,
+      "batch": 128,
+      "slots": 4,
+      "median_rows_per_second": 286163,
+      "median_cycles_per_vin": 12006,
+      "median_system_cpu_seconds": 0.07,
+      "median_busy_cores": 1.01,
+      "samples": [
+        287471,
+        284855
+      ]
+    },
+    {
+      "corpus": "synthetic_8m",
+      "workers": 4,
+      "batch": 32,
+      "slots": 3,
+      "median_rows_per_second": 1005228,
+      "median_cycles_per_vin": 13282,
+      "median_system_cpu_seconds": 1.04,
+      "median_busy_cores": 4.06,
+      "samples": [
+        1002579,
+        1007878
+      ]
+    },
+    {
+      "corpus": "synthetic_8m",
+      "workers": 4,
+      "batch": 48,
+      "slots": 4,
+      "median_rows_per_second": 995941,
+      "median_cycles_per_vin": 13358,
+      "median_system_cpu_seconds": 0.85,
+      "median_busy_cores": 4.04,
+      "samples": [
+        997694,
+        994187
+      ]
+    },
+    {
+      "corpus": "synthetic_8m",
+      "workers": 4,
+      "batch": 64,
+      "slots": 3,
+      "median_rows_per_second": 996660,
+      "median_cycles_per_vin": 13339,
+      "median_system_cpu_seconds": 0.7,
+      "median_busy_cores": 4.03,
+      "samples": [
+        995984,
+        997337
+      ]
+    },
+    {
+      "corpus": "synthetic_8m",
+      "workers": 4,
+      "batch": 64,
+      "slots": 4,
+      "median_rows_per_second": 970969,
+      "median_cycles_per_vin": 13641,
+      "median_system_cpu_seconds": 0.76,
+      "median_busy_cores": 4.03,
+      "samples": [
+        993496,
+        948442
+      ]
+    },
+    {
+      "corpus": "synthetic_8m",
+      "workers": 4,
+      "batch": 96,
+      "slots": 4,
+      "median_rows_per_second": 959299,
+      "median_cycles_per_vin": 13831,
+      "median_system_cpu_seconds": 0.57,
+      "median_busy_cores": 4.02,
+      "samples": [
+        957172,
+        961425
+      ]
+    },
+    {
+      "corpus": "synthetic_8m",
+      "workers": 4,
+      "batch": 128,
+      "slots": 4,
+      "median_rows_per_second": 941337,
+      "median_cycles_per_vin": 14100,
+      "median_system_cpu_seconds": 0.53,
+      "median_busy_cores": 4.01,
+      "samples": [
+        941703,
+        940971
+      ]
+    },
+    {
+      "corpus": "synthetic_8m",
+      "workers": 8,
+      "batch": 16,
+      "slots": 4,
+      "median_rows_per_second": 1689311,
+      "median_cycles_per_vin": 15210,
+      "median_system_cpu_seconds": 2.04,
+      "median_busy_cores": 7.99,
+      "samples": [
+        1685110,
+        1693512
+      ]
+    },
+    {
+      "corpus": "synthetic_8m",
+      "workers": 8,
+      "batch": 48,
+      "slots": 4,
+      "median_rows_per_second": 1729446,
+      "median_cycles_per_vin": 14847,
+      "median_system_cpu_seconds": 0.49,
+      "median_busy_cores": 7.94,
+      "samples": [
+        1730231,
+        1728661
+      ]
+    },
+    {
+      "corpus": "synthetic_8m",
+      "workers": 8,
+      "batch": 64,
+      "slots": 3,
+      "median_rows_per_second": 1707232,
+      "median_cycles_per_vin": 15050,
+      "median_system_cpu_seconds": 0.47,
+      "median_busy_cores": 7.94,
+      "samples": [
+        1713319,
+        1701145
+      ]
+    },
+    {
+      "corpus": "synthetic_8m",
+      "workers": 8,
+      "batch": 64,
+      "slots": 4,
+      "median_rows_per_second": 1708093,
+      "median_cycles_per_vin": 15055,
+      "median_system_cpu_seconds": 0.47,
+      "median_busy_cores": 7.94,
+      "samples": [
+        1717240,
+        1698947
+      ]
+    },
+    {
+      "corpus": "synthetic_8m",
+      "workers": 8,
+      "batch": 96,
+      "slots": 4,
+      "median_rows_per_second": 1643482,
+      "median_cycles_per_vin": 15683,
+      "median_system_cpu_seconds": 0.61,
+      "median_busy_cores": 7.97,
+      "samples": [
+        1644917,
+        1642047
+      ]
+    },
+    {
+      "corpus": "synthetic_8m",
+      "workers": 8,
+      "batch": 128,
+      "slots": 4,
+      "median_rows_per_second": 1552859,
+      "median_cycles_per_vin": 16552,
+      "median_system_cpu_seconds": 0.46,
+      "median_busy_cores": 7.94,
+      "samples": [
+        1557388,
+        1548330
+      ]
+    },
+    {
+      "corpus": "synthetic_8m",
+      "workers": 12,
+      "batch": 24,
+      "slots": 4,
+      "median_rows_per_second": 1960187,
+      "median_cycles_per_vin": 17154,
+      "median_system_cpu_seconds": 1.28,
+      "median_busy_cores": 11.21,
+      "samples": [
+        1951441,
+        1968933
+      ]
+    },
+    {
+      "corpus": "synthetic_8m",
+      "workers": 12,
+      "batch": 48,
+      "slots": 4,
+      "median_rows_per_second": 1894126,
+      "median_cycles_per_vin": 17627,
+      "median_system_cpu_seconds": 1.0,
+      "median_busy_cores": 11.13,
+      "samples": [
+        1874585,
+        1913666
+      ]
+    },
+    {
+      "corpus": "synthetic_8m",
+      "workers": 12,
+      "batch": 64,
+      "slots": 3,
+      "median_rows_per_second": 1877771,
+      "median_cycles_per_vin": 17836,
+      "median_system_cpu_seconds": 0.96,
+      "median_busy_cores": 11.15,
+      "samples": [
+        1890886,
+        1864655
+      ]
+    },
+    {
+      "corpus": "synthetic_8m",
+      "workers": 12,
+      "batch": 64,
+      "slots": 4,
+      "median_rows_per_second": 1863444,
+      "median_cycles_per_vin": 18007,
+      "median_system_cpu_seconds": 0.92,
+      "median_busy_cores": 11.17,
+      "samples": [
+        1849731,
+        1877157
+      ]
+    },
+    {
+      "corpus": "synthetic_8m",
+      "workers": 12,
+      "batch": 96,
+      "slots": 4,
+      "median_rows_per_second": 1743171,
+      "median_cycles_per_vin": 19328,
+      "median_system_cpu_seconds": 0.83,
+      "median_busy_cores": 11.24,
+      "samples": [
+        1751218,
+        1735124
+      ]
+    },
+    {
+      "corpus": "synthetic_8m",
+      "workers": 12,
+      "batch": 128,
+      "slots": 4,
+      "median_rows_per_second": 1703270,
+      "median_cycles_per_vin": 19836,
+      "median_system_cpu_seconds": 0.76,
+      "median_busy_cores": 11.27,
+      "samples": [
+        1703199,
+        1703341
+      ]
+    }
+  ],
+  "runs": [
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 6.31,
+      "load_end": 6.28,
+      "cycles_per_vin": 2848.037748907324,
+      "result": {
+        "average_busy_cores": 4.045574286701739,
+        "batch_size": 32,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 2.6041,
+        "full_output_materialized": true,
+        "max_inflight_rows": 384,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 33966341850,
+          "instructions": 73059578222
+        },
+        "process_system_cpu_seconds": 1.5136369999999997,
+        "process_user_cpu_seconds": 9.021443,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 4579788.02657348,
+        "slots_per_worker": 3,
+        "workers": 4
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 6.28,
+      "load_end": 6.18,
+      "cycles_per_vin": 2592.857340872125,
+      "result": {
+        "average_busy_cores": 4.073673996358419,
+        "batch_size": 48,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 2.323784625,
+        "full_output_materialized": true,
+        "max_inflight_rows": 768,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 30923002633,
+          "instructions": 71398249309
+        },
+        "process_system_cpu_seconds": 1.012752,
+        "process_user_cpu_seconds": 8.453589,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 5132242.40822232,
+        "slots_per_worker": 4,
+        "workers": 4
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 6.18,
+      "load_end": 6.08,
+      "cycles_per_vin": 2575.7402350081243,
+      "result": {
+        "average_busy_cores": 4.0532285437854325,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 2.335122458,
+        "full_output_materialized": true,
+        "max_inflight_rows": 768,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 30718860160,
+          "instructions": 70252823221
+        },
+        "process_system_cpu_seconds": 0.806016,
+        "process_user_cpu_seconds": 8.658769,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 5107323.583455511,
+        "slots_per_worker": 3,
+        "workers": 4
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 6.08,
+      "load_end": 6.24,
+      "cycles_per_vin": 2546.6772089510964,
+      "result": {
+        "average_busy_cores": 4.066007037700019,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 2.295671875,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1024,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 30372247943,
+          "instructions": 70261073838
+        },
+        "process_system_cpu_seconds": 0.781806,
+        "process_user_cpu_seconds": 8.552411999999999,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 5195091.741932849,
+        "slots_per_worker": 4,
+        "workers": 4
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 6.24,
+      "load_end": 5.98,
+      "cycles_per_vin": 2456.8442681699976,
+      "result": {
+        "average_busy_cores": 4.050726309058483,
+        "batch_size": 96,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 2.215668084,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1536,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 29300879989,
+          "instructions": 69101032845
+        },
+        "process_system_cpu_seconds": 0.571026,
+        "process_user_cpu_seconds": 8.404039,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 5382677.164563969,
+        "slots_per_worker": 4,
+        "workers": 4
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 5.98,
+      "load_end": 5.9,
+      "cycles_per_vin": 2418.1395563860688,
+      "result": {
+        "average_busy_cores": 4.038462718002935,
+        "batch_size": 128,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 2.182888791,
+        "full_output_materialized": true,
+        "max_inflight_rows": 2048,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 28839278849,
+          "instructions": 68511561861
+        },
+        "process_system_cpu_seconds": 0.4543419999999999,
+        "process_user_cpu_seconds": 8.361173,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 5463505.996810994,
+        "slots_per_worker": 4,
+        "workers": 4
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 5.9,
+      "load_end": 6.07,
+      "cycles_per_vin": 5688.693884469404,
+      "result": {
+        "average_busy_cores": 7.084795279946602,
+        "batch_size": 16,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 3.005906333,
+        "full_output_materialized": true,
+        "max_inflight_rows": 512,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 67844648911,
+          "instructions": 86671079178
+        },
+        "process_system_cpu_seconds": 8.579403,
+        "process_user_cpu_seconds": 12.716828000000001,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 3967597.34961442,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 6.07,
+      "load_end": 6.3,
+      "cycles_per_vin": 3405.2150662749473,
+      "result": {
+        "average_busy_cores": 7.754962806613416,
+        "batch_size": 48,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.636142083,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1536,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 40611364459,
+          "instructions": 73607483309
+        },
+        "process_system_cpu_seconds": 1.502834,
+        "process_user_cpu_seconds": 11.185387,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 7289236.139035244,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 6.3,
+      "load_end": 6.52,
+      "cycles_per_vin": 3317.3183559493173,
+      "result": {
+        "average_busy_cores": 7.56722511305501,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.615820042,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1536,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 39563088427,
+          "instructions": 72145155459
+        },
+        "process_system_cpu_seconds": 1.1122899999999998,
+        "process_user_cpu_seconds": 11.114984000000002,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 7380912.286023,
+        "slots_per_worker": 3,
+        "workers": 8
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 6.52,
+      "load_end": 6.52,
+      "cycles_per_vin": 3308.701410739659,
+      "result": {
+        "average_busy_cores": 7.687679281578867,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.583475917,
+        "full_output_materialized": true,
+        "max_inflight_rows": 2048,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 39460320791,
+          "instructions": 71974633616
+        },
+        "process_system_cpu_seconds": 0.929521,
+        "process_user_cpu_seconds": 11.243733999999998,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 7531675.014417034,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 6.52,
+      "load_end": 6.64,
+      "cycles_per_vin": 3176.130149302889,
+      "result": {
+        "average_busy_cores": 7.89269871312883,
+        "batch_size": 96,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.490718375,
+        "full_output_materialized": true,
+        "max_inflight_rows": 3072,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 37879245966,
+          "instructions": 70827198509
+        },
+        "process_system_cpu_seconds": 0.887384,
+        "process_user_cpu_seconds": 10.878407000000001,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 8000321.321591008,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 6.64,
+      "load_end": 6.91,
+      "cycles_per_vin": 3378.8803885655025,
+      "result": {
+        "average_busy_cores": 7.786289801881168,
+        "batch_size": 128,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.6020246249999999,
+        "full_output_materialized": true,
+        "max_inflight_rows": 4096,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 40297291141,
+          "instructions": 70180436620
+        },
+        "process_system_cpu_seconds": 0.5096840000000001,
+        "process_user_cpu_seconds": 11.964144000000001,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 7444471.086079592,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 6.91,
+      "load_end": 7.39,
+      "cycles_per_vin": 6573.914256949349,
+      "result": {
+        "average_busy_cores": 9.513051605577,
+        "batch_size": 24,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 2.704190208,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1152,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 78401987133,
+          "instructions": 85579493907
+        },
+        "process_system_cpu_seconds": 10.768013,
+        "process_user_cpu_seconds": 14.957087999999999,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 4410276.3055342,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 7.39,
+      "load_end": 7.84,
+      "cycles_per_vin": 4499.7931981164875,
+      "result": {
+        "average_busy_cores": 10.210205792803507,
+        "batch_size": 48,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.7382775000000001,
+        "full_output_materialized": true,
+        "max_inflight_rows": 2304,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 53665550634,
+          "instructions": 75956327632
+        },
+        "process_system_cpu_seconds": 2.9953339999999997,
+        "process_user_cpu_seconds": 14.752837,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 6860944.8146225205,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 7.84,
+      "load_end": 8.18,
+      "cycles_per_vin": 4322.316423988611,
+      "result": {
+        "average_busy_cores": 10.09542616325097,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.67999,
+        "full_output_materialized": true,
+        "max_inflight_rows": 2304,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 51548922516,
+          "instructions": 74550269834
+        },
+        "process_system_cpu_seconds": 2.5055460000000003,
+        "process_user_cpu_seconds": 14.454668999999999,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 7098986.303489901,
+        "slots_per_worker": 3,
+        "workers": 12
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 8.18,
+      "load_end": 8.18,
+      "cycles_per_vin": 4260.467546984268,
+      "result": {
+        "average_busy_cores": 10.273943099501736,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.633904708,
+        "full_output_materialized": true,
+        "max_inflight_rows": 3072,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 50811298831,
+          "instructions": 74012004489
+        },
+        "process_system_cpu_seconds": 1.9489230000000002,
+        "process_user_cpu_seconds": 14.837720999999998,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 7299217.599169805,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 8.18,
+      "load_end": 7.76,
+      "cycles_per_vin": 4287.034105592163,
+      "result": {
+        "average_busy_cores": 10.760858482857248,
+        "batch_size": 96,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.5794979580000001,
+        "full_output_materialized": true,
+        "max_inflight_rows": 4608,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 51128137613,
+          "instructions": 72037738531
+        },
+        "process_system_cpu_seconds": 1.16376,
+        "process_user_cpu_seconds": 15.832994000000003,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 7550643.506434972,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 7.76,
+      "load_end": 8.18,
+      "cycles_per_vin": 4407.648598559175,
+      "result": {
+        "average_busy_cores": 10.777361954858376,
+        "batch_size": 128,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.620848875,
+        "full_output_materialized": true,
+        "max_inflight_rows": 6144,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 52566613315,
+          "instructions": 71464387985
+        },
+        "process_system_cpu_seconds": 1.014081,
+        "process_user_cpu_seconds": 16.454394,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 7358012.325485927,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 8.18,
+      "load_end": 7.48,
+      "cycles_per_vin": 13325.47769275,
+      "result": {
+        "average_busy_cores": 4.061419975807187,
+        "batch_size": 32,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 7.979420792,
+        "full_output_materialized": true,
+        "max_inflight_rows": 384,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 106603821542,
+          "instructions": 220606089125
+        },
+        "process_system_cpu_seconds": 1.011283,
+        "process_user_cpu_seconds": 31.396496000000006,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1002579.0353130182,
+        "slots_per_worker": 3,
+        "workers": 4
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 7.48,
+      "load_end": 7.87,
+      "cycles_per_vin": 13335.481114625,
+      "result": {
+        "average_busy_cores": 4.036371736793626,
+        "batch_size": 48,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 8.018487917,
+        "full_output_materialized": true,
+        "max_inflight_rows": 768,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 106683848917,
+          "instructions": 220208808561
+        },
+        "process_system_cpu_seconds": 0.8517579999999998,
+        "process_user_cpu_seconds": 31.513839999999995,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 997694.3387342639,
+        "slots_per_worker": 4,
+        "workers": 4
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 7.87,
+      "load_end": 7.33,
+      "cycles_per_vin": 13348.3034385,
+      "result": {
+        "average_busy_cores": 4.028749295518058,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 8.032260542,
+        "full_output_materialized": true,
+        "max_inflight_rows": 768,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 106786427508,
+          "instructions": 218813079725
+        },
+        "process_system_cpu_seconds": 0.6992759999999999,
+        "process_user_cpu_seconds": 31.660688,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 995983.6285400216,
+        "slots_per_worker": 3,
+        "workers": 4
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 7.33,
+      "load_end": 6.96,
+      "cycles_per_vin": 13386.301449875,
+      "result": {
+        "average_busy_cores": 4.028465244761212,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 8.052369334,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1024,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 107090411599,
+          "instructions": 218360725419
+        },
+        "process_system_cpu_seconds": 0.7079500000000001,
+        "process_user_cpu_seconds": 31.73073999999999,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 993496.4068552001,
+        "slots_per_worker": 4,
+        "workers": 4
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 6.96,
+      "load_end": 6.45,
+      "cycles_per_vin": 13853.27706325,
+      "result": {
+        "average_busy_cores": 4.016210832715295,
+        "batch_size": 96,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 8.357950167,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1536,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 110826216506,
+          "instructions": 218781269373
+        },
+        "process_system_cpu_seconds": 0.5501670000000001,
+        "process_user_cpu_seconds": 33.017123000000005,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 957172.4932731343,
+        "slots_per_worker": 4,
+        "workers": 4
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 6.45,
+      "load_end": 5.97,
+      "cycles_per_vin": 14095.8999,
+      "result": {
+        "average_busy_cores": 4.012214657810084,
+        "batch_size": 128,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 8.495244125,
+        "full_output_materialized": true,
+        "max_inflight_rows": 2048,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 112767199200,
+          "instructions": 217978031808
+        },
+        "process_system_cpu_seconds": 0.5311880000000001,
+        "process_user_cpu_seconds": 33.553554999999996,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 941703.3674709143,
+        "slots_per_worker": 4,
+        "workers": 4
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 5.97,
+      "load_end": 6.75,
+      "cycles_per_vin": 15126.198846875,
+      "result": {
+        "average_busy_cores": 7.889785749673213,
+        "batch_size": 16,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.747465291,
+        "full_output_materialized": true,
+        "max_inflight_rows": 512,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 121009590775,
+          "instructions": 220916132471
+        },
+        "process_system_cpu_seconds": 1.4800999999999997,
+        "process_user_cpu_seconds": 35.976383999999996,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1685109.7395416428,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 6.75,
+      "load_end": 6.66,
+      "cycles_per_vin": 14841.607907875,
+      "result": {
+        "average_busy_cores": 7.936355248755345,
+        "batch_size": 48,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.623659583,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1536,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 118732863263,
+          "instructions": 218206940763
+        },
+        "process_system_cpu_seconds": 0.4871779999999999,
+        "process_user_cpu_seconds": 36.207827,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1730231.1851447562,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 6.66,
+      "load_end": 7.01,
+      "cycles_per_vin": 15013.571787,
+      "result": {
+        "average_busy_cores": 7.942637564595457,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.669298542,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1536,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 120108574296,
+          "instructions": 217211963939
+        },
+        "process_system_cpu_seconds": 0.45284500000000005,
+        "process_user_cpu_seconds": 36.633700999999995,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1713319.447887211,
+        "slots_per_worker": 3,
+        "workers": 8
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 7.01,
+      "load_end": 7.54,
+      "cycles_per_vin": 14982.264946625,
+      "result": {
+        "average_busy_cores": 7.944531658452315,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.658639375,
+        "full_output_materialized": true,
+        "max_inflight_rows": 2048,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 119858119573,
+          "instructions": 217400579378
+        },
+        "process_system_cpu_seconds": 0.457939,
+        "process_user_cpu_seconds": 36.552769000000005,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1717239.596378932,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 7.54,
+      "load_end": 7.76,
+      "cycles_per_vin": 15635.844696625,
+      "result": {
+        "average_busy_cores": 7.940425091817435,
+        "batch_size": 96,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.863468209,
+        "full_output_materialized": true,
+        "max_inflight_rows": 3072,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 125086757573,
+          "instructions": 218153856787
+        },
+        "process_system_cpu_seconds": 0.455299,
+        "process_user_cpu_seconds": 38.162706,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1644916.6841875825,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 7.76,
+      "load_end": 8.23,
+      "cycles_per_vin": 16514.35416275,
+      "result": {
+        "average_busy_cores": 7.941670384321156,
+        "batch_size": 128,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 5.136807375,
+        "full_output_materialized": true,
+        "max_inflight_rows": 4096,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 132114833302,
+          "instructions": 217596484081
+        },
+        "process_system_cpu_seconds": 0.43886000000000003,
+        "process_user_cpu_seconds": 40.355971,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1557387.578700087,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 8.23,
+      "load_end": 8.61,
+      "cycles_per_vin": 17130.659176125,
+      "result": {
+        "average_busy_cores": 11.138753105958749,
+        "batch_size": 24,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.099534083,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1152,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 137045273409,
+          "instructions": 220324359191
+        },
+        "process_system_cpu_seconds": 1.2023540000000001,
+        "process_user_cpu_seconds": 44.461344000000004,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1951441.2706493896,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 8.61,
+      "load_end": 9.51,
+      "cycles_per_vin": 17673.302468125,
+      "result": {
+        "average_busy_cores": 11.033276551953675,
+        "batch_size": 48,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.267610875,
+        "full_output_materialized": true,
+        "max_inflight_rows": 2304,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 141386419745,
+          "instructions": 220134538857
+        },
+        "process_system_cpu_seconds": 0.9989280000000003,
+        "process_user_cpu_seconds": 46.086803,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1874585.1565016457,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 9.51,
+      "load_end": 10.44,
+      "cycles_per_vin": 17784.129697875,
+      "result": {
+        "average_busy_cores": 11.192088467935333,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.230820292,
+        "full_output_materialized": true,
+        "max_inflight_rows": 2304,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 142273037583,
+          "instructions": 218839777876
+        },
+        "process_system_cpu_seconds": 0.905842,
+        "process_user_cpu_seconds": 46.445873,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1890886.2697683214,
+        "slots_per_worker": 3,
+        "workers": 12
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 10.44,
+      "load_end": 10.83,
+      "cycles_per_vin": 18064.24149325,
+      "result": {
+        "average_busy_cores": 11.125130879323793,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.324952625,
+        "full_output_materialized": true,
+        "max_inflight_rows": 3072,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 144513931946,
+          "instructions": 219140652981
+        },
+        "process_system_cpu_seconds": 0.93674,
+        "process_user_cpu_seconds": 47.178923999999995,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1849731.2441659404,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 10.83,
+      "load_end": 14.5,
+      "cycles_per_vin": 19427.14771125,
+      "result": {
+        "average_busy_cores": 11.354708950106223,
+        "batch_size": 96,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.56825025,
+        "full_output_materialized": true,
+        "max_inflight_rows": 4608,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 155417181690,
+          "instructions": 218984097619
+        },
+        "process_system_cpu_seconds": 0.847823,
+        "process_user_cpu_seconds": 51.023329,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1751217.5476814124,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 14.5,
+      "load_end": 14.43,
+      "cycles_per_vin": 19827.16202075,
+      "result": {
+        "average_busy_cores": 11.263780806362984,
+        "batch_size": 128,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.697044084,
+        "full_output_materialized": true,
+        "max_inflight_rows": 6144,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 158617296166,
+          "instructions": 218557754169
+        },
+        "process_system_cpu_seconds": 0.7613800000000002,
+        "process_user_cpu_seconds": 52.145095,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1703198.8324851329,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 14.43,
+      "load_end": 13.6,
+      "cycles_per_vin": 2370.5153024099995,
+      "result": {
+        "average_busy_cores": 4.036464884260895,
+        "batch_size": 128,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 2.141772875,
+        "full_output_materialized": true,
+        "max_inflight_rows": 2048,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 28271301233,
+          "instructions": 68535920258
+        },
+        "process_system_cpu_seconds": 0.4786889999999999,
+        "process_user_cpu_seconds": 8.166502000000001,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 5568389.692114295,
+        "slots_per_worker": 4,
+        "workers": 4
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 13.6,
+      "load_end": 12.91,
+      "cycles_per_vin": 2411.82832079486,
+      "result": {
+        "average_busy_cores": 4.053391660563253,
+        "batch_size": 96,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 2.175823542,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1536,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 28764009627,
+          "instructions": 69116809385
+        },
+        "process_system_cpu_seconds": 0.5842310000000001,
+        "process_user_cpu_seconds": 8.235233999999998,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 5481246.879532109,
+        "slots_per_worker": 4,
+        "workers": 4
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 12.91,
+      "load_end": 12.27,
+      "cycles_per_vin": 2529.524721315863,
+      "result": {
+        "average_busy_cores": 4.063232730119865,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 2.284336541,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1024,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 30167683499,
+          "instructions": 70200065176
+        },
+        "process_system_cpu_seconds": 0.7628039999999999,
+        "process_user_cpu_seconds": 8.518987000000001,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 5220870.824392245,
+        "slots_per_worker": 4,
+        "workers": 4
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 12.27,
+      "load_end": 11.61,
+      "cycles_per_vin": 2544.8531930386025,
+      "result": {
+        "average_busy_cores": 4.05986499053758,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 2.314093208,
+        "full_output_materialized": true,
+        "max_inflight_rows": 768,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 30350494317,
+          "instructions": 70155219935
+        },
+        "process_system_cpu_seconds": 0.793416,
+        "process_user_cpu_seconds": 8.601489999999998,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 5153736.227551297,
+        "slots_per_worker": 3,
+        "workers": 4
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 11.61,
+      "load_end": 11.0,
+      "cycles_per_vin": 2606.9977537739096,
+      "result": {
+        "average_busy_cores": 4.074662095883462,
+        "batch_size": 48,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 2.363519667,
+        "full_output_materialized": true,
+        "max_inflight_rows": 768,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 31091644393,
+          "instructions": 71254406398
+        },
+        "process_system_cpu_seconds": 0.9924919999999999,
+        "process_user_cpu_seconds": 8.638052000000002,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 5045960.127396732,
+        "slots_per_worker": 4,
+        "workers": 4
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 11.0,
+      "load_end": 10.44,
+      "cycles_per_vin": 2856.9196789495686,
+      "result": {
+        "average_busy_cores": 4.050494253828561,
+        "batch_size": 32,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 2.604266625,
+        "full_output_materialized": true,
+        "max_inflight_rows": 384,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 34072269755,
+          "instructions": 73106031666
+        },
+        "process_system_cpu_seconds": 1.5419880000000001,
+        "process_user_cpu_seconds": 9.006579,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 4579495.00466374,
+        "slots_per_worker": 3,
+        "workers": 4
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 10.44,
+      "load_end": 10.4,
+      "cycles_per_vin": 3233.4651135237586,
+      "result": {
+        "average_busy_cores": 7.9213720224745305,
+        "batch_size": 128,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.512684667,
+        "full_output_materialized": true,
+        "max_inflight_rows": 4096,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 38563035707,
+          "instructions": 70263155647
+        },
+        "process_system_cpu_seconds": 0.7646160000000001,
+        "process_user_cpu_seconds": 11.217922000000002,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 7884145.493225919,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 10.4,
+      "load_end": 10.37,
+      "cycles_per_vin": 3166.6727190143806,
+      "result": {
+        "average_busy_cores": 7.89403503628388,
+        "batch_size": 96,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.484279959,
+        "full_output_materialized": true,
+        "max_inflight_rows": 3072,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 37766454515,
+          "instructions": 70802173268
+        },
+        "process_system_cpu_seconds": 0.8512339999999999,
+        "process_user_cpu_seconds": 10.865724,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 8035024.610879355,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 10.37,
+      "load_end": 10.26,
+      "cycles_per_vin": 3237.9183782027944,
+      "result": {
+        "average_busy_cores": 7.847676681700781,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.5297482919999998,
+        "full_output_materialized": true,
+        "max_inflight_rows": 2048,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 38616146348,
+          "instructions": 72154239228
+        },
+        "process_system_cpu_seconds": 1.123221,
+        "process_user_cpu_seconds": 10.881748999999997,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 7796201.546600584,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 10.26,
+      "load_end": 10.26,
+      "cycles_per_vin": 3329.352195237622,
+      "result": {
+        "average_busy_cores": 7.560032193011631,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.6237225830000002,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1536,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 39706606714,
+          "instructions": 71994873675
+        },
+        "process_system_cpu_seconds": 1.106662,
+        "process_user_cpu_seconds": 11.168733000000001,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 7344989.916913657,
+        "slots_per_worker": 3,
+        "workers": 8
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 10.26,
+      "load_end": 9.92,
+      "cycles_per_vin": 3366.9668495297674,
+      "result": {
+        "average_busy_cores": 7.759616750095565,
+        "batch_size": 48,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.61080275,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1536,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 40155207582,
+          "instructions": 73550632820
+        },
+        "process_system_cpu_seconds": 1.4885400000000002,
+        "process_user_cpu_seconds": 11.010671999999998,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 7403902.184795748,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 9.92,
+      "load_end": 9.77,
+      "cycles_per_vin": 5386.394936923047,
+      "result": {
+        "average_busy_cores": 7.107484072237081,
+        "batch_size": 16,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 2.834982083,
+        "full_output_materialized": true,
+        "max_inflight_rows": 512,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 64239363343,
+          "instructions": 85532466893
+        },
+        "process_system_cpu_seconds": 7.477931,
+        "process_user_cpu_seconds": 12.671659,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 4206808.244579654,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 9.77,
+      "load_end": 9.14,
+      "cycles_per_vin": 4404.267144107449,
+      "result": {
+        "average_busy_cores": 10.919730736942316,
+        "batch_size": 128,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.600094583,
+        "full_output_materialized": true,
+        "max_inflight_rows": 6144,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 52526285325,
+          "instructions": 71438993506
+        },
+        "process_system_cpu_seconds": 0.9398420000000001,
+        "process_user_cpu_seconds": 16.53276,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 7453450.643923591,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 9.14,
+      "load_end": 9.45,
+      "cycles_per_vin": 4276.888534059308,
+      "result": {
+        "average_busy_cores": 10.963147981799773,
+        "batch_size": 96,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.548363666,
+        "full_output_materialized": true,
+        "max_inflight_rows": 4608,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 51007139234,
+          "instructions": 71982040578
+        },
+        "process_system_cpu_seconds": 1.1067299999999998,
+        "process_user_cpu_seconds": 15.868209999999998,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 7702470.84834397,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 9.45,
+      "load_end": 9.74,
+      "cycles_per_vin": 4296.798142765364,
+      "result": {
+        "average_busy_cores": 10.446913845072016,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.625093042,
+        "full_output_materialized": true,
+        "max_inflight_rows": 3072,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 51244585727,
+          "instructions": 74013205751
+        },
+        "process_system_cpu_seconds": 1.9698580000000003,
+        "process_user_cpu_seconds": 15.007349000000001,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 7338795.805391184,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 9.74,
+      "load_end": 10.08,
+      "cycles_per_vin": 4427.044843523844,
+      "result": {
+        "average_busy_cores": 9.927323141365003,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.7524205419999999,
+        "full_output_materialized": true,
+        "max_inflight_rows": 2304,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 52797937316,
+          "instructions": 74935194105
+        },
+        "process_system_cpu_seconds": 2.986237,
+        "process_user_cpu_seconds": 14.410608,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 6805573.042637845,
+        "slots_per_worker": 3,
+        "workers": 12
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 10.08,
+      "load_end": 10.08,
+      "cycles_per_vin": 4601.297050131366,
+      "result": {
+        "average_busy_cores": 10.20577247572409,
+        "batch_size": 48,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 1.773918833,
+        "full_output_materialized": true,
+        "max_inflight_rows": 2304,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 54876108513,
+          "instructions": 76360600772
+        },
+        "process_system_cpu_seconds": 3.437659,
+        "process_user_cpu_seconds": 14.666553,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 6723095.655865332,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 10.08,
+      "load_end": 10.36,
+      "cycles_per_vin": 6741.83927237334,
+      "result": {
+        "average_busy_cores": 9.52482470039569,
+        "batch_size": 24,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 2.770167833,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1152,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 80404698818,
+          "instructions": 86008397339
+        },
+        "process_system_cpu_seconds": 11.385653000000001,
+        "process_user_cpu_seconds": 14.99971,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 4305235.898679934,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 10.36,
+      "load_end": 9.25,
+      "cycles_per_vin": 14104.406805875,
+      "result": {
+        "average_busy_cores": 4.011992085964278,
+        "batch_size": 128,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 8.501857,
+        "full_output_materialized": true,
+        "max_inflight_rows": 2048,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 112835254447,
+          "instructions": 218114570319
+        },
+        "process_system_cpu_seconds": 0.5332230000000001,
+        "process_user_cpu_seconds": 33.576159999999994,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 940970.8961230471,
+        "slots_per_worker": 4,
+        "workers": 4
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 9.25,
+      "load_end": 7.97,
+      "cycles_per_vin": 13807.99888725,
+      "result": {
+        "average_busy_cores": 4.016350539756942,
+        "batch_size": 96,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 8.320979125,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1536,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 110463991098,
+          "instructions": 218909132091
+        },
+        "process_system_cpu_seconds": 0.5901459999999998,
+        "process_user_cpu_seconds": 32.829823,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 961425.3178408258,
+        "slots_per_worker": 4,
+        "workers": 4
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 7.97,
+      "load_end": 9.24,
+      "cycles_per_vin": 13895.73774775,
+      "result": {
+        "average_busy_cores": 4.022588816912888,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 8.434889208,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1024,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 111165901982,
+          "instructions": 218806626169
+        },
+        "process_system_cpu_seconds": 0.8142089999999998,
+        "process_user_cpu_seconds": 33.115882000000006,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 948441.6217835401,
+        "slots_per_worker": 4,
+        "workers": 4
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 9.24,
+      "load_end": 8.45,
+      "cycles_per_vin": 13329.533624375,
+      "result": {
+        "average_busy_cores": 4.028943684737953,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 8.021364042,
+        "full_output_materialized": true,
+        "max_inflight_rows": 768,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 106636268995,
+          "instructions": 218707736477
+        },
+        "process_system_cpu_seconds": 0.7047289999999999,
+        "process_user_cpu_seconds": 31.612895,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 997336.6073540439,
+        "slots_per_worker": 3,
+        "workers": 4
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 8.45,
+      "load_end": 7.53,
+      "cycles_per_vin": 13380.0068645,
+      "result": {
+        "average_busy_cores": 4.036868067776853,
+        "batch_size": 48,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 8.04677375,
+        "full_output_materialized": true,
+        "max_inflight_rows": 768,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 107040054916,
+          "instructions": 220308258349
+        },
+        "process_system_cpu_seconds": 0.851601,
+        "process_user_cpu_seconds": 31.632163,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 994187.266666967,
+        "slots_per_worker": 4,
+        "workers": 4
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 7.53,
+      "load_end": 6.89,
+      "cycles_per_vin": 13237.757606625,
+      "result": {
+        "average_busy_cores": 4.055180664754376,
+        "batch_size": 32,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 7.937469292,
+        "full_output_materialized": true,
+        "max_inflight_rows": 384,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 105902060853,
+          "instructions": 220726879186
+        },
+        "process_system_cpu_seconds": 1.0639519999999998,
+        "process_user_cpu_seconds": 31.123920000000005,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1007877.9149499228,
+        "slots_per_worker": 3,
+        "workers": 4
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 6.89,
+      "load_end": 7.3,
+      "cycles_per_vin": 16590.372065125,
+      "result": {
+        "average_busy_cores": 7.939409078083439,
+        "batch_size": 128,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 5.166857709,
+        "full_output_materialized": true,
+        "max_inflight_rows": 4096,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 132722976521,
+          "instructions": 217804595866
+        },
+        "process_system_cpu_seconds": 0.486356,
+        "process_user_cpu_seconds": 40.535441,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1548329.8458297064,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 7.3,
+      "load_end": 7.56,
+      "cycles_per_vin": 15729.532716625,
+      "result": {
+        "average_busy_cores": 8.00381755312425,
+        "batch_size": 96,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.871968875,
+        "full_output_materialized": true,
+        "max_inflight_rows": 3072,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 125836261733,
+          "instructions": 218860901472
+        },
+        "process_system_cpu_seconds": 0.772874,
+        "process_user_cpu_seconds": 38.221476,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1642046.6150863904,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 7.56,
+      "load_end": 7.94,
+      "cycles_per_vin": 15128.0967015,
+      "result": {
+        "average_busy_cores": 7.9418915570171205,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.708799375,
+        "full_output_materialized": true,
+        "max_inflight_rows": 2048,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 121024773612,
+          "instructions": 217492474603
+        },
+        "process_system_cpu_seconds": 0.478935,
+        "process_user_cpu_seconds": 36.917838999999994,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1698946.8785766647,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 7.94,
+      "load_end": 8.25,
+      "cycles_per_vin": 15087.098129375,
+      "result": {
+        "average_busy_cores": 7.932331855109229,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.7027149999999995,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1536,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 120696785035,
+          "instructions": 217324925676
+        },
+        "process_system_cpu_seconds": 0.4828690000000001,
+        "process_user_cpu_seconds": 36.820626999999995,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1701144.976891009,
+        "slots_per_worker": 3,
+        "workers": 8
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 8.25,
+      "load_end": 8.6,
+      "cycles_per_vin": 14851.934221125,
+      "result": {
+        "average_busy_cores": 7.9378897095216745,
+        "batch_size": 48,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.627859084,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1536,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 118815473769,
+          "instructions": 218484515455
+        },
+        "process_system_cpu_seconds": 0.48322299999999996,
+        "process_user_cpu_seconds": 36.252212,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1728661.1054469177,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 8.6,
+      "load_end": 8.82,
+      "cycles_per_vin": 15294.70972925,
+      "result": {
+        "average_busy_cores": 8.090434409483732,
+        "batch_size": 16,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.723909875,
+        "full_output_materialized": true,
+        "max_inflight_rows": 512,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 122357677834,
+          "instructions": 223755602564
+        },
+        "process_system_cpu_seconds": 2.598466,
+        "process_user_cpu_seconds": 35.620017,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1693512.4106278592,
+        "slots_per_worker": 4,
+        "workers": 8
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 8.82,
+      "load_end": 9.71,
+      "cycles_per_vin": 19844.879360375,
+      "result": {
+        "average_busy_cores": 11.284324748744961,
+        "batch_size": 128,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.696651167,
+        "full_output_materialized": true,
+        "max_inflight_rows": 6144,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 158759034883,
+          "instructions": 218568033435
+        },
+        "process_system_cpu_seconds": 0.7560710000000002,
+        "process_user_cpu_seconds": 52.242466,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1703341.3203454972,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 9.71,
+      "load_end": 10.46,
+      "cycles_per_vin": 19229.348317,
+      "result": {
+        "average_busy_cores": 11.122479739310647,
+        "batch_size": 96,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.61062175,
+        "full_output_materialized": true,
+        "max_inflight_rows": 4608,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 153834786536,
+          "instructions": 219249398353
+        },
+        "process_system_cpu_seconds": 0.8196450000000002,
+        "process_user_cpu_seconds": 50.461901999999995,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1735123.9016733482,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 10.46,
+      "load_end": 11.01,
+      "cycles_per_vin": 17950.741333375,
+      "result": {
+        "average_busy_cores": 11.224488999563286,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.261764166,
+        "full_output_materialized": true,
+        "max_inflight_rows": 3072,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 143605930667,
+          "instructions": 219026371703
+        },
+        "process_system_cpu_seconds": 0.9082650000000001,
+        "process_user_cpu_seconds": 46.92786,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1877156.8975644722,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 11.01,
+      "load_end": 11.31,
+      "cycles_per_vin": 17888.07224825,
+      "result": {
+        "average_busy_cores": 11.10719686346372,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.29033775,
+        "full_output_materialized": true,
+        "max_inflight_rows": 2304,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 143104577986,
+          "instructions": 219154224611
+        },
+        "process_system_cpu_seconds": 1.008182,
+        "process_user_cpu_seconds": 46.645444,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1864655.0612478005,
+        "slots_per_worker": 3,
+        "workers": 12
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 11.31,
+      "load_end": 11.69,
+      "cycles_per_vin": 17580.513169,
+      "result": {
+        "average_busy_cores": 11.218578539079289,
+        "batch_size": 48,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.180457875,
+        "full_output_materialized": true,
+        "max_inflight_rows": 2304,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 140644105352,
+          "instructions": 220352131967
+        },
+        "process_system_cpu_seconds": 1.0080110000000002,
+        "process_user_cpu_seconds": 45.890784000000004,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1913665.9761222925,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_8m",
+      "result_cache": "default",
+      "load_start": 11.69,
+      "load_end": 11.89,
+      "cycles_per_vin": 17177.187119,
+      "result": {
+        "average_busy_cores": 11.288753507446923,
+        "batch_size": 24,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 4.063114583,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1152,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 137417496952,
+          "instructions": 221013081633
+        },
+        "process_system_cpu_seconds": 1.352725,
+        "process_user_cpu_seconds": 44.514773999999996,
+        "result_owner": "worker_slots",
+        "rows": 8000000,
+        "rows_per_second": 1968932.9051835898,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_shuffled",
+      "result_cache": "default",
+      "load_start": 7.45,
+      "load_end": 8.25,
+      "cycles_per_vin": 30486.435956018275,
+      "result": {
+        "average_busy_cores": 11.596854593064467,
+        "batch_size": 24,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 10.479760958,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1152,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 363588125146,
+          "instructions": 532118280638
+        },
+        "process_system_cpu_seconds": 2.172039,
+        "process_user_cpu_seconds": 119.36022499999999,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 1138024.621725346,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_shuffled",
+      "result_cache": "default",
+      "load_start": 8.25,
+      "load_end": 9.63,
+      "cycles_per_vin": 30518.353384884707,
+      "result": {
+        "average_busy_cores": 11.615526268555136,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 10.470404542,
+        "full_output_materialized": true,
+        "max_inflight_rows": 3072,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 363968779616,
+          "instructions": 521081623650
+        },
+        "process_system_cpu_seconds": 1.3350750000000002,
+        "process_user_cpu_seconds": 120.28418400000001,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 1139041.5673205608,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_shuffled",
+      "result_cache": "default",
+      "load_start": 9.63,
+      "load_end": 10.81,
+      "cycles_per_vin": 30509.63445544299,
+      "result": {
+        "average_busy_cores": 11.577094753412535,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 10.485001167,
+        "full_output_materialized": true,
+        "max_inflight_rows": 3072,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 363864795693,
+          "instructions": 521111787219
+        },
+        "process_system_cpu_seconds": 1.3272739999999998,
+        "process_user_cpu_seconds": 120.05857800000001,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 1137455.8581391524,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_shuffled",
+      "result_cache": "default",
+      "load_start": 10.81,
+      "load_end": 11.61,
+      "cycles_per_vin": 30383.861780583396,
+      "result": {
+        "average_busy_cores": 11.618911610734116,
+        "batch_size": 24,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 10.420930209,
+        "full_output_materialized": true,
+        "max_inflight_rows": 1152,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 362364802348,
+          "instructions": 531626450543
+        },
+        "process_system_cpu_seconds": 2.016849,
+        "process_user_cpu_seconds": 119.06301800000001,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 1144449.272839382,
+        "slots_per_worker": 4,
+        "workers": 12
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 11.61,
+      "load_end": 9.48,
+      "cycles_per_vin": 2062.7544362315457,
+      "result": {
+        "average_busy_cores": 1.1305601852304128,
+        "batch_size": 32,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 6.384912625,
+        "full_output_materialized": true,
+        "max_inflight_rows": 96,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 24600875589,
+          "instructions": 63525337139
+        },
+        "process_system_cpu_seconds": 0.9959529999999999,
+        "process_user_cpu_seconds": 6.222575000000001,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 1867876.1481093878,
+        "slots_per_worker": 3,
+        "workers": 1
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 9.48,
+      "load_end": 8.06,
+      "cycles_per_vin": 1822.5712903646133,
+      "result": {
+        "average_busy_cores": 1.0737072877257583,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 6.348174291,
+        "full_output_materialized": true,
+        "max_inflight_rows": 256,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 21736397110,
+          "instructions": 63288208098
+        },
+        "process_system_cpu_seconds": 0.527372,
+        "process_user_cpu_seconds": 6.288708999999999,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 1878685.9738410418,
+        "slots_per_worker": 4,
+        "workers": 1
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 8.06,
+      "load_end": 6.78,
+      "cycles_per_vin": 1890.7479066722365,
+      "result": {
+        "average_busy_cores": 1.0554275224385392,
+        "batch_size": 96,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 6.238966542,
+        "full_output_materialized": true,
+        "max_inflight_rows": 384,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 22549486844,
+          "instructions": 63624210687
+        },
+        "process_system_cpu_seconds": 0.46655900000000006,
+        "process_user_cpu_seconds": 6.118218,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 1911570.7577070703,
+        "slots_per_worker": 4,
+        "workers": 1
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 6.78,
+      "load_end": 5.65,
+      "cycles_per_vin": 1879.1469639263921,
+      "result": {
+        "average_busy_cores": 1.0457169093332401,
+        "batch_size": 128,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 6.201218458,
+        "full_output_materialized": true,
+        "max_inflight_rows": 512,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 22411131379,
+          "instructions": 63836164685
+        },
+        "process_system_cpu_seconds": 0.39474999999999993,
+        "process_user_cpu_seconds": 6.089969000000001,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 1923206.8795470905,
+        "slots_per_worker": 4,
+        "workers": 1
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_2m",
+      "result_cache": "default",
+      "load_start": 5.65,
+      "load_end": 4.76,
+      "cycles_per_vin": 11733.9250715,
+      "result": {
+        "average_busy_cores": 1.0203395058513156,
+        "batch_size": 32,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 7.12752075,
+        "full_output_materialized": true,
+        "max_inflight_rows": 96,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 23467850143,
+          "instructions": 55125380533
+        },
+        "process_system_cpu_seconds": 0.160543,
+        "process_user_cpu_seconds": 7.111948,
+        "result_owner": "worker_slots",
+        "rows": 2000000,
+        "rows_per_second": 280602.48018218676,
+        "slots_per_worker": 3,
+        "workers": 1
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_2m",
+      "result_cache": "default",
+      "load_start": 4.76,
+      "load_end": 3.92,
+      "cycles_per_vin": 11731.272857,
+      "result": {
+        "average_busy_cores": 1.0110828988331246,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 6.920914208,
+        "full_output_materialized": true,
+        "max_inflight_rows": 256,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 23462545714,
+          "instructions": 54616100974
+        },
+        "process_system_cpu_seconds": 0.10006100000000001,
+        "process_user_cpu_seconds": 6.897556999999999,
+        "result_owner": "worker_slots",
+        "rows": 2000000,
+        "rows_per_second": 288979.1637191755,
+        "slots_per_worker": 4,
+        "workers": 1
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_2m",
+      "result_cache": "default",
+      "load_start": 3.92,
+      "load_end": 3.34,
+      "cycles_per_vin": 11948.4654135,
+      "result": {
+        "average_busy_cores": 1.0075843380178453,
+        "batch_size": 96,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 6.9798445000000005,
+        "full_output_materialized": true,
+        "max_inflight_rows": 384,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 23896930827,
+          "instructions": 54658187916
+        },
+        "process_system_cpu_seconds": 0.081415,
+        "process_user_cpu_seconds": 6.951366999999999,
+        "result_owner": "worker_slots",
+        "rows": 2000000,
+        "rows_per_second": 286539.3347946362,
+        "slots_per_worker": 4,
+        "workers": 1
+      }
+    },
+    {
+      "round": 0,
+      "corpus": "synthetic_2m",
+      "result_cache": "default",
+      "load_start": 3.34,
+      "load_end": 2.82,
+      "cycles_per_vin": 11968.4029285,
+      "result": {
+        "average_busy_cores": 1.0058857315181957,
+        "batch_size": 128,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 6.957213708,
+        "full_output_materialized": true,
+        "max_inflight_rows": 512,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 23936805857,
+          "instructions": 54539419640
+        },
+        "process_system_cpu_seconds": 0.067554,
+        "process_user_cpu_seconds": 6.930607999999999,
+        "result_owner": "worker_slots",
+        "rows": 2000000,
+        "rows_per_second": 287471.40506841533,
+        "slots_per_worker": 4,
+        "workers": 1
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 2.82,
+      "load_end": 2.49,
+      "cycles_per_vin": 1886.7278988340486,
+      "result": {
+        "average_busy_cores": 1.0461586999482124,
+        "batch_size": 128,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 6.201790417,
+        "full_output_materialized": true,
+        "max_inflight_rows": 512,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 22501543322,
+          "instructions": 63841065311
+        },
+        "process_system_cpu_seconds": 0.39488499999999993,
+        "process_user_cpu_seconds": 6.093172000000001,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 1923029.5121403167,
+        "slots_per_worker": 4,
+        "workers": 1
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 2.49,
+      "load_end": 2.34,
+      "cycles_per_vin": 1897.199872952265,
+      "result": {
+        "average_busy_cores": 1.057094744446941,
+        "batch_size": 96,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 6.27024875,
+        "full_output_materialized": true,
+        "max_inflight_rows": 384,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 22626434452,
+          "instructions": 63599744795
+        },
+        "process_system_cpu_seconds": 0.4618270000000001,
+        "process_user_cpu_seconds": 6.1664200000000005,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 1902033.9504074699,
+        "slots_per_worker": 4,
+        "workers": 1
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 2.34,
+      "load_end": 2.11,
+      "cycles_per_vin": 1949.1872887533743,
+      "result": {
+        "average_busy_cores": 1.0829640778965663,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 6.229671083,
+        "full_output_materialized": true,
+        "max_inflight_rows": 256,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 23246448122,
+          "instructions": 63545149128
+        },
+        "process_system_cpu_seconds": 0.620709,
+        "process_user_cpu_seconds": 6.125801,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 1914423.0636100823,
+        "slots_per_worker": 4,
+        "workers": 1
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "ny_sorted",
+      "result_cache": "default",
+      "load_start": 2.11,
+      "load_end": 2.01,
+      "cycles_per_vin": 2101.329129768294,
+      "result": {
+        "average_busy_cores": 1.1289904275599985,
+        "batch_size": 32,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 6.406495417,
+        "full_output_materialized": true,
+        "max_inflight_rows": 96,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 25060926102,
+          "instructions": 63560978244
+        },
+        "process_system_cpu_seconds": 1.0305719999999998,
+        "process_user_cpu_seconds": 6.2023,
+        "result_owner": "worker_slots",
+        "rows": 11926226,
+        "rows_per_second": 1861583.474851645,
+        "slots_per_worker": 3,
+        "workers": 1
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_2m",
+      "result_cache": "default",
+      "load_start": 2.01,
+      "load_end": 1.92,
+      "cycles_per_vin": 12043.5194395,
+      "result": {
+        "average_busy_cores": 1.0058247670412093,
+        "batch_size": 128,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 7.021110666,
+        "full_output_materialized": true,
+        "max_inflight_rows": 512,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 24087038879,
+          "instructions": 54535572328
+        },
+        "process_system_cpu_seconds": 0.06807099999999999,
+        "process_user_cpu_seconds": 6.993936,
+        "result_owner": "worker_slots",
+        "rows": 2000000,
+        "rows_per_second": 284855.21666608634,
+        "slots_per_worker": 4,
+        "workers": 1
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_2m",
+      "result_cache": "default",
+      "load_start": 1.92,
+      "load_end": 1.87,
+      "cycles_per_vin": 11980.807359,
+      "result": {
+        "average_busy_cores": 1.0075956485329036,
+        "batch_size": 96,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 7.035645708,
+        "full_output_materialized": true,
+        "max_inflight_rows": 384,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 23961614718,
+          "instructions": 54656407683
+        },
+        "process_system_cpu_seconds": 0.07982600000000001,
+        "process_user_cpu_seconds": 7.009259999999999,
+        "result_owner": "worker_slots",
+        "rows": 2000000,
+        "rows_per_second": 284266.7301632125,
+        "slots_per_worker": 4,
+        "workers": 1
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_2m",
+      "result_cache": "default",
+      "load_start": 1.87,
+      "load_end": 1.76,
+      "cycles_per_vin": 11857.867308,
+      "result": {
+        "average_busy_cores": 1.0111048379959098,
+        "batch_size": 64,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 7.0220295,
+        "full_output_materialized": true,
+        "max_inflight_rows": 256,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 23715734616,
+          "instructions": 54619068934
+        },
+        "process_system_cpu_seconds": 0.10278999999999999,
+        "process_user_cpu_seconds": 6.997218,
+        "result_owner": "worker_slots",
+        "rows": 2000000,
+        "rows_per_second": 284817.9433025737,
+        "slots_per_worker": 4,
+        "workers": 1
+      }
+    },
+    {
+      "round": 1,
+      "corpus": "synthetic_2m",
+      "result_cache": "default",
+      "load_start": 1.76,
+      "load_end": 1.91,
+      "cycles_per_vin": 12433.916108,
+      "result": {
+        "average_busy_cores": 1.0182573247016589,
+        "batch_size": 32,
+        "benchmark": "production_native_slot_grid",
+        "elapsed_seconds": 7.546452958,
+        "full_output_materialized": true,
+        "max_inflight_rows": 96,
+        "now_micros": 1788220800000000,
+        "ordered_delivery": true,
+        "owner_cleanup_complete": true,
+        "process_counters": {
+          "cycles": 24867832216,
+          "instructions": 55145531114
+        },
+        "process_system_cpu_seconds": 0.252383,
+        "process_user_cpu_seconds": 7.4318480000000005,
+        "result_owner": "worker_slots",
+        "rows": 2000000,
+        "rows_per_second": 265025.17290322453,
+        "slots_per_worker": 3,
+        "workers": 1
+      }
+    }
+  ]
+}
