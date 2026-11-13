@@ -43,28 +43,24 @@ Its `batch_size` now means rows **per worker batch**. New fields are
 
 ## Selection and memory
 
-The native selector searches measured combinations of batch size and slot
-count under the supplied memory budget, choosing the least storage within
-1% of the estimated feasible peak. Worker counts between measured points
-use interpolation; CPU speed scales the throughput estimate, not the selected
-batch size at fixed worker count and memory. This model is
-based on one machine's measurements, not a cross-machine optimum guarantee.
+Since November 12 the selector uses one plan at every worker count: 64 VINs
+per worker batch and 4 slots per worker. It has the best worst case across
+input that hits the result reuse cache and input that never repeats
+([grid](../scripts/bench/native_plan_grid_2026_11_12.json),
+[notes](../PERFORMANCE_IMPROVEMENTS.md#november-12-result-reuse-cache)).
+The measured-plan table this section originally described is retired. A
+budget too small for the plan drops slots first, then rows per batch. CPU
+speed scales the throughput estimate, not the plan. This is one machine's
+measurement, not a cross-machine optimum guarantee.
 
-At the reference output width and default budget, the measured worker points
-select:
+At the reference output width (17,408 bytes) and default budget:
 
 | Workers | VINs per worker batch | Slots per worker | Maximum in-flight rows | Estimated slot storage |
 |---:|---:|---:|---:|---:|
-| 4 | 100 | 5 | 2,000 | 33.2 MiB |
-| 8 | 200 | 2 | 3,200 | 53.1 MiB |
-| 12 | 100 | 5 | 6,000 | 99.6 MiB |
-
-The one-worker measurement covers the 200-VIN/five-slot plan. Between worker
-points, the selector compares plans measured at both endpoints. It uses the
-full batch/slot surface at twelve workers. Beyond twelve it retains that
-throughput surface as a starting assumption while scaling slot memory with
-the requested workers; additional-core speed gains are not estimated.
-Budgets too small for a measured plan use a smaller single-slot fallback.
+| 4 | 64 | 4 | 1,024 | 17.0 MiB |
+| 8 | 64 | 4 | 2,048 | 34.0 MiB |
+| 12 | 64 | 4 | 3,072 | 51.0 MiB |
+| 121 | 64 | 3 | 23,232 | 385.7 MiB |
 
 Working output storage is estimated as:
 

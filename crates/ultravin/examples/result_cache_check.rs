@@ -22,9 +22,9 @@ fn main() {
     let year = ultravin::current_year_at(NOW);
     let config = ultravin::NativeStreamConfig {
         workers,
-        batch_size: 32,
-        slots_per_worker: 3,
-        max_inflight_rows: workers * 32 * 3,
+        batch_size: 64,
+        slots_per_worker: 4,
+        max_inflight_rows: workers * 64 * 4,
     };
     let (hits_before, probes_before, uncopied_before) = ultravin::result_cache_counters();
     let mut pending = Vec::new();

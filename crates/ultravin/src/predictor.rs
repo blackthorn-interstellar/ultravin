@@ -217,12 +217,6 @@ fn predict_native_slots(
     memory_bytes: usize,
     bytes_per_row: f64,
 ) -> Result<BatchPrediction, BatchPredictError> {
-    // Candidate rates come from NATIVE_PLAN_RATES. They seed a plan; they are
-    // not throughput guarantees or cross-machine validation. The reference is
-    // the median of five production-kernel calibration samples from the same
-    // build, recorded with the plan grid.
-    const REFERENCE_SINGLE: f64 = 360_035.0;
-
     let bytes_per_row_ceil = bytes_per_row.ceil();
     if bytes_per_row_ceil > usize::MAX as f64 {
         return Err(BatchPredictError(
@@ -240,49 +234,21 @@ fn predict_native_slots(
         ));
     }
 
-    let working = |batch: usize, slots: usize| {
-        workers
-            .checked_mul(batch)
-            .and_then(|rows| rows.checked_mul(slots))
-            .and_then(|rows| rows.checked_mul(row_bytes))
+    // Under the memory budget, drop slots first, then rows. batch * slots
+    // never exceeds max_rows_per_slot, so the products below cannot overflow.
+    let (plan_batch, plan_slots) = NATIVE_PLAN;
+    let (batch_size, slots_per_worker) = if max_rows_per_slot >= plan_batch {
+        (plan_batch, plan_slots.min(max_rows_per_slot / plan_batch))
+    } else {
+        (max_rows_per_slot, 1)
     };
-    let measured = native_measured_candidates(workers);
-    let preferred = smallest_near_peak(&measured).expect("native measured candidates");
-    let feasible = measured
-        .iter()
-        .filter_map(|&(batch, slots, rate)| {
-            let bytes = working(batch, slots)?;
-            (bytes <= memory_bytes).then_some((batch, slots, bytes, rate))
-        })
-        .collect::<Vec<_>>();
-    let feasible_peak = feasible
-        .iter()
-        .map(|candidate| candidate.3)
-        .fold(0.0, f64::max);
-    let (batch_size, slots_per_worker, estimated_working_bytes, reference_plan_rate) =
-        if feasible.is_empty() {
-            // Below the measured-plan budget, retain up to B200 with one slot.
-            // Rate scales linearly by batch and applies the W12 B200/S1-to-S5
-            // loss measured September 15; an explicit fallback extrapolation.
-            let batch = max_rows_per_slot.min(200);
-            let bytes = working(batch, 1).expect("validated native fallback memory product");
-            let anchor = native_measured_rate(workers, 200, 5);
-            let extrapolated = anchor * (887_306.0 / 943_428.0) * batch as f64 / 200.0;
-            (batch, 1, bytes, extrapolated)
-        } else {
-            feasible
-                .into_iter()
-                .filter(|candidate| candidate.3 >= feasible_peak * 0.99)
-                .min_by_key(|candidate| (candidate.2, candidate.0, candidate.1))
-                .expect("feasible peak candidate")
-        };
-    let max_inflight_rows = workers
-        .checked_mul(batch_size)
-        .and_then(|rows| rows.checked_mul(slots_per_worker))
-        .ok_or_else(|| BatchPredictError("native in-flight row calculation overflowed".into()))?;
-    let speed_scale = single_core_rows_per_second / REFERENCE_SINGLE;
-    let estimated = reference_plan_rate * speed_scale;
-    let memory_limited = (batch_size, slots_per_worker) != (preferred.0, preferred.1);
+    let max_inflight_rows = workers * batch_size * slots_per_worker;
+    // A seed estimate, not a guarantee: the plan's measured cache-miss rate,
+    // scaled by calibrated speed and, under the budget, by in-flight rows.
+    let full =
+        native_plan_miss_rate(workers) * single_core_rows_per_second / NATIVE_PLAN_REFERENCE_SINGLE;
+    let estimated =
+        full * (batch_size * slots_per_worker) as f64 / (plan_batch * plan_slots) as f64;
 
     Ok(BatchPrediction {
         model_version: "ultravin-native-slots-v1",
@@ -290,112 +256,55 @@ fn predict_native_slots(
         workers,
         single_core_rows_per_second,
         estimated_rows_per_second: estimated,
-        estimated_peak_rows_per_second: feasible_peak.max(reference_plan_rate) * speed_scale,
-        target_fraction: 0.99,
+        estimated_peak_rows_per_second: estimated,
+        target_fraction: 1.0,
         estimated_peak_rss_bytes: None,
-        estimated_working_bytes,
-        memory_limited,
+        estimated_working_bytes: max_inflight_rows * row_bytes,
+        memory_limited: (batch_size, slots_per_worker) != NATIVE_PLAN,
         slots_per_worker: Some(slots_per_worker),
         max_inflight_rows: Some(max_inflight_rows),
     })
 }
 
-fn smallest_near_peak(candidates: &[(usize, usize, f64)]) -> Option<(usize, usize, f64)> {
-    let peak = candidates
-        .iter()
-        .map(|candidate| candidate.2)
-        .fold(0.0, f64::max);
-    candidates
-        .iter()
-        .copied()
-        .filter(|candidate| candidate.2 >= peak * 0.99)
-        .min_by_key(|candidate| (candidate.0 * candidate.1, candidate.0, candidate.1))
-}
+/// (rows per worker batch, slots per worker) at every worker count.
+///
+/// scripts/bench/native_plan_grid_2026_11_12.json measured plans of 16-128
+/// rows and 3-4 slots at 1, 4, 8 and 12 workers in two regimes: sorted New
+/// York registrations with the result cache hitting (~94%), and a synthetic
+/// corpus that never repeats. 64x4 has the best worst-regime share of peak
+/// at 8 and 12 workers (95.6%, 95.1%) and is within about 1% of the best at
+/// 1 and 4. Smaller batches lose up to half the hit-regime rate, because a
+/// hit-speed batch is so short that the per-batch hand-off dominates; larger
+/// ones lose up to 13% when nothing repeats.
+const NATIVE_PLAN: (usize, usize) = (64, 4);
 
-/// Measured whole-pass native rates (VIN/s) per (batch, slots) plan at each
-/// measured worker count: medians of alternating runs over the 20M-VIN corpus,
-/// scripts/bench/native_plan_grid_2026_09_23.json. Worker counts between two
-/// anchors interpolate the plans both measured; above 12 the W12 rates are a
-/// conservative seed rather than invented scaling.
-const NATIVE_PLAN_RATES: [(usize, &[NativePlanRate]); 4] = [
-    (
-        1,
-        &[(32, 3, 260_050.0), (100, 5, 247_345.0), (200, 5, 251_356.0)],
-    ),
-    (
-        4,
-        &[
-            (16, 4, 820_000.0),
-            (24, 4, 873_000.0),
-            (32, 3, 897_000.0),
-            (48, 3, 887_000.0),
-            (100, 5, 814_000.0),
-            (200, 2, 697_000.0),
-            (200, 5, 796_000.0),
-            (400, 2, 740_000.0),
-        ],
-    ),
-    (
-        8,
-        &[
-            (16, 4, 1_575_000.0),
-            (24, 4, 1_509_000.0),
-            (32, 3, 1_425_000.0),
-            (48, 3, 1_403_000.0),
-            (100, 5, 1_480_000.0),
-            (200, 2, 1_315_000.0),
-            (200, 5, 1_234_000.0),
-            (400, 2, 1_140_000.0),
-        ],
-    ),
-    (
-        12,
-        &[
-            (16, 4, 1_579_000.0),
-            (24, 4, 1_640_000.0),
-            (32, 3, 1_645_000.0),
-            (32, 4, 1_611_000.0),
-            (48, 3, 1_495_000.0),
-            (64, 2, 1_599_000.0),
-            (100, 5, 1_609_000.0),
-            (200, 2, 1_577_000.0),
-            (200, 5, 1_403_000.0),
-            (400, 2, 1_383_000.0),
-        ],
-    ),
+/// Cache-miss whole-pass VIN/s of `NATIVE_PLAN` per worker count, from the
+/// synthetic corpus in the same grid (its 2M slice at one worker). They seed
+/// `estimated_rows_per_second` only; they do not choose the plan. Between
+/// anchors the rate interpolates; above 12 workers it holds.
+const NATIVE_PLAN_MISS_RATES: [(usize, f64); 4] = [
+    (1, 286_899.0),
+    (4, 970_969.0),
+    (8, 1_708_093.0),
+    (12, 1_863_444.0),
 ];
 
-/// (batch rows, slots per worker, VIN/s).
-type NativePlanRate = (usize, usize, f64);
+/// Median of five production calibration samples on the same synthetic
+/// corpus and build as `NATIVE_PLAN_MISS_RATES`.
+const NATIVE_PLAN_REFERENCE_SINGLE: f64 = 351_126.0;
 
-fn native_measured_rate(workers: usize, batch: usize, slots: usize) -> f64 {
-    native_measured_candidates(workers)
-        .into_iter()
-        .find(|&(b, s, _)| (b, s) == (batch, slots))
-        .map(|(_, _, rate)| rate)
-        .expect("plan was measured at the bracketing worker counts")
-}
-
-fn native_measured_candidates(workers: usize) -> Vec<(usize, usize, f64)> {
-    let upper = NATIVE_PLAN_RATES
+fn native_plan_miss_rate(workers: usize) -> f64 {
+    let anchors = NATIVE_PLAN_MISS_RATES;
+    let upper = anchors
         .iter()
         .position(|&(anchor, _)| anchor >= workers)
-        .unwrap_or(NATIVE_PLAN_RATES.len() - 1);
-    let (right, right_plans) = NATIVE_PLAN_RATES[upper];
+        .unwrap_or(anchors.len() - 1);
+    let (right, high) = anchors[upper];
     if workers >= right || upper == 0 {
-        return right_plans.to_vec();
+        return high;
     }
-    let (left, left_plans) = NATIVE_PLAN_RATES[upper - 1];
-    let fraction = (workers - left) as f64 / (right - left) as f64;
-    left_plans
-        .iter()
-        .filter_map(|&(batch, slots, low)| {
-            let &(_, _, high) = right_plans
-                .iter()
-                .find(|&&(b, s, _)| (b, s) == (batch, slots))?;
-            Some((batch, slots, low + (high - low) * fraction))
-        })
-        .collect()
+    let (left, low) = anchors[upper - 1];
+    low + (high - low) * (workers - left) as f64 / (right - left) as f64
 }
 
 /// Worker count of the Rayon pool used by the native decoder.
@@ -426,12 +335,15 @@ mod tests {
         )
         .unwrap();
         assert_eq!(native.model_version, "ultravin-native-slots-v1");
-        assert_eq!(native.batch_size, 24);
+        assert_eq!(native.batch_size, 64);
         assert_eq!(native.slots_per_worker, Some(4));
-        assert_eq!(native.max_inflight_rows, Some(1_152));
+        assert_eq!(native.max_inflight_rows, Some(3_072));
         assert_eq!(native.estimated_peak_rss_bytes, None);
-        assert_eq!(native.target_fraction, 0.99);
-        assert!(native.estimated_rows_per_second >= 0.99 * native.estimated_peak_rows_per_second);
+        assert_eq!(native.target_fraction, 1.0);
+        assert_eq!(
+            native.estimated_rows_per_second,
+            native.estimated_peak_rows_per_second
+        );
         let memory_capped = predict_batch(
             1,
             174_387.694_628_043_04,
@@ -440,8 +352,8 @@ mod tests {
             BatchFormat::Native.default_bytes_per_row(),
         )
         .unwrap();
-        assert_eq!(memory_capped.batch_size, 32);
-        assert_eq!(memory_capped.slots_per_worker, Some(3));
+        assert_eq!(memory_capped.batch_size, 64);
+        assert_eq!(memory_capped.slots_per_worker, Some(4));
         assert!(memory_capped.estimated_working_bytes <= 512 * 1024 * 1024);
     }
 
@@ -463,12 +375,16 @@ mod tests {
             12,
             140_000.0,
             BatchFormat::Native,
-            // 90 rows per worker: below the 96-row preferred plans.
+            // 90 rows per worker: room for one 64-row slot.
             12 * 90 * 17_408,
             17_408.0,
         )
         .unwrap();
         assert!(constrained.memory_limited);
+        assert_eq!(
+            (constrained.batch_size, constrained.slots_per_worker),
+            (64, Some(1))
+        );
         assert!(constrained.estimated_peak_rows_per_second < roomy.estimated_peak_rows_per_second);
     }
 
@@ -496,31 +412,32 @@ mod tests {
     }
 
     #[test]
-    fn native_slot_plan_uses_smallest_measured_plan_within_99_percent() {
+    fn native_slot_plan_is_one_plan_until_the_default_budget_binds() {
         let width = BatchFormat::Native.default_bytes_per_row();
         let plan = |workers| {
-            predict_batch(
-                workers,
-                174_387.694_628_043_04,
-                BatchFormat::Native,
-                usize::MAX,
-                width,
-            )
-            .expect("native plan")
+            predict_batch(workers, 351_126.0, BatchFormat::Native, 512 << 20, width)
+                .expect("native plan")
         };
-        let w4 = plan(4);
-        let w8 = plan(8);
-        let w12 = plan(12);
-        assert_eq!((w4.batch_size, w4.slots_per_worker), (32, Some(3)));
-        assert_eq!((w8.batch_size, w8.slots_per_worker), (16, Some(4)));
-        assert_eq!((w12.batch_size, w12.slots_per_worker), (24, Some(4)));
-        for prediction in [w4, w8, w12] {
-            assert!(
-                prediction.estimated_rows_per_second
-                    >= prediction.estimated_peak_rows_per_second * prediction.target_fraction
+        let mut previous = 0.0;
+        for workers in [1, 2, 4, 6, 8, 12, 16, 32, 120] {
+            let prediction = plan(workers);
+            assert_eq!(
+                (prediction.batch_size, prediction.slots_per_worker),
+                (64, Some(4))
             );
-            assert_eq!(prediction.estimated_peak_rss_bytes, None);
+            assert!(!prediction.memory_limited);
+            assert!(prediction.estimated_rows_per_second >= previous);
+            previous = prediction.estimated_rows_per_second;
         }
+        assert_eq!(plan(12).estimated_rows_per_second, 1_863_444.0);
+        // 121 workers x 64 rows x 4 slots x 17,408 bytes exceeds 512 MiB.
+        let crowded = plan(121);
+        assert_eq!(
+            (crowded.batch_size, crowded.slots_per_worker),
+            (64, Some(3))
+        );
+        assert!(crowded.memory_limited);
+        assert!(crowded.estimated_working_bytes <= 512 << 20);
     }
 
     #[test]

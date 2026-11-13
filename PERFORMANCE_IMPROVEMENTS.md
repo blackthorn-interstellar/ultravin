@@ -818,6 +818,40 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
   cycles per VIN (−37%), twelve 7.4k → 6.9k. The no-repeat overhead on the
   synthetic 2M slice: +2.4%/+2.2% cycles in two alternating pairs (+102-108
   instructions per VIN, against +85-88 before either step).
+- **Slot plans.** Hits made a 24-row batch about 15 µs, so the per-batch
+  hand-off (a worker waking and sleeping; kernel time) became the cost: at
+  twelve workers on sorted NY the September plan (24 rows × 4 slots) spent
+  11 s of system CPU per pass and 6.7k cycles per VIN. A grid at 1, 4, 8 and
+  12 workers, cache hitting (sorted NY) and missing (a synthetic slice that
+  never repeats), two alternating rounds per cell
+  ([raw runs](scripts/bench/native_plan_grid_2026_11_12.json)), found no
+  plan within 3% of the best in both regimes: small batches lose up to half
+  the hit rate, large ones up to 13% of the miss rate (their in-flight
+  results fall out of cache). 64 rows × 4 slots has the best worst case
+  (95-96% of each regime's peak at 8 and 12 workers, within about 1% of the
+  best at 1 and 4), so the predictor now uses it at every worker count
+  ([predictor.rs](crates/ultravin/src/predictor.rs)); the September plan
+  table and its interpolation are gone, and the memory budget only drops
+  slots, then rows (at 17,408 bytes per row 64×4 fits 512 MiB up to 120
+  workers). The trade: up to ~5-6% slower on never-repeating synthetic input
+  at twelve workers in exchange for ~1.7× on repeating input (1.9× at eight
+  in the grid). `throughput ... full auto` (calibration and prediction
+  included), one run each, back to back with 0c212a2:
+
+  | workers | input | VIN/s | cycles/VIN | busy cores | system CPU s |
+  |---:|---|---:|---:|---:|---:|
+  | 12 | NY sorted | 4,262,010 → **7,292,891** | 6,787 → 4,302 | 9.5 → 10.4 | 45.9 → 13.1 |
+  | 12 | NY shuffled | 1,105,344 → 1,097,599 | 30.6k → 30.8k | 11.3 → 11.3 | 2.7 → 2.2 |
+  | 12 | synthetic 2M | 1,959,442 → 1,836,453 | 16,962 → 18,136 | 11.1 → 11.1 | 3.0 → 2.1 |
+  | 1 | NY sorted | 1,978,981 → 1,864,874 | 1,787 → 1,894 | 1.1 → 1.1 | 1.6 → 1.4 |
+  | 1 | NY shuffled | 155,495 → 156,584 | 21.5k → 21.4k | 1.0 → 1.0 | 2.4 → 1.7 |
+  | 1 | synthetic 2M | 276,316 → 277,082 | 12,108 → 12,101 | 1.0 → 1.0 | 0.5 → 0.4 |
+
+  One sorted worker is the open question: two more pairs gave 1.97M/1.94M
+  for 32×3 against 1.84M/1.91M for 64×4 (32×3 has more uncopied hits, 35%
+  against 25%, because its slots come back sooner), while the grid had 64×4
+  ahead by 1-3%. One plan everywhere was kept. Peak RSS is unchanged at one
+  worker and +0.06-0.12 GB at twelve on NY.
 
 ## Experiments we rejected or replaced
 

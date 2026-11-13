@@ -22,7 +22,7 @@ def test_prediction_is_deterministic_and_within_model_plateau(output: str) -> No
         >= prediction["target_fraction"] * prediction["estimated_peak_rows_per_second"]
     )
     if output == "native":
-        assert prediction["target_fraction"] == 0.99
+        assert prediction["target_fraction"] == 1.0
     budget = {"jsonl": 8, "native": 512}.get(output, 64)
     assert prediction["estimated_working_bytes"] <= budget * 1024**2
     if output == "native":

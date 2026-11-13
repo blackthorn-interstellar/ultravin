@@ -76,14 +76,18 @@ serial](../PERFORMANCE_IMPROVEMENTS.md#november-12-result-reuse-cache): one
 table of 16,384 entries (about 230 MB when full) shared by all its workers.
 A hit copies the stored elements with one `memcpy` (their owned text is
 interned), and a hit on the entry a recycled output row already holds writes
-only the VIN. Same corpus and command, one run per cell:
+only the VIN. With hits that cheap a worker batch takes microseconds, so the
+stream now sizes batches at 64 VINs × 4 slots per worker instead of 24 × 4
+(otherwise twelve sorted workers spend over 40% of their CPU time in the kernel handing
+batches over; [slot plans](../PERFORMANCE_IMPROVEMENTS.md#november-12-result-reuse-cache)).
+Same corpus and command, one run per cell, load average 2-9:
 
 | workers | input | before VIN/s | with reuse VIN/s | cycles/VIN, before → with |
 |---:|---|---:|---:|---:|
-| 12 | sorted | 1,310,992 | **4,099,105** | 25.4k → 6.9k (3.7×) |
-| 12 | shuffled | 790,892 | 1,082,756 | 40.5k → 30.6k |
-| 1 | sorted | 159,869 | **1,901,587** | 21.0k → 1.9k (11×) |
-| 1 | shuffled | 102,890 | 155,624 | 32.5k → 21.5k |
+| 12 | sorted | 1,310,992 | **7,292,891** | 25.4k → 4.3k (5.9×) |
+| 12 | shuffled | 790,892 | 1,097,599 | 40.5k → 30.8k |
+| 1 | sorted | 159,869 | **1,864,874** | 21.0k → 1.9k (11×) |
+| 1 | shuffled | 102,890 | 156,584 | 32.5k → 21.4k |
 
 Shuffled input hits 50% at the default; with `ULTRAVIN_RESULT_CACHE=65536`
 (about 0.9 GB, whatever the worker count) it hits 74% and reaches 242,569
