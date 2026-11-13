@@ -31,7 +31,7 @@
 use crate::{checkdigit, clear_elements, Db, DecodeResult};
 
 /// Entries per worker when `ULTRAVIN_RESULT_CACHE` is unset.
-pub(crate) const DEFAULT_ENTRIES: usize = 1024;
+pub(crate) const DEFAULT_ENTRIES: usize = 64;
 
 /// Entries per worker for one stream: `ULTRAVIN_RESULT_CACHE`, else the default.
 pub(crate) fn configured_entries() -> usize {

@@ -71,6 +71,20 @@ corpus. Same host and command as the headline, one run per cell, load average
 | 1 | sorted | 159,869 | 21.0k |
 | 1 | shuffled | 102,890 | 32.5k |
 
+Since `45a61d2` each stream worker [reuses results across VINs that differ
+only by serial](../PERFORMANCE_IMPROVEMENTS.md#november-12-result-reuse-cache)
+(64 entries per worker). Same corpus and command, one run per cell:
+
+| workers | input | before VIN/s | with reuse VIN/s | cycles/VIN, before → with |
+|---:|---|---:|---:|---:|
+| 12 | sorted | 1,310,992 | **4,092,808** | 25.4k → 7.7k (3.3×) |
+| 12 | shuffled | 790,892 | 810,755 | 40.5k → 40.8k |
+| 1 | sorted | 159,869 | **1,132,301** | 21.0k → 3.0k (6.9×) |
+
+Shuffled input does not repeat within 64 entries, so it is unchanged; with
+`ULTRAVIN_RESULT_CACHE=65536` (about 1 GB per worker) it reaches 252,623 VIN/s
+on one worker and 1,160,771 on twelve.
+
 The file is published nearly sorted, so the first two orders match. Build the
 corpus (a 12.5M-row download) and run one cell:
 
