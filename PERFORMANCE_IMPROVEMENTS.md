@@ -672,62 +672,93 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
 - **Bottleneck.** Real fleets repeat: in New York's 11.9M-VIN registration
   file about 320k keys occur and 97% of VINs share theirs with an earlier
   VIN, yet every VIN paid a full decode (~21k cycles in file order).
-- **Mechanism.** Each native-stream worker owns a direct-mapped table
+- **Mechanism.** Each native stream owns one direct-mapped table
   ([result_cache.rs](crates/ultravin/src/result_cache.rs)) of clean full
-  results. A hit copies the stored result into the recycled output slot and
-  patches `vin`. No locks, no shared mutable state. Entries per worker come
-  from `ULTRAVIN_RESULT_CACHE` (0 disables), default 64.
+  results, shared by all its workers and dropped when the stream ends. A hit
+  copies the stored result into the recycled output slot and patches `vin`.
+  Entries are immutable once published; each slot is an `arc-swap`
+  `ArcSwapOption`, so a probe borrows the entry through a thread-local debt
+  and a hit writes no shared cache line, while a store swaps in a fresh entry
+  (the displaced one is freed when its last reader lets go). Two workers
+  missing the same key both decode and both store; the last one wins and
+  nobody waits. Table size comes from `ULTRAVIN_RESULT_CACHE` (total entries,
+  rounded to a power of two, 0 disables), default 16,384. The slot array
+  (8 bytes per slot) allocates on the first probe, entries as they are stored.
 - **Key.** The sanitized VIN with position 9 masked; positions 12-17 with
   digits collapsed to `#`, except positions 12-14 of a `9` WMI and any
   position up to `Db::wmi_key_depth` (the deepest position any pattern key of
   any schema of any row of that WMI constrains, computed lazily per WMI;
-  53 WMIs reach 12-14, none reach 15-17); the caller year. The table empties
-  when the database, `now_micros` or current year changes. Only 17 valid
-  characters, a valid check digit (computed without the car flag: a car WMI
-  with a letter at 13 is never clean, so never stored) and not a check-digit
-  exception are probed; only results with codes exactly `[0]` are stored.
-- **Admission.** A store costs about a fifth of a decode. While fewer than a
-  quarter of recent stores paid off, only every 64th VIN is probed. On the
-  shuffled 2M synthetic slice this cut the overhead from +35% to +1-2% cycles.
+  53 WMIs reach 12-14, none reach 15-17); the caller year. A table serves one
+  stream, so one database and one clock. Only 17 valid characters, a valid
+  check digit (computed without the car flag: a car WMI with a letter at 13
+  is never clean, so never stored) and not a check-digit exception are
+  probed; only results with codes exactly `[0]` are stored.
+- **Admission.** Per worker, as are the WMI depth memo and the hit counters.
+  A store costs about a fifth of a decode. While fewer than a quarter of the
+  worker's recent stores paid off, only every 64th VIN is probed. Sharing
+  needed no retuning: a worker's hits count entries any worker stored, so the
+  ratio tracks the shared table, and on shuffled NY at 12 workers and 16,384
+  entries the policy hits 49.5% against 50.7% with it disabled.
 - **Correctness.** Debug builds re-decode every hit and assert equality, so
-  the Rust suite is a differential test (a unit test streams cover VINs and
-  serial siblings at 1, 2 and 64 entries). Release whole-corpus equality
+  the Rust suite is a differential test (unit tests stream cover VINs and
+  serial siblings at 1, 2 and 16,384 entries, and four workers overwrite a
+  1- and 2-entry table sixteen times over). Release whole-corpus equality
   (`examples/result_cache_check.rs`) against uncached `decode_full`: zero
-  mismatches over NY file, sorted and shuffled orders and 5M realistic VINs at
-  1 and 4 workers and 1, 64 and 1024 entries, plus the admission policy
-  disabled (8.97M hits on shuffled NY at 65536 entries). Fingerprints
-  unchanged.
-- **Results.** New York registrations, one run per cell, against the build
-  before the cache:
+  mismatches over sorted and shuffled NY and 5M realistic VINs at 1 and 12
+  workers and 1, 2, 64 and 16,384 entries, plus the admission policy
+  disabled at 12 workers and 2 entries (constant overwrite under readers:
+  10.2M hits on sorted NY) and 65,536 entries (8.97M hits on shuffled NY).
+  Fingerprints unchanged.
+- **Results.** New York registrations, one run per cell. "Per worker" rows
+  are the previous design (64 entries, or 65,536, per worker), rerun back to
+  back with the shared table; "none" rows are the build before the cache:
 
-  | workers | input | entries | VIN/s | cycles/VIN | hits | peak RSS |
-  |---:|---|---:|---:|---:|---:|---:|
-  | 1 | sorted | none | 159,869 | 21.0k | | 1.2 GB |
-  | 1 | sorted | 1 | 746,512 | 4.5k | 84.8% | 1.2 GB |
-  | 1 | sorted | **64** | 1,132,301 | 3.0k | 94.0% | 1.2 GB |
-  | 1 | sorted | 65,536 | 1,132,775 | 3.0k | 94.8% | 2.7 GB |
-  | 1 | shuffled | none | 102,890 | 32.5k | | 1.2 GB |
-  | 1 | shuffled | 65,536 | 252,623 | 13.2k | 74.4% | 2.6 GB |
-  | 12 | sorted | none | 1,310,992 | 25.4k | | 1.3 GB |
-  | 12 | sorted | 1 | 3,097,048 | 9.9k | 80.7% | 1.4 GB |
-  | 12 | sorted | **64** | 4,092,808 | 7.7k | 89.9% | 1.4 GB |
-  | 12 | sorted | 65,536 | 3,653,669 | 8.5k | 90.1% | 10.1 GB |
-  | 12 | shuffled | none | 790,892 | 40.5k | | 1.3 GB |
-  | 12 | shuffled | 64 | 810,755 | 40.8k | 0.0% | 1.4 GB |
-  | 12 | shuffled | 65,536 | 1,160,771 | 26.8k | 56.2% | 11.4 GB |
+  | workers | input | entries | VIN/s | cycles/VIN | instr/VIN | hits | peak RSS |
+  |---:|---|---:|---:|---:|---:|---:|---:|
+  | 1 | sorted | none | 159,869 | 21.0k | | | 1.2 GB |
+  | 1 | sorted | 64 per worker | 1,132,301 | 3.0k | 10.3k | 94.0% | 1.2 GB |
+  | 1 | sorted | 1,024 | 1,155,605 | 3.0k | 10.0k | 94.7% | 1.2 GB |
+  | 1 | sorted | **16,384** | 1,130,883 | 3.0k | 9.9k | 94.8% | 1.4 GB |
+  | 1 | sorted | 65,536 | 1,109,827 | 3.1k | 10.0k | 94.8% | 2.3 GB |
+  | 1 | shuffled | none | 102,890 | 32.5k | | | 1.2 GB |
+  | 1 | shuffled | 1,024 | 102,445 | 32.6k | 79.4k | 0.4% | 1.2 GB |
+  | 1 | shuffled | **16,384** | 150,186 | 22.3k | 45.1k | 50.1% | 1.2 GB |
+  | 1 | shuffled | 65,536 | 242,569 | 13.8k | 25.5k | 74.4% | 1.8 GB |
+  | 12 | sorted | none | 1,310,992 | 25.4k | 79.5k | | 1.3 GB |
+  | 12 | sorted | 64 per worker | 4,061,914 | 7.7k | 13.5k | 89.9% | 1.4 GB |
+  | 12 | sorted | 1,024 | 4,320,316 | 7.3k | 10.8k | 94.0% | 1.4 GB |
+  | 12 | sorted | **16,384** | 4,169,419 | 7.4k | 10.7k | 94.1% | 1.9 GB |
+  | 12 | sorted | 65,536 | 4,151,626 | 7.3k | 10.7k | 94.1% | 2.8 GB |
+  | 12 | shuffled | none | 790,892 | 40.5k | | | 1.3 GB |
+  | 12 | shuffled | 65,536 per worker | 1,249,963 | 26.3k | 39.1k | 55.8% | 11.6 GB |
+  | 12 | shuffled | 1,024 | 830,023 | 40.3k | 80.0k | 0.2% | 1.4 GB |
+  | 12 | shuffled | **16,384** | 887,614 | 34.6k | 46.7k | 49.5% | 1.7 GB |
+  | 12 | shuffled | 65,536 | 1,535,066 | 21.6k | 26.3k | 73.6% | 2.3 GB |
 
-  The default is 64 entries: on sorted input a larger table adds under one
-  point of hits, and on shuffled input only a table of tens of thousands of
-  entries helps, at about 1 GB per worker. Workers do not share entries, so
-  twelve workers hit 90% where one hits 94%, and each miss costs a full
-  decode. On the synthetic 2M slice, where nothing repeats, 64 entries cost
-  +1.3% cycles and 65,536 cost +2.5-4%.
+  Sharing lifts twelve workers on sorted input from 90% to 94% hits, the
+  one-worker rate, and cuts 20% of instructions; cycles fall only 5%, because
+  at twelve workers a hit is bound by copying 14 KB through the memory
+  system (7.4k cycles per VIN against 3.0k on one worker). On shuffled input
+  one shared table of 65,536 entries beats twelve private ones of 65,536 at a
+  fifth of the memory. The default is 16,384 entries: sorted input saturates
+  by 1,024, shuffled input needs tens of thousands, and 16,384 caps the table
+  near 230 MB while taking a third off shuffled cycles on one worker and a
+  seventh on twelve. On the synthetic 2M slice, where nothing repeats, 16,384
+  entries cost +1.9% cycles (four alternating pairs, +1.4% to +2.6%) and
+  1,024 about +1%.
 - **Memory.** About 13-15 KB per entry (56-66 elements of 224 bytes plus
-  8-11 owned strings): 64 entries ≈ 1 MB per worker, 65,536 ≈ 1 GB.
-- **Hit cost.** About 2k cycles: element clone ~60%, dropping the slot's old
-  elements ~20%, probe and bookkeeping ~12%, allocation ~5%, exception filter,
-  sanitize and check digit the rest. A bitwise-copied compact entry would cut
-  most of it.
+  8-11 owned strings): 16,384 entries ≈ 230 MB per stream, 65,536 ≈ 0.9 GB,
+  whatever the worker count. Peak RSS runs above that at twelve workers
+  (+0.5 GB at 16,384 on sorted NY): entries are freed on threads other than
+  the one that allocated them, and each pass of the benchmark is a new stream
+  with new threads, so the allocator holds some freed pages.
+- **Hit cost.** About 2k cycles on one worker: element clone ~50%, dropping
+  the slot's old elements ~15%, probe and bookkeeping ~10%, allocation ~5%,
+  the `arc-swap` load under 1%. Both copies (into the output slot and into a
+  new entry) must go through `extend_from_slice`: building the entry with
+  `Vec::clone` made the copy loop call `DecodedElement::clone` per element
+  (+1.4k instructions per VIN). A bitwise-copied compact entry would cut most
+  of the rest.
 
 ## Experiments we rejected or replaced
 

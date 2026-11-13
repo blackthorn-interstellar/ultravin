@@ -1114,8 +1114,10 @@ pub(crate) fn decode_full_with_workspace<'a>(
     .full_into_workspace(Vec::new(), workspace)
 }
 
-/// Full decode into `previous`'s storage, answered from the workspace's
-/// result cache when an earlier VIN differing only by serial was clean.
+/// Full decode into `previous`'s storage, answered from the stream's result
+/// table when an earlier VIN differing only by serial was clean.
+// The decode inputs, the reused output, then the shared and per-worker state.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn decode_full_cached<'a>(
     db: &'a Db,
     input: &str,
@@ -1123,9 +1125,10 @@ pub(crate) fn decode_full_cached<'a>(
     current_year: i32,
     caller_year: Option<i32>,
     previous: Option<DecodeResult<'a>>,
+    table: &result_cache::Table<'a>,
     workspace: &mut DecodeWorkspace<'a>,
 ) -> DecodeResult<'a> {
-    if !workspace.results.wants_probe() {
+    if !workspace.results.wants_probe(table) {
         return match previous {
             Some(previous) => decode_full_reusing(
                 db,
@@ -1148,12 +1151,10 @@ pub(crate) fn decode_full_cached<'a>(
     }
     let mut out = previous.unwrap_or_else(empty_result);
     out.vin = sanitize_into(input, std::mem::take(&mut out.vin));
-    let probe = workspace
-        .results
-        .probe(db, &out.vin, now_micros, current_year, caller_year);
+    let probe = workspace.results.probe(table, db, &out.vin, caller_year);
     match probe {
-        result_cache::Probe::Hit(index) => {
-            workspace.results.fill(index, &mut out);
+        result_cache::Probe::Hit(hit) => {
+            hit.fill(&mut out);
             #[cfg(debug_assertions)]
             assert_eq!(
                 out,
@@ -1172,7 +1173,7 @@ pub(crate) fn decode_full_cached<'a>(
                 out,
                 workspace,
             );
-            workspace.results.store(index, key, &result);
+            workspace.results.store(table, index, key, &result);
             result
         }
         result_cache::Probe::Skip => decode_full_reusing(
@@ -1204,26 +1205,21 @@ pub(crate) struct DecodeWorkspace<'a> {
     item_vectors: [Vec<decode::DecodingItem<'a>>; 3],
     item_vectors_len: usize,
     passes: Vec<Pass<'a>>,
-    results: result_cache::ResultCache<'a>,
+    results: result_cache::Worker,
 }
 
 impl Default for DecodeWorkspace<'_> {
     fn default() -> Self {
-        Self::with_result_cache(0)
-    }
-}
-
-impl<'a> DecodeWorkspace<'a> {
-    /// A workspace whose full decodes reuse up to `entries` clean results.
-    pub(crate) fn with_result_cache(entries: usize) -> Self {
         Self {
             item_vectors: std::array::from_fn(|_| Vec::new()),
             item_vectors_len: 0,
             passes: Vec::new(),
-            results: result_cache::ResultCache::with_capacity(entries),
+            results: result_cache::Worker::default(),
         }
     }
+}
 
+impl<'a> DecodeWorkspace<'a> {
     fn take_items(&mut self) -> Vec<decode::DecodingItem<'a>> {
         if self.item_vectors_len == 0 {
             Vec::new()

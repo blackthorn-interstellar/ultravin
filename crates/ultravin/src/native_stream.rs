@@ -358,14 +358,14 @@ fn worker<'db>(
     current_year: i32,
     batch_size: usize,
     retain_results: bool,
-    result_cache_entries: usize,
+    result_table: &crate::result_cache::Table<'db>,
     slots: &[Mutex<Slot<'db>>],
     coordinator: &Arc<Coordinator>,
     published: &mpsc::Sender<Published>,
 ) {
     let mut free = (0..slots.len()).rev().collect::<Vec<_>>();
     let mut order = Vec::<(u64, usize)>::with_capacity(batch_size.min(inputs.len()));
-    let mut decode_workspace = DecodeWorkspace::with_result_cache(result_cache_entries);
+    let mut decode_workspace = DecodeWorkspace::default();
     loop {
         let cancelled = coordinator.cancelled();
         recycle(slots, &mut free, cancelled, retain_results);
@@ -419,6 +419,7 @@ fn worker<'db>(
                             current_year,
                             model_year,
                             result_slot.take(),
+                            result_table,
                             &mut decode_workspace,
                         ));
                         #[cfg(test)]
@@ -506,7 +507,8 @@ impl Db {
         )
     }
 
-    /// [`Db::decode_native_stream_at`] with `result_cache_entries` per worker.
+    /// [`Db::decode_native_stream_at`] with a result table of
+    /// `result_cache_entries` shared by the stream's workers.
     pub(crate) fn decode_native_stream_cached_at<'db, F>(
         &'db self,
         inputs: &[String],
@@ -547,6 +549,7 @@ impl Db {
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
+        let result_table = crate::result_cache::Table::new(result_cache_entries);
         let (published_tx, published_rx) = mpsc::channel();
         let mut panic_payload = None;
         let mut stream_error = None;
@@ -555,6 +558,7 @@ impl Db {
             for (owner, owner_slots) in all_slots.iter().enumerate() {
                 let tx = published_tx.clone();
                 let coordinator_ref = Arc::clone(&coordinator);
+                let result_table = &result_table;
                 let spawned = std::thread::Builder::new()
                     .name(format!("ultravin-native-{owner}"))
                     .spawn_scoped(scope, move || {
@@ -568,7 +572,7 @@ impl Db {
                                 current_year_at(now_micros),
                                 config.batch_size,
                                 retain_results,
-                                result_cache_entries,
+                                result_table,
                                 owner_slots,
                                 &coordinator_ref,
                                 &tx,

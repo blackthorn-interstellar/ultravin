@@ -1,7 +1,7 @@
 //! Check every native-stream result against an uncached `decode_full` at the
-//! same fixed clock, so the per-worker result cache can serve nothing else:
+//! same fixed clock, so the shared result cache can serve nothing else:
 //! `result_cache_check <vins.txt> [workers] [limit] [caller-year]`.
-//! `ULTRAVIN_RESULT_CACHE` sets the entries per worker.
+//! `ULTRAVIN_RESULT_CACHE` sets the entries of the stream's table.
 
 use rayon::prelude::*;
 

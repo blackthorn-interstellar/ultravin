@@ -1,10 +1,10 @@
-//! Reuse a worker's full results across VINs that differ only by serial.
+//! Reuse full results across VINs that differ only by serial.
 //!
 //! Real fleets repeat: most VINs in a registration file share everything but
 //! the serial with an earlier one, and for a clean VIN the serial changes
-//! nothing in the decoded result except the echoed `vin`. A stream worker keeps
-//! a small direct-mapped table of clean results and copies one out instead of
-//! decoding again.
+//! nothing in the decoded result except the echoed `vin`. A stream keeps one
+//! direct-mapped [`Table`] of clean results that all its workers read and
+//! write, and a worker copies a result out instead of decoding again.
 //!
 //! The key is everything a clean result can depend on besides the `vin` echo:
 //!
@@ -18,22 +18,35 @@
 //!   Past that depth no pattern match, formula value or correction charset
 //!   can see the character; only its class matters (the invalid-character
 //!   scan and the check digit), and letters stay verbatim;
-//! - the caller's model year;
-//! - the database and the clock: a result reads the clock through the current
-//!   year and publication dates, so the table empties whenever either changes.
+//! - the caller's model year.
+//!
+//! A result also reads the database and the clock (the current year and
+//! publication dates). Neither is in the key: a table lives for one stream,
+//! which has one of each.
 //!
 //! Only VINs of 17 valid characters with a valid check digit that are not
 //! check-digit exceptions are looked up or stored, and only results whose
 //! codes are exactly `[0]` are stored. The check digit is computed without the
 //! car flag, which differs only for a letter at position 13: a car WMI makes
 //! that letter invalid (code 400), so no such result is ever stored to hit.
+//!
+//! An entry never changes once published. Each slot is an [`ArcSwapOption`]:
+//! a probe borrows the entry through a thread-local debt, so a hit writes no
+//! shared cache line, and a store swaps in a fresh entry; the one it displaces
+//! is freed when its last reader lets go. Two workers missing the same key
+//! both decode and both store, and the last one wins.
+
+use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
+use std::sync::{Arc, OnceLock};
+
+use arc_swap::{ArcSwapOption, Guard};
 
 use crate::{checkdigit, clear_elements, Db, DecodeResult};
 
-/// Entries per worker when `ULTRAVIN_RESULT_CACHE` is unset.
-pub(crate) const DEFAULT_ENTRIES: usize = 64;
+/// Entries of a stream's table when `ULTRAVIN_RESULT_CACHE` is unset.
+pub(crate) const DEFAULT_ENTRIES: usize = 16_384;
 
-/// Entries per worker for one stream: `ULTRAVIN_RESULT_CACHE`, else the default.
+/// Entries of one stream's table: `ULTRAVIN_RESULT_CACHE`, else the default.
 pub(crate) fn configured_entries() -> usize {
     std::env::var("ULTRAVIN_RESULT_CACHE")
         .ok()
@@ -41,24 +54,20 @@ pub(crate) fn configured_entries() -> usize {
         .unwrap_or(DEFAULT_ENTRIES)
 }
 
-static HITS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-static PROBES: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static HITS: AtomicU64 = AtomicU64::new(0);
+static PROBES: AtomicU64 = AtomicU64::new(0);
 
 /// Process-wide `(hits, probes)` of finished stream workers, for tuning.
 #[doc(hidden)]
 pub fn result_cache_counters() -> (u64, u64) {
-    use std::sync::atomic::Ordering::Relaxed;
     (HITS.load(Relaxed), PROBES.load(Relaxed))
 }
 
-/// VIN bytes 1-16, then byte 17 with the caller year above it. All zero only
-/// for an empty slot: VIN bytes are never zero.
+/// VIN bytes 1-16, then byte 17 with the caller year above it.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Key([u64; 3]);
 
 impl Key {
-    const EMPTY: Self = Self([0; 3]);
-
     fn new(vin: &[u8; 17], caller_year: Option<i32>) -> Self {
         let word = |at: usize| u64::from_le_bytes(vin[at..at + 8].try_into().expect("8 bytes"));
         let year = caller_year.map_or(0, |year| u64::from(year as u32) << 8 | 1 << 40);
@@ -76,25 +85,71 @@ impl Key {
     }
 }
 
-pub(crate) enum Probe {
+/// A clean result, its `vin` left empty, and the key it answers.
+struct Entry<'a> {
+    key: Key,
+    result: DecodeResult<'a>,
+}
+
+/// One stream's results, shared by its workers; disabled at capacity 0. It
+/// holds for one database and one clock, so it must not outlive the stream.
+pub(crate) struct Table<'a> {
+    slots: OnceLock<Box<[ArcSwapOption<Entry<'a>>]>>,
+    capacity: usize,
+}
+
+impl<'a> Table<'a> {
+    /// `entries` rounds up to a power of two; slots allocate on first use.
+    pub(crate) fn new(entries: usize) -> Self {
+        Self {
+            slots: OnceLock::new(),
+            capacity: if entries == 0 {
+                0
+            } else {
+                entries.next_power_of_two()
+            },
+        }
+    }
+
+    fn slot(&self, index: usize) -> &ArcSwapOption<Entry<'a>> {
+        &self
+            .slots
+            .get_or_init(|| (0..self.capacity).map(|_| ArcSwapOption::empty()).collect())[index]
+    }
+}
+
+/// A probe's answer: the stored entry, borrowed while it is copied out.
+pub(crate) struct Hit<'a>(Guard<Option<Arc<Entry<'a>>>>);
+
+impl<'a> Hit<'a> {
+    /// Write the entry's result into `out`, reusing its buffers; `out.vin`
+    /// already holds the sanitized VIN.
+    pub(crate) fn fill(&self, out: &mut DecodeResult<'a>) {
+        let stored = &self.0.as_ref().expect("a hit holds an entry").result;
+        out.wmi.clone_from(&stored.wmi);
+        out.descriptor.clone_from(&stored.descriptor);
+        out.model_year = stored.model_year;
+        out.error_codes.clone_from(&stored.error_codes);
+        out.check_digit_valid = stored.check_digit_valid;
+        out.corrected_vin.clear();
+        clear_elements(&mut out.elements);
+        out.elements.extend_from_slice(&stored.elements);
+    }
+}
+
+pub(crate) enum Probe<'a> {
     /// Not eligible: decode normally and store nothing.
     Skip,
-    Hit(usize),
+    Hit(Hit<'a>),
     Miss(usize, Key),
 }
 
 /// WMI depths remembered per worker, so a probe rarely searches the database.
 const DEPTH_MEMO: usize = 512;
 
-/// One worker's table; disabled (and allocation-free) at capacity 0.
-pub(crate) struct ResultCache<'a> {
-    /// Slot keys, apart from the results so a probe touches 24 bytes.
-    keys: Vec<Key>,
-    /// Clean results, their `vin` left empty; valid where `keys` is not empty.
-    results: Vec<DecodeResult<'a>>,
-    capacity: usize,
-    /// Database address, `now_micros` and current year the entries hold for.
-    clock: (usize, i64, i32),
+/// One worker's side of the cache: admission, the WMI depth memo, counters.
+#[derive(Default)]
+pub(crate) struct Worker {
     /// `(packed WMI, depth)`, `depth` 0 for a WMI the database lacks.
     depths: Vec<(u64, u8)>,
     /// Hits and stores over roughly the last few thousand probes.
@@ -105,15 +160,8 @@ pub(crate) struct ResultCache<'a> {
     probes: u64,
 }
 
-impl Default for ResultCache<'_> {
-    fn default() -> Self {
-        Self::with_capacity(0)
-    }
-}
-
-impl Drop for ResultCache<'_> {
+impl Drop for Worker {
     fn drop(&mut self) {
-        use std::sync::atomic::Ordering::Relaxed;
         if self.probes != 0 {
             HITS.fetch_add(self.hits, Relaxed);
             PROBES.fetch_add(self.probes, Relaxed);
@@ -121,33 +169,13 @@ impl Drop for ResultCache<'_> {
     }
 }
 
-impl<'a> ResultCache<'a> {
-    /// `entries` rounds up to a power of two; the table allocates on first use.
-    pub(crate) fn with_capacity(entries: usize) -> Self {
-        Self {
-            keys: Vec::new(),
-            results: Vec::new(),
-            capacity: if entries == 0 {
-                0
-            } else {
-                entries.next_power_of_two()
-            },
-            clock: (0, 0, 0),
-            depths: Vec::new(),
-            recent_hits: 0,
-            recent_stores: 0,
-            seen: 0,
-            hits: 0,
-            probes: 0,
-        }
-    }
-
+impl Worker {
     /// Whether to look this VIN up at all. A store costs a fraction of a
     /// decode and a hit saves most of one, so while fewer than a quarter of
     /// recent stores paid off, only every 64th VIN is probed (and stored on a
     /// miss): enough to notice when the input starts repeating.
-    pub(crate) fn wants_probe(&mut self) -> bool {
-        if self.capacity == 0 {
+    pub(crate) fn wants_probe(&mut self, table: &Table<'_>) -> bool {
+        if table.capacity == 0 {
             return false;
         }
         self.seen += 1;
@@ -171,15 +199,14 @@ impl<'a> ResultCache<'a> {
         (slot.1 != 0).then_some(slot.1)
     }
 
-    /// Classify a sanitized VIN and find its slot.
-    pub(crate) fn probe(
+    /// Classify a sanitized VIN and look it up.
+    pub(crate) fn probe<'a>(
         &mut self,
+        table: &Table<'a>,
         db: &Db,
         vin: &str,
-        now_micros: i64,
-        current_year: i32,
         caller_year: Option<i32>,
-    ) -> Probe {
+    ) -> Probe<'a> {
         let b = vin.as_bytes();
         let Ok(b) = <&[u8; 17]>::try_from(b) else {
             return Probe::Skip;
@@ -205,64 +232,57 @@ impl<'a> ResultCache<'a> {
             }
         }
         let key = Key::new(&masked, caller_year);
-        let clock = (std::ptr::from_ref(db) as usize, now_micros, current_year);
-        if self.clock != clock || self.keys.is_empty() {
-            self.keys.clear();
-            self.keys.resize(self.capacity, Key::EMPTY);
-            self.clock = clock;
-        }
         self.probes += 1;
         if self.probes.is_multiple_of(1024) {
             self.recent_hits /= 2;
             self.recent_stores /= 2;
         }
-        let index = key.index(self.capacity - 1);
-        let hit = self.keys[index] == key;
         if db.vinexception_checkdigit(vin) {
             return Probe::Skip;
         }
-        if hit {
+        let index = key.index(table.capacity - 1);
+        let entry = table.slot(index).load();
+        if entry.as_ref().is_some_and(|entry| entry.key == key) {
             self.hits += 1;
             self.recent_hits += 1;
-            Probe::Hit(index)
+            Probe::Hit(Hit(entry))
         } else {
             Probe::Miss(index, key)
         }
     }
 
-    /// Write the entry's result into `out`, reusing its buffers; `out.vin`
-    /// already holds the sanitized VIN.
-    pub(crate) fn fill(&self, index: usize, out: &mut DecodeResult<'a>) {
-        let stored = &self.results[index];
-        out.wmi.clone_from(&stored.wmi);
-        out.descriptor.clone_from(&stored.descriptor);
-        out.model_year = stored.model_year;
-        out.error_codes.clone_from(&stored.error_codes);
-        out.check_digit_valid = stored.check_digit_valid;
-        out.corrected_vin.clear();
-        clear_elements(&mut out.elements);
-        out.elements.extend_from_slice(&stored.elements);
-    }
-
-    /// Keep a clean result for the probed key; anything else is not stored.
-    pub(crate) fn store(&mut self, index: usize, key: Key, result: &DecodeResult<'a>) {
+    /// Publish a clean result for the probed key; anything else is not stored.
+    pub(crate) fn store<'a>(
+        &mut self,
+        table: &Table<'a>,
+        index: usize,
+        key: Key,
+        result: &DecodeResult<'a>,
+    ) {
         if result.error_codes != [0] || !result.corrected_vin.is_empty() {
             return;
         }
         debug_assert!(result.check_digit_valid);
-        if self.results.is_empty() {
-            self.results.resize_with(self.capacity, crate::empty_result);
-        }
         self.recent_stores += 1;
-        self.keys[index] = key;
-        let stored = &mut self.results[index];
-        stored.wmi.clone_from(&result.wmi);
-        stored.descriptor.clone_from(&result.descriptor);
-        stored.model_year = result.model_year;
-        stored.error_codes.clone_from(&result.error_codes);
-        stored.check_digit_valid = result.check_digit_valid;
-        clear_elements(&mut stored.elements);
-        stored.elements.extend_from_slice(&result.elements);
+        // The same `extend_from_slice` as `fill`, so the two share one
+        // out-of-line copy loop with the element clone inlined; `clone()`
+        // here left `fill` calling `clone` per element (+1.4k instructions
+        // per VIN on sorted New York).
+        let mut elements = Vec::with_capacity(result.elements.len());
+        elements.extend_from_slice(&result.elements);
+        let result = DecodeResult {
+            vin: String::new(),
+            wmi: result.wmi.clone(),
+            descriptor: result.descriptor.clone(),
+            model_year: result.model_year,
+            error_codes: result.error_codes.clone(),
+            check_digit_valid: result.check_digit_valid,
+            corrected_vin: String::new(),
+            elements,
+        };
+        table
+            .slot(index)
+            .store(Some(Arc::new(Entry { key, result })));
     }
 }
 
@@ -348,14 +368,23 @@ mod tests {
         out
     }
 
-    fn assert_stream_matches(db: &Db, inputs: &[String], year: Option<i32>, entries: usize) {
+    /// Stream `inputs` and compare every row to an uncached full decode;
+    /// returns the hits the stream's workers made.
+    fn assert_stream_matches(
+        db: &Db,
+        inputs: &[String],
+        year: Option<i32>,
+        entries: usize,
+        workers: usize,
+    ) -> u64 {
         let config = NativeStreamConfig {
-            workers: 1,
+            workers,
             batch_size: 8,
             slots_per_worker: 2,
-            max_inflight_rows: 16,
+            max_inflight_rows: 16 * workers,
         };
         let current_year = current_year_at(NOW);
+        let (hits, _) = result_cache_counters();
         let mut checked = 0;
         db.decode_native_stream_cached_at(inputs, year, NOW, config, entries, |batch| {
             for (offset, actual) in batch.iter().enumerate() {
@@ -367,6 +396,9 @@ mod tests {
         })
         .expect("native stream");
         assert_eq!(checked, inputs.len());
+        // Counters only grow, so another test running alongside can inflate
+        // this but never hide that this stream made no hits.
+        result_cache_counters().0 - hits
     }
 
     #[test]
@@ -375,14 +407,23 @@ mod tests {
         let inputs = inputs(db);
         for entries in [0, 1, 2, DEFAULT_ENTRIES] {
             for year in [None, Some(2015)] {
-                let (hits, _) = result_cache_counters();
-                assert_stream_matches(db, &inputs, year, entries);
-                // Hits happened, and a debug build checked each one against a
-                // full decode. Counters only grow, so no other test can hide
-                // that none happened here, only fail to.
+                // A debug build also checked each hit against a full decode.
+                let hits = assert_stream_matches(db, &inputs, year, entries, 1);
                 if entries > 0 {
-                    assert!(result_cache_counters().0 > hits, "{entries} entries");
+                    assert!(hits > 0, "{entries} entries");
                 }
+            }
+        }
+    }
+
+    #[test]
+    fn workers_overwriting_a_tiny_shared_table_serve_only_matching_results() {
+        let Some(db) = Db::try_embedded() else { return };
+        let inputs = inputs(db);
+        for entries in [1, 2] {
+            for _ in 0..16 {
+                let hits = assert_stream_matches(db, &inputs, None, entries, 4);
+                assert!(hits > 0, "{entries} entries");
             }
         }
     }
@@ -391,10 +432,19 @@ mod tests {
     fn serial_siblings_hit_and_refused_inputs_do_not() {
         let Some(db) = Db::try_embedded() else { return };
         let current_year = current_year_at(NOW);
-        let mut workspace = crate::DecodeWorkspace::with_result_cache(DEFAULT_ENTRIES);
+        let table = Table::new(DEFAULT_ENTRIES);
+        let mut workspace = crate::DecodeWorkspace::default();
         let mut decode = |input: &str| {
-            let result =
-                crate::decode_full_cached(db, input, NOW, current_year, None, None, &mut workspace);
+            let result = crate::decode_full_cached(
+                db,
+                input,
+                NOW,
+                current_year,
+                None,
+                None,
+                &table,
+                &mut workspace,
+            );
             assert_eq!(result, decode_full(db, input, NOW, current_year, None));
         };
         let clean = "1HGCM82633A004352";
@@ -411,35 +461,21 @@ mod tests {
     }
 
     #[test]
-    fn a_new_clock_or_caller_year_misses() {
+    fn another_worker_hits_and_a_new_caller_year_misses() {
         let Some(db) = Db::try_embedded() else { return };
-        let mut cache = ResultCache::with_capacity(4);
+        let table = Table::new(4);
+        let mut worker = Worker::default();
         let vin = "1HGCM82633A004352";
-        let Probe::Miss(index, key) = cache.probe(db, vin, NOW, 2026, None) else {
+        let Probe::Miss(index, key) = worker.probe(&table, db, vin, None) else {
             panic!("an empty table misses");
         };
-        let result = decode_full(db, vin, NOW, 2026, None);
-        cache.store(index, key, &result);
+        let result = decode_full(db, vin, NOW, current_year_at(NOW), None);
+        worker.store(&table, index, key, &result);
+        let mut other = Worker::default();
+        assert!(matches!(other.probe(&table, db, vin, None), Probe::Hit(_)));
         assert!(matches!(
-            cache.probe(db, vin, NOW, 2026, None),
-            Probe::Hit(_)
-        ));
-        assert!(matches!(
-            cache.probe(db, vin, NOW + 1, 2026, None),
+            other.probe(&table, db, vin, Some(2003)),
             Probe::Miss(..)
-        ));
-        cache.store(index, key, &result);
-        let Probe::Miss(index, key) = cache.probe(db, vin, NOW + 1, 2027, None) else {
-            panic!("a new current year misses");
-        };
-        cache.store(index, key, &result);
-        assert!(matches!(
-            cache.probe(db, vin, NOW + 1, 2027, Some(2003)),
-            Probe::Miss(..)
-        ));
-        assert!(matches!(
-            cache.probe(db, vin, NOW + 1, 2027, None),
-            Probe::Hit(_)
         ));
     }
 }
