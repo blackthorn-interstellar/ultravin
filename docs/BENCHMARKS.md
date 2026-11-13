@@ -73,20 +73,21 @@ corpus. Same host and command as the headline, one run per cell, load average
 
 Each stream now [reuses results across VINs that differ only by
 serial](../PERFORMANCE_IMPROVEMENTS.md#november-12-result-reuse-cache): one
-table of 16,384 entries (about 230 MB when full) shared by all its workers,
-and a hit on the entry a recycled output row already holds writes only the
-VIN. Same corpus and command, one run per cell:
+table of 16,384 entries (about 230 MB when full) shared by all its workers.
+A hit copies the stored elements with one `memcpy` (their owned text is
+interned), and a hit on the entry a recycled output row already holds writes
+only the VIN. Same corpus and command, one run per cell:
 
 | workers | input | before VIN/s | with reuse VIN/s | cycles/VIN, before → with |
 |---:|---|---:|---:|---:|
-| 12 | sorted | 1,310,992 | **4,196,910** | 25.4k → 7.4k (3.4×) |
-| 12 | shuffled | 790,892 | 1,012,612 | 40.5k → 33.3k |
-| 1 | sorted | 159,869 | **1,453,707** | 21.0k → 2.4k (8.8×) |
-| 1 | shuffled | 102,890 | 152,295 | 32.5k → 22.0k |
+| 12 | sorted | 1,310,992 | **4,099,105** | 25.4k → 6.9k (3.7×) |
+| 12 | shuffled | 790,892 | 1,082,756 | 40.5k → 30.6k |
+| 1 | sorted | 159,869 | **1,901,587** | 21.0k → 1.9k (11×) |
+| 1 | shuffled | 102,890 | 155,624 | 32.5k → 21.5k |
 
 Shuffled input hits 50% at the default; with `ULTRAVIN_RESULT_CACHE=65536`
 (about 0.9 GB, whatever the worker count) it hits 74% and reaches 242,569
-VIN/s on one worker and 1,543,946 on twelve.
+VIN/s on one worker and 1,774,319 on twelve.
 
 The file is published nearly sorted, so the first two orders match. Build the
 corpus (a 12.5M-row download) and run one cell:

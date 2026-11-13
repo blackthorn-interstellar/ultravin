@@ -747,8 +747,8 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
   seventh on twelve. On the synthetic 2M slice, where nothing repeats, 16,384
   entries cost +1.9% cycles (four alternating pairs, +1.4% to +2.6%) and
   1,024 about +1%.
-- **Memory.** About 13-15 KB per entry (56-66 elements of 224 bytes plus
-  8-11 owned strings): 16,384 entries ≈ 230 MB per stream, 65,536 ≈ 0.9 GB,
+- **Memory.** About 13-15 KB per entry (56-66 elements of 224 bytes; their
+  owned text is interned, see below): 16,384 entries ≈ 230 MB per stream, 65,536 ≈ 0.9 GB,
   whatever the worker count. Peak RSS runs above that at twelve workers
   (+0.5 GB at 16,384 on sorted NY): entries are freed on threads other than
   the one that allocated them, and each pass of the benchmark is a new stream
@@ -758,8 +758,8 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
   the `arc-swap` load under 1%. Both copies (into the output slot and into a
   new entry) must go through `extend_from_slice`: building the entry with
   `Vec::clone` made the copy loop call `DecodedElement::clone` per element
-  (+1.4k instructions per VIN). A bitwise-copied compact entry would cut most
-  of the rest.
+  (+1.4k instructions per VIN). The next two bullets take out most of the
+  rest.
 - **Uncopied hits.** Output slots are recycled, so a row often already holds
   the very result a hit would copy into it. Each entry gets an id that is
   never reused, and each row of a worker's slots remembers the id it was last
@@ -785,6 +785,39 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
   there is still the copy's memory traffic. The no-repeat overhead on the
   synthetic 2M slice is unchanged within noise (+13 instructions per VIN;
   two alternating pairs +2.6%/+2.3% cycles against +2.1%/+0.8% before).
+- **Bitwise entries.** A stored result owned 8-11 strings, so every copy
+  allocated and every recycled row walked its elements to free them. A store
+  now swaps each owned string in the decoded row for an equal interned one
+  (a process-wide, append-only, deduplicated set of leaked strings, like the
+  default records' scrubbed values, behind a per-worker memo so the lock is
+  taken once per new text per worker), then copies the row into the entry
+  bitwise. A hit copies the entry's elements with one `memcpy`, and a row
+  holding such a copy (marked in its remembered id) empties with
+  `set_len(0)` instead of a drop walk. Two small `unsafe` blocks in
+  `result_cache.rs`, both relying on one invariant: every text of an entry
+  is borrowed. The interner caps at 32 MB counting 32 bytes of overhead per
+  text; at the cap a result needing new text is simply not stored. Nearly
+  all interned text is one descriptor value per key: sorted NY interns
+  233,693 texts (217,970 of 11 bytes, 11,373 of 14), 2.7 MB of text, 10.2 MB
+  with overhead; shuffled NY the same; the synthetic 2M slice, where nothing
+  repeats, 26k texts per 60k stores. Building the entry element by element
+  while interning cost +1.4k instructions per VIN on shuffled input (more
+  than the hits saved); interning in place and copying the row bitwise made
+  stores cheaper than before. Same host, one run per cell, back to back with
+  the previous step:
+
+  | workers | input | VIN/s | cycles/VIN | instr/VIN |
+  |---:|---|---:|---:|---:|
+  | 1 | sorted | 1,454,146 → 1,901,587 | 2,393 → 1,903 (−20%) | 7.62k → 5.30k |
+  | 12 | sorted | 4,139,484 → 4,099,105 | 7,401 → 6,942 (−6%) | 10.02k → 7.26k |
+  | 1 | shuffled | 153,023 → 155,624 | 21.9k → 21.5k | 45.1k → 43.4k |
+  | 12 | shuffled | 921,897 → 1,082,756 | 34.1k → 30.6k | 46.5k → 44.7k |
+  | 12 | shuffled, 65,536 | 1,490,184 → 1,774,319 | 21.6k → 18.5k | 26.4k → 23.6k |
+
+  Against the shared table before both steps: one sorted worker 3.0k → 1.9k
+  cycles per VIN (−37%), twelve 7.4k → 6.9k. The no-repeat overhead on the
+  synthetic 2M slice: +2.4%/+2.2% cycles in two alternating pairs (+102-108
+  instructions per VIN, against +85-88 before either step).
 
 ## Experiments we rejected or replaced
 

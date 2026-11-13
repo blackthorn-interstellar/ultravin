@@ -40,13 +40,19 @@
 //! it last received. Ids are never reused, so a hit on that same entry finds
 //! the row already holding the result and writes only `vin`; anything else
 //! that writes the row forgets the id.
+//!
+//! A stored element owns no text: owned strings are interned for the life of
+//! the process first. A hit therefore copies elements bitwise, and a row
+//! filled that way empties without a drop walk.
 
+use std::borrow::Cow;
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
-use std::sync::{Arc, OnceLock};
+use std::sync::{Arc, LazyLock, Mutex, MutexGuard, OnceLock, PoisonError};
 
 use arc_swap::{ArcSwapOption, Guard};
 
-use crate::{checkdigit, clear_elements, Db, DecodeResult};
+use crate::hash::IntSet;
+use crate::{checkdigit, clear_elements, Db, DecodeResult, DecodedElement};
 
 /// Entries of a stream's table when `ULTRAVIN_RESULT_CACHE` is unset.
 pub(crate) const DEFAULT_ENTRIES: usize = 16_384;
@@ -106,16 +112,127 @@ struct Entry<'a> {
     result: DecodeResult<'a>,
 }
 
-/// The entry an output row was last filled from, 0 for none: when set, the
+/// The entry an output row was last filled from, id 0 for none: when set, the
 /// row holds that entry's result in every field but `vin`. Whatever else
 /// writes the row must reset it.
 #[derive(Clone, Copy, Default)]
-pub(crate) struct Filled(u64);
+pub(crate) struct Filled {
+    id: u64,
+    /// The row's elements own no text, like the entry's, so emptying them
+    /// needs no drop walk.
+    copied: bool,
+}
 
 impl Filled {
     pub(crate) fn is_set(self) -> bool {
-        self.0 != 0
+        self.id != 0
     }
+
+    /// Empty the elements of the row this describes.
+    pub(crate) fn clear(self, elements: &mut Vec<DecodedElement<'_>>) {
+        if self.copied {
+            forget_copies(elements);
+        } else {
+            clear_elements(elements);
+        }
+    }
+}
+
+fn owns_nothing(element: &DecodedElement<'_>) -> bool {
+    [
+        &element.value,
+        &element.attribute_id,
+        &element.source,
+        &element.keys,
+    ]
+    .iter()
+    .all(|text| matches!(text, Cow::Borrowed(_)))
+}
+
+/// Append bitwise copies of `stored`: an entry's elements, or a result's
+/// that `store` has just interned. Either way every text is borrowed.
+fn copy_elements<'a>(stored: &[DecodedElement<'a>], out: &mut Vec<DecodedElement<'a>>) {
+    debug_assert!(stored.iter().all(owns_nothing));
+    out.reserve(stored.len());
+    // SAFETY: every text of `stored` is borrowed (`store` swaps owned text
+    // for interned text before it copies a result into an entry), so a
+    // bitwise copy owns nothing and neither it nor the original frees anything
+    // when dropped. `reserve` made room for `stored.len()` more, and `stored`
+    // is another vector's, so nothing overlaps.
+    unsafe {
+        let len = out.len();
+        std::ptr::copy_nonoverlapping(stored.as_ptr(), out.as_mut_ptr().add(len), stored.len());
+        out.set_len(len + stored.len());
+    }
+}
+
+/// Empty `elements` that own no text without walking them.
+fn forget_copies(elements: &mut Vec<DecodedElement<'_>>) {
+    debug_assert!(elements.iter().all(owns_nothing));
+    // SAFETY: shortening exposes nothing uninitialized, and the elements
+    // skipped own no heap memory, so not dropping them leaks nothing.
+    unsafe { elements.set_len(0) }
+}
+
+/// Memory the result tables may intern over the life of the process. Nearly
+/// all interned text is the per-key descriptor value (11 or 14 bytes), so this
+/// holds about 750k keys; sorted New York's 11.9M VINs need about 10 MB.
+const MAX_INTERNED_BYTES: usize = 32 << 20;
+/// What one interned text costs besides its bytes: its allocation and slot.
+const TEXT_OVERHEAD: usize = 32;
+
+/// Owned text of stored results, kept for the life of the process so that an
+/// entry borrows only text that outlives every database: an element copied
+/// out of a stream may be kept for `'db`, past the table. Append-only and
+/// deduplicated; past `cap` bytes nothing more is interned and a result
+/// needing new text is not stored. Leaked, like the scrubbed values of the
+/// default records.
+struct Interner {
+    texts: IntSet<&'static str>,
+    bytes: usize,
+    cap: usize,
+    refused: u64,
+}
+
+impl Interner {
+    fn new(cap: usize) -> Self {
+        Self {
+            texts: IntSet::default(),
+            bytes: 0,
+            cap,
+            refused: 0,
+        }
+    }
+
+    fn intern(&mut self, text: &str) -> Option<&'static str> {
+        if let Some(&interned) = self.texts.get(text) {
+            return Some(interned);
+        }
+        let cost = text.len() + TEXT_OVERHEAD;
+        if cost > self.cap - self.bytes {
+            self.refused += 1;
+            return None;
+        }
+        let interned: &'static str = Box::leak(text.into());
+        self.bytes += cost;
+        self.texts.insert(interned);
+        Some(interned)
+    }
+}
+
+static INTERNED: LazyLock<Mutex<Interner>> =
+    LazyLock::new(|| Mutex::new(Interner::new(MAX_INTERNED_BYTES)));
+
+fn interned() -> MutexGuard<'static, Interner> {
+    INTERNED.lock().unwrap_or_else(PoisonError::into_inner)
+}
+
+/// Process-wide `(texts, bytes with overhead, refusals)` of the result
+/// tables' interned text, for tuning.
+#[doc(hidden)]
+pub fn result_cache_interned() -> (usize, usize, u64) {
+    let interned = interned();
+    (interned.texts.len(), interned.bytes, interned.refused)
 }
 
 /// One stream's results, shared by its workers; disabled at capacity 0. It
@@ -154,10 +271,9 @@ impl<'a> Hit<'a> {
     /// sanitized VIN. Returns whether it copied.
     pub(crate) fn fill(&self, out: &mut DecodeResult<'a>, filled: &mut Filled) -> bool {
         let entry = self.0.as_ref().expect("a hit holds an entry");
-        if filled.0 == entry.id {
+        if filled.id == entry.id {
             return false;
         }
-        filled.0 = entry.id;
         let stored = &entry.result;
         out.wmi.clone_from(&stored.wmi);
         out.descriptor.clone_from(&stored.descriptor);
@@ -165,8 +281,12 @@ impl<'a> Hit<'a> {
         out.error_codes.clone_from(&stored.error_codes);
         out.check_digit_valid = stored.check_digit_valid;
         out.corrected_vin.clear();
-        clear_elements(&mut out.elements);
-        out.elements.extend_from_slice(&stored.elements);
+        filled.clear(&mut out.elements);
+        *filled = Filled {
+            id: entry.id,
+            copied: true,
+        };
+        copy_elements(&stored.elements, &mut out.elements);
         true
     }
 }
@@ -193,6 +313,8 @@ pub(crate) struct Worker {
     hits: u64,
     probes: u64,
     pub(crate) uncopied: u64,
+    /// Interned text this worker has seen, to skip the shared lock.
+    texts: IntSet<&'static str>,
 }
 
 impl Drop for Worker {
@@ -288,25 +410,38 @@ impl Worker {
     }
 
     /// Publish a clean result for the probed key; anything else is not
-    /// stored. Returns what `result` now holds: the new entry, if stored.
+    /// stored. Owned text in `result` is swapped for equal interned text, so
+    /// the entry copies it bitwise. Returns what `result` now holds: the new
+    /// entry, if stored.
     pub(crate) fn store<'a>(
         &mut self,
         table: &Table<'a>,
         index: usize,
         key: Key,
-        result: &DecodeResult<'a>,
+        result: &mut DecodeResult<'a>,
     ) -> Filled {
         if result.error_codes != [0] || !result.corrected_vin.is_empty() {
             return Filled::default();
         }
         debug_assert!(result.check_digit_valid);
-        self.recent_stores += 1;
-        // The same `extend_from_slice` as `fill`, so the two share one
-        // out-of-line copy loop with the element clone inlined; `clone()`
-        // here left `fill` calling `clone` per element (+1.4k instructions
-        // per VIN on sorted New York).
+        for element in &mut result.elements {
+            for text in [
+                &mut element.value,
+                &mut element.attribute_id,
+                &mut element.source,
+                &mut element.keys,
+            ] {
+                if let Cow::Owned(owned) = text {
+                    let Some(interned) = self.intern(owned) else {
+                        return Filled::default();
+                    };
+                    *text = Cow::Borrowed(interned);
+                }
+            }
+        }
         let mut elements = Vec::with_capacity(result.elements.len());
-        elements.extend_from_slice(&result.elements);
+        copy_elements(&result.elements, &mut elements);
+        self.recent_stores += 1;
         let result = DecodeResult {
             vin: String::new(),
             wmi: result.wmi.clone(),
@@ -321,7 +456,17 @@ impl Worker {
         table
             .slot(index)
             .store(Some(Arc::new(Entry { key, id, result })));
-        Filled(id)
+        Filled { id, copied: true }
+    }
+
+    /// `text` interned through the worker's memo; `None` at the cap.
+    fn intern(&mut self, text: &str) -> Option<&'static str> {
+        if let Some(&interned) = self.texts.get(text) {
+            return Some(interned);
+        }
+        let interned = interned().intern(text)?;
+        self.texts.insert(interned);
+        Some(interned)
     }
 }
 
@@ -500,6 +645,52 @@ mod tests {
     }
 
     #[test]
+    fn interner_dedups_and_refuses_new_text_past_its_cap() {
+        let mut interner = Interner::new(2 * TEXT_OVERHEAD + 8);
+        let first = interner.intern("abcde").expect("fits");
+        let again = interner.intern(&String::from("abcde")).expect("interned");
+        assert!(std::ptr::eq(first, again));
+        assert_eq!(interner.intern("wxyz"), None);
+        assert_eq!(interner.intern("xyz"), Some("xyz"));
+        assert_eq!(interner.intern("q"), None);
+        assert_eq!(interner.intern("abcde"), Some("abcde"));
+        assert_eq!(
+            (interner.texts.len(), interner.bytes, interner.refused),
+            (2, 2 * TEXT_OVERHEAD + 8, 2)
+        );
+    }
+
+    #[test]
+    fn stored_entries_borrow_every_text() {
+        let Some(db) = Db::try_embedded() else { return };
+        let table = Table::new(64);
+        let mut worker = Worker::default();
+        let mut owned = 0;
+        for vin in inputs(db) {
+            let Probe::Miss(index, key) =
+                worker.probe(&table, db, &vin.trim().to_ascii_uppercase(), None)
+            else {
+                continue;
+            };
+            let decoded = decode_full(db, &vin, NOW, current_year_at(NOW), None);
+            owned += decoded
+                .elements
+                .iter()
+                .filter(|element| !owns_nothing(element))
+                .count();
+            let mut result = decoded.clone();
+            if worker.store(&table, index, key, &mut result).is_set() {
+                let entry = table.slot(index).load_full().expect("stored");
+                assert!(result.elements.iter().all(owns_nothing));
+                assert!(entry.result.elements.iter().all(owns_nothing));
+                assert_eq!(result, decoded);
+                assert_eq!(entry.result.elements, decoded.elements);
+            }
+        }
+        assert!(owned > 0, "some stored result had owned text to intern");
+    }
+
+    #[test]
     fn serial_siblings_hit_and_refused_inputs_do_not() {
         let Some(db) = Db::try_embedded() else { return };
         let current_year = current_year_at(NOW);
@@ -542,7 +733,7 @@ mod tests {
             panic!("an empty table misses");
         };
         let result = decode_full(db, vin, NOW, current_year_at(NOW), None);
-        worker.store(&table, index, key, &result);
+        worker.store(&table, index, key, &mut result.clone());
         let mut other = Worker::default();
         assert!(matches!(other.probe(&table, db, vin, None), Probe::Hit(_)));
         assert!(matches!(

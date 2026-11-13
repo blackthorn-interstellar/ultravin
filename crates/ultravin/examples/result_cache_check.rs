@@ -66,5 +66,7 @@ fn main() {
         uncopied - uncopied_before,
         probes - probes_before
     );
+    let (texts, bytes, refused) = ultravin::result_cache_interned();
+    println!("interned {texts} texts, {bytes} bytes, {refused} refused");
     assert_eq!(mismatches, 0);
 }

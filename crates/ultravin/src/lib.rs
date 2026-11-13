@@ -66,7 +66,7 @@ pub use native_stream::{
     decode_native_stream_at, NativeBatch, NativeStreamConfig, NativeStreamError,
 };
 #[doc(hidden)]
-pub use result_cache::result_cache_counters;
+pub use result_cache::{result_cache_counters, result_cache_interned};
 pub use wmi::{vin_descriptor, vin_wmi};
 
 /// Identity of the decoder and the embedded NHTSA data artifact.
@@ -1134,15 +1134,18 @@ pub(crate) fn decode_full_cached<'a>(
     let held = std::mem::take(filled);
     if !workspace.results.wants_probe(table) {
         return match previous {
-            Some(previous) => decode_full_reusing(
-                db,
-                input,
-                now_micros,
-                current_year,
-                caller_year,
-                previous,
-                workspace,
-            ),
+            Some(mut previous) => {
+                held.clear(&mut previous.elements);
+                decode_full_reusing(
+                    db,
+                    input,
+                    now_micros,
+                    current_year,
+                    caller_year,
+                    previous,
+                    workspace,
+                )
+            }
             None => decode_full_with_workspace(
                 db,
                 input,
@@ -1158,8 +1161,7 @@ pub(crate) fn decode_full_cached<'a>(
         None => (empty_result(), result_cache::Filled::default()),
     };
     out.vin = sanitize_into(input, std::mem::take(&mut out.vin));
-    let probe = workspace.results.probe(table, db, &out.vin, caller_year);
-    match probe {
+    let miss = match workspace.results.probe(table, db, &out.vin, caller_year) {
         result_cache::Probe::Hit(hit) => {
             *filled = held;
             if !hit.fill(&mut out, filled) {
@@ -1171,31 +1173,25 @@ pub(crate) fn decode_full_cached<'a>(
                 decode_full(db, input, now_micros, current_year, caller_year),
                 "result cache hit differs from a full decode of {input:?}"
             );
-            out
+            return out;
         }
-        result_cache::Probe::Miss(index, key) => {
-            let result = decode_full_reusing(
-                db,
-                input,
-                now_micros,
-                current_year,
-                caller_year,
-                out,
-                workspace,
-            );
-            *filled = workspace.results.store(table, index, key, &result);
-            result
-        }
-        result_cache::Probe::Skip => decode_full_reusing(
-            db,
-            input,
-            now_micros,
-            current_year,
-            caller_year,
-            out,
-            workspace,
-        ),
+        result_cache::Probe::Miss(index, key) => Some((index, key)),
+        result_cache::Probe::Skip => None,
+    };
+    held.clear(&mut out.elements);
+    let mut result = decode_full_reusing(
+        db,
+        input,
+        now_micros,
+        current_year,
+        caller_year,
+        out,
+        workspace,
+    );
+    if let Some((index, key)) = miss {
+        *filled = workspace.results.store(table, index, key, &mut result);
     }
+    result
 }
 
 fn empty_result<'a>() -> DecodeResult<'a> {
