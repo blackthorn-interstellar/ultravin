@@ -6,11 +6,9 @@ use std::fmt;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::SeqCst};
 use std::sync::{mpsc, Arc, Condvar, Mutex, MutexGuard};
 
-use crate::result_cache::Filled;
 use crate::{current_year_at, decode_full_cached, Db, DecodeResult, DecodeWorkspace};
 
 const MAX_RETAINED_VIN_BYTES: usize = 64;
-const MAX_RETAINED_ELEMENTS: usize = 256;
 
 #[cfg(test)]
 static PANIC_WORKER_BATCH: std::sync::atomic::AtomicUsize =
@@ -159,8 +157,6 @@ enum SlotState {
 
 struct Slot<'db> {
     results: Vec<Option<DecodeResult<'db>>>,
-    /// Per row, the result-table entry it was last filled from.
-    filled: Vec<Filled>,
     state: SlotState,
 }
 
@@ -168,7 +164,6 @@ impl<'db> Slot<'db> {
     fn new(batch_size: usize) -> Self {
         Self {
             results: (0..batch_size).map(|_| None).collect(),
-            filled: vec![Filled::default(); batch_size],
             state: SlotState::Free,
         }
     }
@@ -316,32 +311,31 @@ enum Published {
 }
 
 fn clear_slot(slot: &mut Slot<'_>, len: usize) {
-    for (result, filled) in slot.results[..len].iter_mut().zip(&mut slot.filled) {
+    for result in &mut slot.results[..len] {
         drop(result.take());
-        *filled = Filled::default();
     }
 }
 
-/// Empty each row but keep its buffers. A row filled from a result-table
-/// entry keeps that result too: a hit on the same entry then rewrites only
-/// `vin`, and any other decode resets every field itself.
+/// Empty each row but keep its buffers. A row sharing a result-table
+/// entry's elements keeps that result too: a hit on the same entry then
+/// rewrites only `vin`, and any other decode resets every field itself.
 fn prepare_slot_reuse(slot: &mut Slot<'_>, len: usize) {
-    for (result, filled) in slot.results[..len].iter_mut().zip(&slot.filled) {
-        let Some(result) = result else { continue };
+    for result in slot.results[..len].iter_mut().flatten() {
         result.vin.clear();
         if result.vin.capacity() > MAX_RETAINED_VIN_BYTES {
             result.vin = String::new();
         }
-        if filled.is_set() {
+        if result.elements.is_shared() {
             continue;
         }
         result.wmi.clear();
         result.descriptor.clear();
         result.error_codes = Vec::new();
         result.corrected_vin = String::new();
-        crate::clear_elements(&mut result.elements);
-        if result.elements.capacity() > MAX_RETAINED_ELEMENTS {
-            result.elements = Vec::new();
+        let elements = result.elements.to_mut();
+        crate::clear_elements(elements);
+        if elements.capacity() > crate::MAX_RETAINED_ELEMENTS {
+            *elements = Vec::new();
         }
     }
 }
@@ -444,9 +438,7 @@ fn worker<'db>(
                         (start..end).map(|index| (crate::locality_key(&inputs[index]), index)),
                     );
                     order.sort_unstable_by_key(|&(key, _)| key);
-                    let Slot {
-                        results, filled, ..
-                    } = &mut *slot;
+                    let results = &mut slot.results;
                     for (_, index) in order.iter().copied() {
                         let result_slot = &mut results[index - start];
                         *result_slot = Some(decode_full_cached(
@@ -456,7 +448,6 @@ fn worker<'db>(
                             current_year,
                             model_year,
                             result_slot.take(),
-                            &mut filled[index - start],
                             result_table,
                             &mut decode_workspace,
                         ));

@@ -76,7 +76,8 @@ mod tests {
                 created_on: None,
                 wmi_id: None,
                 to_be_qced: false,
-            }],
+            }]
+            .into(),
         }
     }
 
@@ -94,9 +95,9 @@ mod tests {
     fn native_memory_excludes_borrowed_element_text() {
         let mut result = result_with_source(Cow::Borrowed("Pattern"));
         let owned = native_row_owned_bytes(&result);
-        result.elements[0].value = Cow::Borrowed("value");
-        result.elements[0].attribute_id = Cow::Borrowed("123");
-        result.elements[0].keys = Cow::Borrowed("ABCDE");
+        result.elements.to_mut()[0].value = Cow::Borrowed("value");
+        result.elements.to_mut()[0].attribute_id = Cow::Borrowed("123");
+        result.elements.to_mut()[0].keys = Cow::Borrowed("ABCDE");
         assert_eq!(owned - native_row_owned_bytes(&result), 7 + 13 + 17);
     }
 

@@ -74,9 +74,9 @@ corpus. Same host and command as the headline, one run per cell, load average
 Each stream now [reuses results across VINs that differ only by
 serial](../PERFORMANCE_IMPROVEMENTS.md#november-12-result-reuse-cache): one
 table of 16,384 entries (about 230 MB when full) shared by all its workers.
-A hit copies the stored elements with one `memcpy` (their owned text is
-interned), and a hit on the entry a recycled output row already holds writes
-only the VIN. With hits that cheap a worker batch takes microseconds, so the
+A hit hands the output row the entry's element list by reference instead of
+copying it, and a hit on the entry a recycled output row already shares
+writes only the VIN. With hits that cheap a worker batch takes microseconds, so the
 stream now sizes batches at 64 VINs × 4 slots per worker instead of 24 × 4
 (otherwise twelve sorted workers spend over 40% of their CPU time in the kernel handing
 batches over; [slot plans](../PERFORMANCE_IMPROVEMENTS.md#november-12-result-reuse-cache)).

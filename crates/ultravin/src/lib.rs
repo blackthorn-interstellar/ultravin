@@ -19,6 +19,7 @@ mod conversion;
 pub mod cover;
 pub mod db;
 mod decode;
+mod elements;
 mod errors;
 pub mod generate;
 mod hash;
@@ -51,6 +52,7 @@ pub use arrow_io::{
 pub use batch_results::BatchResults;
 pub use checkdigit::check_digit;
 pub use db::Db;
+pub use elements::Elements;
 #[doc(hidden)] // build-tooling hook (`vpic-import --stale-cache-report`), not API
 pub use errors::recompute_valid_chars;
 pub use generate::{generate, pairwise, seeded, sweep, Dimension, Filter, DEFAULT_INVALID_RATE};
@@ -66,7 +68,7 @@ pub use native_stream::{
     decode_native_stream_at, NativeBatch, NativeStreamConfig, NativeStreamError,
 };
 #[doc(hidden)]
-pub use result_cache::{result_cache_counters, result_cache_interned};
+pub use result_cache::result_cache_counters;
 pub use wmi::{vin_descriptor, vin_wmi};
 
 /// Identity of the decoder and the embedded NHTSA data artifact.
@@ -140,7 +142,7 @@ pub struct DecodeResult<'a> {
     pub error_codes: Vec<i32>,
     pub check_digit_valid: bool,
     pub corrected_vin: String,
-    pub elements: Vec<DecodedElement<'a>>,
+    pub elements: Elements<'a>,
 }
 
 /// One attribute of a [`FlatResult`]: a single value, or the full list for the
@@ -1071,11 +1073,11 @@ pub(crate) fn decode_full_reusing<'a>(
         descriptor,
         error_codes,
         corrected_vin,
-        mut elements,
+        elements,
         ..
     } = previous;
     drop((error_codes, corrected_vin));
-    clear_elements(&mut elements);
+    let elements = workspace.take_elements(elements);
     decode_items_with_pruning_and_buffers_workspace(
         db,
         input,
@@ -1091,32 +1093,8 @@ pub(crate) fn decode_full_reusing<'a>(
     .full_into_workspace(elements, workspace)
 }
 
-pub(crate) fn decode_full_with_workspace<'a>(
-    db: &'a Db,
-    input: &str,
-    now_micros: i64,
-    current_year: i32,
-    caller_year: Option<i32>,
-    workspace: &mut DecodeWorkspace<'a>,
-) -> DecodeResult<'a> {
-    decode_items_with_pruning_and_buffers_workspace(
-        db,
-        input,
-        now_micros,
-        current_year,
-        caller_year,
-        true,
-        String::new(),
-        String::new(),
-        String::new(),
-        workspace,
-    )
-    .full_into_workspace(Vec::new(), workspace)
-}
-
 /// Full decode into `previous`'s storage, answered from the stream's result
-/// table when an earlier VIN differing only by serial was clean. `filled`
-/// names the entry `previous` was last filled from and is kept current.
+/// table when an earlier VIN differing only by serial was clean.
 // The decode inputs, the reused output, then the shared and per-worker state.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn decode_full_cached<'a>(
@@ -1126,59 +1104,31 @@ pub(crate) fn decode_full_cached<'a>(
     current_year: i32,
     caller_year: Option<i32>,
     previous: Option<DecodeResult<'a>>,
-    filled: &mut result_cache::Filled,
     table: &result_cache::Table<'a>,
     workspace: &mut DecodeWorkspace<'a>,
 ) -> DecodeResult<'a> {
-    // Only a hit on a reused row keeps what it held; all else rewrites it.
-    let held = std::mem::take(filled);
-    if !workspace.results.wants_probe(table) {
-        return match previous {
-            Some(mut previous) => {
-                held.clear(&mut previous.elements);
-                decode_full_reusing(
-                    db,
-                    input,
-                    now_micros,
-                    current_year,
-                    caller_year,
-                    previous,
-                    workspace,
-                )
+    let mut out = previous.unwrap_or_else(empty_result);
+    let mut miss = None;
+    if workspace.results.wants_probe(table) {
+        out.vin = sanitize_into(input, std::mem::take(&mut out.vin));
+        match workspace.results.probe(table, db, &out.vin, caller_year) {
+            result_cache::Probe::Hit(hit) => {
+                match hit.fill(&mut out) {
+                    Some(displaced) => workspace.park_elements(displaced),
+                    None => workspace.results.uncopied += 1,
+                }
+                #[cfg(debug_assertions)]
+                assert_eq!(
+                    out,
+                    decode_full(db, input, now_micros, current_year, caller_year),
+                    "result cache hit differs from a full decode of {input:?}"
+                );
+                return out;
             }
-            None => decode_full_with_workspace(
-                db,
-                input,
-                now_micros,
-                current_year,
-                caller_year,
-                workspace,
-            ),
-        };
-    }
-    let (mut out, held) = match previous {
-        Some(previous) => (previous, held),
-        None => (empty_result(), result_cache::Filled::default()),
-    };
-    out.vin = sanitize_into(input, std::mem::take(&mut out.vin));
-    let miss = match workspace.results.probe(table, db, &out.vin, caller_year) {
-        result_cache::Probe::Hit(hit) => {
-            *filled = held;
-            if !hit.fill(&mut out, filled) {
-                workspace.results.uncopied += 1;
-            }
-            #[cfg(debug_assertions)]
-            assert_eq!(
-                out,
-                decode_full(db, input, now_micros, current_year, caller_year),
-                "result cache hit differs from a full decode of {input:?}"
-            );
-            return out;
+            result_cache::Probe::Miss(index, key) => miss = Some((index, key)),
+            result_cache::Probe::Skip => {}
         }
-        result_cache::Probe::Miss(index, key) => Some((index, key)),
-        result_cache::Probe::Skip => None,
-    };
-    held.clear(&mut out.elements);
+    }
     let mut result = decode_full_reusing(
         db,
         input,
@@ -1189,7 +1139,9 @@ pub(crate) fn decode_full_cached<'a>(
         workspace,
     );
     if let Some((index, key)) = miss {
-        *filled = workspace.results.store(table, index, key, &mut result);
+        if let Some(spare) = workspace.results.store(table, index, key, &mut result) {
+            workspace.park_elements(spare.into());
+        }
     }
     result
 }
@@ -1203,7 +1155,7 @@ fn empty_result<'a>() -> DecodeResult<'a> {
         error_codes: Vec::new(),
         check_digit_valid: false,
         corrected_vin: String::new(),
-        elements: Vec::new(),
+        elements: Elements::default(),
     }
 }
 
@@ -1212,6 +1164,9 @@ pub(crate) struct DecodeWorkspace<'a> {
     item_vectors_len: usize,
     passes: Vec<Pass<'a>>,
     results: result_cache::Worker,
+    /// Emptied element lists: a cache hit leaves its row's list here, and a
+    /// decode into a row whose list is shared takes one.
+    spare_elements: Vec<Vec<DecodedElement<'a>>>,
 }
 
 impl Default for DecodeWorkspace<'_> {
@@ -1221,11 +1176,36 @@ impl Default for DecodeWorkspace<'_> {
             item_vectors_len: 0,
             passes: Vec::new(),
             results: result_cache::Worker::default(),
+            spare_elements: Vec::new(),
         }
     }
 }
 
+/// Element lists a worker keeps spare, and the most elements each may hold.
+const MAX_SPARE_ELEMENT_LISTS: usize = 8;
+pub(crate) const MAX_RETAINED_ELEMENTS: usize = 256;
+
 impl<'a> DecodeWorkspace<'a> {
+    /// An empty list to decode into: `elements`' own unless it is shared.
+    fn take_elements(&mut self, elements: Elements<'a>) -> Vec<DecodedElement<'a>> {
+        elements
+            .into_buffer()
+            .or_else(|| self.spare_elements.pop())
+            .unwrap_or_default()
+    }
+
+    /// Keep `elements`' list for a later [`Self::take_elements`] if no other
+    /// result shares it and there is room.
+    fn park_elements(&mut self, elements: Elements<'a>) {
+        if self.spare_elements.len() < MAX_SPARE_ELEMENT_LISTS {
+            if let Some(list) = elements.into_buffer() {
+                if list.capacity() <= MAX_RETAINED_ELEMENTS {
+                    self.spare_elements.push(list);
+                }
+            }
+        }
+    }
+
     fn take_items(&mut self) -> Vec<decode::DecodingItem<'a>> {
         if self.item_vectors_len == 0 {
             Vec::new()
@@ -1480,7 +1460,7 @@ impl<'a> RawResult<'a> {
             error_codes: self.error_codes,
             check_digit_valid: self.check_digit_valid,
             corrected_vin: self.corrected_vin,
-            elements: project(self.db, self.items, defaults),
+            elements: project(self.db, self.items, defaults).into(),
         }
     }
 
@@ -1500,7 +1480,7 @@ impl<'a> RawResult<'a> {
             error_codes: self.error_codes,
             check_digit_valid: self.check_digit_valid,
             corrected_vin: self.corrected_vin,
-            elements,
+            elements: elements.into(),
         };
         workspace.put_items(self.items);
         result

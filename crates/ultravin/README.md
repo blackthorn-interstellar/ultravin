@@ -112,8 +112,12 @@ artifact whose digest differs from the release pin reports its data month as
 `model_year`, `error_codes`, `check_digit_valid`, `corrected_vin`) plus
 `elements`: one `DecodedElement` per resolved attribute, the 15-column
 `spVinDecode` row including provenance (`source`, `pattern_id`,
-`vin_schema_id`, `keys`, …). `FlatResult` collapses that to `variable -> value`.
-Both implement `serde::Serialize`.
+`vin_schema_id`, `keys`, …). `elements` is an `Elements` list that reads as a
+slice (`iter`, `len`, indexing, `for e in &r.elements`); a native stream's
+result cache lets VINs with the same cached result share one list, so
+`to_mut` and `into_vec` copy a shared list first, like `Cow`.
+`FlatResult` collapses that to `variable -> value`. Both implement
+`serde::Serialize`.
 
 Full results borrow database text wherever possible. `DecodedElement.value`,
 `attribute_id`, `keys`, and `source` are `Cow<'a, str>`: database-backed strings

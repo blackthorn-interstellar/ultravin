@@ -24,6 +24,7 @@ identified as such.
 - [September 25: sorted-input instruction cuts](#september-25-sorted-input-instruction-cuts)
 - [November 11: key positions checked in place](#november-11-key-positions-checked-in-place)
 - [November 13: native stream wakes only the worker that can go on](#november-13-native-stream-wakes-only-the-worker-that-can-go-on)
+- [November 13: cache hits share the element list](#november-13-cache-hits-share-the-element-list)
 - [Experiments we rejected or replaced](#experiments-we-rejected-or-replaced)
 - [SQL oracle and development resources](#sql-oracle-and-development-resources)
 - [Correctness and measurement rules](#correctness-and-measurement-rules)
@@ -794,7 +795,8 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
   taken once per new text per worker), then copies the row into the entry
   bitwise. A hit copies the entry's elements with one `memcpy`, and a row
   holding such a copy (marked in its remembered id) empties with
-  `set_len(0)` instead of a drop walk. Two small `unsafe` blocks in
+  `set_len(0)` instead of a drop walk ([replaced the next day](#november-13-cache-hits-share-the-element-list)
+  by sharing the list, which needs neither). Two small `unsafe` blocks in
   `result_cache.rs`, both relying on one invariant: every text of an entry
   is borrowed. The interner caps at 32 MB counting 32 bytes of overhead per
   text; at the cap a result needing new text is simply not stored. Nearly
@@ -905,6 +907,82 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
   per VIN and throughput fell to 6.72-6.75M, below targeted wakes alone:
   a slot last written on another core (often the other cluster) costs more
   than the stalls it fills.
+
+## November 13: cache hits share the element list
+
+- **Bottleneck.** A result-cache hit still copied the entry's 56-66
+  elements (13-15 KB) into the output row. At twelve sorted-NY workers that
+  is ~100 GB/s of copying: 4.2k cycles per VIN against 2.0k on one worker,
+  and eight workers already as fast as twelve (7.2M VIN/s).
+- **Mechanism.** `DecodeResult::elements` is now an `Elements` list
+  ([elements.rs](crates/ultravin/src/elements.rs)): an owned `Vec`, or an
+  `Arc<Vec>` shared with other results. It derefs to the element slice and
+  compares, prints and serializes exactly like the `Vec` it replaces;
+  `to_mut`/`into_vec` copy a shared list first, like `Cow`. A store moves
+  the decoded row's list into an `Arc` the row and the entry both hold (into
+  an exact-size list first when the row's reused buffer has more than an
+  eighth to spare, so a full table holds no slack); a hit clones that `Arc`
+  into the row and patches the header. A row whose list is the entry's
+  (`Arc::ptr_eq`) already holds the whole result and gets only `vin`, which
+  replaces the per-row entry ids. Entries own their text again, so the
+  process-wide interner (32 MB cap, leaked), the bitwise copy, the
+  `set_len(0)` emptying and both `unsafe` blocks in `result_cache.rs` are
+  gone, as is `result_cache_interned()`. A list lives as long as any row,
+  entry or caller clone holding it.
+- **Buffer reuse.** A decode into a row whose list is shared takes the list
+  back if the row is its last holder (`Arc::into_inner`), else a spare from
+  the worker's pool (at most 8 lists of at most 256 elements), else
+  allocates. A hit parks the row's displaced list there, as does a store
+  that moved its row into an exact-size list.
+- **Correctness.** Debug builds still re-decode every hit and assert
+  equality. `result_cache_check` at 12 workers against uncached
+  `decode_full`, holding up to 32k cloned rows past their batch: 0 mismatches
+  over all of sorted and shuffled NY (11.9M rows each, 11.2M and 6.0M hits),
+  again at 2 entries (9.1M hits on sorted NY with entries evicted under rows
+  that still share them), and over the synthetic 2M slice. The
+  native-stream tests passed 100 consecutive runs at 12 test threads.
+- **Results.** `throughput ... full auto`, back to back with c6cd0d3,
+  alternating, ranges over pairs (12-worker sorted: three pairs; 12-worker
+  synthetic: three; shuffled 12 and 1-worker sorted and synthetic: two):
+
+  | workers | input | VIN/s | cycles/VIN | busy cores | system CPU s |
+  |---:|---|---:|---:|---:|---:|
+  | 12 | NY sorted 2M | 7.14-7.21M → **10.55-10.56M** (+47%) | 4,186-4,196 → 2,630-2,641 | 9.9-10.0 → 9.2 | 4.8-5.2 → 5.2-5.4 |
+  | 8 | NY sorted 2M | 7.17M → 9.83M (+37%) | 3,330 → 2,268 | 7.4 → 7.0 | 5.3 → 5.9 |
+  | 1 | NY sorted 2M | 1.730-1.733M → **2.833-2.839M** (+64%) | 1,962-1,966 → 1,224-1,226 | 1.0 → 1.1 | 0.8 → 1.2 |
+  | 12 | NY shuffled | 1.091-1.100M → 1.219-1.267M (+11-16%) | 30.7k → 26.7-26.8k | 11.2 → 10.9-11.3 | 2.1-2.2 → 1.8-3.1 |
+  | 1 | NY shuffled | 156,979 → 177,334 (+13%) | 21.3k → 18.9k | 1.0 | 1.8 → 1.7 |
+  | 12 | synthetic 2M | 1.869-1.875M → 1.827-1.859M (−1.5%) | 17.86-17.92k → 18.04-18.20k | 11.2 → 11.1-11.2 | 1.8-1.9 → 1.8-2.0 |
+  | 1 | synthetic 2M | 276,555-281,331 → 272,726-276,004 (−1.5%) | 11.97-12.12k → 12.15-12.30k | 1.0 | 0.3-0.4 → 0.4-0.5 |
+
+  Instructions per VIN fell everywhere (sorted 12: 6.72k → 4.65k; synthetic:
+  −90). The synthetic slice, where nothing repeats, pays ~1% more cycles:
+  with the cache disabled the two builds match within 0.5%, and a `sample`
+  diff shows the same decode work, inlined differently, plus 0.4% freeing
+  evicted entries' text, which the interner used to leak. Moving every
+  stored row into an exact-size list (so no later miss allocates) measured
+  the same. Peak RSS falls at twelve workers on NY (sorted 0.98-1.01 →
+  0.70-0.72 GB, shuffled 1.83 → 1.64-1.68 GB) and holds within about
+  0.08 GB on synthetic input. Twelve workers now keep only ~9.2 cores busy
+  on sorted input: the per-batch hand-off, not the hit, is what they wait on.
+- **A consumer that reads the data.** The benchmark consumer only
+  `black_box`es each batch. With a temporary harness change that sums every
+  element's value length and id, twelve sorted workers go from 3.50-3.52M
+  (5,232 cycles/VIN, 5.8 busy cores) to 9.42-9.43M VIN/s (2,825-2,829, 8.8
+  cores), two pairs. Most likely the consumer thread on master read 13 KB
+  of elements freshly written on another core per VIN, while now
+  consecutive sorted rows mostly point at the same few lists, which stay
+  in its cache.
+- **Refcount traffic.** A hit that changes the row's list increments the
+  entry list's count and decrements the old one, counters every worker on
+  that key shares. A `sample` at twelve sorted workers puts
+  `DecodeWorkspace::park_elements` (where the displaced list's decrement
+  lands) at 4.7% of busy samples against 0.4% on one worker, and the
+  worker loop, where the clone is inlined, at 19.9% against 16.5%: roughly
+  5-8% of twelve-worker hit time, measurable but not the limit. The fix, if
+  wanted, is a per-worker handle: each worker wraps an entry's list once in
+  an `Arc` only it touches and hands its rows that, so the shared count
+  moves once per worker per entry instead of once per hit.
 
 ## Experiments we rejected or replaced
 
