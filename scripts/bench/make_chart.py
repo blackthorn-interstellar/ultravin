@@ -87,7 +87,8 @@ def short(n: float) -> str:
 
 def legend(counts: list[int], centre: float, y: float) -> list[str]:
     """One swatch per core count, in the bars' own shades, centred under the axis title."""
-    widths = [16 + len(cores(n)) * CHAR_W for n in counts]
+    # Whole pixels: a float sum lands on rounding ties that Python 3.12 breaks differently.
+    widths = [round(16 + len(cores(n)) * CHAR_W) for n in counts]
     lx = centre - (sum(widths) + 14 * (len(counts) - 1)) / 2
     out = []
     for level, (n, width) in enumerate(zip(counts, widths, strict=True)):

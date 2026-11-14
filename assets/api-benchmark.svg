@@ -91,10 +91,10 @@
 <text class="axis" x="703.0" y="422" text-anchor="middle">4.5M</text>
 <text class="axis" x="750.0" y="422" text-anchor="middle">5M</text>
 <text class="axis" x="515.0" y="438" text-anchor="middle">VINs decoded per second — higher is better</text>
-<rect class="s0" x="416.0" y="448.5" width="11" height="11" rx="2"/>
-<text class="axis" x="432.0" y="458.0">1 core</text>
-<rect class="s1" x="482.6" y="448.5" width="11" height="11" rx="2"/>
-<text class="axis" x="498.6" y="458.0">4 cores</text>
-<rect class="s2" x="555.3" y="448.5" width="11" height="11" rx="2"/>
-<text class="axis" x="571.3" y="458.0">8 cores</text>
+<rect class="s0" x="415.5" y="448.5" width="11" height="11" rx="2"/>
+<text class="axis" x="431.5" y="458.0">1 core</text>
+<rect class="s1" x="482.5" y="448.5" width="11" height="11" rx="2"/>
+<text class="axis" x="498.5" y="458.0">4 cores</text>
+<rect class="s2" x="555.5" y="448.5" width="11" height="11" rx="2"/>
+<text class="axis" x="571.5" y="458.0">8 cores</text>
 </svg>

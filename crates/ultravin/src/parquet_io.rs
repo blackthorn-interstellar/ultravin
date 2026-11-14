@@ -2553,7 +2553,9 @@ mod tests {
             let rows = compact(&src, &out, all.clone(), NOW, chunk_rows).expect("compact");
             assert_eq!(rows.vins, vins.len());
             assert_eq!(assert_joins_to(&out, &expected), rows.vehicles);
-            assert!(rows.vehicles + 1_000 < rows.vins, "repeats share: {rows:?}");
+            // How many repeats share a row depends on the worker count (the
+            // cache admits by what each worker has seen); that some do does not.
+            assert!(rows.vehicles < rows.vins, "repeats share: {rows:?}");
         }
 
         // Ids name the column the projection asks for, under either naming.
