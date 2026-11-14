@@ -10,6 +10,10 @@ use crate::{current_year_at, decode_full_cached, Db, DecodeResult, DecodeWorkspa
 
 const MAX_RETAINED_VIN_BYTES: usize = 64;
 
+/// A batch mostly hit the result cache when at most one row in this many
+/// missed.
+const MISS_SHARE: usize = 4;
+
 #[cfg(test)]
 static PANIC_WORKER_BATCH: std::sync::atomic::AtomicUsize =
     std::sync::atomic::AtomicUsize::new(usize::MAX);
@@ -27,8 +31,15 @@ static PANIC_DECODE_INPUT: std::sync::atomic::AtomicUsize =
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct NativeStreamConfig {
     pub workers: usize,
+    /// Rows of a worker's batch while its rows miss the result cache. While
+    /// they mostly hit, its batches grow, up to `batch_size +
+    /// max_inflight_rows / workers` rows.
     pub batch_size: usize,
     pub slots_per_worker: usize,
+    /// Rows that missed the result cache, held across all worker slots.
+    /// A hit shares its element list with the cache and is not counted. The
+    /// cap is checked when a batch is claimed, before its rows are known to
+    /// hit; see [`Db::decode_native_stream_at`] for the worst case.
     pub max_inflight_rows: usize,
 }
 
@@ -185,7 +196,8 @@ impl fmt::Display for NativeStreamError {
 
 impl std::error::Error for NativeStreamError {}
 
-/// Stream decoded batches from the embedded database in input order.
+/// Stream decoded batches from the embedded database in input order. Batch
+/// lengths vary; see [`Db::decode_native_stream_at`].
 pub fn decode_native_stream_at<F>(
     inputs: &[String],
     model_year: Option<i32>,
@@ -222,11 +234,13 @@ impl<'db, T> Slot<'db, T> {
     }
 }
 
-/// The next batch to claim and the rows that claims hold until recycled.
-/// Rows are only added under the `next_batch` lock, so claims reserve them in
-/// batch order and an earlier batch never waits on rows a later one holds.
+/// The next row and batch number to claim, and the rows that claims hold
+/// until recycled. Claims reserve rows only under the `next` lock, so they
+/// reserve in batch order, and a batch that holds more after decoding adds
+/// them without waiting: an earlier batch never waits on rows a later one
+/// holds.
 struct Coordinator {
-    next_batch: Mutex<usize>,
+    next: Mutex<(usize, usize)>,
     inflight_rows: AtomicUsize,
     max_inflight_rows: usize,
     /// Workers waiting for `inflight_rows` to fall.
@@ -274,31 +288,32 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl Coordinator {
-    fn claim(self: &Arc<Self>, rows: usize, batch_size: usize) -> Claim {
-        let mut next_batch = lock(&self.next_batch);
+    /// Claim the next `len` rows (fewer at the end), reserving at most
+    /// `base` of them: a batch longer than `base` follows one that mostly
+    /// hit, and settles its true count once decoded.
+    fn claim(self: &Arc<Self>, rows: usize, len: usize, base: usize) -> Claim {
+        let mut next = lock(&self.next);
         if self.cancelled() {
             return Claim::Cancelled;
         }
-        let start = match next_batch.checked_mul(batch_size) {
-            Some(start) if start < rows => start,
-            _ => return Claim::Finished,
-        };
-        let end = start.saturating_add(batch_size).min(rows);
-        let len = end - start;
-        // Other threads only subtract, so the cap still holds after the add.
-        if self.inflight_rows.load(SeqCst) > self.max_inflight_rows - len {
-            return Claim::Blocked(len);
+        let (start, batch) = *next;
+        if start >= rows {
+            return Claim::Finished;
         }
-        let batch = *next_batch;
-        *next_batch += 1;
-        self.inflight_rows.fetch_add(len, SeqCst);
+        let end = start + len.min(rows - start);
+        let reserve = (end - start).min(base);
+        if self.inflight_rows.load(SeqCst) > self.max_inflight_rows - reserve {
+            return Claim::Blocked(reserve);
+        }
+        *next = (end, batch + 1);
+        self.inflight_rows.fetch_add(reserve, SeqCst);
         Claim::Work {
             batch,
             start,
             end,
             permit: Permit {
                 coordinator: Arc::clone(self),
-                rows: len,
+                rows: reserve,
             },
         }
     }
@@ -330,15 +345,32 @@ struct Permit {
     rows: usize,
 }
 
-impl Drop for Permit {
-    fn drop(&mut self) {
+impl Permit {
+    /// Hold `rows` instead. Adding never waits, so it may pass the cap.
+    fn settle(&mut self, rows: usize) {
+        if rows > self.rows {
+            let more = rows - self.rows;
+            self.coordinator.inflight_rows.fetch_add(more, SeqCst);
+        } else if rows < self.rows {
+            self.release(self.rows - rows);
+        }
+        self.rows = rows;
+    }
+
+    fn release(&self, rows: usize) {
         let coordinator = &self.coordinator;
-        coordinator.inflight_rows.fetch_sub(self.rows, SeqCst);
+        coordinator.inflight_rows.fetch_sub(rows, SeqCst);
         if coordinator.row_waiters.load(SeqCst) > 0 {
             for wake in &coordinator.wakes {
                 wake.wake();
             }
         }
+    }
+}
+
+impl Drop for Permit {
+    fn drop(&mut self) {
+        self.release(self.rows);
     }
 }
 
@@ -373,8 +405,15 @@ fn clear_slot<T>(slot: &mut Slot<'_, T>, len: usize) {
 /// Empty each row but keep its buffers. A row sharing a result-table
 /// entry's elements keeps that result too: a hit on the same entry then
 /// rewrites only `vin`, and any other decode resets every field itself.
-fn prepare_slot_reuse<T>(slot: &mut Slot<'_, T>, len: usize) {
-    for result in slot.results[..len].iter_mut().flatten() {
+/// Rows from `base` on, which only a long batch fills, keep their small
+/// text buffers but no element list, owned or shared, so a slot holds no
+/// more element lists than it would without long batches.
+fn prepare_slot_reuse<T>(slot: &mut Slot<'_, T>, len: usize, base: usize) {
+    for (row, result) in slot.results[..len].iter_mut().enumerate() {
+        let Some(result) = result else { continue };
+        if row >= base {
+            result.elements = crate::Elements::default();
+        }
         result.vin.clear();
         if result.vin.capacity() > MAX_RETAINED_VIN_BYTES {
             result.vin = String::new();
@@ -408,6 +447,7 @@ fn recycle<T>(
     free: &mut Vec<usize>,
     cancelled: bool,
     retain_results: bool,
+    base: usize,
 ) {
     for (index, mutex) in slots.iter().enumerate() {
         let mut slot = lock(mutex);
@@ -424,7 +464,7 @@ fn recycle<T>(
             SlotState::Free => unreachable!(),
         };
         if retain_results && !cancelled {
-            prepare_slot_reuse(&mut slot, len);
+            prepare_slot_reuse(&mut slot, len, base);
         } else {
             clear_slot(&mut slot, len);
         }
@@ -443,6 +483,8 @@ struct Job<'a, 'db, C> {
     now_micros: i64,
     current_year: i32,
     batch_size: usize,
+    /// The longest batch a worker claims.
+    max_batch_size: usize,
     retain_results: bool,
     result_table: &'a crate::result_cache::Table<'db>,
     convert: &'a C,
@@ -458,12 +500,17 @@ fn worker<'db, T, C>(
     C: Fn(&NativeBatch<'_, 'db>) -> T,
 {
     let inputs = job.inputs;
+    let base = job.batch_size;
     let mut free = (0..slots.len()).rev().collect::<Vec<_>>();
-    let mut order = Vec::<(u64, usize)>::with_capacity(job.batch_size.min(inputs.len()));
+    let mut order = Vec::<(u64, usize)>::with_capacity(base.min(inputs.len()));
     let mut decode_workspace = DecodeWorkspace::default();
+    // The next batch's length: it doubles after a batch that mostly hit the
+    // result cache, whose rows cost little time or memory, and falls back to
+    // `base` after one that did not.
+    let mut len = base;
     loop {
         let cancelled = coordinator.cancelled();
-        recycle(slots, &mut free, cancelled, job.retain_results);
+        recycle(slots, &mut free, cancelled, job.retain_results, base);
         if cancelled {
             clear_all_slots(slots);
             return;
@@ -472,12 +519,12 @@ fn worker<'db, T, C>(
             coordinator.wakes[owner].wait();
             continue;
         }
-        match coordinator.claim(inputs.len(), job.batch_size) {
+        match coordinator.claim(inputs.len(), len, base) {
             Claim::Work {
                 batch,
                 start,
                 end,
-                permit,
+                mut permit,
             } => {
                 #[cfg(test)]
                 if PANIC_WORKER_INPUT.load(std::sync::atomic::Ordering::SeqCst)
@@ -495,6 +542,10 @@ fn worker<'db, T, C>(
                 }
                 let slot_index = free.pop().expect("checked nonempty free slots");
                 let mut slot = lock(&slots[slot_index]);
+                if slot.results.len() < end - start {
+                    slot.results.resize_with(end - start, || None);
+                }
+                let hits = decode_workspace.results.hits();
                 let decoded = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     let input = |row: usize| job.order.map_or(row, |order| order[row] as usize);
                     order.clear();
@@ -542,10 +593,15 @@ fn worker<'db, T, C>(
                 }));
                 match decoded {
                     Ok(()) => {
-                        slot.state = SlotState::Published {
-                            len: end - start,
-                            permit,
+                        let rows = end - start;
+                        let misses = rows - (decode_workspace.results.hits() - hits) as usize;
+                        permit.settle(misses);
+                        len = if misses * MISS_SHARE <= rows {
+                            (len * 2).min(job.max_batch_size)
+                        } else {
+                            base
                         };
+                        slot.state = SlotState::Published { len: rows, permit };
                         drop(slot);
                         if published
                             .send(Published::Ready {
@@ -582,6 +638,21 @@ fn worker<'db, T, C>(
 
 impl Db {
     /// Decode on scoped native workers and lend each ordered batch to `consume`.
+    ///
+    /// Batches vary in length. A worker's batches have `config.batch_size`
+    /// rows (fewer at the end of the inputs) until one mostly hits the result
+    /// cache, at most a quarter of its rows missing it. Each such batch
+    /// doubles the next, up to `batch_size + max_inflight_rows / workers`
+    /// rows, and the first that misses more puts it back to `batch_size`.
+    /// [`NativeBatch::start_index`] places each batch.
+    ///
+    /// A claim reserves at most `batch_size` rows against
+    /// `max_inflight_rows`; once decoded, a batch holds one row for each of
+    /// its misses, since a hit shares its element list with the cache. Input
+    /// that misses never lengthens a batch, so it holds what fixed batches
+    /// would. At worst, every worker's long batch, claimed after one that
+    /// mostly hit, misses throughout, and `2 * max_inflight_rows` missed
+    /// rows are held at once.
     pub fn decode_native_stream_at<'db, F>(
         &'db self,
         inputs: &[String],
@@ -647,7 +718,7 @@ impl Db {
             .and_then(|slots| slots.checked_mul(slot_capacity))
             .is_some_and(|physical_rows| physical_rows <= config.max_inflight_rows);
         let coordinator = Arc::new(Coordinator {
-            next_batch: Mutex::new(0),
+            next: Mutex::new((0, 0)),
             inflight_rows: AtomicUsize::new(0),
             max_inflight_rows: config.max_inflight_rows,
             row_waiters: AtomicUsize::new(0),
@@ -672,6 +743,7 @@ impl Db {
             now_micros,
             current_year: current_year_at(now_micros),
             batch_size: config.batch_size,
+            max_batch_size: config.batch_size + config.max_inflight_rows / active_workers,
             retain_results,
             result_table: &result_table,
             convert: &convert,
@@ -694,7 +766,7 @@ impl Db {
                     }));
                     if let Err(payload) = result {
                         coordinator_ref.cancel();
-                        recycle(owner_slots, &mut Vec::new(), true, false);
+                        recycle(owner_slots, &mut Vec::new(), true, false, 0);
                         clear_all_slots(owner_slots);
                         let _ = tx.send(Published::Panicked(payload));
                     }
@@ -704,8 +776,8 @@ impl Db {
             {
                 let consumed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     let mut waiting = BTreeMap::new();
-                    let mut next = 0;
-                    'consume: while next < batches {
+                    let (mut next, mut start) = (0, 0);
+                    'consume: while start < inputs.len() {
                         match published_rx.recv() {
                             Ok(Published::Ready { batch, owner, slot }) => {
                                 waiting.insert(batch, (owner, slot));
@@ -726,7 +798,6 @@ impl Db {
                                     };
                                     let consumed = std::panic::catch_unwind(
                                         std::panic::AssertUnwindSafe(|| {
-                                            let start = next * config.batch_size;
                                             let output = slot.output.take();
                                             consume(
                                                 NativeBatch {
@@ -747,6 +818,7 @@ impl Db {
                                         std::panic::resume_unwind(payload);
                                     }
                                     next += 1;
+                                    start += len;
                                 }
                             }
                             Ok(Published::Panicked(payload)) => {
@@ -1140,7 +1212,6 @@ mod tests {
             .collect();
         let expected = crate::decode_batch_at(&inputs, Some(&years), NOW);
         let seen = converted(&inputs, &years, None);
-        assert_eq!(seen.len(), inputs.len().div_ceil(2));
         let mut visited = Vec::new();
         for (indices, text, model_years) in seen {
             let rows: Vec<_> = indices.iter().map(|&index| &expected[index]).collect();
@@ -1160,7 +1231,8 @@ mod tests {
             return;
         }
         let inputs: Vec<_> = inputs().into_iter().cycle().take(31).collect();
-        for batch in [0, 3, 15] {
+        // Batches of 2 grow to at most 3 rows, so 31 rows make at least 11.
+        for batch in [0, 3, 10] {
             let panic = std::panic::catch_unwind(|| converted(&inputs, &[], Some(batch)));
             let payload = panic.expect_err("the converter panic propagates");
             assert_eq!(
@@ -1168,7 +1240,11 @@ mod tests {
                 Some(&"injected converter panic")
             );
         }
-        assert_eq!(converted(&inputs, &[], None).len(), 16);
+        let rows: usize = converted(&inputs, &[], None)
+            .iter()
+            .map(|(indices, ..)| indices.len())
+            .sum();
+        assert_eq!(rows, inputs.len());
     }
 
     #[test]
@@ -1186,5 +1262,178 @@ mod tests {
         PANIC_DECODE_BATCH.store(usize::MAX, std::sync::atomic::Ordering::SeqCst);
         PANIC_DECODE_INPUT.store(usize::MAX, std::sync::atomic::Ordering::SeqCst);
         assert!(panic.is_err());
+    }
+
+    /// `hits` repeats of one clean VIN, `misses` distinct invalid inputs
+    /// (never stored, so never hit), then `hits` repeats again.
+    fn hit_miss_hit(hits: usize, misses: usize) -> Vec<String> {
+        let hit = || std::iter::repeat_n("1HGCM82633A004352".to_owned(), hits);
+        hit()
+            .chain((0..misses).map(|row| format!("MISS{row}")))
+            .chain(hit())
+            .collect()
+    }
+
+    /// Each batch's `(start_index, len)`, after checking every result
+    /// against an uncached decode.
+    fn batch_spans(inputs: &[String], config: NativeStreamConfig) -> Vec<(usize, usize)> {
+        let expected = crate::decode_batch_at(inputs, None, NOW);
+        let mut spans = Vec::new();
+        let mut actual = Vec::new();
+        decode_native_stream_at(inputs, None, NOW, config, |batch| {
+            assert_eq!(batch.batch_index(), spans.len());
+            assert_eq!(batch.start_index(), actual.len());
+            spans.push((batch.start_index(), batch.len()));
+            actual.extend(batch.iter().cloned());
+        })
+        .unwrap();
+        assert_eq!(actual, expected);
+        spans
+    }
+
+    #[test]
+    fn batch_lengths_grow_on_hits_and_fall_back_on_misses() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
+        // One worker, so the lengths are exact: base 4, longest 4 + 8 / 1.
+        let config = NativeStreamConfig {
+            workers: 1,
+            batch_size: 4,
+            slots_per_worker: 2,
+            max_inflight_rows: 8,
+        };
+        let lengths: Vec<_> = batch_spans(&hit_miss_hit(40, 40), config)
+            .into_iter()
+            .map(|(_, len)| len)
+            .collect();
+        let mut expected = vec![4, 8, 12, 12, 12];
+        expected.extend([4; 8]);
+        expected.extend([4, 8, 12, 12, 4]);
+        assert_eq!(lengths, expected);
+    }
+
+    #[test]
+    fn mixed_lengths_keep_input_order_across_workers() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
+        let inputs: Vec<_> = (0..6).flat_map(|_| hit_miss_hit(60, 25)).collect();
+        let config = NativeStreamConfig {
+            workers: 4,
+            batch_size: 4,
+            slots_per_worker: 2,
+            max_inflight_rows: 32,
+        };
+        for _ in 0..5 {
+            let spans = batch_spans(&inputs, config);
+            assert!(spans.iter().all(|&(_, len)| len <= 4 + 32 / 4));
+            assert!(spans.iter().any(|&(_, len)| len > 4));
+            assert!(spans.iter().any(|&(_, len)| len == 4));
+        }
+    }
+
+    #[test]
+    fn inputs_that_miss_never_lengthen_a_batch() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
+        let inputs: Vec<_> = (0..203).map(|row| format!("MISS{row}")).collect();
+        let config = NativeStreamConfig {
+            workers: 3,
+            batch_size: 4,
+            slots_per_worker: 3,
+            max_inflight_rows: 8,
+        };
+        let spans = batch_spans(&inputs, config);
+        let (last, rest) = spans.split_last().unwrap();
+        assert!(rest.iter().all(|&(_, len)| len == 4));
+        assert_eq!(last.1, 203 % 4);
+    }
+
+    #[test]
+    fn long_claims_reserve_the_base_and_settle_their_misses() {
+        let coordinator = Arc::new(Coordinator {
+            next: Mutex::new((0, 0)),
+            inflight_rows: AtomicUsize::new(0),
+            max_inflight_rows: 8,
+            row_waiters: AtomicUsize::new(0),
+            cancelled: AtomicBool::new(false),
+            wakes: vec![Wake::default()],
+        });
+        let inflight = || coordinator.inflight_rows.load(SeqCst);
+        let Claim::Work {
+            batch: 0,
+            start: 0,
+            end: 20,
+            mut permit,
+        } = coordinator.claim(100, 20, 4)
+        else {
+            panic!("a 20-row claim fits");
+        };
+        assert_eq!(inflight(), 4);
+        // Every row missed: the batch holds them all, past the cap.
+        permit.settle(20);
+        assert_eq!(inflight(), 20);
+        assert!(matches!(coordinator.claim(100, 20, 4), Claim::Blocked(4)));
+        permit.settle(1);
+        assert_eq!(inflight(), 1);
+        let Claim::Work {
+            batch: 1,
+            start: 20,
+            end: 22,
+            permit: tail,
+        } = coordinator.claim(22, 20, 4)
+        else {
+            panic!("the last rows fit");
+        };
+        assert_eq!(inflight(), 3);
+        assert!(matches!(coordinator.claim(22, 4, 4), Claim::Finished));
+        drop((permit, tail));
+        assert_eq!(inflight(), 0);
+    }
+
+    #[test]
+    fn panics_in_long_batches_are_cancelled_joined_and_propagated() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
+        let _turn = lock(&DECODE_PANIC);
+        let inputs = hit_miss_hit(400, 0);
+        let config = NativeStreamConfig {
+            workers: 3,
+            batch_size: 2,
+            slots_per_worker: 2,
+            max_inflight_rows: 12,
+        };
+        // The consumer stops at its first long batch.
+        let panic = std::panic::catch_unwind(|| {
+            decode_native_stream_at(&inputs, None, NOW, config, |batch| {
+                assert!(batch.len() <= 2, "long batch");
+            })
+            .unwrap();
+        });
+        let payload = panic.expect_err("the consumer panic propagates");
+        assert_eq!(payload.downcast_ref::<&str>(), Some(&"long batch"));
+        // A decode panics partway through a later, long batch.
+        PANIC_DECODE_INPUT.store(inputs.as_ptr() as usize, SeqCst);
+        for batch in [20, 60] {
+            PANIC_DECODE_BATCH.store(batch, SeqCst);
+            let panic = std::panic::catch_unwind(|| {
+                decode_native_stream_at(&inputs, None, NOW, config, |_| {}).unwrap();
+            });
+            let payload = panic.expect_err("the decode panic propagates");
+            assert_eq!(
+                payload.downcast_ref::<&str>(),
+                Some(&"injected partial native decode panic")
+            );
+        }
+        PANIC_DECODE_BATCH.store(usize::MAX, SeqCst);
+        PANIC_DECODE_INPUT.store(usize::MAX, SeqCst);
+        assert!(batch_spans(&inputs, config).iter().any(|&(_, len)| len > 2));
     }
 }

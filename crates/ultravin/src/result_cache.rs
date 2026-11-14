@@ -194,6 +194,11 @@ impl Drop for Worker {
 }
 
 impl Worker {
+    /// Hits this worker has made.
+    pub(crate) fn hits(&self) -> u64 {
+        self.hits
+    }
+
     /// Whether to look this VIN up at all. A store costs a fraction of a
     /// decode and a hit saves most of one, so while fewer than a quarter of
     /// recent stores paid off, only every 64th VIN is probed (and stored on a

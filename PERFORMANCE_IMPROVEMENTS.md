@@ -1116,6 +1116,72 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
   (139k against 251k VIN/s on one worker): it allocates every value and
   never reuses buffers, which costs more than the projection it skips.
 
+## November 13: native batches lengthen while they hit
+
+- **Bottleneck.** A cache hit costs ~1.2k cycles, so a 64-row batch of
+  hits is ~25 µs of work and each hand-off costs a large share of it: on
+  sorted NY at twelve workers only ~9.4 cores were busy at 2.67k cycles per
+  VIN. Fixed longer batches helped there (1024×8: ~15M VIN/s) but cost ~10%
+  on never-repeating input, where every in-flight row owns ~15 KB.
+- **Mechanism** ([native_stream.rs](crates/ultravin/src/native_stream.rs)).
+  Workers claim a row range from a cursor instead of a fixed-size batch
+  number, and the consumer delivers by claim number. Each worker reads its
+  result-cache hit count around a batch: if at most a quarter of the rows
+  missed, its next batch doubles, up to `batch_size + max_inflight_rows /
+  workers` (64 → 320 rows for the shipped plan); otherwise it is back to
+  `batch_size`. The in-flight cap now counts misses: a claim reserves at
+  most `batch_size` rows, and once decoded the permit settles to the batch's
+  miss count (a hit shares its element list with the cache). Settling up
+  never waits, so the claim-order argument for deadlock freedom stands.
+  Slots grow to a long batch on first use; on recycle, rows past
+  `batch_size` keep their small strings but drop their element list, owned
+  or shared, so retained buffers are what fixed batches retained.
+- **Memory.** Input that misses never lengthens a batch: same rows, same
+  cap, same slots as before. Worst case for mixed input: every worker's long
+  batch, claimed after one that mostly hit, misses throughout, so missed
+  rows held can reach `max_inflight_rows + workers × (max − base)` =
+  `2 × max_inflight_rows` (6,144 rows, ~107 MB at 17 KB a row, at twelve
+  workers). Hit rows in flight (≤ 48 × 320) add their own strings, an
+  estimated ~0.3 KB each, and keep alive a shared list the table may have
+  evicted meanwhile, as hit rows already did. Measured peak RSS:
+  +35-45 MB on the sorted 2M run, unchanged elsewhere.
+- **Correctness.** `result_cache_check` at 12 workers: 0 mismatches over all
+  of sorted and shuffled NY (11.9M rows each). New tests: exact lengths
+  growing and falling back on one worker, order and results across four
+  workers on input that alternates hits and misses, all-miss input never
+  lengthening a batch, the cap's reserve-and-settle accounting, and consumer
+  and mid-decode panics inside long batches. Native-stream tests passed 100
+  consecutive runs at 12 test threads.
+- **Visible change.** `decode_native_stream*` batches are no longer all
+  `batch_size` long; `start_index` and `batch_index` still place them. No
+  caller in the repo assumed fixed lengths.
+- **Results.** `throughput ... full auto`, back to back with 7d33d19,
+  alternating pairs, shared host (other agents compiling during the
+  shuffled pairs):
+
+  | workers | input | VIN/s | cycles/VIN | busy cores | peak RSS MB |
+  |---:|---|---:|---:|---:|---:|
+  | 12 | NY sorted 2M | 10.46-10.81M → **12.66-13.22M** (+21-23%) | 2,667-2,678 → 2,042-2,107 | 9.3-9.6 → 8.8-8.9 | 639-653 → 677-686 |
+  | 1 | NY sorted 2M | 2.59-2.60M → **2.83-2.84M** (+9%) | 1,268-1,272 → 1,150-1,155 | 1.0 | 557-559 → 557-559 |
+  | 12 | NY shuffled | 1.24-1.27M → 1.20-1.26M | 26.5-26.8k → 26.6-26.9k | 11.2-11.3 → 11.0-11.3 | 1,272-1,289 → 1,278-1,290 |
+  | 1 | NY shuffled | 0.18-0.19M → 0.18M | 18.4-18.7k → 18.7-18.8k | 1.0 | 1,212 → 1,212 |
+  | 12 | synthetic 2M | 1.83-1.85M → 1.79-1.86M | 18.0-18.2k → 18.1-18.3k | 11.0-11.1 → 10.9-11.2 | 636-641 → 633-638 |
+  | 1 | synthetic 2M | 0.27-0.28M → 0.28M | 12.17-12.20k → 12.11-12.12k | 1.0 | 519 → 519-520 |
+
+  Shuffled NY (50% hits) keeps 99.99% of its rows in 64-row batches and
+  synthetic 100%, so their plan is unchanged; the spread is host noise.
+  200k-VIN batch calls, 12 workers, three pairs: `decode_batch_at` sorted
+  5.45-5.59M → 5.92-6.56M (+15%, RSS 755-761 → 763-771 MB), synthetic
+  687-700k → 698-699k; `decode_batch_json_at` sorted 480-482k → 479-488k,
+  synthetic 315-318k → 315-320k.
+- **Tried and dropped.** Dropping rows past `batch_size` entirely on
+  recycle cost the one-worker sorted run 4.5% (2.53M against 2.66M); keeping
+  their strings recovers it. Longer maxima (64 + 3 or 7 × 256 rows) reached
+  13.5-13.7M but added 90-190 MB of peak RSS and a 4-8× worst case. A stricter
+  growth rule (one miss in eight) gained less (12.5M). Eight slots per worker
+  (13.5M at 832 rows) would have needed a bigger cap or no buffer retention
+  for input that misses.
+
 ## Experiments we rejected or replaced
 
 Keeping these failures is part of preserving the performance work. A compatible
