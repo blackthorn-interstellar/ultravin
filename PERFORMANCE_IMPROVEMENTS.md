@@ -25,6 +25,7 @@ identified as such.
 - [November 11: key positions checked in place](#november-11-key-positions-checked-in-place)
 - [November 13: native stream wakes only the worker that can go on](#november-13-native-stream-wakes-only-the-worker-that-can-go-on)
 - [November 13: cache hits share the element list](#november-13-cache-hits-share-the-element-list)
+- [November 13: batch calls run on the native stream](#november-13-batch-calls-run-on-the-native-stream)
 - [Experiments we rejected or replaced](#experiments-we-rejected-or-replaced)
 - [SQL oracle and development resources](#sql-oracle-and-development-resources)
 - [Correctness and measurement rules](#correctness-and-measurement-rules)
@@ -984,6 +985,122 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
   an `Arc` only it touches and hands its rows that, so the shared count
   moves once per worker per entry instead of once per hit.
 
+## November 13: batch calls run on the native stream
+
+- **What changed.** `decode_batch(_at)`, `decode_batch_json(_at)` and full
+  JSON lines (so Python's `decode_batch(full=True)`, `decode_batch_json(full=True)`
+  and the JSON-lines CLI) no longer have rayon drivers of their own. They are
+  thin consumers of the native stream and its result reuse cache
+  ([native_stream.rs](crates/ultravin/src/native_stream.rs)):
+  `Db::decode_batch_stream_at` lends batches, `decode_batch_at` moves each
+  result to its input position, JSON writes each row's text on the workers
+  (a per-batch converter whose output travels with the batch) and the caller
+  joins them once, and Python builds each batch's dicts as it arrives, taking
+  the GIL per batch while the workers go on. The stream gained a caller year
+  per row, an optional visiting order and the converter. The full JSON
+  encoder now reads a `DecodeResult`, so single and batch JSON share it.
+  `decode_batch_managed(_at)` and its `Db` methods are gone; the flat and
+  columnar paths are unchanged.
+- **Three things the first version got wrong.** Measured on the synthetic
+  2M slice, one worker, before they were fixed:
+  - *Locality.* The old drivers sorted the whole call by VIN prefix; the
+    stream sorted only within 64-row batches. Never-repeating input decoded
+    at 205k VIN/s in input order against 276k presorted (cache off). Batch calls now visit their inputs in the old drivers'
+    `locality_order` and place results by `NativeBatch::input_indices`.
+    On shuffled NY this also makes repeats adjacent: 2.5× at twelve workers.
+  - *Thread lifetime.* The stream spawned fresh threads per call. Results
+    that outlive the call (a returned `Vec`) were then freed into the
+    abandoned mimalloc heaps of exited threads, so every call faulted in
+    fresh pages: 171k against 203k VIN/s with `MIMALLOC_PURGE_DELAY=-1`.
+    Workers now run on the pid-aware decoder pool (`batch_pool`, the same
+    `RAYON_NUM_THREADS` threads as before), which also keeps them fork-safe.
+    `NativeStreamError::Spawn` is gone with the spawning.
+  - *Short calls.* A 100-VIN call built and tore down a 16,384-slot table
+    (each slot's drop walks `arc-swap`'s debt list) and used two of twelve
+    workers. The table is now capped at the input length and short calls
+    split their rows evenly across the workers.
+  The handed-over JSON was first one string per batch, appended by the
+  caller as it arrived; that left the output in input order only without
+  the global sort, and the caller's growing string copied each batch again
+  on every doubling (12-worker synthetic −34%). One string per row and one
+  exact-size join, as the old driver did, matches it.
+- **Correctness.** Output hashed per 200k-VIN call (full results as
+  `serde_json` per row, JSON and JSON lines as text) equals 0f4fe7d over all
+  of sorted and shuffled NY (11.9M rows each), the synthetic 2M slice with
+  and without per-row years (every third row `None`), 2M shuffled NY with
+  years, sorted NY in 777-row calls with years, and shuffled NY in 1-, 7- and
+  50-row calls; JSON lines on synthetic with years and sorted NY. Python:
+  identical `repr` of the dicts and identical JSON, JSON-lines and flat JSON
+  strings between the two wheels for empty input, one VIN with and without a
+  year, invalid, non-ASCII, lowercase and padded VINs, and 5,000 shuffled NY
+  VINs with mixed years. New tests: batch calls against single decodes over
+  serial siblings, errors and messy input with per-row years and a short year
+  list; a reversed visiting order with a converter; converter panics at the
+  first, a middle and the last batch propagate and the stream runs again;
+  the result-cache differential tests now stream mixed per-row years.
+- **Results.** Rust, `ULTRAVIN_NOW_MICROS` fixed, 200k-VIN calls over 2M
+  VINs, back to back with 0f4fe7d, two alternating rounds (JSON one at one
+  worker); peak RSS from `time -l`:
+
+  | call | workers | input | VIN/s before → after | peak RSS GB |
+  |---|---:|---|---:|---:|
+  | `decode_batch_at` | 12 | NY sorted | 623-625k → **5.29-5.37M** (8.5×) | 3.6 → 0.7 |
+  | `decode_batch_at` | 1 | NY sorted | 124-125k → **2.09-2.11M** (17×) | 3.2 → 0.6 |
+  | `decode_batch_at` | 12 | NY shuffled | 553-554k → **1.41M** (2.5×) | 3.9 → 1.2 |
+  | `decode_batch_at` | 1 | NY shuffled | 118-119k → 121-122k | 3.2 → 3.1 |
+  | `decode_batch_at` | 12 | synthetic | 699-708k → 694-696k (−0.4%, −2.0%) | 5.1 → 4.5 |
+  | `decode_batch_at` | 1 | synthetic | 240-243k → 251k (+4%) | 4.1 → 4.0 |
+  | `decode_batch_json_at` | 12 | NY sorted | 357-358k → **487-494k** (+37%) | 9.7 → 9.7 |
+  | `decode_batch_json_at` | 1 | NY sorted | 76k → **167k** (2.2×) | 9.4 → 9.5 |
+  | `decode_batch_json_at` | 12 | NY shuffled | 302k → 345k (+14%) | 9.2 → 9.6 |
+  | `decode_batch_json_at` | 1 | NY shuffled | 72.5k → 76.1k (+5%) | 8.9 → 8.9 |
+  | `decode_batch_json_at` | 12 | synthetic | 318-322k → 315-319k (−0.9%) | 11.0 → 11.3 |
+  | `decode_batch_json_at` | 1 | synthetic | 106k → 121k (+14%) | 10.3 → 10.4 |
+
+  Twelve-worker JSON is now bound by the one serial join of ~3.5 GB of text
+  per call (~8 GB/s); one worker by serialization (about 6 µs a VIN against
+  0.5 µs for a cached decode on sorted NY). Caching each entry's encoded body
+  would only help the second, so it was not built.
+
+  Python, release wheels, 200k VINs, 12 cores, best of three in each of two
+  processes per wheel:
+
+  | call | input | VIN/s before → after |
+  |---|---|---:|
+  | `decode_batch(full=True)` | NY sorted | 61.6-61.9k → 68.6-70.0k (+12%) |
+  | `decode_batch(full=True)` | NY shuffled | 53.4-53.6k → 59.3-59.9k (+11%) |
+  | `decode_batch_json(full=True)` | NY sorted | 241k → 266-280k (+10-16%) |
+  | `decode_batch_json(full=True)` | NY shuffled | 108-118k → 110-124k (noisy) |
+
+  Dict building under the GIL still dominates the dict call, and the
+  conversion of the Rust string to a Python one the JSON call.
+- **Short calls got slower.** Twelve workers, full results, many calls in a
+  row: 100-VIN synthetic calls 523k → 301k VIN/s (−42%), 1,000-VIN synthetic
+  calls 798k → 624k (−22%), 1,000-VIN shuffled NY 520k → 458k (−12%); but
+  1,000-VIN sorted NY 708k → 1.85M and 100-VIN sorted NY 475k → 494k. One
+  worker, 1,000-VIN synthetic: 238k → 235k. In a short call nearly every row
+  is a store (each worker's admission allows 16 before it throttles), and a
+  store costs a fifth of a decode; with the cache off the 1,000-VIN synthetic
+  call runs 752k. The cache was kept: at 1,000 VINs it is worth 2.6× on
+  sorted NY.
+- **Flat derived from full results (measured, not built).** A temporary
+  converter built each `FlatResult` from the stream's full result
+  (`flatten_unique_variables` over its elements) on the workers. Its
+  `serde_json` output equals `decode_batch_flat_at`'s on the synthetic and
+  sorted NY 2M slices, with and without per-row years. 200k-VIN calls, two
+  alternating rounds:
+
+  | workers | input | `decode_batch_flat_at` today → from full | 
+  |---:|---|---:|
+  | 12 | NY sorted | 748-769k → 1.56-1.57M (2.1×) |
+  | 1 | NY sorted | 121k → 631-636k (5.2×) |
+  | 12 | synthetic | 448-484k → 471-506k (+3%) |
+  | 1 | synthetic | 136-139k → 186k (+35%) |
+
+  Today's flat path is slower than the full one on never-repeating input
+  (139k against 251k VIN/s on one worker): it allocates every value and
+  never reuses buffers, which costs more than the projection it skips.
+
 ## Experiments we rejected or replaced
 
 Keeping these failures is part of preserving the performance work. A compatible
@@ -1009,6 +1126,8 @@ rewrite with no established end-to-end benefit did not qualify for retention.
 | O(1) indexes for engine-model and vehicle-spec joins (September 25) | About 1%, below the bar for the extra indexes. |
 | Warm upcoming batch rows to overlap cache misses (November 11) | Lookahead of 1-8 rows and staged passes across the batch, with real loads down the WMI, schema and pattern-index chain. Warming cost as many cycles (0.5-0.8k per VIN, mostly the lookups needed to find the index) as the misses it hid; pattern-index misses are only about a sixth of the ~6k-cycle shuffled penalty. Best variant: +0.3% cycles at one worker, -1.6% at four, +5% on sorted input. |
 | Memoize results by structure instead of by VIN (November 11, measured, not built) | The headline corpus fills descriptor positions at random, so choices multiply. Over 20M VINs a result keyed by positions 1-8, 10, 11 or by the set of matched patterns repeats only 22-26% of the time late in the run. Splitting off independent per-pattern records, keyed by pattern and WMI row (exact, 0 mismatches in 5M), leaves a remainder that still misses 35% on regular WMIs and 12% on small-volume ones and needs 4.4 GB at 5M VINs. Only the WMI-and-year context (99.6%) and single output records repeat. Input with repeated descriptors, such as a real fleet, is a different case and was not measured. |
+| Batch JSON handed over as one string per stream batch (November 13) | The caller appended each batch as it arrived, so the text stayed in input order only without the global locality sort, and the growing output was copied again on every doubling: −34% at twelve workers on never-repeating input. One string per row and one exact-size join replaced it. |
+| Native stream workers on threads spawned per call (November 13) | Results that outlive the call were freed into the abandoned allocator heaps of exited threads, so each call faulted in fresh pages: −16% for a one-worker batch call. Workers now run on the decoder pool. |
 
 The earlier ablations and Python interning experiment are recorded in
 [BENCHMARKS.md](docs/BENCHMARKS.md). The September experiment outcomes above were
