@@ -9,10 +9,10 @@
 **An extremely fast, fully offline NHTSA vPIC VIN decoder, written in Rust.**
 
 <p align="center">
-  <img src="assets/benchmark.svg" alt="VINs decoded per second: ultravin on 12 cores 2,375,066 sorted / 1,439,568 random, on 4 cores 1,606,742 / 891,536, on 1 core 473,698 / 226,265 vs corgi v3 83, corgi v2 33, NHTSA MSSQL 22.5, NHTSA Postgres 19.5" width="640">
+  <img src="assets/benchmark.svg" alt="VINs decoded per second, disk to disk, on 1, 4 and 8 cores: ultravin on sorted New York registrations 1,963,445 / 5,142,356 / 6,906,661, on random synthetic VINs 234,846 / 827,139 / 1,197,917, vs corgi v3 83, corgi v2 33, NHTSA MSSQL 22.5, NHTSA Postgres 19.5" width="640">
 </p>
 
-- ⚡️ ~64,000× faster than NHTSA's own `spVinDecode` — ~1.44 million VIN/s on 12 cores
+- ⚡️ ~307,000× faster than NHTSA's own `spVinDecode` — 6.9 million VIN/s on 8 cores, file in to file out, on New York's real registrations
 - 🦀 Pure Rust core, shipped as a Python library and a Rust crate
 - 📦 The entire vPIC vehicle database baked into the wheel
 - 🔌 Fully offline — no network, no database, no data files at runtime
@@ -24,8 +24,8 @@ ultravin brings the complete `spVinDecode` algorithm into your process: vehicle
 attributes, model-year resolution, VIN correction, errors, and provenance.
 It checks every output field against NHTSA's unmodified Postgres procedure and
 corrects documented defects in the upstream data and procedures. You get vPIC
-fidelity with better answers on those defective cases, at **over 63,000× the
-NHTSA SQL Server baseline** on 12 cores.
+fidelity with better answers on those defective cases, at **over 300,000× the
+NHTSA SQL Server baseline** on 8 cores.
 [Benchmarks and reproduction](docs/BENCHMARKS.md).
 
 The complete vehicle database ships inside the binary. No network, no database
@@ -298,8 +298,8 @@ ultravin decode-parquet registrations.parquet decoded.parquet --column-names id
 
 Real fleets repeat: in New York's registrations 97% of VINs decode to a vehicle
 an earlier VIN already did. `decode-compact` writes each such vehicle once, which
-on that file (sorted) runs about 16× faster than `decode-parquet`: 7.7M VIN/s on
-12 cores, disk to disk.
+on that file (sorted) runs about 15× faster than `decode-parquet`: 6.9M VIN/s on
+8 cores, disk to disk.
 
 ```bash
 ultravin decode-compact registrations.parquet decoded/  # or a text file, one VIN per line
@@ -322,32 +322,71 @@ from Python it is `ultravin.decode_compact(src, dst_dir)`.
 How many VINs each engine decodes **per second**, measured against the NHTSA
 MSSQL `spVinDecode` baseline of 22.5 VIN/s.
 
+| engine | 1 core | 4 cores | 8 cores | 8 cores vs NHTSA MSSQL |
+|---|---:|---:|---:|---:|
+| **ultravin** — sorted (New York registrations) | **1,963,445** | **5,142,356** | **6,906,661** | ~306,963× faster |
+| **ultravin** — random (synthetic, no repeats) | **234,846** | **827,139** | **1,197,917** | ~53,241× faster |
+
 | engine | VIN/s | vs NHTSA MSSQL |
 |---|---:|---:|
-| **ultravin** — 12 cores, sorted input | **2,375,066** | ~105,558× faster |
-| **ultravin** — 12 cores | **1,439,568** | ~63,981× faster |
-| **ultravin** — 4 cores, sorted input | **1,606,742** | ~71,411× faster |
-| **ultravin** — 4 cores | **891,536** | ~39,624× faster |
-| **ultravin** — 1 core, sorted input | **473,698** | ~21,053× faster |
-| **ultravin** — 1 core | **226,265** | ~10,056× faster |
 | corgi v3 — `@cardog/corgi` (binary index) | ~83 | ~3.7× faster |
 | corgi v2 — `@cardog/corgi` 2.0.1 (SQLite) | ~33 | ~1.5× faster |
 | NHTSA MSSQL — `spVinDecode` (SQL Server) | 22.5 | 1× (baseline) |
 | NHTSA Postgres — `spvindecode` | 19.5 | ~1.2× slower |
 | NHTSA vPIC web API — public rate limit | ~10 | ~2.25× slower |
 
-Commit `56cf2e9`, September 25, 2026, Apple M2 Max (eight performance and four
-efficiency cores), 20,000,000 unique synthetic VINs on one, four, or twelve
-workers, medians of two fresh-process trials. About 95% of the VINs are valid
-and 5% carry one realistic defect (a typo, a wrong check digit, or two swapped
-characters). Across worker counts ultravin scales to ~3.9× and ~6.4× its own
-single-core rate. The host was shared with other work; the previous decoder,
-run back to back, needed 1.12–1.30× more CPU cycles per VIN.
+The ultravin rows are whole jobs a customer can run: `ultravin decode-compact`
+reads a Parquet file of VINs and writes the decoded [compact output](#compact-output)
+to disk, timed from process start to exit. Commit `5ab93e6`, November 14, 2026,
+Apple M2 Max (eight performance and four efficiency cores), one run per figure.
 
-Sorting the same VINs first makes decoding ~1.65–2.1× faster: neighbouring VINs
-share a manufacturer and pattern tables, so they stay in CPU cache. The work per
-VIN is unchanged
-([details](docs/BENCHMARKS.md#headline-throughput-september-25-2026-commit-56cf2e9)).
+- **Sorted** is every 17-character VIN in New York's public
+  [registration file](https://data.ny.gov/d/w4pv-hbkt), 11,926,226 unique VINs,
+  sorted. 97% of them decode to a vehicle an earlier VIN already did, and
+  ultravin decodes and writes each such vehicle once.
+- **Random** is 20,000,000 unique synthetic VINs in random order, about 95% valid
+  and 5% with one realistic defect. Nothing repeats, so this is the floor: every
+  VIN is decoded and written in full.
+
+On one core that is ~87,264× and ~10,438× the NHTSA rate. The four efficiency
+cores add little: twelve workers reach 7,338,780 VIN/s sorted and 1,113,817
+random ([details](docs/BENCHMARKS.md#headline-disk-to-disk-november-14-2026-commit-5ab93e6)).
+
+### By output
+
+The same decoder behind every way of getting results out, on the first
+2,000,000 sorted New York VINs, with the output actually consumed: files
+written, strings built, every field of every result read.
+
+<p align="center">
+  <img src="assets/api-benchmark.svg" alt="VINs per second by output path on 1, 4 and 8 cores; the figures are in the table below" width="720">
+</p>
+
+| output | 1 core | 4 cores | 8 cores | peak memory |
+|---|---:|---:|---:|---:|
+| `ultravin decode-compact` — `vins.parquet` + `vehicles.parquet` on disk | 1,613,510 | 3,844,678 | 4,973,422 | 0.6 GB |
+| Rust `decode_batch_json_at`, flat — one JSON string | 344,143 | 1,111,172 | 1,847,685 | 1.5 GB |
+| Python `decode_batch_json` — one JSON string | 321,974 | 861,609 | 1,182,950 | 4.3 GB |
+| Rust `decode_batch_flat_at` — flat results, every field read | 519,307 | 912,151 | 1,032,922 | 1.2 GB |
+| Rust `decode_batch_stream_at` — full results, every field read on the calling thread | 709,516 | 814,131 | 810,598 | 0.6 GB |
+| Rust `ArrowDecoder::decode_batch` — all columns in memory | 132,347 | 447,496 | 770,666 | 0.6 GB |
+| Python `decode_stream` — Arrow batches into pyarrow | 136,979 | 460,541 | 743,301 | 0.3 GB |
+| Rust `decode_batch_at` — full results, every field read | 597,607 | 690,612 | 710,531 | 0.7 GB |
+| Rust `decode_batch_json_at`, full — one JSON string | 157,988 | 369,230 | 475,813 | 9.4 GB |
+| `ultravin decode-parquet` — one wide Parquet file on disk | 116,989 | 316,884 | 439,445 | 0.3 GB |
+| `ultravin decode-batch --jsonl` — JSON lines on disk | 90,439 | 253,186 | 345,439 | 0.3 GB |
+| Python `decode_batch` — a dict per VIN | 211,780 | 225,095 | 217,209 | 0.4 GB |
+| Python `decode_batch(full=True)` — a dict per VIN with every element | 43,266 | 43,673 | 43,604 | 1.1 GB |
+
+What the result is made of decides the speed, not the decode. A full result
+carries every vPIC element with 15 fields each; building a Python dict or a JSON
+object for each costs far more than decoding it, and Python builds dicts on one
+thread.
+The compact output is fastest because it writes each distinct vehicle once.
+`decode-compact` reads 4,973,421 VIN/s here against 6,906,661 above because
+process startup is a larger share of a 2,000,000-VIN job.
+Reproduce with `uv run --frozen python -m scripts.bench.api_compare --workers 1 --workers 4 --workers 8`;
+the synthetic corpus is in [the benchmark notes](docs/BENCHMARKS.md#by-output-november-14-2026-commit-5ab93e6).
 
 ultravin runs in-process with the database embedded — no server, no round-trip.
 The corgi rows are derived from that project's published per-VIN latency, and

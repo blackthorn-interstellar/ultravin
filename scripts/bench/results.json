@@ -1,70 +1,23 @@
 {
   "provenance": {
-    "commit": "56cf2e92300ca408feb98db042dd07eede12352e",
-    "version": "v3.0.1-14-g56cf2e9",
-    "date": "September 25, 2026",
+    "commit": "5ab93e6",
+    "date": "November 14, 2026",
     "machine": "Apple M2 Max (8 performance + 4 efficiency cores)",
-    "corpus": "twenty million unique synthetic VINs, ~95% valid and ~5% with one realistic defect",
-    "corpus_path": "target/bench/realistic-corpus.txt",
-    "corpus_sha256": "03b610da26b5f1f270422858e4e412c062a7d31f8d7156fb6500224843fb5ea9",
-    "binary_sha256": "883e57958310f3a73e2c6c919fa3f8dc78e0ed5b85da29180dcaa39458cb9f73",
-    "command": "RAYON_NUM_THREADS=$N ULTRAVIN_NOW_MICROS=1788220800000000 target/release/examples/throughput target/bench/realistic-corpus.txt 10 batch full auto",
-    "method": "Median of two fresh-process trials per worker count, run 1/4/12 then 12/4/1, each paired back to back with the previous headline's decoder on the same corpus. Each process warms one full unique pass, then times complete unique passes until at least ten seconds have elapsed (one pass, except two for the faster twelve-worker sorted runs) including calibration, live tuning, full native results, order restoration and synchronous cleanup. The host was shared: each trial waited up to five minutes for a one-minute load average of at most 3.5 (2.9-3.5 at start). Raw runs in scripts/bench/headline_2026_09_25.json.",
-    "ultravin_rows": {
-      "ultravin": 1,
-      "ultravin-batch": 4,
-      "ultravin-auto-12": 12
-    },
-    "ultravin_trials": {
-      "ultravin": [
-        214162,
-        238368
-      ],
-      "ultravin-batch": [
-        858497,
-        924576
-      ],
-      "ultravin-auto-12": [
-        1546341,
-        1332796
-      ]
-    },
-    "other_engines": "corgi and NHTSA rows are their earlier published or measured figures; they were not re-run for this session.",
-    "sorted_rows": {
-      "ultravin_rows": {
-        "ultravin-sorted-1": 1,
-        "ultravin-sorted-4": 4,
-        "ultravin-sorted-12": 12
-      },
-      "ultravin_trials": {
-        "ultravin-sorted-1": [
-          460210,
-          487186
-        ],
-        "ultravin-sorted-4": [
-          1507617,
-          1705866
-        ],
-        "ultravin-sorted-12": [
-          2280257,
-          2469875
-        ]
-      },
-      "commit": "56cf2e92300ca408feb98db042dd07eede12352e",
-      "binary_sha256": "883e57958310f3a73e2c6c919fa3f8dc78e0ed5b85da29180dcaa39458cb9f73",
-      "corpus": "the same twenty million VINs, byte-sorted (LC_ALL=C sort)",
-      "corpus_path": "target/bench/realistic-corpus-sorted.txt",
-      "corpus_sha256": "358c7b6996ac732e1d6e20cd6eec22bc9b077577e5e34a5de3a8be877da85995",
-      "method": "Same session, command and two-trial median as the random-order rows; raw runs in scripts/bench/headline_2026_09_25.json."
-    }
+    "sorted_corpus": "every 17-character VIN in New York's public registration file, 11,926,226 unique VINs, byte-sorted",
+    "random_corpus": "twenty million unique synthetic VINs in random order, ~95% valid and ~5% with one realistic defect",
+    "sorted_corpus_path": "target/bench/ny/ny-corpus-sorted.txt",
+    "random_corpus_path": "target/bench/realistic-corpus.txt",
+    "command": "uv run --frozen python -m scripts.bench.api_compare --cells cli-decode-compact --workers 1 --workers 4 --workers 8 --workers 12 --corpus ny-sorted=target/bench/ny/ny-corpus-sorted.txt --corpus synthetic-20m=target/bench/realistic-corpus.txt --seconds 10",
+    "method": "Disk to disk: `ultravin decode-compact SRC DST_DIR` from a release wheel reads a Parquet file of VINs and writes vins.parquet and vehicles.parquet. Each figure is rows divided by the wall time of whole fresh CLI processes, startup included, repeated until ten seconds have passed (one pass on the synthetic corpus). One run per cell; one-minute load average 3.0 at the start. Raw records, including twelve workers, in scripts/bench/headline_2026_11_14.json.",
+    "other_engines": "corgi and NHTSA rows are their earlier published or measured figures; they were not re-run for this session."
   },
   "engines": {
-    "ultravin-sorted-12": 2375066,
-    "ultravin-auto-12": 1439568,
-    "ultravin-sorted-4": 1606742,
-    "ultravin-batch": 891536,
-    "ultravin-sorted-1": 473698,
-    "ultravin": 226265,
+    "ultravin-sorted-1": 1963445,
+    "ultravin-sorted-4": 5142356,
+    "ultravin-sorted-8": 6906661,
+    "ultravin-random-1": 234846,
+    "ultravin-random-4": 827139,
+    "ultravin-random-8": 1197917,
     "corgi-v3": 83,
     "corgi-v2": 33,
     "mssql": 22.5,

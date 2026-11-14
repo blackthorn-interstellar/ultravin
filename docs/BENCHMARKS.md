@@ -1,6 +1,16 @@
 # ultravin benchmarks
 
-The README uses the [September 25 headline benchmark at commit
+The README uses the [November 14 disk-to-disk headline at commit
+`5ab93e6`](#headline-disk-to-disk-november-14-2026-commit-5ab93e6):
+**6,906,661 VIN/s on eight workers**, **5,142,356 on four** and **1,963,445 on
+one** over New York's sorted registrations, and 1,197,917, 827,139 and 234,846
+over twenty million random synthetic VINs. Unlike every earlier headline, these
+time a whole job a customer can run, file in to file out; the earlier ones timed
+the Rust batch call and discarded its results. [By
+output](#by-output-november-14-2026-commit-5ab93e6) compares every output path
+the same way.
+
+The previous headline was the [September 25 benchmark at commit
 `56cf2e9`](#headline-throughput-september-25-2026-commit-56cf2e9):
 **1,439,568 VIN/s on twelve workers**, **891,536 VIN/s on four**, and
 **226,265 VIN/s on one**, all with automatic batching over twenty million unique
@@ -42,6 +52,77 @@ The [shipped predictor](BATCH_PREDICTOR.md) adds worker-count and single-core
 calibration, batch-size and memory heatmaps, and a separate validation of the
 current automatic defaults at 4, 8, and 12 workers.
 The comparison tables below preserve their dated measurement sessions.
+
+## Headline: disk to disk (November 14, 2026, commit 5ab93e6)
+
+`ultravin decode-compact SRC DST_DIR` from a release wheel: read a Parquet file
+of VINs, write `vins.parquet` and `vehicles.parquet`. Each figure is rows divided
+by the wall time of whole fresh processes, startup included, repeated until ten
+seconds have passed. One run per cell, Apple M2 Max, one-minute load average 3.0
+at the start. The ratio is against NHTSA MSSQL `spVinDecode` at 22.5 VIN/s.
+
+| corpus | workers | VIN/s | vs NHTSA MSSQL | passes | peak RSS MiB |
+|---|---:|---:|---:|---:|---:|
+| sorted New York, 11,926,226 | 1 | 1,963,445 | 87,264× | 2 | 747 |
+| sorted New York, 11,926,226 | 4 | 5,142,356 | 228,549× | 5 | 814 |
+| sorted New York, 11,926,226 | 8 | 6,906,661 | 306,963× | 6 | 897 |
+| sorted New York, 11,926,226 | 12 | 7,338,780 | 326,168× | 7 | 989 |
+| random synthetic, 20,000,000 | 1 | 234,846 | 10,438× | 1 | 798 |
+| random synthetic, 20,000,000 | 4 | 827,139 | 36,762× | 1 | 905 |
+| random synthetic, 20,000,000 | 8 | 1,197,917 | 53,241× | 1 | 1,026 |
+| random synthetic, 20,000,000 | 12 | 1,113,817 | 49,503× | 1 | 1,198 |
+
+Twelve workers add 6% over eight on the sorted corpus and lose 7% on the random
+one: the last four cores are efficiency cores. The README therefore reports one,
+four and eight. Raw records are in
+[`scripts/bench/headline_2026_11_14.json`](../scripts/bench/headline_2026_11_14.json).
+
+```bash
+uv run --frozen python -m scripts.bench.api_compare --cells cli-decode-compact \
+  --workers 1 --workers 4 --workers 8 --workers 12 --seconds 10 \
+  --corpus ny-sorted=target/bench/ny/ny-corpus-sorted.txt \
+  --corpus synthetic-20m=target/bench/realistic-corpus.txt
+```
+
+## By output (November 14, 2026, commit 5ab93e6)
+
+Every public output path on the same input, each cell a fresh process, one
+untimed pass then whole passes for at least three seconds. Rust result cells
+read every field of every result into a checksum; JSON cells sum the output
+length; Arrow cells build every column; file cells write real files and include
+process startup. Python dict cells are capped at 200,000 VINs. Raw records are in
+[`scripts/bench/api_compare_2026_11_14.json`](../scripts/bench/api_compare_2026_11_14.json),
+which also holds the stream with its results discarded (the method of the
+headlines below): 2,796,587, 8,005,580 and 12,019,993 VIN/s
+sorted, 292,315, 1,054,390 and 1,911,743 synthetic.
+
+First 2,000,000 sorted New York VINs: the table is in the
+[README](../README.md#by-output). First 2,000,000 synthetic VINs, where nothing
+repeats:
+
+| output | 1 core | 4 cores | 8 cores | peak memory |
+|---|---:|---:|---:|---:|
+| `ultravin decode-compact` — `vins.parquet` + `vehicles.parquet` on disk | 196,431 | 686,243 | 988,131 | 0.8 GB |
+| Rust `decode_batch_json_at`, flat — one JSON string | 159,252 | 501,782 | 763,713 | 1.9 GB |
+| Python `decode_batch_json` — one JSON string | 141,615 | 371,734 | 503,330 | 5.5 GB |
+| Rust `decode_batch_flat_at` — flat results, every field read | 149,265 | 274,210 | 309,979 | 1.4 GB |
+| Rust `decode_batch_stream_at` — full results, every field read on the calling thread | 249,987 | 597,379 | 586,771 | 0.5 GB |
+| Rust `ArrowDecoder::decode_batch` — all columns in memory | 193,439 | 592,594 | 903,529 | 0.8 GB |
+| Python `decode_stream` — Arrow batches into pyarrow | 195,779 | 596,380 | 885,444 | 0.4 GB |
+| Rust `decode_batch_at` — full results, every field read | 168,277 | 266,109 | 290,196 | 3.2 GB |
+| Rust `decode_batch_json_at`, full — one JSON string | 127,873 | 270,998 | 330,471 | 9.5 GB |
+| `ultravin decode-parquet` — one wide Parquet file on disk | 121,834 | 242,802 | 287,188 | 0.4 GB |
+| `ultravin decode-batch --jsonl` — JSON lines on disk | 90,342 | 173,421 | 200,404 | 0.3 GB |
+| Python `decode_batch` — a dict per VIN | 130,148 | 170,506 | 168,635 | 0.4 GB |
+| Python `decode_batch(full=True)` — a dict per VIN with every element | 34,248 | 35,345 | 35,264 | 1.0 GB |
+
+Reading a full result on the calling thread caps the stream near 800,000 VIN/s
+on sorted input however many workers decode; work that can run per batch on the
+workers (`Db::decode_batch_map_at`) is not bound by that.
+
+```bash
+uv run --frozen python -m scripts.bench.api_compare --workers 1 --workers 4 --workers 8
+```
 
 ## Real fleet: New York registrations (November 12, 2026, commit a758e6d)
 

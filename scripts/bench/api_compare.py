@@ -18,9 +18,7 @@ Smoke run::
     uv run --frozen python -m scripts.bench.api_compare --workers 1 --workers 2 --limit-rows 50000 --seconds 1
 
 Adding a cell is one ``Cell`` in ``CELLS``. A CLI command needs only its argv;
-a Rust function also needs one match arm in the example. The slot for
-``decode-compact SRC DST_DIR`` (writes ``vins.parquet`` + ``vehicles.parquet``)
-is the commented entry at the end of ``CELLS``.
+a Rust function also needs one match arm in the example.
 """
 
 from __future__ import annotations
@@ -105,9 +103,14 @@ CELLS = (
         argv=("decode-parquet", "{src}", "{out}/decoded.parquet"),
         rows="{out}/decoded.parquet",
     ),
-    # Uncomment once `ultravin decode-compact SRC DST_DIR` ships:
-    # Cell("cli-decode-compact", "CLI decode-compact", "cli", input="parquet",
-    #      argv=("decode-compact", "{src}", "{out}"), rows="{out}/vins.parquet"),
+    Cell(
+        "cli-decode-compact",
+        "CLI decode-compact",
+        "cli",
+        input="parquet",
+        argv=("decode-compact", "{src}", "{out}"),
+        rows="{out}/vins.parquet",
+    ),
 )
 CELL_NAMES = {cell.name: cell for cell in CELLS}
 
