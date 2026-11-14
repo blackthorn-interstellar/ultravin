@@ -645,7 +645,9 @@ impl Db {
                     .collect::<Vec<_>>()
             })
             .collect::<Vec<_>>();
-        let result_table = crate::result_cache::Table::new(result_cache_entries);
+        // A stream stores at most one entry per input; a bigger table only
+        // costs its setup and teardown, which a short batch call would feel.
+        let result_table = crate::result_cache::Table::new(result_cache_entries.min(inputs.len()));
         let job = Job {
             db: self,
             inputs,

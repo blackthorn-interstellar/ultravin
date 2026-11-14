@@ -14,7 +14,7 @@
     {"file": "conversion.rs", "function": "conversion::eval_inner", "reason": "division-by-zero guard and unparseable-operand arms; no formula divides by zero", "regions": 5},
     {"file": "conversion.rs", "function": "conversion::round_up_if", "reason": "the all-nines carry that grows the number a digit; no displacement in the data rounds that way", "regions": 3},
     {"file": "decode.rs", "function": "<decode::DecodeScratch>::bound_retained_capacity", "reason": "the over-capacity reset; cover VINs never retain more schema slots or hits than the bound", "regions": 2},
-    {"file": "decode.rs", "function": "<decode::DecodeScratchGuard as core::ops::drop::Drop>::drop::{closure#0}", "reason": "Drop glue llvm-cov attributes to decode scratch; no VIN takes an error path inside Drop", "regions": 2},
+    {"file": "decode.rs", "function": "<decode::DecodeScratchGuard as core::ops::drop::Drop>::drop::{closure#0}", "reason": "Drop glue llvm-cov attributes to decode scratch; no VIN takes an error path inside Drop", "regions": 1},
     {"file": "decode.rs", "function": "<decode::PatternScan as core::ops::drop::Drop>::drop::{closure#0}", "reason": "Drop glue llvm-cov attributes to PatternScan storage; no VIN takes an error path inside Drop", "regions": 2},
     {"file": "decode.rs", "function": "<decode::PatternScanStorage>::bound_retained_capacity", "reason": "the over-capacity reset on PatternScanStorage; cover VINs stay under the retained bound", "regions": 1},
     {"file": "decode.rs", "function": "decode::append_default_values", "reason": "the dependent-defaults fallback, called only when Db::defaults_independent is false; this month every default row targets an element no pass reads, so passes defer defaults to the winner instead", "regions": 24},
