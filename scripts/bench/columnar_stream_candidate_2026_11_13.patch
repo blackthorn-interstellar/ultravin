@@ -1,0 +1,508 @@
+diff --git a/crates/ultravin/src/arrow_io.rs b/crates/ultravin/src/arrow_io.rs
+index 7cdf9e1..c2279c7 100644
+--- a/crates/ultravin/src/arrow_io.rs
++++ b/crates/ultravin/src/arrow_io.rs
+@@ -16,10 +16,11 @@ use arrow_array::builder::{ArrayBuilder, Float64Builder, Int64Builder, StringBui
+ use arrow_array::{cast::AsArray, new_empty_array, Array, ArrayRef, Int32Array, RecordBatch};
+ use arrow_cast::cast;
+ use arrow_schema::{DataType, Field, Schema, SchemaRef};
+-use arrow_select::concat::{concat, concat_batches};
++use arrow_select::concat::concat_batches;
++use arrow_select::interleave::interleave;
+ 
+ use crate::db::Db;
+-use crate::ids::{decode_chunks_at, resolve_columns, ColumnSpec, ColumnWriter, IdMeta, IdsDType};
++use crate::ids::{decode_columns_at, resolve_columns, ColumnSpec, ColumnWriter, IdMeta, IdsDType};
+ 
+ /// `Io` covers a batch that will not cast or assemble; `Config` is a caller
+ /// mistake (missing/ambiguous columns, bad column requests) worth a
+@@ -341,8 +342,8 @@ impl ArrowDecoder {
+         let vin_arr = cast(batch.column(self.vin_idx), &DataType::Utf8)
+             .map_err(|e| ArrowError::Io(format!("casting VIN column: {e}")))?;
+         let vin = vin_arr.as_string::<i32>();
+-        let vins: Vec<&str> = (0..vin.len())
+-            .map(|i| if vin.is_null(i) { "" } else { vin.value(i) })
++        let vins: Vec<String> = (0..vin.len())
++            .map(|i| if vin.is_null(i) { "" } else { vin.value(i) }.to_owned())
+             .collect();
+ 
+         // The caller-year column is cast once and reused: the kernel reads it and
+@@ -401,11 +402,23 @@ impl ArrowColumn {
+ }
+ 
+ impl ColumnWriter for ArrowColumn {
+-    fn push_value(&mut self, row: usize, value: std::borrow::Cow<'_, str>) {
++    fn rows(&self) -> usize {
++        match self {
++            Self::Str(v) => v.len(),
++            Self::Int(v) => v.len(),
++            Self::Float(v) => v.len(),
++        }
++    }
++
++    fn push_value(&mut self, row: usize, value: &str) {
+         match self {
+             Self::Str(v) => {
+                 v.append_nulls(row - v.len());
+-                v.append_value(value.as_ref());
++                if value.is_empty() {
++                    v.append_null();
++                } else {
++                    v.append_value(value);
++                }
+             }
+             Self::Int(v) => {
+                 v.append_nulls(row - v.len());
+@@ -427,35 +440,51 @@ impl ColumnWriter for ArrowColumn {
+     }
+ }
+ 
++/// Decode `vins` into the decoded model year and one array per projected
++/// column, in input order. Each chunk's columns are finished as they arrive;
++/// once all are in, every column gathers its rows from the chunks in one
++/// pass, the columns in parallel.
+ fn decode_arrays(
+-    vins: &[&str],
++    vins: &[String],
+     years: Option<&[Option<i32>]>,
+     metas: &[IdMeta],
+     now_micros: i64,
+ ) -> Result<(Vec<Option<i32>>, Vec<ArrayRef>), ArrowError> {
+-    let mut chunks = decode_chunks_at(vins, years, metas, ArrowColumn::new, now_micros);
+-    let model_year = chunks
+-        .iter_mut()
+-        .flat_map(|c| std::mem::take(&mut c.model_year))
+-        .collect();
+-    let columns = metas
+-        .iter()
+-        .enumerate()
+-        .map(|(ci, meta)| {
+-            let parts: Vec<_> = chunks.iter_mut().map(|c| c.columns[ci].finish()).collect();
+-            match parts.len() {
+-                0 => Ok(new_empty_array(&match meta.dtype {
+-                    IdsDType::Str => DataType::Utf8,
+-                    IdsDType::Int => DataType::Int64,
+-                    IdsDType::Float => DataType::Float64,
+-                })),
+-                1 => Ok(parts.into_iter().next().unwrap()),
+-                _ => concat(&parts.iter().map(|a| a.as_ref()).collect::<Vec<_>>()).map_err(|e| {
++    use rayon::prelude::*;
++    let mut model_year = vec![None; vins.len()];
++    // Where each input row landed: (chunk, row in chunk).
++    let mut positions = vec![(0, 0); vins.len()];
++    let mut parts: Vec<Vec<ArrayRef>> = metas.iter().map(|_| Vec::new()).collect();
++    let mut chunks = 0;
++    decode_columns_at(vins, years, metas, now_micros, ArrowColumn::new, |chunk| {
++        for (row, (&index, year)) in chunk.rows.iter().zip(chunk.model_year).enumerate() {
++            positions[index] = (chunks, row);
++            model_year[index] = year;
++        }
++        for (column, mut built) in parts.iter_mut().zip(chunk.columns) {
++            column.push(built.finish());
++        }
++        chunks += 1;
++    });
++    let columns = crate::install_batch_work(|| {
++        parts
++            .into_par_iter()
++            .zip(metas)
++            .map(|(parts, meta)| {
++                if parts.is_empty() {
++                    return Ok(new_empty_array(&match meta.dtype {
++                        IdsDType::Str => DataType::Utf8,
++                        IdsDType::Int => DataType::Int64,
++                        IdsDType::Float => DataType::Float64,
++                    }));
++                }
++                let parts: Vec<&dyn Array> = parts.iter().map(|a| a.as_ref()).collect();
++                interleave(&parts, &positions).map_err(|e| {
+                     ArrowError::Io(format!("assembling decoded column {}: {e}", meta.name))
+-                }),
+-            }
+-        })
+-        .collect::<Result<Vec<_>, _>>()?;
++                })
++            })
++            .collect::<Result<Vec<_>, _>>()
++    })?;
+     Ok((model_year, columns))
+ }
+ 
+diff --git a/crates/ultravin/src/ids.rs b/crates/ultravin/src/ids.rs
+index b1a3090..cda0174 100644
+--- a/crates/ultravin/src/ids.rs
++++ b/crates/ultravin/src/ids.rs
+@@ -8,8 +8,8 @@
+ //! break a pipeline pinned to them.
+ 
+ use crate::db::Db;
+-use crate::hash::{ElementIndex, ElementSet, IntSet};
+-use crate::{decode_items, public_decode};
++use crate::hash::IntSet;
++use crate::{public_decode, DecodeResult};
+ 
+ /// Value type of a projected column, taken from the element's vPIC `data_type`.
+ #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+@@ -157,19 +157,37 @@ pub struct IdsBatch {
+     pub columns: Vec<ColumnValues>,
+ }
+ 
+-/// A typed column written in row order. Missing values are filled as null gaps,
+-/// avoiding a scan of every requested column for every decoded row.
++/// A typed column a run of rows is written into, in row order. A row with
++/// no value is a null gap, filled when a later row (or `finish_rows`)
++/// writes past it.
+ pub(crate) trait ColumnWriter: Send {
+-    fn push_value(&mut self, row: usize, value: std::borrow::Cow<'_, str>);
++    /// Rows written so far, gaps included.
++    fn rows(&self) -> usize;
++    /// Write `value` at `row`, at or past [`Self::rows`]; empty text is null.
++    fn push_value(&mut self, row: usize, value: &str);
+     fn finish_rows(&mut self, rows: usize);
+ }
+ 
++impl ColumnValues {
++    fn with_capacity(dtype: IdsDType, rows: usize) -> ColumnValues {
++        match dtype {
++            IdsDType::Str => ColumnValues::Str(Vec::with_capacity(rows)),
++            IdsDType::Int => ColumnValues::Int(Vec::with_capacity(rows)),
++            IdsDType::Float => ColumnValues::Float(Vec::with_capacity(rows)),
++        }
++    }
++}
++
+ impl ColumnWriter for ColumnValues {
+-    fn push_value(&mut self, row: usize, value: std::borrow::Cow<'_, str>) {
++    fn rows(&self) -> usize {
++        self.len()
++    }
++
++    fn push_value(&mut self, row: usize, value: &str) {
+         match self {
+             ColumnValues::Str(v) => {
+                 v.resize(row, None);
+-                v.push(Some(value.into_owned()));
++                v.push((!value.is_empty()).then(|| value.to_owned()));
+             }
+             ColumnValues::Int(v) => {
+                 v.resize(row, None);
+@@ -191,19 +209,125 @@ impl ColumnWriter for ColumnValues {
+     }
+ }
+ 
++/// Decoded rows as typed columns, with each row's input position.
+ pub(crate) struct ColumnChunk<C> {
++    pub(crate) rows: Vec<usize>,
+     pub(crate) model_year: Vec<Option<i32>>,
+     pub(crate) columns: Vec<C>,
+ }
+ 
+-/// Move one chunk into its final column, releasing the chunk's allocation.
+-fn append_column(dst: &mut ColumnValues, src: &mut ColumnValues) {
+-    match (dst, src) {
+-        (ColumnValues::Str(dst), ColumnValues::Str(src)) => dst.extend(std::mem::take(src)),
+-        (ColumnValues::Int(dst), ColumnValues::Int(src)) => dst.extend(std::mem::take(src)),
+-        (ColumnValues::Float(dst), ColumnValues::Float(src)) => dst.extend(std::mem::take(src)),
+-        _ => unreachable!("chunk and destination use the same column metadata"),
++/// Below this many rows a columnar call decodes directly, uncached, in
++/// 256-row runs in input order; from it, on the native stream and its
++/// result cache.
++const COLUMN_STREAM_MIN_ROWS: usize = 8_192;
++
++/// Rows per run on the direct path.
++const RUN_ROWS: usize = 256;
++
++/// Decode every input to a full result and project it onto the requested
++/// columns, handing `consume` chunks of rows with their input positions.
++/// Long calls run on the native stream, whose batches arrive grouped by VIN
++/// prefix; short ones decode directly and arrive in input order. Per-row
++/// values equal [`crate::decode`] with the matching year.
++///
++/// First occurrence wins for the repeat-exempt elements (the free-text
++/// notes), even when it is empty: a dataset column holds one value per row
++/// by construction, and the notes are provenance, not competing facts.
++pub(crate) fn decode_columns_at<C: ColumnWriter>(
++    inputs: &[String],
++    years: Option<&[Option<i32>]>,
++    metas: &[IdMeta],
++    now_micros: i64,
++    make_column: impl Fn(IdsDType, usize) -> C + Sync,
++    mut consume: impl FnMut(ColumnChunk<C>),
++) {
++    let db = Db::embedded();
++    // IdMeta is public: keep visibility filtering and last-column-wins
++    // behavior even when the caller bypasses resolve_columns.
++    let mut column_of: Vec<Option<usize>> = Vec::new();
++    for (ci, m) in metas.iter().enumerate() {
++        let Ok(id) = usize::try_from(m.id) else {
++            continue;
++        };
++        if db
++            .element_by_id(m.id)
++            .is_some_and(|e| public_decode(db, e).is_some())
++        {
++            if column_of.len() <= id {
++                column_of.resize(id + 1, None);
++            }
++            column_of[id] = Some(ci);
++        }
++    }
++    let chunk = |rows: usize| ColumnChunk {
++        rows: Vec::with_capacity(rows),
++        model_year: Vec::with_capacity(rows),
++        columns: metas.iter().map(|m| make_column(m.dtype, rows)).collect(),
++    };
++    let push = |chunk: &mut ColumnChunk<C>, index: usize, result: &DecodeResult<'_>| {
++        let row = chunk.rows.len();
++        chunk.rows.push(index);
++        chunk.model_year.push(result.model_year);
++        for e in result.elements.iter() {
++            let ci = usize::try_from(e.element_id)
++                .ok()
++                .and_then(|id| column_of.get(id).copied().flatten());
++            if let Some(column) = ci.map(|ci| &mut chunk.columns[ci]) {
++                if column.rows() <= row {
++                    column.push_value(row, &e.value);
++                }
++            }
++        }
++    };
++    let finish = |mut chunk: ColumnChunk<C>| {
++        for column in &mut chunk.columns {
++            column.finish_rows(chunk.rows.len());
++        }
++        chunk
++    };
++
++    // The stream runs on the shared decoder pool, so calibration on a
++    // private pool (`adaptive`) times the direct path instead.
++    if inputs.len() >= COLUMN_STREAM_MIN_ROWS && !crate::in_private_calibration_scope() {
++        let convert = |batch: &crate::NativeBatch<'_, 'static>| {
++            let mut c = chunk(batch.len());
++            for (index, result) in batch.input_indices().zip(batch.iter()) {
++                push(&mut c, index, result);
++            }
++            finish(c)
++        };
++        db.batch_stream_at(inputs, years, now_micros, convert, |_, c| consume(c))
++            .expect("native decode workers");
++        return;
+     }
++    use rayon::prelude::*;
++    let current_year = crate::current_year_at(now_micros);
++    let chunks: Vec<_> = crate::install_batch_work(|| {
++        inputs
++            .par_chunks(RUN_ROWS)
++            .enumerate()
++            .map(|(run, vins)| {
++                let mut workspace = crate::DecodeWorkspace::default();
++                let mut result = crate::empty_result();
++                let mut c = chunk(vins.len());
++                for (row, vin) in vins.iter().enumerate() {
++                    let index = run * RUN_ROWS + row;
++                    result = crate::decode_full_reusing(
++                        db,
++                        vin,
++                        now_micros,
++                        current_year,
++                        crate::year_at(years, index),
++                        result,
++                        &mut workspace,
++                    );
++                    push(&mut c, index, &result);
++                }
++                finish(c)
++            })
++            .collect()
++    });
++    chunks.into_iter().for_each(consume);
+ }
+ 
+ /// Decode every input in parallel over the shared archive, projecting each
+@@ -228,128 +352,50 @@ pub fn decode_batch_ids_at(
+     metas: &[IdMeta],
+     now_micros: i64,
+ ) -> IdsBatch {
+-    let mut chunks = decode_chunks_at(
++    let n = inputs.len();
++    let mut model_year = vec![None; n];
++    let mut columns: Vec<ColumnValues> = metas
++        .iter()
++        .map(|m| match m.dtype {
++            IdsDType::Str => ColumnValues::Str(vec![None; n]),
++            IdsDType::Int => ColumnValues::Int(vec![None; n]),
++            IdsDType::Float => ColumnValues::Float(vec![None; n]),
++        })
++        .collect();
++    decode_columns_at(
+         inputs,
+         years,
+         metas,
+-        |dtype, rows| match dtype {
+-            IdsDType::Str => ColumnValues::Str(Vec::with_capacity(rows)),
+-            IdsDType::Int => ColumnValues::Int(Vec::with_capacity(rows)),
+-            IdsDType::Float => ColumnValues::Float(Vec::with_capacity(rows)),
+-        },
+         now_micros,
+-    );
+-
+-    let model_year = chunks
+-        .iter_mut()
+-        .flat_map(|chunk| std::mem::take(&mut chunk.model_year))
+-        .collect();
+-    // Allocate and assemble one final column at a time, freeing its old chunk
+-    // buffers as they are consumed. Peak storage stays near the final columns'
+-    // size rather than holding two full rectangular representations at once.
+-    let columns = metas
+-        .iter()
+-        .enumerate()
+-        .map(|(ci, m)| {
+-            let mut column = match m.dtype {
+-                IdsDType::Str => ColumnValues::Str(Vec::with_capacity(inputs.len())),
+-                IdsDType::Int => ColumnValues::Int(Vec::with_capacity(inputs.len())),
+-                IdsDType::Float => ColumnValues::Float(Vec::with_capacity(inputs.len())),
+-            };
+-            for chunk in &mut chunks {
+-                append_column(&mut column, &mut chunk.columns[ci]);
++        ColumnValues::with_capacity,
++        |chunk| {
++            for (&index, year) in chunk.rows.iter().zip(chunk.model_year) {
++                model_year[index] = year;
+             }
+-            column
+-        })
+-        .collect();
++            for (dst, src) in columns.iter_mut().zip(chunk.columns) {
++                scatter(dst, src, &chunk.rows);
++            }
++        },
++    );
+     IdsBatch {
+         model_year,
+         columns,
+     }
+ }
+ 
+-/// Decode each row once into bounded typed chunks at one explicit instant.
+-pub(crate) fn decode_chunks_at<I: AsRef<str> + Sync, C: ColumnWriter>(
+-    inputs: &[I],
+-    years: Option<&[Option<i32>]>,
+-    metas: &[IdMeta],
+-    make_column: impl Fn(IdsDType, usize) -> C + Sync,
+-    now_micros: i64,
+-) -> Vec<ColumnChunk<C>> {
+-    use rayon::prelude::*;
+-    let current_year = crate::current_year_at(now_micros);
+-    let db = Db::embedded();
+-    // IdMeta is public: retain visibility filtering and last-column-wins
+-    // behavior even when the caller bypasses resolve_columns.
+-    let mut index = ElementIndex::default();
+-    for (ci, m) in metas.iter().enumerate() {
+-        if db
+-            .element_by_id(m.id)
+-            .is_some_and(|e| public_decode(db, e).is_some())
+-        {
+-            index.insert(m.id, ci);
++/// Move a chunk's values to their input positions in the final column.
++fn scatter(dst: &mut ColumnValues, src: ColumnValues, rows: &[usize]) {
++    fn place<T>(dst: &mut [T], src: Vec<T>, rows: &[usize]) {
++        for (&index, value) in rows.iter().zip(src) {
++            dst[index] = value;
+         }
+     }
+-
+-    // Bound the worker's typed buffers. A whole-batch row-major enum matrix
+-    // duplicates the final columns and costs 210 MiB at 65,536 x 140 cells.
+-    const CHUNK_ROWS: usize = 256;
+-    crate::install_batch_work(|| {
+-        inputs
+-            .par_chunks(CHUNK_ROWS)
+-            .enumerate()
+-            .map(|(chunk_index, vins)| {
+-                let mut columns: Vec<_> = metas
+-                    .iter()
+-                    .map(|m| make_column(m.dtype, vins.len()))
+-                    .collect();
+-                let mut model_year = Vec::with_capacity(vins.len());
+-                for (row, vin) in vins.iter().enumerate() {
+-                    let input_index = chunk_index * CHUNK_ROWS + row;
+-                    let mut r = decode_items(
+-                        db,
+-                        vin.as_ref(),
+-                        now_micros,
+-                        current_year,
+-                        crate::year_at(years, input_index),
+-                    );
+-                    r.materialize_defaults();
+-                    model_year.push(r.model_year);
+-                    let mut seen = ElementSet::default();
+-                    for it in r.items {
+-                        let Some(&ci) = index.get(&it.element_id) else {
+-                            continue;
+-                        };
+-                        // Mark seen before checking emptiness: the first note wins
+-                        // even when its value is null and later notes contain text.
+-                        if !seen.insert(it.element_id) {
+-                            continue;
+-                        }
+-                        let value = if it.value == "XXX" {
+-                            crate::resolve::felement_attribute_value(
+-                                db,
+-                                it.element_id,
+-                                it.attribute_id,
+-                            )
+-                        } else {
+-                            it.value
+-                        };
+-                        if value.is_empty() {
+-                            continue;
+-                        }
+-                        columns[ci].push_value(row, crate::scrub_value(value));
+-                    }
+-                }
+-                for column in &mut columns {
+-                    column.finish_rows(vins.len());
+-                }
+-                ColumnChunk {
+-                    model_year,
+-                    columns,
+-                }
+-            })
+-            .collect()
+-    })
++    match (dst, src) {
++        (ColumnValues::Str(dst), ColumnValues::Str(src)) => place(dst, src, rows),
++        (ColumnValues::Int(dst), ColumnValues::Int(src)) => place(dst, src, rows),
++        (ColumnValues::Float(dst), ColumnValues::Float(src)) => place(dst, src, rows),
++        _ => unreachable!("chunk and destination use the same column metadata"),
++    }
+ }
+ 
+ #[cfg(test)]
+diff --git a/crates/ultravin/src/lib.rs b/crates/ultravin/src/lib.rs
+index 75610b1..49c86b6 100644
+--- a/crates/ultravin/src/lib.rs
++++ b/crates/ultravin/src/lib.rs
+@@ -555,7 +555,7 @@ impl Db {
+     }
+ 
+     /// [`Db::decode_batch_stream_at`] with a converter run on the workers.
+-    fn batch_stream_at<'db, T, C, F>(
++    pub(crate) fn batch_stream_at<'db, T, C, F>(
+         &'db self,
+         inputs: &[String],
+         years: Option<&[Option<i32>]>,
+@@ -788,8 +788,12 @@ pub(crate) fn with_private_calibration_pool_scope<T>(run: impl FnOnce() -> T) ->
+     })
+ }
+ 
++pub(crate) fn in_private_calibration_scope() -> bool {
++    PRIVATE_CALIBRATION_POOL_DEPTH.with(|depth| depth.get() > 0)
++}
++
+ pub(crate) fn install_batch_work<T: Send>(run: impl FnOnce() -> T + Send) -> T {
+-    if PRIVATE_CALIBRATION_POOL_DEPTH.with(|depth| depth.get() > 0) {
++    if in_private_calibration_scope() {
+         run()
+     } else {
+         batch_pool().install(run)

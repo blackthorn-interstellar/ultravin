@@ -1288,6 +1288,63 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
   never-repeating input the full projection it now skips would cost about
   what workspace reuse saves.
 
+## November 13: columnar output on the native stream (rejected)
+
+- **What was tried.** `decode_batch_ids(_at)` and `ArrowDecoder::decode_batch`
+  (so the Parquet jobs and Python's `decode_stream`) decoding on the native
+  stream through `Db::batch_stream_at`: a converter on the workers projects
+  each batch's full results into typed column chunks; the caller scatters
+  them to their input positions (`decode_batch_ids`) or gathers each Arrow
+  column from the chunks with one `interleave` (columns in parallel). Calls
+  under 8,192 rows decoded directly (rayon, full decode into a reused
+  workspace, 256-row runs in input order). The item-level projection went.
+  Output was identical: the same hashes for every `decode_batch_ids_at`
+  case (three 2M corpora with and without mixed years, column subsets,
+  edge input at 1-70,001-row calls around 4,096, 8,192, 16,384, 32,768 and
+  65,536), and byte-identical Parquet for every fixed-batch Arrow and
+  Parquet job (adaptive jobs are not byte-deterministic even on master;
+  read back, they were equal). Candidate:
+  [columnar_stream_candidate_2026_11_13.patch](scripts/bench/columnar_stream_candidate_2026_11_13.patch).
+- **Why it was rejected.** Never-repeating input at twelve workers got
+  slower at every call size, and the candidate was not smaller (+233 −154
+  lines: the direct path stays for short calls, and assembly is new).
+  `decode_batch_ids_at`, 200k-VIN calls over 2M, 12 workers, two rounds,
+  peak RSS from `time -l`:
+
+  | input | columns | VIN/s before → stream | peak RSS GB |
+  |---|---|---:|---:|
+  | NY sorted | all | 571-616k → 1.13-1.18M | 2.11 → 1.29 |
+  | NY sorted | Make, Model, year | 1.44-1.45M → 6.79-6.83M | 0.33 → 0.47 |
+  | NY shuffled | all | 375-434k → 510-513k | 1.88 → 1.59 |
+  | NY shuffled | Make, Model, year | 945-985k → 1.67-1.69M | 0.39 → 0.74 |
+  | synthetic | all | 434-526k → 429-449k | 2.23 → 1.40 |
+  | synthetic | Make, Model, year | 1.98M → **1.52-1.55M (−22%)** | 0.43 → 0.55 |
+
+  Parquet to Parquet, 2M rows, 65,536-row batches:
+
+  | workers | input | columns | VIN/s before → stream | peak RSS MB |
+  |---:|---|---|---:|---:|
+  | 12 | NY sorted | all | 481k → 772-800k | 494-508 → 571-596 |
+  | 12 | NY sorted | Make, Model, year | 1.23-1.26M → 3.57-3.69M | 156 → 290 |
+  | 12 | NY shuffled | all | 269-276k → 289-296k | 563-570 → 835-849 |
+  | 12 | synthetic | all | 312-332k → 298-303k | 663-695 → 814-838 |
+  | 12 | synthetic | Make, Model, year | 1.39-1.44M → **1.09-1.15M (−20%)** | 274 → 393-395 |
+  | 1 | synthetic | all | 121k → **107k (−12%)** | 591 → 661 |
+  | 1 | synthetic | Make, Model, year | 227-228k → 258k (+13%) | 261 → 283 |
+- **Where the time goes.** Same binary, warmed, synthetic, Make/Model/year,
+  12 workers, 65,536- / 200,000-row calls: direct path 2.11-2.14M /
+  2.16-2.18M; stream 1.57-1.58M / 1.68M; stream with a converter that does
+  nothing 1.74-1.77M / 1.87M; that again with the result cache off 1.88M /
+  2.01M. So on input that never repeats, the stream itself (coordination,
+  per-call start-up and teardown) costs ~10%, the cache's probes ~8%, and
+  projecting after the batch, once its results have left the core's cache,
+  ~10%. A direct driver has none of these; the stream only wins once rows
+  repeat, or at one worker, where its locality order is worth 7-13%. A
+  threshold on call size cannot separate the two cases. Getting there
+  would need either a cheaper stream on misses, or a per-job switch on the
+  observed hit share (a hit shares its element list, so a converter can
+  count them).
+
 ## Experiments we rejected or replaced
 
 Keeping these failures is part of preserving the performance work. A compatible
@@ -1316,6 +1373,7 @@ rewrite with no established end-to-end benefit did not qualify for retention.
 | Batch JSON handed over as one string per stream batch (November 13) | The caller appended each batch as it arrived, so the text stayed in input order only without the global locality sort, and the growing output was copied again on every doubling: −34% at twelve workers on never-repeating input. One string per row and one exact-size join replaced it. |
 | Flat batch calls of 8,192-65,535 VINs on the native stream (November 13) | Handing every row's owned values back in input order cost ~1 µs a row on the calling thread: 10,000-50,000-VIN calls ran 1-20% slower than decoding directly at twelve workers. They decode directly; flat calls stream from 65,536 VINs. |
 | Native stream workers on threads spawned per call (November 13) | Results that outlive the call were freed into the abandoned allocator heaps of exited threads, so each call faulted in fresh pages: −16% for a one-worker batch call. Workers now run on the decoder pool. |
+| Columnar output on the native stream (November 13) | Identical output and 1.6-4.7× on repeating input, but never-repeating input lost 3-22% at twelve workers at every call size (the stream's coordination and cache probes cost ~18% before any conversion) and 12% for all columns at one worker. A size threshold cannot tell repeating input from not; the columnar path keeps its own driver. |
 
 The earlier ablations and Python interning experiment are recorded in
 [BENCHMARKS.md](docs/BENCHMARKS.md). The September experiment outcomes above were
