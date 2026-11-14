@@ -125,10 +125,11 @@ ultravin version
 
 `decode-batch` accepts `VIN,year` on each input line. JSONL mode processes
 bounded chunks and emits complete JSON objects in input order, ready for shell
-pipelines. Its automatic default adapts under an 8 MiB working-buffer target;
-pass `--batch-size N` to pin a measured size or `--batch-memory-mb N` to change
-the automatic target. If a later input line is malformed, the command exits with
-an error; already-emitted lines remain valid results.
+pipelines. By default it decodes on the native stream, result cache included,
+and writes each worker batch as it finishes, under an 8 MiB working-buffer
+target; pass `--batch-size N` to pin a measured size or `--batch-memory-mb N`
+to change the automatic target. If a later input line is malformed, the command
+exits with an error; already-emitted lines remain valid results.
 
 ### Reproducible results
 

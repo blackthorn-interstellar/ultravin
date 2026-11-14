@@ -24,6 +24,7 @@ pub mod generate;
 mod hash;
 mod ids;
 mod json;
+mod jsonl_write;
 mod keyspec;
 mod matcher;
 mod native_auto;
@@ -58,6 +59,7 @@ pub use ids::{
     all_public_ids, decode_batch_ids, decode_batch_ids_at, resolve_columns, resolve_ids,
     ColumnSpec, ColumnValues, IdMeta, IdsBatch, IdsDType,
 };
+pub use jsonl_write::WriteJsonlError;
 pub use matcher::sqlwild_to_regex;
 pub use native_auto::{
     decode_native_stream, decode_native_stream_auto_at, NativeAutoError, NativeAutoOptions,

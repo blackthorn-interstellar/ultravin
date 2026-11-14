@@ -11,7 +11,11 @@ output-stream calibration and feedback description applies to Arrow/Parquet
 and JSONL.
 
 It is **automatically used** by `decode_stream`, `decode-parquet`, and
-`decode-batch --jsonl` when `batch_size="auto"` (the default). A job returns a
+`decode-batch --jsonl` when `batch_size="auto"` (the default). `decode-batch
+--jsonl` writing to the process's own UTF-8 stdout (the usual shell case) skips
+it instead: it streams on the native worker-slot plan, cut to fit
+`--batch-memory-mb` of JSON Lines at the 4,500-byte JSONL reference row width,
+and writes each worker batch as it finishes. A job returns a
 small warm-up batch and measures the next 256 real rows on one private Rayon
 worker. Normally these are two 256-row batches; small file tails accumulate
 until there is enough measured work. The measured sample is replayed once

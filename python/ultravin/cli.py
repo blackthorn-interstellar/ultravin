@@ -1,6 +1,5 @@
 """Thin typer CLI over the ultravin core. No decode logic lives here."""
 
-import json
 from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path
@@ -9,7 +8,7 @@ from typing import Annotated, cast
 import typer
 
 import ultravin as uv
-from ultravin._batch_cli import BatchSize, collect, input_lines, parse_batch_size, rows, write_jsonl
+from ultravin._batch_cli import BatchSize, collect, decode_jsonl, input_lines, parse_batch_size, rows
 
 app = typer.Typer(add_completion=False, no_args_is_help=True, help="ultravin — NHTSA vPIC VIN decoder")
 
@@ -60,17 +59,16 @@ def decode_batch(
     """
     now = datetime.now(timezone.utc)
     with input_lines(file) as lines:
-        parsed = rows(lines)
         if jsonl:
-            write_jsonl(
-                parsed,
+            decode_jsonl(
+                lines,
                 full=full,
                 batch_size=cast("BatchSize", batch_size),
                 now=now,
                 batch_memory_mb=batch_memory_mb,
             )
             return
-        vins, years = collect(parsed)
+        vins, years = collect(rows(lines))
     hints = years if any(y is not None for y in years) else None
     typer.echo(uv.decode_batch_json(vins, years=hints, full=full, now=now))
 
@@ -192,6 +190,10 @@ def version() -> None:
 @app.command()
 def info() -> None:
     """Print decoder and embedded-data provenance as JSON."""
+    # Imported here, not at the top: no other command needs json, and every
+    # command pays for the module's imports at startup.
+    import json  # noqa: PLC0415
+
     typer.echo(json.dumps(uv.provenance(), separators=(",", ":")))
 
 

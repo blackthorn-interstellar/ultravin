@@ -1,19 +1,29 @@
 """Incremental input parsing and chunking for the batch CLI."""
 
+import codecs
 import io
 import sys
-from collections.abc import Generator, Iterator
+from collections.abc import Generator, Iterable, Iterator
 from contextlib import ExitStack, contextmanager
 from datetime import datetime
+from itertools import islice
 from pathlib import Path
 from time import perf_counter
-from typing import Literal, TextIO
+from typing import BinaryIO, Literal, TextIO
 
 import typer
 
 import ultravin as uv
 
 BatchSize = int | Literal["auto"]
+
+#: Rows of the first two streamed JSONL chunks, as the tuner's two calibration
+#: chunks had; each later chunk doubles, up to `JSONL_MAX_ROWS`. Output starts as
+#: soon as it did, a bad line in the first 512 rows leaves the same output, and
+#: a long input soon decodes in runs long enough for the result cache to pay.
+JSONL_FIRST_ROWS = 256
+JSONL_MAX_ROWS = 65_536
+UTF8_ERROR = "input is not valid UTF-8"
 
 
 def parse_batch_size(value: str) -> BatchSize:
@@ -47,9 +57,10 @@ def input_lines(file: str) -> Generator[TextIO]:
         yield lines
 
 
-def rows(lines: TextIO) -> Iterator[tuple[str, int | None]]:
+def rows(lines: Iterable[str], start: int = 1) -> Iterator[tuple[str, int | None]]:
+    """`(vin, year)` per non-blank line; `start` numbers the first line in error messages."""
     try:
-        for lineno, raw in enumerate(lines, start=1):
+        for lineno, raw in enumerate(lines, start=start):
             line = raw.strip()
             if not line:
                 continue
@@ -60,8 +71,7 @@ def rows(lines: TextIO) -> Iterator[tuple[str, int | None]]:
                 msg = f"line {lineno}: model year {year.strip()!r} is not an integer"
                 raise typer.BadParameter(msg) from None
     except UnicodeDecodeError:
-        msg = "input is not valid UTF-8"
-        raise typer.BadParameter(msg) from None
+        raise typer.BadParameter(UTF8_ERROR) from None
 
 
 def collect(parsed: Iterator[tuple[str, int | None]]) -> tuple[list[str], list[int | None]]:
@@ -109,3 +119,81 @@ def write_jsonl(
         del encoded
         if exhausted:
             return
+
+
+def decode_jsonl(lines: TextIO, *, full: bool, batch_size: BatchSize, now: datetime, batch_memory_mb: int) -> None:
+    """Decode `lines` to JSON Lines on stdout.
+
+    Automatic batches written to the interpreter's own UTF-8 stdout decode and
+    write in Rust, batch by batch on the native stream; anything else runs
+    `write_jsonl`. The bytes are the same either way.
+    """
+    out = binary_stdout() if batch_size == "auto" else None
+    if out is None:
+        write_jsonl(rows(lines), full=full, batch_size=batch_size, now=now, batch_memory_mb=batch_memory_mb)
+        return
+    memory_bytes = batch_memory_mb * 1024 * 1024
+    # An empty call checks the arguments, so an unrepresentable budget raises
+    # before any input is read, as it did from the tuner.
+    uv._write_batch_jsonl([], out, memory_bytes=memory_bytes)
+    sys.stdout.flush()
+    for vins, years in chunks(lines):
+        uv._write_batch_jsonl(vins, out, years=years, full=full, now=now, memory_bytes=memory_bytes)
+        out.flush()
+
+
+def binary_stdout() -> BinaryIO | None:
+    """The interpreter's own stdout as bytes, if text echoed to it arrives as exactly its UTF-8.
+
+    That takes a UTF-8 text layer that translates no newlines over a buffered
+    binary one. Anything else (a capture that replaced `sys.stdout`, another
+    encoding, Windows newlines, `-u`) keeps the text path.
+    """
+    stdout = sys.stdout
+    if stdout is not sys.__stdout__ or sys.platform == "win32" or not isinstance(stdout, io.TextIOWrapper):
+        return None
+    if codecs.lookup(stdout.encoding).name != "utf-8" or not isinstance(stdout.buffer, io.BufferedWriter):
+        return None
+    return stdout.buffer
+
+
+def chunks(lines: TextIO) -> Iterator[tuple[list[str], list[int | None] | None]]:
+    """What `rows(lines)` parses, in chunks of rows: VINs, and years if any line gives one.
+
+    Like `write_jsonl`, it yields only whole chunks: at a bad line it raises
+    `rows`' error, a bad year before an invalid byte later in its chunk.
+    """
+    size, read, count = JSONL_FIRST_ROWS, 0, 0
+    while True:
+        chunk: list[str] = []
+        stripped: list[str] = []
+        failure = None
+        try:
+            wanted = size
+            while wanted:
+                start = len(chunk)
+                # One at a time, so the lines read before an invalid byte survive it.
+                for line in islice(lines, wanted):
+                    chunk.append(line)  # noqa: PERF402
+                if len(chunk) == start:
+                    break
+                stripped += [line.strip() for line in chunk[start:]]
+                wanted -= len(chunk) - start - stripped[start:].count("")
+        except UnicodeDecodeError:
+            failure = typer.BadParameter(UTF8_ERROR)
+            stripped += [line.strip() for line in chunk[len(stripped) :]]
+        if failure is not None or any("," in line for line in stripped):
+            vins, years = collect(rows(chunk, start=read + 1))
+            hints = years if any(year is not None for year in years) else None
+        else:
+            # Without a comma, `rows` yields each stripped line and no year.
+            vins, hints = [line for line in stripped if line], None
+        if failure is not None:
+            raise failure
+        if vins:
+            yield vins, hints
+        if len(vins) < size:
+            return
+        read += len(chunk)
+        count += 1
+        size = size if count < 2 else min(2 * size, JSONL_MAX_ROWS)
