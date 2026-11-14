@@ -427,6 +427,119 @@ impl ColumnWriter for ArrowColumn {
     }
 }
 
+/// What the parquet layer's compact decode builds its vehicle rows with.
+#[cfg(feature = "parquet")]
+mod results {
+    use super::*;
+    use crate::DecodeResult;
+    use arrow_array::builder::Int32Builder;
+
+    impl ArrowColumn {
+        fn len(&self) -> usize {
+            match self {
+                Self::Str(v) => v.len(),
+                Self::Int(v) => v.len(),
+                Self::Float(v) => v.len(),
+            }
+        }
+    }
+
+    /// Full decode results projected onto a decoder's columns: what
+    /// [`ArrowDecoder::decode_batch`] makes of the same VINs and years, read off
+    /// results the native stream already holds instead of decoded again.
+    pub(crate) struct ResultProjection {
+        metas: Vec<IdMeta>,
+        /// The column of each element id, for the public ones requested; the
+        /// last request for an id wins, as in [`decode_chunks_at`].
+        column_of: Vec<Option<usize>>,
+    }
+
+    impl ResultProjection {
+        pub(crate) fn new(metas: &[IdMeta]) -> Self {
+            let db = Db::embedded();
+            let mut column_of = Vec::new();
+            for (ci, m) in metas.iter().enumerate() {
+                let Ok(id) = usize::try_from(m.id) else {
+                    continue;
+                };
+                if db
+                    .element_by_id(m.id)
+                    .is_some_and(|e| crate::public_decode(db, e).is_some())
+                {
+                    if column_of.len() <= id {
+                        column_of.resize(id + 1, None);
+                    }
+                    column_of[id] = Some(ci);
+                }
+            }
+            Self {
+                metas: metas.to_vec(),
+                column_of,
+            }
+        }
+
+        /// Empty columns with room for `rows` rows.
+        pub(crate) fn columns(&self, rows: usize) -> ResultColumns {
+            ResultColumns {
+                year: Int32Builder::with_capacity(rows),
+                columns: self
+                    .metas
+                    .iter()
+                    .map(|m| ArrowColumn::new(m.dtype, rows))
+                    .collect(),
+                rows: 0,
+            }
+        }
+
+        /// Append `result` as a row of `out`. An element's first occurrence
+        /// wins even when empty, and empty is null.
+        pub(crate) fn push(&self, out: &mut ResultColumns, result: &DecodeResult<'_>) {
+            let row = out.rows;
+            out.year.append_option(result.model_year);
+            for e in result.elements.iter() {
+                let column = usize::try_from(e.element_id)
+                    .ok()
+                    .and_then(|id| self.column_of.get(id).copied().flatten());
+                let Some(column) = column.map(|ci| &mut out.columns[ci]) else {
+                    continue;
+                };
+                if column.len() > row {
+                    continue;
+                }
+                if e.value.is_empty() {
+                    column.finish_rows(row + 1);
+                } else {
+                    column.push_value(row, std::borrow::Cow::Borrowed(&e.value));
+                }
+            }
+            out.rows += 1;
+        }
+    }
+
+    /// Rows of [`ResultProjection`] columns being built.
+    pub(crate) struct ResultColumns {
+        year: Int32Builder,
+        columns: Vec<ArrowColumn>,
+        rows: usize,
+    }
+
+    impl ResultColumns {
+        /// The decoded model year, then one array per projected column; the
+        /// builder is empty again after.
+        pub(crate) fn finish(&mut self) -> Vec<ArrayRef> {
+            let mut arrays: Vec<ArrayRef> = vec![Arc::new(self.year.finish())];
+            arrays.extend(self.columns.iter_mut().map(|column| {
+                column.finish_rows(self.rows);
+                column.finish()
+            }));
+            self.rows = 0;
+            arrays
+        }
+    }
+}
+#[cfg(feature = "parquet")]
+pub(crate) use results::{ResultColumns, ResultProjection};
+
 fn decode_arrays(
     vins: &[&str],
     years: Option<&[Option<i32>]>,

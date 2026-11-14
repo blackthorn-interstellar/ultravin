@@ -25,8 +25,8 @@ use pyo3::types::{PyBool, PyCapsule, PyDateTime, PyDict, PyList, PyString};
 
 use ultravin::adaptive::{BatchFeedback, BatchRebatcher};
 use ultravin::parquet_io::{
-    check_dst_outside_src, open_chunks_at, open_chunks_auto_at, ParquetChunkIter, ParquetOpts,
-    ParquetSink,
+    check_dst_outside_src, decode_compact_at, open_chunks_at, open_chunks_auto_at,
+    ParquetChunkIter, ParquetOpts, ParquetSink,
 };
 use ultravin::predictor::{predict_batch, BatchFormat, BatchPrediction};
 use ultravin::{
@@ -1466,6 +1466,45 @@ fn decode_stream(
     })
 }
 
+/// Decode a file of VINs into `vins.parquet` and `vehicles.parquet` in `dst_dir`,
+/// returning the rows written to each.
+///
+/// Every VIN that repeats a vehicle the decode has already seen shares its
+/// `vehicle_id` instead of repeating its columns; joining the two files on
+/// `vehicle_id` gives `decode_stream(source).to_parquet(...)`'s table.
+#[pyfunction]
+#[pyo3(signature = (source, dst_dir, *, vin_column = None, year_column = None, columns = None, column_names = "variable", sample_rows = 100, now = None))]
+#[pyo3(
+    text_signature = "(source, dst_dir, *, vin_column=None, year_column=None, columns=None, column_names='variable', sample_rows=100, now=None)"
+)]
+// One parameter per documented keyword, as `decode_stream` has.
+#[allow(clippy::too_many_arguments)]
+fn decode_compact(
+    py: Python<'_>,
+    source: PathBuf,
+    dst_dir: PathBuf,
+    vin_column: Option<String>,
+    year_column: Option<String>,
+    columns: Option<Vec<Bound<'_, PyAny>>>,
+    column_names: &str,
+    sample_rows: usize,
+    now: Option<Bound<'_, PyDateTime>>,
+) -> PyResult<(usize, usize)> {
+    let (now_micros, _) = decode_clock(now.as_ref())?;
+    let opts = ParquetOpts {
+        vin: vin_column,
+        year: year_column,
+        columns: column_specs(columns)?,
+        names: column_names_from(column_names)?,
+        sample_rows,
+        ..ParquetOpts::default()
+    };
+    let rows = py
+        .detach(|| decode_compact_at(&source, &dst_dir, opts, now_micros))
+        .map_err(arrow_err)?;
+    Ok((rows.vins, rows.vehicles))
+}
+
 #[pymodule]
 fn _ultravin(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<PyBatchTuner>()?;
@@ -1484,6 +1523,7 @@ fn _ultravin(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(pairwise, m)?)?;
     m.add_function(wrap_pyfunction!(seeded, m)?)?;
     m.add_function(wrap_pyfunction!(decode_stream, m)?)?;
+    m.add_function(wrap_pyfunction!(decode_compact, m)?)?;
     m.add_class::<DecodeStream>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())

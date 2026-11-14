@@ -22,7 +22,7 @@ import subprocess
 import sys
 import threading
 from collections.abc import Sequence
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Literal
 
@@ -940,3 +940,75 @@ def test_a_masked_row_in_a_later_chunk_of_non_nullable_fields_decodes() -> None:
     clean = pa.StructArray.from_arrays(arrays, fields=fields)
     masked = pa.StructArray.from_arrays(arrays, fields=fields, mask=pa.array([True]))
     assert columns(pa.chunked_array([clean, masked]), columns=[MAKE])["Make"] == ["HONDA", None]
+
+
+# ── Compact output ────────────────────────────────────────────────────────────
+
+
+NOW = datetime(2026, 9, 1, tzinfo=timezone.utc)
+
+
+def joined(dst_dir: Path) -> pa.Table:
+    """`vins JOIN vehicles USING (vehicle_id)` in VIN order, `vehicle_id` dropped."""
+    vins = pq.read_table(dst_dir / "vins.parquet")
+    vehicles = pq.read_table(dst_dir / "vehicles.parquet")
+    ids = vehicles["vehicle_id"].to_pylist()
+    assert len(set(ids)) == len(ids), "each vehicle_id has one row"
+    row = {vehicle_id: i for i, vehicle_id in enumerate(ids)}
+    rows = vehicles.take([row[vehicle_id] for vehicle_id in vins["vehicle_id"].to_pylist()])
+    return pa.table({vins.column_names[0]: vins.column(0), **{n: rows[n] for n in rows.column_names[1:]}})
+
+
+def test_decode_compact_joins_back_to_the_stream_table(tmp_path: Path) -> None:
+    # Every row shape twice, so the second pass shares vehicles with the first.
+    src = corpus_file(tmp_path / "in.parquet", CORPUS * 2)
+    vins, vehicles = uv.decode_compact(src, tmp_path / "out", columns=PROJECTED, now=NOW)
+
+    assert vins == 2 * len(CORPUS)
+    assert vehicles < vins
+    expected = pa.table(uv.decode_stream(src, columns=PROJECTED, now=NOW))
+    assert joined(tmp_path / "out").equals(expected)
+
+
+def test_decode_compact_reads_text_as_one_vin_per_line(tmp_path: Path) -> None:
+    lines = [HONDA, FORD, "", "not a vin", HONDA]
+    src = tmp_path / "vins.txt"
+    src.write_text("\r\n".join(lines) + "\n")
+    assert uv.decode_compact(src, tmp_path / "out", columns=[MAKE], now=NOW)[0] == len(lines)
+
+    table = joined(tmp_path / "out")
+    assert table["vin"].to_pylist() == lines
+    assert table["Make"].to_pylist() == ["HONDA", "FORD", None, None, "HONDA"]
+
+
+def test_decode_compact_reports_caller_mistakes_and_missing_files(tmp_path: Path) -> None:
+    src = corpus_file(tmp_path / "in.parquet")
+    with pytest.raises(ValueError, match="unknown element_id"):
+        uv.decode_compact(src, tmp_path / "out", columns=[999_999])
+    with pytest.raises(OSError, match="not found"):
+        uv.decode_compact(tmp_path / "missing.txt", tmp_path / "out")
+
+
+def test_cli_decode_compact_writes_both_files(tmp_path: Path) -> None:
+    src = corpus_file(tmp_path / "in.parquet")
+    result = CliRunner(env={"COLUMNS": "200"}).invoke(
+        app, ["decode-compact", str(src), str(tmp_path / "out"), "--columns", "Make,9"]
+    )
+
+    assert result.exit_code == 0, result.output
+    assert f"wrote {len(CORPUS)} VINs" in result.stderr
+    assert pq.read_table(tmp_path / "out" / "vehicles.parquet").column_names == [
+        "vehicle_id",
+        "year",
+        "decoded_model_year",
+        "Make",
+        "Engine Number of Cylinders",
+    ]
+
+
+def test_cli_decode_compact_reports_a_missing_source_without_a_traceback(tmp_path: Path) -> None:
+    result = CliRunner(env={"COLUMNS": "200"}).invoke(
+        app, ["decode-compact", str(tmp_path / "missing.txt"), str(tmp_path / "out")]
+    )
+    assert result.exit_code == 2
+    assert "Invalid value" in plain(result.output)

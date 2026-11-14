@@ -27,6 +27,7 @@ identified as such.
 - [November 13: cache hits share the element list](#november-13-cache-hits-share-the-element-list)
 - [November 13: batch calls run on the native stream](#november-13-batch-calls-run-on-the-native-stream)
 - [November 13: flat results are flattened full results](#november-13-flat-results-are-flattened-full-results)
+- [November 14: compact output writes each vehicle once](#november-14-compact-output-writes-each-vehicle-once)
 - [Experiments we rejected or replaced](#experiments-we-rejected-or-replaced)
 - [SQL oracle and development resources](#sql-oracle-and-development-resources)
 - [Correctness and measurement rules](#correctness-and-measurement-rules)
@@ -1344,6 +1345,99 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
   would need either a cheaper stream on misses, or a per-job switch on the
   observed hit share (a hit shares its element list, so a converter can
   count them).
+
+## November 14: compact output writes each vehicle once
+
+- **Bottleneck.** The native stream decodes sorted NY at ~13M VIN/s because
+  97% of VINs share a cached result, but every output format re-materialised
+  the ~140-column row for each VIN: `decode_parquet_to_file` ran at ~470k
+  VIN/s on it, and the rejected columnar stream at ~0.8M.
+- **Mechanism** ([parquet_io.rs](crates/ultravin/src/parquet_io.rs)
+  `decode_compact`, CLI `ultravin decode-compact`). The result cache now
+  names results: every row a worker decodes takes a process-unique id (from
+  per-worker blocks of 4,096 off one counter), a stored entry keeps its row's
+  id, and a hit returns it. The stream hands each batch's ids and which rows
+  it decoded fresh to the converter (`NativeBatch::result_ids`/`fresh`,
+  crate-private). Output is two files: `vins.parquet` (the input VIN column
+  as given, plus `vehicle_id`, in input order) and `vehicles.parquet` (one
+  row per fresh row: `vehicle_id` and every other column the wide output
+  has). Joining them on `vehicle_id` is the wide output. A cached result
+  equals a full decode in everything but `vin`: a hit copies the header and
+  shares the element list, only results with codes `[0]` and no
+  `corrected_vin` are stored, and debug builds assert equality on every hit;
+  the caller year is part of the key, so its passthrough column goes with the
+  vehicle.
+  - Input is streamed in 512Ki-row chunks, each one native stream (locality
+    order inside it) and one `vins.parquet` row group; a reader thread casts
+    the next chunk meanwhile. Parquet input reuses the column sniffing; any
+    other file is one VIN per line.
+  - Workers project fresh results into Arrow columns (the projection of the
+    rejected columnar patch, read off `DecodeResult`), gathered in a pool of
+    2,048-row builders: building one small record batch per stream batch
+    cost 4.5 µs per vehicle row in per-column builder overhead, plus 0.5 s
+    of concatenation per 12M VINs on the writer.
+  - Each file has a writer thread; row groups (32Ki rows for vehicles) are
+    encoded a column at a time on a per-call rayon pool of as many threads as
+    decode workers (`ArrowColumnWriter`). With one `ArrowWriter` thread
+    synthetic input was capped at ~510k VIN/s by encoding.
+  - `vins.parquet`: Snappy, no dictionary on the VIN column. Measured on 2M
+    VINs single-threaded: PLAIN+Snappy 106 ms / 16.1 MB sorted NY, 114 ms /
+    35.6 MB synthetic; uncompressed 50 ms but 43 MB for both;
+    DELTA_BYTE_ARRAY+Snappy 106 ms / 10.7 MB and 87 ms / 35.2 MB (kept PLAIN
+    for reader compatibility); LZ4 no better than Snappy. `vehicle_id` keeps
+    the default dictionary, which RLE makes ~free on sorted input.
+- **Correctness.** A Rust test joins the pair back for a mixed corpus (clean
+  VINs with up to 60 serial siblings, cover and generated VINs, wrong check
+  digits, padded lowercase, short, garbage, nulls, per-VIN years in and out
+  of range) at one chunk and at 1,000-row chunks, and compares it with the
+  wide output column for column; another streams repeats across four workers
+  and checks each id is fresh exactly once and names one result but for
+  `vin`. Release, DuckDB `EXCEPT ALL` both ways on the join keyed by row
+  number: 0 differing rows over sorted NY 2M, sorted NY 2M with a year on
+  every third row, and synthetic 2M with years (143-144 columns; a mismatched
+  pair as control differs in all 2M rows).
+- **Results.** Disk to disk, parquet in, all public columns, release
+  `examples/decode_files.rs`, `ULTRAVIN_NOW_MICROS` fixed, two runs at twelve
+  workers (one at one), peak RSS from `time -l`, output size on disk:
+
+  | workers | input | `decode_parquet_to_file` VIN/s | compact VIN/s | RSS MB wide → compact | output MB wide → compact |
+  |---:|---|---:|---:|---:|---:|
+  | 12 | NY sorted 2M | 472-475k | **6.35-6.56M** (13.6×) | 482-487 → 594-611 | 23.9 → 18.3 |
+  | 12 | NY sorted 11.9M | 461k | **7.66-7.82M** (16.8×) | 664 → 951-1,028 | 145 → 112 |
+  | 12 | synthetic 2M | 320-333k | **1.03-1.09M** (3.2×) | 947-972 → 930-973 | 208 → 173 |
+  | 1 | NY sorted 2M | 116-119k | **1.79-1.84M** (15×) | 387 → 445-450 | 24.0 → 18.6 |
+  | 1 | synthetic 2M | 123-127k | **196-198k** (1.6×) | 661 → 523 | 208 → 173 |
+
+  Text input (one VIN per line) runs as fast as parquet: 6.50-6.76M on
+  sorted NY 2M, 1.05-1.10M on synthetic at twelve workers. A release wheel
+  gives the same from Python (`decode_compact` 6.16M against
+  `decode_stream(...).to_parquet` 449k on sorted NY 2M; 1.02M against 319k
+  on synthetic). Peak RSS levels off: 0.95, 1.10, 1.15-1.20 and 1.22 GB on
+  sorted NY repeated 1, 2, 4 and 8 times (95M VINs); with both writers off it
+  is 0.63-0.72 GB, so the stream and reader account for most of it.
+- **Where the time goes.** CPU seconds by stage, twelve workers, from
+  temporary timers:
+
+  | input | wall s | total CPU s | read | decode | vehicle rows | encode + write |
+  |---|---:|---:|---:|---:|---:|---:|
+  | NY sorted 11.9M | 1.53 | 12.3 | 0.25 | ~9.2 | 1.11 | 1.72 |
+  | NY sorted 2M | 0.31 | 2.2 | 0.04 | ~1.8 | 0.15 | 0.26 |
+  | synthetic 2M | 1.99 | 19.1 | 0.05 | ~9.9 | 4.30 | 4.89 |
+
+  On sorted NY the stream itself is the limit (~8 of 12 cores busy, as in the
+  bare stream: its per-batch hand-off), and the first chunk's read and the
+  last chunk's encode are serial (~40 ms). On never-repeating input every row
+  is a vehicle row: building and encoding it costs about what decoding it
+  does.
+- **No cost to the stream.** `throughput ... batch full auto`, alternating
+  with 4427a36, two pairs each:
+
+  | workers | input | VIN/s before → after | cycles/VIN |
+  |---:|---|---:|---:|
+  | 12 | NY sorted 2M | 12.77-12.79M → 12.88-12.93M | 2,099-2,104 → 2,071-2,076 |
+  | 12 | synthetic 2M | 2.04-2.09M → 2.04-2.07M | 16,492-16,508 → 16,513-16,587 |
+  | 1 | NY sorted 2M | 2.68-2.69M → 2.83M | 1,217-1,224 → 1,154-1,157 |
+  | 1 | synthetic 2M | 278-301k → 279-299k | 11,247-11,777 → 11,275-11,764 |
 
 ## Experiments we rejected or replaced
 

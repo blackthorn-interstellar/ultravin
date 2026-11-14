@@ -294,6 +294,29 @@ ultravin decode-parquet parts/ decoded.parquet --columns 26,28 --vin-column chas
 ultravin decode-parquet registrations.parquet decoded.parquet --column-names id
 ```
 
+### Compact output
+
+Real fleets repeat: in New York's registrations 97% of VINs decode to a vehicle
+an earlier VIN already did. `decode-compact` writes each such vehicle once, which
+on that file (sorted) runs about 16× faster than `decode-parquet`: 7.7M VIN/s on
+12 cores, disk to disk.
+
+```bash
+ultravin decode-compact registrations.parquet decoded/  # or a text file, one VIN per line
+```
+
+`decoded/vins.parquet` has one row per input VIN, in input order: the VIN as given
+and a `vehicle_id`. `decoded/vehicles.parquet` has every other `decode-parquet`
+column, one row per `vehicle_id`. Join them for the wide table:
+
+```sql
+SELECT * EXCLUDE (vehicle_id)
+FROM 'decoded/vins.parquet' JOIN 'decoded/vehicles.parquet' USING (vehicle_id);
+```
+
+`--columns`, `--column-names` and the VIN/year column options work as above;
+from Python it is `ultravin.decode_compact(src, dst_dir)`.
+
 ## Benchmarks
 
 How many VINs each engine decodes **per second**, measured against the NHTSA

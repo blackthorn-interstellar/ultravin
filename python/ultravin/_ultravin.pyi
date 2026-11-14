@@ -323,6 +323,37 @@ def decode_stream(
     ambiguous autodetect) and ``OSError`` for an unreadable file.
     """
 
+def decode_compact(
+    source: str | Path,
+    dst_dir: str | Path,
+    *,
+    vin_column: str | None = None,
+    year_column: str | None = None,
+    columns: Sequence[int | str] | None = None,
+    column_names: Literal["variable", "id"] = "variable",
+    sample_rows: int = 100,
+    now: datetime | None = None,
+) -> tuple[int, int]:
+    """Decode a file of VINs into ``vins.parquet`` and ``vehicles.parquet`` in
+    ``dst_dir`` (created if missing), returning the rows written to each.
+
+    ``source`` is a parquet file or directory, its VIN and caller-year columns
+    found as :func:`decode_stream` finds them, or any other file, read as one
+    VIN per line. ``vins.parquet`` has one row per input VIN, in input order:
+    the VIN as given and a ``vehicle_id``. ``vehicles.parquet`` has one row per
+    ``vehicle_id`` with every other column ``decode_stream(source).to_parquet``
+    writes, so ``vins JOIN vehicles USING (vehicle_id)`` is that table. A VIN
+    that repeats a vehicle already decoded (the same result but for the
+    serial) shares its id, which is what makes a real fleet fast to decode and
+    small to store. Ids are not dense and a vehicle may appear under more than
+    one id. The other keywords mean what they do for :func:`decode_stream`.
+
+    The whole job stays in Rust with the GIL released, memory is bounded
+    independently of source rows, and neither file is replaced unless both are
+    written. Raises ``ValueError`` for a caller mistake and ``OSError`` for an
+    unreadable source or unwritable destination.
+    """
+
 class DecodeStream:
     """A one-shot stream of decoded Arrow batches.
 

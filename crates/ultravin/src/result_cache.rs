@@ -41,6 +41,11 @@
 //! owned or a shared list). A row already sharing the entry's list holds its
 //! whole result, so a hit on it writes only `vin`. A list lives as long as any
 //! row or entry holding it, past its entry's eviction and past the stream.
+//!
+//! Every row a worker decodes gets an id, and a stored entry keeps the id of
+//! the row it came from, so a hit names the result it shares: rows with one
+//! id hold equal results apart from `vin`. Ids are unique in the process.
+//! Workers take them in blocks from one counter, so they are not dense.
 
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 use std::sync::{Arc, OnceLock};
@@ -59,6 +64,11 @@ pub(crate) fn configured_entries() -> usize {
         .and_then(|value| value.trim().parse().ok())
         .unwrap_or(DEFAULT_ENTRIES)
 }
+
+/// Ids a worker takes from [`NEXT_ID`] at a time.
+const ID_BLOCK: u64 = 4096;
+
+static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
 static HITS: AtomicU64 = AtomicU64::new(0);
 static PROBES: AtomicU64 = AtomicU64::new(0);
@@ -97,10 +107,11 @@ impl Key {
     }
 }
 
-/// A clean result, its `vin` left empty and its elements shared, and the key
-/// it answers.
+/// A clean result, its `vin` left empty and its elements shared, the key it
+/// answers and the id of the row it was decoded for.
 struct Entry<'a> {
     key: Key,
+    id: u64,
     result: DecodeResult<'a>,
 }
 
@@ -138,6 +149,11 @@ impl<'a> Table<'a> {
 pub(crate) struct Hit<'a>(Guard<Option<Arc<Entry<'a>>>>);
 
 impl<'a> Hit<'a> {
+    /// The id of the row the entry was decoded for.
+    pub(crate) fn id(&self) -> u64 {
+        self.0.as_ref().expect("a hit holds an entry").id
+    }
+
     /// Write the entry's result into `out`, whose `vin` already holds the
     /// sanitized VIN, unless `out` already shares the entry's elements.
     /// Returns the elements `out` held before, if it did not.
@@ -178,6 +194,8 @@ pub(crate) struct Worker {
     recent_hits: u32,
     recent_stores: u32,
     seen: u64,
+    /// The rest of this worker's block of ids.
+    ids: std::ops::Range<u64>,
     hits: u64,
     probes: u64,
     pub(crate) uncopied: u64,
@@ -197,6 +215,17 @@ impl Worker {
     /// Hits this worker has made.
     pub(crate) fn hits(&self) -> u64 {
         self.hits
+    }
+
+    /// An id no other row in the process has.
+    pub(crate) fn new_id(&mut self) -> u64 {
+        if self.ids.is_empty() {
+            let start = NEXT_ID.fetch_add(ID_BLOCK, Relaxed);
+            self.ids = start..start + ID_BLOCK;
+        }
+        let id = self.ids.start;
+        self.ids.start += 1;
+        id
     }
 
     /// Whether to look this VIN up at all. A store costs a fraction of a
@@ -280,8 +309,8 @@ impl Worker {
         }
     }
 
-    /// Publish a clean result for the probed key; anything else is not
-    /// stored. `result` keeps its elements, now shared with the entry. A
+    /// Publish a clean result, decoded for the row `id`, for the probed
+    /// key; anything else is not stored. `result` keeps its elements, now shared with the entry. A
     /// list with much more room than it fills (a recycled row's buffer) moves
     /// to one of its own size first, so a full table holds no slack, and the
     /// emptied buffer is returned for reuse.
@@ -290,6 +319,7 @@ impl Worker {
         table: &Table<'a>,
         index: usize,
         key: Key,
+        id: u64,
         result: &mut DecodeResult<'a>,
     ) -> Option<Vec<DecodedElement<'a>>> {
         if result.error_codes != [0] || !result.corrected_vin.is_empty() {
@@ -317,7 +347,7 @@ impl Worker {
         table
             .slot(index)
             .get_or_init(ArcSwapOption::empty)
-            .store(Some(Arc::new(Entry { key, result })));
+            .store(Some(Arc::new(Entry { key, id, result })));
         spare
     }
 }
@@ -524,13 +554,14 @@ mod tests {
         };
         let mut stored = decode(vin);
         let list = stored.elements.as_ptr();
-        worker.store(&table, index, key, &mut stored);
+        worker.store(&table, index, key, 7, &mut stored);
         assert_eq!((stored.elements.as_ptr(), &stored), (list, &decode(vin)));
 
         let mut row = decode("1FTFW1ET5DFC10312");
         let Probe::Hit(hit) = worker.probe(&table, db, vin, None) else {
             panic!("stored");
         };
+        assert_eq!(hit.id(), 7);
         assert!(!hit.fill(&mut row).expect("displaced").is_shared());
         row.vin = vin.to_owned();
         assert_eq!((row.elements.as_ptr(), &row), (list, &decode(vin)));
@@ -542,7 +573,7 @@ mod tests {
         let Probe::Miss(index, key) = worker.probe(&table, db, &other, None) else {
             panic!("a different key misses");
         };
-        worker.store(&table, index, key, &mut decode(&other));
+        worker.store(&table, index, key, 8, &mut decode(&other));
         assert!(table
             .slot(index)
             .get()
@@ -566,8 +597,9 @@ mod tests {
         let current_year = current_year_at(NOW);
         let table = Table::new(DEFAULT_ENTRIES);
         let mut workspace = crate::DecodeWorkspace::default();
+        let mut ids = Vec::new();
         let mut decode = |input: &str| {
-            let result = crate::decode_full_cached(
+            let (result, id, fresh) = crate::decode_full_cached(
                 db,
                 input,
                 NOW,
@@ -578,6 +610,7 @@ mod tests {
                 &mut workspace,
             );
             assert_eq!(result, decode_full(db, input, NOW, current_year, None));
+            ids.push((id, fresh));
         };
         let clean = "1HGCM82633A004352";
         decode(clean);
@@ -588,6 +621,13 @@ mod tests {
         decode(" 1hgcm82633a004352 ");
         decode("1HGCM82643A004352");
         decode("1HGCM82633A00435");
+        // Hits name the row that stored the entry; every other row is new.
+        let (first, _) = ids[0];
+        let hit = |&(id, fresh): &(u64, bool)| id == first && !fresh;
+        assert!(ids[1..=siblings.len() + 1].iter().all(hit), "{ids:?}");
+        let rest = &ids[siblings.len() + 2..];
+        assert!(rest.iter().all(|&(id, fresh)| fresh && id != first));
+        assert_ne!(rest[0].0, rest[1].0);
         assert_eq!(workspace.results.hits, 1 + siblings.len() as u64);
         assert_eq!(workspace.results.probes, 2 + siblings.len() as u64);
     }
@@ -602,7 +642,7 @@ mod tests {
             panic!("an empty table misses");
         };
         let result = decode_full(db, vin, NOW, current_year_at(NOW), None);
-        worker.store(&table, index, key, &mut result.clone());
+        worker.store(&table, index, key, 3, &mut result.clone());
         let mut other = Worker::default();
         assert!(matches!(other.probe(&table, db, vin, None), Probe::Hit(_)));
         assert!(matches!(

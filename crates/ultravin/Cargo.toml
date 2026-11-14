@@ -102,3 +102,7 @@ harness = false
 [[example]]
 name = "api_compare"
 required-features = ["parquet"]
+
+[[example]]
+name = "decode_files"
+required-features = ["parquet"]

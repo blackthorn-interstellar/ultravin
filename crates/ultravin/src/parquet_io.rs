@@ -13,28 +13,46 @@
 //! and caller-year columns, so a 500-column source costs what a 2-column one
 //! does. No row of the output is materialized as a Python object on this path —
 //! the pyo3 layer hands back either a row count or lazily-iterated column dicts.
+//!
+//! [`decode_compact`] is the fast door for big files: it decodes on the native
+//! stream, whose result cache hands a repeated vehicle to every VIN that has
+//! it, and writes that sharing out instead of undoing it. Each input VIN is a
+//! row of `vins.parquet` (the VIN and a `vehicle_id`); each vehicle the stream
+//! decoded fresh is one row of `vehicles.parquet`, built on the workers from
+//! the full result (`arrow_io::ResultProjection`) and encoded a
+//! column per thread. Reading, decoding and the two writers each run on their
+//! own threads.
 
 use std::fs::{File, OpenOptions};
+use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{mpsc, Arc};
 use std::time::Instant;
 
-use arrow_array::{cast::AsArray, Array, RecordBatch, RecordBatchReader};
+use arrow_array::builder::{ArrayBuilder, StringBuilder};
+use arrow_array::types::Int32Type;
+use arrow_array::{
+    cast::AsArray, Array, ArrayRef, Int32Array, RecordBatch, RecordBatchReader, UInt64Array,
+};
 use arrow_cast::cast;
-use arrow_schema::{DataType, SchemaRef};
+use arrow_schema::{DataType, Field, Schema, SchemaRef};
 use parquet::arrow::arrow_reader::ParquetRecordBatchReaderBuilder;
+use parquet::arrow::arrow_writer::{compute_leaves, ArrowColumnChunk, ArrowColumnWriter};
 use parquet::arrow::{ArrowWriter, ProjectionMask};
 use parquet::basic::Compression;
 use parquet::file::properties::WriterProperties;
+use parquet::schema::types::ColumnPath;
 
 use crate::adaptive::BatchFeedback;
 use crate::arrow_io::{
     is_intish, is_stringish, names, vin_by_name, year_by_name, ArrowBatchRebatcher, ArrowDecoder,
-    ColumnNames,
+    ColumnNames, ResultColumns, ResultProjection,
 };
 use crate::db::Db;
 use crate::ids::{resolve_columns, ColumnSpec, IdMeta};
 use crate::predictor::BatchFormat;
+use crate::NativeBatch;
 
 /// The dataset door reports failures through the arrow layer's error type, so a
 /// column mistake reads the same whether it came off disk or out of a stream.
@@ -483,29 +501,40 @@ impl ParquetChunkIter {
     }
 
     fn next_chunk_inner(&mut self) -> Result<Option<RecordBatch>, ParquetError> {
+        if self.feedback.is_none() {
+            return match self.next_input()? {
+                Some((batch, decoder)) => decoder.decode_batch(&batch).map(Some),
+                None => Ok(None),
+            };
+        }
         loop {
             if self.state.is_none() && !self.advance_file()? {
                 return Ok(None);
             }
-            if self.feedback.is_some() {
-                if let Some(batch) = self.next_adaptive_batch()? {
-                    return Ok(Some(batch));
-                }
-                self.state = None;
-                continue;
+            if let Some(batch) = self.next_adaptive_batch()? {
+                return Ok(Some(batch));
+            }
+            self.state = None;
+        }
+    }
+
+    /// The next batch as read, the VIN and year columns only, with the
+    /// decoder bound to its file.
+    fn next_input(&mut self) -> Result<Option<(RecordBatch, &ArrowDecoder)>, ParquetError> {
+        loop {
+            if self.state.is_none() && !self.advance_file()? {
+                return Ok(None);
             }
             let st = self.state.as_mut().expect("a file is open");
-            let batch = match st.reader.next().transpose() {
+            match st.reader.next().transpose() {
                 Err(e) => return Err(ParquetError::Io(format!("reading row group: {e}"))),
-                Ok(Some(b)) => b,
-                // File drained — fall through to the next one, if any.
-                Ok(None) => {
-                    self.state = None;
-                    continue;
+                Ok(Some(batch)) => {
+                    let st = self.state.as_ref().expect("a file is open");
+                    return Ok(Some((batch, &st.decoder)));
                 }
-            };
-            let st = self.state.as_ref().expect("a file is open");
-            return st.decoder.decode_batch(&batch).map(Some);
+                // File drained — fall through to the next one, if any.
+                Ok(None) => self.state = None,
+            }
         }
     }
 
@@ -666,6 +695,19 @@ impl ParquetSink {
         row_group: usize,
         feedback: Option<BatchFeedback>,
     ) -> Result<Self, ParquetError> {
+        let props = WriterProperties::builder()
+            .set_compression(Compression::SNAPPY)
+            .set_max_row_group_row_count(Some(row_group.max(1)))
+            .build();
+        Self::with_props(schema, dst, props, feedback)
+    }
+
+    fn with_props(
+        schema: SchemaRef,
+        dst: &Path,
+        props: WriterProperties,
+        feedback: Option<BatchFeedback>,
+    ) -> Result<Self, ParquetError> {
         static NEXT_TEMP: AtomicU64 = AtomicU64::new(0);
 
         let parent = dst.parent().unwrap_or_else(|| Path::new("."));
@@ -690,10 +732,6 @@ impl ParquetSink {
             .ok()
             .filter(|metadata| metadata.is_file())
             .map(|metadata| metadata.permissions());
-        let props = WriterProperties::builder()
-            .set_compression(Compression::SNAPPY)
-            .set_max_row_group_row_count(Some(row_group.max(1)))
-            .build();
         let writer = ArrowWriter::try_new(out, schema, Some(props))
             .map_err(|e| ParquetError::Io(format!("{}: {e}", tmp.0.display())))?;
         Ok(Self {
@@ -730,19 +768,83 @@ impl ParquetSink {
         self.writer
             .close()
             .map_err(|e| ParquetError::Io(format!("finalizing {}: {e}", tmp.display())))?;
-        if let Some(permissions) = self.destination_permissions {
-            std::fs::set_permissions(tmp, permissions).map_err(|e| {
-                ParquetError::Io(format!("setting permissions on {}: {e}", tmp.display()))
+        Written::new(self.tmp, self.dst, self.destination_permissions)?.install()?;
+        Ok(rows)
+    }
+
+    /// Write every batch, each row group of about `row_group` rows buffered
+    /// and its columns encoded in parallel on `encoders` (with many columns,
+    /// encoding is the work, and it splits by column); then finish the temp
+    /// file but leave `dst` alone until [`Written::install`].
+    fn write_parallel(
+        self,
+        batches: impl Iterator<Item = Result<RecordBatch, ParquetError>>,
+        row_group: usize,
+        encoders: &rayon::ThreadPool,
+    ) -> Result<(usize, Written), ParquetError> {
+        let io =
+            |e: parquet::errors::ParquetError| ParquetError::Io(format!("writing row group: {e}"));
+        let (mut file, columns) = self.writer.into_serialized_writer().map_err(io)?;
+        let (mut rows, mut groups) = (0, 0);
+        let mut pending: Vec<RecordBatch> = Vec::new();
+        let mut batches = batches.peekable();
+        while let Some(batch) = batches.next() {
+            let batch = batch?;
+            rows += batch.num_rows();
+            pending.push(batch);
+            let buffered: usize = pending.iter().map(RecordBatch::num_rows).sum();
+            if buffered < row_group && batches.peek().is_some() {
+                continue;
+            }
+            let writers = columns.create_column_writers(groups).map_err(io)?;
+            let chunks = encode_columns(writers, &pending, encoders)?;
+            let mut group = file.next_row_group().map_err(io)?;
+            for chunk in chunks {
+                chunk.append_to_row_group(&mut group).map_err(io)?;
+            }
+            group.close().map_err(io)?;
+            pending.clear();
+            groups += 1;
+        }
+        let tmp = &self.tmp.0;
+        file.close()
+            .map_err(|e| ParquetError::Io(format!("finalizing {}: {e}", tmp.display())))?;
+        let written = Written::new(self.tmp, self.dst, self.destination_permissions)?;
+        Ok((rows, written))
+    }
+}
+
+/// A finished parquet file waiting beside its destination; dropping it
+/// removes the file.
+struct Written {
+    tmp: TempOutput,
+    dst: PathBuf,
+}
+
+impl Written {
+    /// A closed temp file, given the permissions of the file it replaces.
+    fn new(
+        tmp: TempOutput,
+        dst: PathBuf,
+        permissions: Option<std::fs::Permissions>,
+    ) -> Result<Self, ParquetError> {
+        if let Some(permissions) = permissions {
+            std::fs::set_permissions(&tmp.0, permissions).map_err(|e| {
+                ParquetError::Io(format!("setting permissions on {}: {e}", tmp.0.display()))
             })?;
         }
-        std::fs::rename(tmp, &self.dst).map_err(|e| {
+        Ok(Self { tmp, dst })
+    }
+
+    fn install(self) -> Result<(), ParquetError> {
+        std::fs::rename(&self.tmp.0, &self.dst).map_err(|e| {
             ParquetError::Io(format!(
                 "installing completed parquet at {}: {e}",
                 self.dst.display()
             ))
         })?;
         self.tmp.keep();
-        Ok(rows)
+        Ok(())
     }
 }
 
@@ -768,6 +870,500 @@ impl Drop for TempOutput {
             let _ = std::fs::remove_file(&self.0);
         }
     }
+}
+
+/// Encode column `i` of every batch with `writers[i]` on `encoders`, the
+/// columns in parallel, and return the finished chunks in order. Every column
+/// is flat, one parquet leaf each.
+fn encode_columns(
+    writers: Vec<ArrowColumnWriter>,
+    batches: &[RecordBatch],
+    encoders: &rayon::ThreadPool,
+) -> Result<Vec<ArrowColumnChunk>, ParquetError> {
+    use rayon::prelude::*;
+    let schema = batches[0].schema();
+    assert_eq!(writers.len(), schema.fields().len(), "one leaf per column");
+    let encode = |(i, mut writer): (usize, ArrowColumnWriter)| {
+        for batch in batches {
+            for leaf in compute_leaves(schema.field(i), batch.column(i))? {
+                writer.write(&leaf)?;
+            }
+        }
+        writer.close()
+    };
+    encoders
+        .install(|| {
+            writers
+                .into_par_iter()
+                .enumerate()
+                .map(encode)
+                .collect::<Result<_, _>>()
+        })
+        .map_err(|e| ParquetError::Io(format!("encoding column: {e}")))
+}
+
+/// The VIN file a compact decode writes: one row per input VIN, in input
+/// order — the VIN as given and its [`VEHICLE_ID`].
+pub const COMPACT_VINS: &str = "vins.parquet";
+/// The vehicle file a compact decode writes: one row per [`VEHICLE_ID`],
+/// carrying every other column [`decode_parquet_to_file`] writes.
+pub const COMPACT_VEHICLES: &str = "vehicles.parquet";
+/// The column joining [`COMPACT_VINS`] to [`COMPACT_VEHICLES`].
+pub const VEHICLE_ID: &str = "vehicle_id";
+
+/// Input rows a compact decode streams at once. Each chunk is one native
+/// stream and one row group of [`COMPACT_VINS`]: 512Ki rows ran as fast as
+/// 1Mi on sorted NY and held ~0.2 GB less; 4Mi was slower.
+const COMPACT_CHUNK_ROWS: usize = 1 << 19;
+/// Vehicle rows gathered into one batch before they are handed on: a stream
+/// batch adds a few, and building columns costs per column.
+const VEHICLE_BATCH_ROWS: usize = 2_048;
+/// Rows per row group of [`COMPACT_VEHICLES`], buffered whole while its
+/// columns encode in parallel.
+const VEHICLE_ROW_GROUP: usize = 32_768;
+
+/// The rows a compact decode wrote to each file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CompactRows {
+    pub vins: usize,
+    pub vehicles: usize,
+}
+
+/// Decode `src` into [`COMPACT_VINS`] and [`COMPACT_VEHICLES`] in `dst_dir`.
+///
+/// `src` is a parquet file or directory, its VIN and caller-year columns
+/// found as [`decode_parquet_to_file`] finds them, or any other file, read
+/// as one VIN per line. A VIN that repeats a vehicle the decode has seen
+/// (the same result but for the serial) gets that vehicle's id instead of
+/// another row of vehicle columns, so `vins JOIN vehicles USING
+/// (vehicle_id)` is [`decode_parquet_to_file`]'s output, row for row. Ids
+/// are unique within the output but not dense, and a vehicle can appear
+/// under more than one id. `opts.batch_size` is not used: the decode
+/// streams in chunks of its own. Memory is bounded by the chunk, not the
+/// input. Neither file is replaced unless both are written.
+pub fn decode_compact(
+    src: &Path,
+    dst_dir: &Path,
+    opts: ParquetOpts,
+) -> Result<CompactRows, ParquetError> {
+    decode_compact_at(src, dst_dir, opts, crate::now_micros())
+}
+
+/// [`decode_compact`] at one explicit instant.
+pub fn decode_compact_at(
+    src: &Path,
+    dst_dir: &Path,
+    opts: ParquetOpts,
+    now_micros: i64,
+) -> Result<CompactRows, ParquetError> {
+    compact(src, dst_dir, opts, now_micros, COMPACT_CHUNK_ROWS)
+}
+
+/// One chunk of input: the VIN column as text and the caller years.
+struct CompactChunk {
+    vins: ArrayRef,
+    years: Option<ArrayRef>,
+}
+
+enum CompactInput {
+    Parquet(Box<ParquetChunkIter>),
+    Text(TextLines),
+}
+
+impl CompactInput {
+    /// Open `src` with the schema [`decode_parquet_to_file`] would write.
+    fn open(
+        src: &Path,
+        opts: ParquetOpts,
+        metas: &[IdMeta],
+        now_micros: i64,
+        chunk_rows: usize,
+    ) -> Result<(Self, SchemaRef), ParquetError> {
+        if is_parquet(src)? {
+            let opts = ParquetOpts {
+                batch_size: chunk_rows,
+                ..opts
+            };
+            let iter = open_chunks_impl(src, opts, now_micros, None)?;
+            let schema = iter
+                .out_schema
+                .clone()
+                .ok_or_else(|| ParquetError::Config("source expanded to no files".to_string()))?;
+            return Ok((Self::Parquet(Box::new(iter)), schema));
+        }
+        let file =
+            File::open(src).map_err(|e| ParquetError::Io(format!("{}: {e}", src.display())))?;
+        let schema = Arc::new(Schema::new(vec![Field::new("vin", DataType::Utf8, true)]));
+        let decoder = ArrowDecoder::with_columns_at(
+            &schema,
+            0,
+            None,
+            metas.to_vec(),
+            opts.names,
+            now_micros,
+        )?;
+        let lines = TextLines {
+            file,
+            buf: Vec::new(),
+            pos: 0,
+            eof: false,
+            line: 0,
+        };
+        Ok((Self::Text(lines), decoder.out_schema().clone()))
+    }
+
+    fn next(&mut self, rows: usize) -> Result<Option<CompactChunk>, ParquetError> {
+        match self {
+            Self::Text(lines) => Ok(lines
+                .next(rows)?
+                .map(|vins| CompactChunk { vins, years: None })),
+            Self::Parquet(iter) => {
+                let Some((batch, decoder)) = iter.next_input()? else {
+                    return Ok(None);
+                };
+                let vins = cast(batch.column(decoder.vin_index()), &DataType::Utf8)
+                    .map_err(|e| ParquetError::Io(format!("casting VIN column: {e}")))?;
+                let years = decoder
+                    .year_index()
+                    .map(|yi| cast(batch.column(yi), &DataType::Int32))
+                    .transpose()
+                    .map_err(|e| {
+                        ParquetError::Io(format!("casting caller-year column to int: {e}"))
+                    })?;
+                Ok(Some(CompactChunk { vins, years }))
+            }
+        }
+    }
+}
+
+/// A directory, or a file that starts with parquet's magic.
+fn is_parquet(src: &Path) -> Result<bool, ParquetError> {
+    if src.is_dir() {
+        return Ok(true);
+    }
+    let mut magic = [0u8; 4];
+    match File::open(src).and_then(|mut file| file.read_exact(&mut magic)) {
+        Ok(()) => Ok(&magic == b"PAR1"),
+        Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof => Ok(false),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            Err(ParquetError::Io(format!("{}: not found", src.display())))
+        }
+        Err(e) => Err(ParquetError::Io(format!("{}: {e}", src.display()))),
+    }
+}
+
+/// A text file read as one VIN per line; a `\r` before the `\n` is dropped.
+struct TextLines {
+    file: File,
+    buf: Vec<u8>,
+    pos: usize,
+    eof: bool,
+    /// Lines read so far.
+    line: usize,
+}
+
+impl TextLines {
+    /// The next `rows` lines, fewer at the end, `None` after it.
+    fn next(&mut self, rows: usize) -> Result<Option<ArrayRef>, ParquetError> {
+        let mut vins = StringBuilder::with_capacity(rows, rows * 17);
+        while vins.len() < rows {
+            let rest = &self.buf[self.pos..];
+            let end = match memchr::memchr(b'\n', rest) {
+                Some(end) => end,
+                None if self.eof && rest.is_empty() => break,
+                None if self.eof => rest.len(),
+                None => {
+                    self.fill()?;
+                    continue;
+                }
+            };
+            let line = &rest[..end];
+            let line = line.strip_suffix(b"\r").unwrap_or(line);
+            let line = std::str::from_utf8(line)
+                .map_err(|_| ParquetError::Io(format!("line {} is not UTF-8", self.line + 1)))?;
+            vins.append_value(line);
+            self.line += 1;
+            self.pos += (end + 1).min(rest.len());
+        }
+        Ok((vins.len() > 0).then(|| Arc::new(vins.finish()) as ArrayRef))
+    }
+
+    fn fill(&mut self) -> Result<(), ParquetError> {
+        self.buf.drain(..self.pos);
+        self.pos = 0;
+        let len = self.buf.len();
+        self.buf.resize(len + (4 << 20), 0);
+        let read = loop {
+            match self.file.read(&mut self.buf[len..]) {
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                read => break read,
+            }
+        };
+        let read = read.map_err(|e| ParquetError::Io(format!("reading input: {e}")))?;
+        self.buf.truncate(len + read);
+        self.eof = read == 0;
+        Ok(())
+    }
+}
+
+/// Vehicle rows being gathered, a few per stream batch, on whichever worker
+/// takes them from the pool: building columns costs per column, so they are
+/// built for many rows at once.
+struct VehicleRows {
+    ids: Vec<u64>,
+    years: Vec<Option<i32>>,
+    columns: ResultColumns,
+}
+
+/// The vehicle rows of a compact decode: the projection, the output schema,
+/// and the rows being gathered.
+struct Vehicles<'a> {
+    projection: &'a ResultProjection,
+    schema: SchemaRef,
+    has_year: bool,
+    pool: std::sync::Mutex<Vec<VehicleRows>>,
+}
+
+impl Vehicles<'_> {
+    fn take(&self) -> VehicleRows {
+        let pooled = self
+            .pool
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .pop();
+        pooled.unwrap_or_else(|| VehicleRows {
+            ids: Vec::with_capacity(VEHICLE_BATCH_ROWS),
+            years: Vec::new(),
+            columns: self.projection.columns(VEHICLE_BATCH_ROWS),
+        })
+    }
+
+    fn put(&self, rows: VehicleRows) {
+        self.pool
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .push(rows);
+    }
+
+    /// Gather a batch's fresh rows, and return a batch of them once there
+    /// are enough.
+    fn gather(
+        &self,
+        batch: &NativeBatch<'_, '_>,
+        years: Option<&[Option<i32>]>,
+    ) -> Option<RecordBatch> {
+        if !batch.fresh().contains(&true) {
+            return None;
+        }
+        let mut rows = self.take();
+        let fresh = batch
+            .input_indices()
+            .zip(batch.result_ids())
+            .zip(batch.fresh())
+            .zip(batch.iter());
+        for (((index, &id), &fresh), result) in fresh {
+            if fresh {
+                rows.ids.push(id);
+                rows.years.extend(years.map(|years| years[index]));
+                self.projection.push(&mut rows.columns, result);
+            }
+        }
+        let full = (rows.ids.len() >= VEHICLE_BATCH_ROWS).then(|| self.finish(&mut rows));
+        self.put(rows);
+        full
+    }
+
+    /// The rows gathered in `rows` as a batch, leaving it empty.
+    fn finish(&self, rows: &mut VehicleRows) -> RecordBatch {
+        let mut columns: Vec<ArrayRef> =
+            vec![Arc::new(UInt64Array::from(std::mem::take(&mut rows.ids)))];
+        if self.has_year {
+            columns.push(Arc::new(Int32Array::from(std::mem::take(&mut rows.years))));
+        }
+        columns.extend(rows.columns.finish());
+        RecordBatch::try_new(self.schema.clone(), columns).expect("vehicle rows match their schema")
+    }
+
+    /// Every batch still being gathered.
+    fn drain(&self) -> Vec<RecordBatch> {
+        let pool = std::mem::take(&mut *self.pool.lock().unwrap_or_else(|p| p.into_inner()));
+        pool.into_iter()
+            .filter(|rows| !rows.ids.is_empty())
+            .map(|mut rows| self.finish(&mut rows))
+            .collect()
+    }
+}
+
+fn compact(
+    src: &Path,
+    dst_dir: &Path,
+    opts: ParquetOpts,
+    now_micros: i64,
+    chunk_rows: usize,
+) -> Result<CompactRows, ParquetError> {
+    let metas = resolve_columns(Db::embedded(), &opts.columns).map_err(ParquetError::Config)?;
+    let (mut input, wide) = CompactInput::open(src, opts, &metas, now_micros, chunk_rows)?;
+    if let Some(field) = wide.fields().iter().find(|f| f.name() == VEHICLE_ID) {
+        return Err(ParquetError::Config(format!(
+            "input column {:?} collides with the {VEHICLE_ID} column of a compact decode; \
+             rename it",
+            field.name()
+        )));
+    }
+    let id_field = Arc::new(Field::new(VEHICLE_ID, DataType::UInt64, false));
+    let vin_field = wide.field(0).clone();
+    let vins_schema = Arc::new(Schema::new_with_metadata(
+        vec![Arc::new(vin_field.clone()), id_field.clone()],
+        wide.metadata().clone(),
+    ));
+    let mut fields = vec![id_field];
+    fields.extend(wide.fields().iter().skip(1).cloned());
+    let vehicles_schema = Arc::new(Schema::new_with_metadata(fields, wide.metadata().clone()));
+
+    // Made first, so the checks see where the files really land.
+    std::fs::create_dir_all(dst_dir)
+        .map_err(|e| ParquetError::Io(format!("{}: {e}", dst_dir.display())))?;
+    let vins_dst = dst_dir.join(COMPACT_VINS);
+    let vehicles_dst = dst_dir.join(COMPACT_VEHICLES);
+    check_dst_outside_src(src, &vins_dst)?;
+    check_dst_outside_src(src, &vehicles_dst)?;
+    let props = |row_group: usize| {
+        WriterProperties::builder()
+            .set_compression(Compression::SNAPPY)
+            .set_max_row_group_row_count(Some(row_group))
+    };
+    // VINs are all distinct: a dictionary would only be built to be dropped.
+    let vins_props = props(chunk_rows)
+        .set_column_dictionary_enabled(ColumnPath::from(vin_field.name().as_str()), false)
+        .build();
+    let vins_sink = ParquetSink::with_props(vins_schema.clone(), &vins_dst, vins_props, None)?;
+    let vehicles_props = props(VEHICLE_ROW_GROUP).build();
+    let vehicles_sink =
+        ParquetSink::with_props(vehicles_schema.clone(), &vehicles_dst, vehicles_props, None)?;
+
+    let projection = ResultProjection::new(&metas);
+    // The wide layout is `[vin, year?, decoded_model_year, ..projected]`.
+    let has_year = wide.fields().len() == metas.len() + 3;
+    let vehicle_rows = Vehicles {
+        projection: &projection,
+        schema: vehicles_schema,
+        has_year,
+        pool: std::sync::Mutex::new(Vec::new()),
+    };
+    // As many encoders as decode workers, for both files, alive for the call.
+    let encoders = rayon::ThreadPoolBuilder::new()
+        .num_threads(crate::predictor::worker_count())
+        .build()
+        .map_err(|e| ParquetError::Io(format!("starting parquet encoders: {e}")))?;
+    let encoders = &encoders;
+    std::thread::scope(|scope| {
+        let (chunks_tx, chunks) = mpsc::sync_channel(1);
+        let reader = scope.spawn(move || loop {
+            let Some(chunk) = input.next(chunk_rows).transpose() else {
+                break;
+            };
+            let failed = chunk.is_err();
+            if chunks_tx.send(chunk).is_err() || failed {
+                break;
+            }
+        });
+        let (vins_tx, vins_rx) = mpsc::sync_channel(1);
+        let vins = scope.spawn(move || vins_sink.write_parallel(vins_rx.into_iter(), 1, encoders));
+        let (vehicles_tx, vehicles_rx) = mpsc::sync_channel(4);
+        let vehicles = scope.spawn(move || {
+            vehicles_sink.write_parallel(vehicles_rx.into_iter(), VEHICLE_ROW_GROUP, encoders)
+        });
+        let feeds = Feeds {
+            vins: vins_tx,
+            vehicles: vehicles_tx,
+        };
+        let decoded = compact_chunks(chunks, &vehicle_rows, &vins_schema, now_micros, &feeds);
+        // A writer that is handed the error finishes no file.
+        if let Err(e) = &decoded {
+            let _ = feeds.vins.send(Err(e.clone()));
+            let _ = feeds.vehicles.send(Err(e.clone()));
+        }
+        drop(feeds);
+        fn join<T>(handle: std::thread::ScopedJoinHandle<'_, T>) -> T {
+            handle
+                .join()
+                .unwrap_or_else(|payload| std::panic::resume_unwind(payload))
+        }
+        // A reader that panicked ended the input early.
+        join(reader);
+        let (vins, vehicles) = (join(vins), join(vehicles));
+        if let Err(e) = decoded {
+            // A writer that failed on its own is why the decode stopped.
+            let own = [&vins, &vehicles]
+                .into_iter()
+                .find_map(|written| written.as_ref().err().filter(|w| **w != e));
+            return Err(own.cloned().unwrap_or(e));
+        }
+        let (vin_rows, vins) = vins?;
+        let (vehicle_rows, vehicles) = vehicles?;
+        vehicles.install()?;
+        vins.install()?;
+        Ok(CompactRows {
+            vins: vin_rows,
+            vehicles: vehicle_rows,
+        })
+    })
+}
+
+/// The writers' inboxes.
+struct Feeds {
+    vins: mpsc::SyncSender<Result<RecordBatch, ParquetError>>,
+    vehicles: mpsc::SyncSender<Result<RecordBatch, ParquetError>>,
+}
+
+/// Stream each chunk, sending vehicle rows as they gather and each chunk's
+/// VINs with their ids once it is done.
+fn compact_chunks(
+    chunks: mpsc::Receiver<Result<CompactChunk, ParquetError>>,
+    vehicles: &Vehicles<'_>,
+    vins_schema: &SchemaRef,
+    now_micros: i64,
+    feeds: &Feeds,
+) -> Result<(), ParquetError> {
+    let stopped = || ParquetError::Io("a compact output writer stopped".to_string());
+    for chunk in chunks {
+        let CompactChunk { vins, years } = chunk?;
+        let inputs: Vec<&str> = vins
+            .as_string::<i32>()
+            .iter()
+            .map(|vin| vin.unwrap_or(""))
+            .collect();
+        let years: Option<Vec<Option<i32>>> =
+            years.map(|years| years.as_primitive::<Int32Type>().iter().collect());
+        let years = years.as_deref();
+        let mut ids = vec![0u64; inputs.len()];
+        let mut sent = true;
+        let convert = |batch: &NativeBatch<'_, 'static>| vehicles.gather(batch, years);
+        Db::embedded()
+            .batch_stream_at(&inputs, years, now_micros, convert, |batch, gathered| {
+                for (index, &id) in batch.input_indices().zip(batch.result_ids()) {
+                    ids[index] = id;
+                }
+                if let Some(gathered) = gathered {
+                    sent &= feeds.vehicles.send(Ok(gathered)).is_ok();
+                }
+            })
+            .map_err(|e| ParquetError::Io(e.to_string()))?;
+        drop(inputs);
+        if !sent {
+            return Err(stopped());
+        }
+        let batch = RecordBatch::try_new(
+            vins_schema.clone(),
+            vec![vins, Arc::new(UInt64Array::from(ids))],
+        )
+        .map_err(|e| ParquetError::Io(format!("assembling VIN rows: {e}")))?;
+        feeds.vins.send(Ok(batch)).map_err(|_| stopped())?;
+    }
+    for gathered in vehicles.drain() {
+        feeds.vehicles.send(Ok(gathered)).map_err(|_| stopped())?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -1794,5 +2390,309 @@ mod tests {
             col_utf8(&out, "Make"),
             vec![Some("HONDA".to_string()), None, Some("FORD".to_string())]
         );
+    }
+
+    const NOW: i64 = 1_788_220_800_000_000;
+
+    fn read_all(path: &Path) -> RecordBatch {
+        let f = File::open(path).expect("open");
+        let reader = ParquetRecordBatchReaderBuilder::try_new(f)
+            .expect("footer")
+            .build()
+            .expect("reader");
+        let schema = reader.schema();
+        let batches: Vec<RecordBatch> = reader.collect::<Result<_, _>>().expect("batches");
+        arrow_select::concat::concat_batches(&schema, &batches).expect("concat")
+    }
+
+    /// `src` decoded the wide way, at [`NOW`], into `dst`.
+    fn wide(src: &Path, dst: &Path, opts: ParquetOpts) -> RecordBatch {
+        let iter = open_chunks_at(src, opts, NOW).expect("open");
+        let schema = iter.out_schema.clone().expect("schema");
+        write_parquet(iter, schema, dst, 65_536).expect("wide decode");
+        read_all(dst)
+    }
+
+    /// Join the compact pair in `dir` and check it is `wide`, row for row and
+    /// column for column; returns the vehicle rows.
+    fn assert_joins_to(dir: &Path, wide: &RecordBatch) -> usize {
+        use arrow_array::types::UInt64Type;
+        let vins = read_all(&dir.join(COMPACT_VINS));
+        let vehicles = read_all(&dir.join(COMPACT_VEHICLES));
+        assert_eq!(vins.num_rows(), wide.num_rows());
+        assert_eq!(vins.num_columns(), 2);
+        assert_eq!(vins.schema().field(0), wide.schema().field(0));
+        assert_eq!(vins.column(0), wide.column(0), "the VINs as given");
+        let ids = vehicles
+            .column_by_name(VEHICLE_ID)
+            .expect("vehicle ids")
+            .as_primitive::<UInt64Type>();
+        let mut row_of = std::collections::HashMap::new();
+        for (row, &id) in ids.values().iter().enumerate() {
+            assert!(row_of.insert(id, row as u64).is_none(), "id {id} twice");
+        }
+        let vin_ids = vins.column(1).as_primitive::<UInt64Type>();
+        let rows: arrow_array::UInt64Array = vin_ids.values().iter().map(|id| row_of[id]).collect();
+        let referenced: std::collections::HashSet<_> = vin_ids.values().iter().collect();
+        assert_eq!(referenced.len(), row_of.len(), "every vehicle row is used");
+        assert_eq!(vehicles.num_columns(), wide.num_columns());
+        assert_eq!(vehicles.schema().metadata(), wide.schema().metadata());
+        for (column, field) in wide.columns().iter().zip(wide.schema().fields()).skip(1) {
+            let (at, vehicle_field) = vehicles
+                .schema()
+                .column_with_name(field.name())
+                .map(|(at, f)| (at, f.clone()))
+                .unwrap_or_else(|| panic!("{}", field.name()));
+            assert_eq!(&vehicle_field, field.as_ref());
+            let joined = arrow_select::take::take(vehicles.column(at), &rows, None).expect("take");
+            assert_eq!(&joined, column, "{}", field.name());
+        }
+        vehicles.num_rows()
+    }
+
+    /// `vin` with position 9 set to its check digit, when it can have one.
+    fn with_check_digit(vin: &str) -> Option<String> {
+        let digit = crate::checkdigit::check_digit_with_flag(vin, false).filter(|&d| d != '?')?;
+        let mut bytes = vin.as_bytes().to_vec();
+        bytes[8] = digit as u8;
+        String::from_utf8(bytes).ok()
+    }
+
+    /// Clean VINs, the cover's and two common ones, each with serial siblings
+    /// (which share its vehicle), a wrong check digit, lowercase and padded,
+    /// cut short, and raw; then garbage and nulls; all of it twice, so later
+    /// rows find vehicles earlier ones decoded. A seed's rows share a caller
+    /// year, cycling through none, plausible ones and one out of range.
+    fn mixed_corpus() -> (Vec<Option<String>>, Vec<Option<i32>>) {
+        let (mut vins, mut years) = (Vec::new(), Vec::new());
+        let db = Db::embedded();
+        let common = [
+            HONDA,
+            FORD,
+            "5YJ3E1EA7KF317000",
+            "5YJSA1E26HF000337",
+            "5UXWX7C5XBA123456",
+            "3C6TRVAG6JE100000",
+            "1M8GDM9AXKP042788",
+            "JH4KA8260MC000000",
+            "1FMAA50A91A111111",
+            "4P1CT02S91A001458",
+        ];
+        let mut seeds: Vec<_> = common.map(str::to_owned).into();
+        let filter = crate::Filter::default();
+        let year = crate::current_year_at(NOW);
+        seeds.extend(crate::generate(db, 150, 7, &filter, NOW, year));
+        seeds.extend(db.cover().into_iter().filter(|s| s.len() == 17).take(150));
+        for (k, seed) in seeds.into_iter().enumerate() {
+            let start = vins.len();
+            vins.push(Some(seed.clone()));
+            if let Some(clean) = with_check_digit(&seed) {
+                let siblings = if k < common.len() { 60 } else { 4 };
+                for step in 1..=siblings {
+                    let mut sibling = clean.clone().into_bytes();
+                    let serial = (10_000 + step * 7_919 % 90_000).to_string();
+                    for (c, digit) in sibling[12..].iter_mut().zip(serial.bytes()) {
+                        if c.is_ascii_digit() {
+                            *c = digit;
+                        }
+                    }
+                    let sibling = String::from_utf8(sibling).expect("ASCII");
+                    vins.extend(with_check_digit(&sibling).map(Some));
+                }
+                let mut wrong = clean.clone().into_bytes();
+                wrong[8] = if wrong[8] == b'1' { b'2' } else { b'1' };
+                vins.push(Some(String::from_utf8(wrong).expect("ASCII")));
+                vins.push(Some(format!("  {}\t", clean.to_ascii_lowercase())));
+                vins.push(Some(clean[..11].to_string()));
+                vins.push(Some(clean));
+            }
+            let year = [None, Some(2003), None, None, Some(2015), Some(1979)][k % 6];
+            years.resize(vins.len(), year);
+            debug_assert_eq!(years.len() - start, vins.len() - start);
+        }
+        for garbage in [
+            None,
+            Some(""),
+            Some("INVALID"),
+            Some("1HGCM82633A00435Ł"),
+            Some("1HGCM82633A0043521"),
+        ] {
+            vins.push(garbage.map(str::to_owned));
+            years.push(None);
+        }
+        (vins.iter().chain(&vins).cloned().collect(), years.repeat(2))
+    }
+
+    fn write_corpus(path: &Path, vins: &[Option<String>], years: Option<&[Option<i32>]>) {
+        let vins: Vec<Option<&str>> = vins.iter().map(Option::as_deref).collect();
+        let mut cols = vec![utf8("vin", &vins)];
+        cols.extend(years.map(|years| i32s("year", years)));
+        write(path, &batch(cols));
+    }
+
+    #[test]
+    fn the_compact_pair_joins_back_to_the_wide_output() {
+        if !loaded() {
+            return;
+        }
+        let dir = Scratch::new();
+        let src = dir.join("in.parquet");
+        let (vins, years) = mixed_corpus();
+        write_corpus(&src, &vins, Some(&years));
+        let all = ParquetOpts {
+            columns: crate::all_public_ids(Db::embedded())
+                .into_iter()
+                .map(ColumnSpec::Id)
+                .collect(),
+            ..ParquetOpts::default()
+        };
+        let expected = wide(&src, &dir.join("wide.parquet"), all.clone());
+        // One chunk, then short ones: several streams, the last partial.
+        for chunk_rows in [COMPACT_CHUNK_ROWS, 1_000] {
+            let out = dir.join(&format!("out-{chunk_rows}"));
+            let rows = compact(&src, &out, all.clone(), NOW, chunk_rows).expect("compact");
+            assert_eq!(rows.vins, vins.len());
+            assert_eq!(assert_joins_to(&out, &expected), rows.vehicles);
+            assert!(rows.vehicles + 1_000 < rows.vins, "repeats share: {rows:?}");
+        }
+
+        // Ids name the column the projection asks for, under either naming.
+        let named = ParquetOpts {
+            names: ColumnNames::Id,
+            ..opts(&[MAKE, CYLINDERS, DISPLACEMENT_L])
+        };
+        let expected = wide(&src, &dir.join("wide-ids.parquet"), named.clone());
+        decode_compact_at(&src, &dir.join("ids"), named, NOW).expect("compact");
+        assert_joins_to(&dir.join("ids"), &expected);
+    }
+
+    #[test]
+    fn a_text_file_is_one_vin_per_line() {
+        if !loaded() {
+            return;
+        }
+        let dir = Scratch::new();
+        let lines = [
+            HONDA,
+            "",
+            " 1hgcm82633a004352",
+            FORD,
+            MISS,
+            HONDA,
+            "not a vin",
+            FORD,
+        ];
+        let src = dir.join("in.txt");
+        std::fs::write(&src, format!("{}\r\n{}", lines[..7].join("\n"), lines[7])).unwrap();
+        let parquet = dir.join("in.parquet");
+        let vins: Vec<_> = lines.iter().map(|line| Some(line.to_string())).collect();
+        write_corpus(&parquet, &vins, None);
+        let expected = wide(
+            &parquet,
+            &dir.join("wide.parquet"),
+            opts(&[MAKE, CYLINDERS]),
+        );
+        // Three-line chunks split the file mid-buffer, and the last is short.
+        let rows =
+            compact(&src, &dir.join("out"), opts(&[MAKE, CYLINDERS]), NOW, 3).expect("compact");
+        assert_eq!(rows.vins, lines.len());
+        assert_joins_to(&dir.join("out"), &expected);
+
+        // A trailing newline ends the last line; it does not start another.
+        std::fs::write(&src, format!("{HONDA}\n{FORD}\n")).unwrap();
+        let rows = decode_compact_at(&src, &dir.join("out"), opts(&[MAKE]), NOW).expect("compact");
+        assert_eq!(rows.vins, 2);
+        // An empty file is two empty files with the full schemas.
+        std::fs::write(&src, "").unwrap();
+        let rows = decode_compact_at(&src, &dir.join("out"), opts(&[MAKE]), NOW).expect("compact");
+        assert_eq!(
+            rows,
+            CompactRows {
+                vins: 0,
+                vehicles: 0
+            }
+        );
+        assert_eq!(
+            out_names(&read_all(&dir.join("out").join(COMPACT_VINS))),
+            ["vin", VEHICLE_ID]
+        );
+        assert_eq!(
+            out_names(&read_all(&dir.join("out").join(COMPACT_VEHICLES))),
+            [VEHICLE_ID, "decoded_model_year", "Make"]
+        );
+    }
+
+    #[test]
+    fn a_failed_compact_decode_replaces_neither_file() {
+        if !loaded() {
+            return;
+        }
+        let dir = Scratch::new();
+        let out = dir.join("out");
+        let src = dir.join("in.txt");
+        std::fs::write(&src, format!("{HONDA}\n{FORD}\n")).unwrap();
+        decode_compact_at(&src, &out, opts(&[MAKE]), NOW).expect("compact");
+        let before = |name: &str| std::fs::read(out.join(name)).unwrap();
+        let (vins, vehicles) = (before(COMPACT_VINS), before(COMPACT_VEHICLES));
+        // The second chunk holds a line that is not UTF-8.
+        std::fs::write(
+            &src,
+            [HONDA.as_bytes(), b"\n", FORD.as_bytes(), b"\n\xff\n"].concat(),
+        )
+        .unwrap();
+        match compact(&src, &out, opts(&[MAKE]), NOW, 2) {
+            Err(ParquetError::Io(m)) => assert!(m.contains("line 3 is not UTF-8"), "{m}"),
+            other => panic!("expected the bad line to fail the decode, got {other:?}"),
+        }
+        assert_eq!(before(COMPACT_VINS), vins);
+        assert_eq!(before(COMPACT_VEHICLES), vehicles);
+        assert_eq!(
+            std::fs::read_dir(&out).unwrap().count(),
+            2,
+            "no temp files left"
+        );
+    }
+
+    #[test]
+    fn compact_outputs_stay_out_of_the_source_and_off_its_columns() {
+        if !loaded() {
+            return;
+        }
+        let dir = Scratch::new();
+        let parts = dir.join("parts");
+        std::fs::create_dir_all(&parts).unwrap();
+        write(
+            &parts.join("a.parquet"),
+            &batch(vec![utf8("vin", &[Some(HONDA)])]),
+        );
+        match decode_compact_at(&parts, &parts.join("out"), opts(&[MAKE]), NOW) {
+            Err(ParquetError::Config(m)) => assert!(m.contains("inside the source"), "{m}"),
+            other => panic!("expected the destination to be refused, got {other:?}"),
+        }
+        let src = dir.join("in.parquet");
+        write(
+            &src,
+            &batch(vec![
+                utf8("vin", &[Some(HONDA)]),
+                i32s(VEHICLE_ID, &[Some(2003)]),
+            ]),
+        );
+        let named = ParquetOpts {
+            year: Some(VEHICLE_ID.to_string()),
+            ..opts(&[MAKE])
+        };
+        match decode_compact_at(&src, &dir.join("out"), named, NOW) {
+            Err(ParquetError::Config(m)) => assert!(m.contains("collides"), "{m}"),
+            other => panic!("expected the column to be refused, got {other:?}"),
+        }
+        match decode_compact_at(
+            &dir.join("missing.txt"),
+            &dir.join("out"),
+            opts(&[MAKE]),
+            NOW,
+        ) {
+            Err(ParquetError::Io(m)) => assert!(m.contains("not found"), "{m}"),
+            other => panic!("expected a missing source to fail, got {other:?}"),
+        }
     }
 }

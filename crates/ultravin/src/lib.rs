@@ -554,16 +554,18 @@ impl Db {
         )
     }
 
-    /// [`Db::decode_batch_stream_at`] with a converter run on the workers.
-    fn batch_stream_at<'db, T, C, F>(
+    /// [`Db::decode_batch_stream_at`] with a converter run on the workers,
+    /// streaming every call however short.
+    pub(crate) fn batch_stream_at<'db, S, T, C, F>(
         &'db self,
-        inputs: &[String],
+        inputs: &[S],
         years: Option<&[Option<i32>]>,
         now_micros: i64,
         convert: C,
         consume: F,
     ) -> Result<(), NativeStreamError>
     where
+        S: AsRef<str> + Sync,
         T: Send,
         C: Fn(&NativeBatch<'_, 'db>) -> T + Sync,
         F: for<'batch> FnMut(NativeBatch<'batch, 'db>, T),
@@ -811,13 +813,13 @@ fn year_at(years: Option<&[Option<i32>]>, i: usize) -> Option<i32> {
 /// prefixes costs microseconds against that. Output order is restored before
 /// return; only the visiting order changes, and a decode depends on nothing but
 /// its own VIN, so results are unaffected.
-fn locality_order(inputs: &[String]) -> Vec<u32> {
+fn locality_order<S: AsRef<str> + Sync>(inputs: &[S]) -> Vec<u32> {
     use rayon::prelude::*;
 
     let mut order: Vec<u32> = (0..inputs.len() as u32).collect();
     // The WMI is the first three characters; the next five pick the schema's
     // pattern keys, so sorting on the descriptor prefix clusters both.
-    order.par_sort_unstable_by_key(|&i| locality_key(&inputs[i as usize]));
+    order.par_sort_unstable_by_key(|&i| locality_key(inputs[i as usize].as_ref()));
     order
 }
 
@@ -1153,7 +1155,9 @@ pub(crate) fn decode_full_reusing<'a>(
 }
 
 /// Full decode into `previous`'s storage, answered from the stream's result
-/// table when an earlier VIN differing only by serial was clean.
+/// table when an earlier VIN differing only by serial was clean. Also returns
+/// the result's id and whether this call decoded it: a hit returns the id of
+/// the row its entry was decoded for, and anything else a new one.
 // The decode inputs, the reused output, then the shared and per-worker state.
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn decode_full_cached<'a>(
@@ -1165,7 +1169,7 @@ pub(crate) fn decode_full_cached<'a>(
     previous: Option<DecodeResult<'a>>,
     table: &result_cache::Table<'a>,
     workspace: &mut DecodeWorkspace<'a>,
-) -> DecodeResult<'a> {
+) -> (DecodeResult<'a>, u64, bool) {
     let mut out = previous.unwrap_or_else(empty_result);
     let mut miss = None;
     if workspace.results.wants_probe(table) {
@@ -1182,7 +1186,7 @@ pub(crate) fn decode_full_cached<'a>(
                     decode_full(db, input, now_micros, current_year, caller_year),
                     "result cache hit differs from a full decode of {input:?}"
                 );
-                return out;
+                return (out, hit.id(), false);
             }
             result_cache::Probe::Miss(index, key) => miss = Some((index, key)),
             result_cache::Probe::Skip => {}
@@ -1197,12 +1201,13 @@ pub(crate) fn decode_full_cached<'a>(
         out,
         workspace,
     );
+    let id = workspace.results.new_id();
     if let Some((index, key)) = miss {
-        if let Some(spare) = workspace.results.store(table, index, key, &mut result) {
+        if let Some(spare) = workspace.results.store(table, index, key, id, &mut result) {
             workspace.park_elements(spare.into());
         }
     }
-    result
+    (result, id, true)
 }
 
 fn empty_result<'a>() -> DecodeResult<'a> {

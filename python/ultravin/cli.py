@@ -112,21 +112,12 @@ def decode_parquet(
     Output columns: the passthrough VIN (and caller year), `decoded_model_year`,
     then one typed column per projected element. Rows never become Python objects.
     """
-    # A token that parses as an integer is an element id; anything else is a
-    # variable name. Both reach the same resolver, so mixing them is fine.
-    # `isdecimal` is the decimal-digit characters `int()` accepts; `isdigit`
-    # also takes superscripts and circled digits, which `int()` refuses.
-    projection: list[int | str] | None = None
-    if columns:
-        projection = [
-            int(tok) if tok.lstrip("-").isdecimal() else tok for tok in (t.strip() for t in columns.split(",")) if tok
-        ]
     try:
         rows = uv.decode_stream(
             src,
             vin_column=vin_column,
             year_column=year_column,
-            columns=projection,
+            columns=projection(columns),
             column_names=column_names.value,
             batch_size=cast("BatchSize", batch_size),
             batch_memory_mb=batch_memory_mb,
@@ -138,6 +129,58 @@ def decode_parquet(
         # that cannot be read or written — say so, don't traceback.
         raise typer.BadParameter(str(exc)) from None
     typer.echo(f"wrote {rows} rows to {dst}", err=True)
+
+
+@app.command(name="decode-compact")
+def decode_compact(
+    src: Path,
+    dst_dir: Path,
+    vin_column: str | None = typer.Option(None, "--vin-column", help="VIN column name (default: autodetect)."),
+    year_column: str | None = typer.Option(
+        None, "--year-column", help="Caller model-year column name (default: autodetect)."
+    ),
+    columns: str | None = typer.Option(
+        None, "--columns", help="Comma-separated elements to project — variable names or element ids (default: all)."
+    ),
+    column_names: Annotated[
+        ColumnNames,
+        typer.Option(
+            "--column-names",
+            help="Label projected columns by vPIC variable name, or as attr_<element_id> "
+            "(stable across data refreshes).",
+        ),
+    ] = ColumnNames.variable,
+    sample_rows: int = typer.Option(100, "--sample-rows", min=1, help="Rows sniffed when autodetecting columns."),
+) -> None:
+    """Decode SRC (parquet, or text with one VIN per line) into vins.parquet and vehicles.parquet in DST_DIR.
+
+    vins.parquet holds each input VIN and its vehicle_id, in input order;
+    vehicles.parquet holds every decode-parquet column but the VIN, once per
+    vehicle_id. Join them on vehicle_id for the full table.
+    """
+    try:
+        vins, vehicles = uv.decode_compact(
+            src,
+            dst_dir,
+            vin_column=vin_column,
+            year_column=year_column,
+            columns=projection(columns),
+            column_names=column_names.value,
+            sample_rows=sample_rows,
+        )
+    except (ValueError, OSError) as exc:
+        raise typer.BadParameter(str(exc)) from None
+    typer.echo(f"wrote {vins} VINs and {vehicles} vehicles to {dst_dir}", err=True)
+
+
+def projection(columns: str | None) -> list[int | str] | None:
+    """Parse `--columns`: a token that parses as an integer is an element id, anything else a variable name."""
+    # Both reach the same resolver, so mixing them is fine. `isdecimal` is the
+    # decimal-digit characters `int()` accepts; `isdigit` also takes
+    # superscripts and circled digits, which `int()` refuses.
+    if not columns:
+        return None
+    return [int(tok) if tok.lstrip("-").isdecimal() else tok for tok in (t.strip() for t in columns.split(",")) if tok]
 
 
 @app.command()
