@@ -251,8 +251,8 @@ gate — control 3 further down — rejects the month when that counter is non-z
 (`crates/ultravin-build/src/stalecache.rs`) diffs every `(wmi, year)` cell of the
 dump's cache against the recompute from that same dump's pattern rows — the
 decoder's own `ultravin::recompute_valid_chars` — and **`scripts/stale_cache_cells.json`
-is the resulting `[wmi, year, positions]` list**: **5,706 stale cells in dump
-2026_10** (`summary.stale_cells`; 5,519 in 2026_09). That file is the authoritative membership list
+is the resulting `[wmi, year, positions]` list**: **7,062 stale cells in dump
+2026_11** (`summary.stale_cells`; 5,706 in 2026_10). That file is the authoritative membership list
 for this class. Every monthly refresh reruns the scan and rewrites the file from
 it — `scripts/refresh.py` invokes `vpic-import --stale-cache-report` and hands the
 report to `stale_cache.write_cells`, and the `stale-cache` gate then validates the
@@ -652,7 +652,14 @@ answer, and it is what the oracle itself produces once the stale cell is gone.
 
 <a id="stale-cache-code-3-vs-5"></a>
 
-## 5. Stale cache extra error takes the multi-position rung — WMI `1GD`/`1GT`/`2AP`
+## 5. Stale cache extra error takes the multi-position rung — WMI `2AP`
+
+**The `1GD`/`1GT` members healed in dump 2026_11.** NHTSA rebuilt the
+`(1GD, 2023)`, `(1GT, 2023)`, and `(1GD, 2024)` cache cells; they are gone
+from `scripts/stale_cache_cells.json` and the four registered VINs now
+decode in exact parity and were retired. The live member of this class is
+`2APCDT9R0TC111111` on `(2AP, 2026)`. The 1GD/1GT walkthrough below is
+kept as history of the same rung.
 
 The same defective artifact as §2 — the shipped `vpic.WMIYearValidChars` cell —
 can add or hide a flagged position, which moves `spvindecode_errorcode` between
@@ -680,10 +687,11 @@ Two shapes, same rung, opposite direction:
 | **permissive** | cache leftover-lists the character sitting there | oracle 1, ultravin 2+ | oracle 3, ultravin 5 |
 | **restrictive** | cache is missing a character the pattern rows allow | oracle 2+, ultravin 1 | oracle 5, ultravin 3 |
 
-**The offending datum.** Cells `(1GD, 2023)`, `(1GT, 2023)`, and `(1GD, 2024)`
-are already on the §2 list, each stale at position 8 only
-(`scripts/stale_cache_cells.json`). Position 11, which the Suggested VIN also
-rewrites, is identical in both columns. Both columns come out of the same loaded
+**The offending datum (healed in 2026_11).** Cells `(1GD, 2023)`, `(1GT, 2023)`,
+and `(1GD, 2024)` were on the §2 list through dump 2026_10, each stale at
+position 8 only. Dump 2026_11 rebuilt them so they match the recompute; the
+walkthrough is the 2026_10 evidence. Position 11, which the Suggested VIN also
+rewrote, was identical in both columns. Both columns came out of the same loaded
 dump:
 
 ```sql
@@ -716,15 +724,15 @@ every pattern row of every schema covering those cells returns zero rows for
 those two characters. They are leftovers in the cache, not a current rule. The
 2024 `1GD` cell also leftover-lists `T` there.
 
-**The mechanism.** Each probe VIN is on-charset everywhere in the VDS except
+**The mechanism.** Each probe VIN was on-charset everywhere in the VDS except
 position 11 (plant; charset `1FZ` / `1FUZ`, input `A`) *and*, under the extract
 only, position 8 (the cache's extra `F`/`H` is the character sitting there):
 
-| VIN | cell | pos 8 | cache sees | extract sees |
-|---|---|---|---|---|
-| `1GD67MHFXPA077111` | `(1GD, 2023)` | `F` | valid | invalid |
-| `1GTW7NFH5PA077131` | `(1GT, 2023)` | `H` | valid | invalid |
-| `1GD67LHF3RA077111` | `(1GD, 2024)` | `F` | valid | invalid |
+| cell | pos 8 | cache sees | extract sees |
+|---|---|---|---|
+| `(1GD, 2023)` | `F` | valid | invalid |
+| `(1GT, 2023)` | `H` | valid | invalid |
+| `(1GD, 2024)` | `F` | valid | invalid |
 
 Position 11 is invalid on both sides, so the oracle's `cntErrors = 1` and
 ultravin's `cntErrors = 2`. That is the rung:
@@ -736,14 +744,14 @@ ultravin's `cntErrors = 2`. That is the rung:
 
 The filter is why Suggested VIN differs at a *fresh* position. Position 11's
 charset is `1FZ` (or `1FUZ` on `1GT`) in both the cache and the extract, so it
-is not a stale-charset disagreement. Substituting each candidate into
-`1GD67MHFXPA077111` and asking `vpic.fVINCheckDigit` keeps only `1` (matches
+is not a stale-charset disagreement. Substituting each candidate into the
+2023 `1GD` probe and asking `vpic.fVINCheckDigit` keeps only `1` (matches
 the input's `X` at position 9); `F` computes to `6` and `Z` to `8`. The oracle
 therefore emits Possible Values `(11:1)` and a Suggested VIN with position 11
 rewritten to `1`. Ultravin never enters that rung: two errors means code 5,
 Possible Values `(8:178DKLPTY)(11:1FZ)`, and `!` in both slots. The same
 split, with the `1GT` check digit keeping `Z` and the 2024 `1GD` check digit
-keeping `1`, is the other two VINs.
+keeping `1`, is the other two probes.
 
 **The cache is what makes the oracle's answer, demonstrably.** Deleting each
 cell inside a transaction takes `tmpRowCount` to 0, so the proc runs its own
@@ -810,22 +818,22 @@ which is not a subset of the cell's `{8, 11}`.
 The 2026_08 `(ZDM, 2018)` restrictive members of this class healed in dump
 2026_09 when NHTSA rebuilt that cache cell; they were retired.
 
-**The 2026-09-08 member — same cell as `1GTW7NFH5PA077131`, leftover `F`
-instead of `H`.** `1GT289EF0P9P77111` is the same permissive shape on
-`(1GT, 2023)`. The VIN carries `F` at position 8, so the cache accepts it and
-the extract rejects it. Position 11 (`9`, charset `1FUZ` on both sides — not
-a stale position) is invalid either way. Oracle `cntErrors = 1` (code 3);
-ultravin `cntErrors = 2` (code 5). Substituting each candidate of charset
-`1FUZ` into position 11 of `1GT289EF0P9P77111` and asking
+**The 2026-09-08 member — same `(1GT, 2023)` cell, leftover `F` instead of
+`H`.** A fourth probe of the same permissive shape: `F` at position 8, so the
+cache accepted it and the extract rejected it. Position 11 (`9`, charset
+`1FUZ` on both sides — not a stale position) is invalid either way. Oracle
+`cntErrors = 1` (code 3); ultravin `cntErrors = 2` (code 5). Substituting
+each candidate of charset `1FUZ` into position 11 and asking
 `vpic.fVINCheckDigit` keeps only `Z` (matches the input's `0` at position 9).
-The oracle therefore emits Possible Values `(11:Z)` and rewrites position 11
-to `Z`; ultravin never enters that rung and stamps `!` at 8 and 11. Element
-142 differs at `{8, 11}`, which is not a subset of the cell's `{8}`. Deleting
-the cell's 68 rows inside a transaction takes `tmpRowCount` to 0, so the proc
-runs its own `fExtractValidCharsPerWmiYear` fallback — and the oracle then
-returns codes `5,14` with Suggested VIN `1GT289E!0P!P77111` and Possible
+The oracle therefore emitted Possible Values `(11:Z)` and rewrote position 11
+to `Z`; ultravin never entered that rung and stamped `!` at 8 and 11. Element
+142 differed at `{8, 11}`, which is not a subset of the cell's `{8}`. Deleting
+the cell's 68 rows inside a transaction took `tmpRowCount` to 0, so the proc
+ran its own `fExtractValidCharsPerWmiYear` fallback — and the oracle then
+returned codes `5,14` with Suggested VIN rewritten `!` at 8 and 11 and Possible
 Values `(8:178ADKLPTY)(11:1FUZ)`, byte-for-byte with ultravin. Rolled back
-afterwards; the cache is left at its shipped 8,809,229 rows.
+afterwards; the cache was left at its shipped 8,809,229 rows. **Healed in dump
+2026_11** with the same `1GD`/`1GT` rebuild.
 
 Deleting each cell inside a transaction takes `tmpRowCount` to 0, so the proc
 runs its own `fExtractValidCharsPerWmiYear` fallback — and the oracle then
@@ -835,21 +843,20 @@ at its shipped row count.
 
 **Why this is not §2's enumerated class.** `scripts/parity/stale_cache.py`
 excuses a divergence only when **every** VIN position the difference points at
-is one that cell is actually stale at. The `1GD`/`1GT` cells are stale at
-position 8 only. Element 142 differs at positions 8 *and* 11, and element 144
-prints a group for both, so `diff_positions == {8, 11}` which is not a subset
-of `{8}`. A cell stale at 8 explains the extra error at 8 and nothing about
-the Suggested VIN character printed for 11 — even though 11 moved only
-because 8 did. The same containment refuses the 2026-08-30 members:
-`(2AP, 2026)` is stale at `{8, 11}` and the diff names `{7, 8, 11}`;
-`(ZDM, 2018)` is stale at `{5, 6, 7}` and the diff names `{6, 8}`. It also
-refuses the 2026-09-07 member: the same `(ZDM, 2018)` cell, with the diff
-naming `{4, 6}`. It also refuses the 2026-09-08 member: the same `(1GT, 2023)`
-cell, leftover `F` at position 8, with the diff naming `{8, 11}`. That
-containment is load-bearing: otherwise any bug that happened to share a VIN
-with a stale cell would be laundered as soon as one overlapping position
-appeared. The defect is still the stale cell; the observation is just one
-the cell list is forbidden to forgive. Matching the oracle here would mean
+is one that cell is actually stale at. The healed `1GD`/`1GT` cells were stale
+at position 8 only. Element 142 differed at positions 8 *and* 11, and element
+144 printed a group for both, so `diff_positions == {8, 11}` which is not a
+subset of `{8}`. A cell stale at 8 explains the extra error at 8 and nothing
+about the Suggested VIN character printed for 11 — even though 11 moved only
+because 8 did. The same containment refuses the live 2026-08-30 member:
+`(2AP, 2026)` is stale at `{8, 11}` and the diff names `{7, 8, 11}`. It also
+refused the 2026_08 `(ZDM, 2018)` members (stale at `{5, 6, 7}`, diff naming
+`{6, 8}` and `{4, 6}`), healed in dump 2026_09, and the 2026-09-08
+`(1GT, 2023)` leftover-`F` member (diff naming `{8, 11}`), healed in dump
+2026_11. That containment is load-bearing: otherwise any bug that happened
+to share a VIN with a stale cell would be laundered as soon as one overlapping
+position appeared. The defect is still the stale cell; the observation is just
+one the cell list is forbidden to forgive. Matching the oracle here would mean
 teaching ultravin to read that cell, which §2 already rejected.
 
 **What ultravin does.** `errors.rs::valid_charset` recomputes from the pattern
