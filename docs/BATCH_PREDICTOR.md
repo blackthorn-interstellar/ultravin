@@ -178,8 +178,9 @@ See [the current native model and API](NATIVE_WORKER_AUTO_2026_09_15.md).
 The [retired shared-batch model and recorded results](NATIVE_SHARED_PREDICTOR_HISTORY.md)
 remain available as historical evidence. `BatchFeedback::new_predictive` rejects
 `BatchFormat::Native` so old loops cannot accidentally apply the new plan.
-Owned `decode_batch` and `decode_batch_managed` APIs retain their existing
-result-ownership contract.
+Since 2026-11-13 the owned `decode_batch` and full JSON batch calls run on
+the same stream with this plan, without the calibration step (the plan
+depends only on the worker count and the memory budget).
 
 ## Contention and live tuning
 

@@ -151,16 +151,31 @@ impl Db {
             width,
         )
         .map_err(NativeAutoError::Prediction)?;
-        let config = NativeStreamConfig {
-            workers: prediction.workers,
-            batch_size: prediction.batch_size,
-            slots_per_worker: prediction.slots_per_worker.expect("native slot prediction"),
-            max_inflight_rows: prediction.max_inflight_rows.expect("native row prediction"),
-        };
-        self.decode_native_stream_at(inputs, model_year, now_micros, config, consume)
+        self.decode_native_stream_at(inputs, model_year, now_micros, config(&prediction), consume)
             .map_err(NativeAutoError::Stream)?;
         Ok(Some(prediction))
     }
+}
+
+fn config(prediction: &BatchPrediction) -> NativeStreamConfig {
+    NativeStreamConfig {
+        workers: prediction.workers,
+        batch_size: prediction.batch_size,
+        slots_per_worker: prediction.slots_per_worker.expect("native slot prediction"),
+        max_inflight_rows: prediction.max_inflight_rows.expect("native row prediction"),
+    }
+}
+
+/// The automatic plan for a batch call of `rows` rows, without calibration:
+/// the plan depends only on the workers and the memory budget, so the
+/// default budget and the reference row width stand in for a measurement.
+pub(crate) fn batch_config(rows: usize) -> NativeStreamConfig {
+    let workers = crate::predictor::worker_count().min(rows).max(1);
+    let format = BatchFormat::Native;
+    let budget = NativeAutoOptions::default().memory_bytes;
+    let prediction = predict_batch(workers, 1.0, format, budget, format.default_bytes_per_row())
+        .expect("the default budget fits one row per worker");
+    config(&prediction)
 }
 
 fn owned_row_bytes(result: &DecodeResult<'_>) -> usize {

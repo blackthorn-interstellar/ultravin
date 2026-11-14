@@ -413,14 +413,30 @@ mod tests {
         let current_year = current_year_at(NOW);
         let (hits, _, uncopied) = result_cache_counters();
         let mut checked = 0;
-        db.decode_native_stream_cached_at(inputs, year, NOW, config, entries, |batch| {
-            for (offset, actual) in batch.iter().enumerate() {
-                let input = &inputs[batch.start_index() + offset];
-                let expected = decode_full(db, input, NOW, current_year, year);
-                assert_eq!(*actual, expected, "{input:?}, {year:?}, {entries} entries");
-                checked += 1;
-            }
-        })
+        // Every third row without the year: rows of one batch differ in year.
+        let years: Vec<_> = (0..inputs.len())
+            .map(|row| year.filter(|_| row % 3 != 0))
+            .collect();
+        let each = crate::native_stream::Years::Each(&years);
+        let no_output = |_: &crate::NativeBatch<'_, '_>| {};
+        db.stream_at(
+            inputs,
+            None,
+            each,
+            NOW,
+            config,
+            entries,
+            no_output,
+            |batch, ()| {
+                for (offset, actual) in batch.iter().enumerate() {
+                    let row = batch.start_index() + offset;
+                    let (input, year) = (&inputs[row], years[row]);
+                    let expected = decode_full(db, input, NOW, current_year, year);
+                    assert_eq!(*actual, expected, "{input:?}, {year:?}, {entries} entries");
+                    checked += 1;
+                }
+            },
+        )
         .expect("native stream");
         assert_eq!(checked, inputs.len());
         // Counters only grow, so another test running alongside can inflate

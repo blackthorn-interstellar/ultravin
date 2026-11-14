@@ -439,12 +439,13 @@ pub fn decode_with<'a>(
 
 /// Decode many VINs in parallel over the shared (immutable) embedded archive.
 ///
-/// The clock is read once so a batch is internally consistent; each VIN is then
-/// decoded independently across rayon's thread pool. Output order matches
-/// `inputs`. `years` optionally supplies a caller model year per VIN (the batch
-/// equivalent of [`decode`]'s `year` — vPIC's batch API carries one per line);
-/// a missing entry or a `None` decodes that VIN with no year. Per-VIN output is
-/// identical to calling [`decode`] with the matching year.
+/// The clock is read once so a batch is internally consistent; the VINs are
+/// then decoded on the native stream's workers ([`Db::decode_batch_stream_at`]),
+/// which reuse the results of VINs differing only by serial. Output order
+/// matches `inputs`. `years` optionally supplies a caller model year per VIN
+/// (the batch equivalent of [`decode`]'s `year` — vPIC's batch API carries one
+/// per line); a missing entry or a `None` decodes that VIN with no year.
+/// Per-VIN output is identical to calling [`decode`] with the matching year.
 pub fn decode_batch(
     inputs: &[String],
     years: Option<&[Option<i32>]>,
@@ -459,23 +460,6 @@ pub fn decode_batch_at(
     now_micros: i64,
 ) -> Vec<DecodeResult<'static>> {
     Db::embedded().decode_batch_at(inputs, years, now_micros)
-}
-
-/// [`decode_batch`] with parallel cleanup when the returned container is dropped.
-pub fn decode_batch_managed(
-    inputs: &[String],
-    years: Option<&[Option<i32>]>,
-) -> BatchResults<DecodeResult<'static>> {
-    Db::embedded().decode_batch_managed(inputs, years)
-}
-
-/// [`decode_batch_managed`] at an explicit instant.
-pub fn decode_batch_managed_at(
-    inputs: &[String],
-    years: Option<&[Option<i32>]>,
-    now_micros: i64,
-) -> BatchResults<DecodeResult<'static>> {
-    Db::embedded().decode_batch_managed_at(inputs, years, now_micros)
 }
 
 /// [`decode_batch`] with the [`FlatResult`] shape. Flattening runs inside the
@@ -534,7 +518,7 @@ impl Db {
         inputs: &[String],
         years: Option<&[Option<i32>]>,
     ) -> Vec<DecodeResult<'_>> {
-        batch_at(self, inputs, years, now_micros(), RawResult::full)
+        self.decode_batch_at(inputs, years, now_micros())
     }
 
     /// [`Db::decode_batch`] at an explicit instant.
@@ -544,28 +528,94 @@ impl Db {
         years: Option<&[Option<i32>]>,
         now_micros: i64,
     ) -> Vec<DecodeResult<'_>> {
-        batch_at(self, inputs, years, now_micros, RawResult::full)
+        let mut out: Vec<_> = inputs.iter().map(|_| None).collect();
+        self.decode_batch_stream_at(inputs, years, now_micros, |mut batch| {
+            for (index, result) in batch.take() {
+                out[index] = Some(result);
+            }
+        })
+        .expect("native decode workers");
+        out.into_iter()
+            .map(|result| result.expect("every input is decoded"))
+            .collect()
     }
 
-    /// [`Db::decode_batch`] with parallel cleanup for large returned batches.
-    pub fn decode_batch_managed(
-        &self,
+    /// [`Db::decode_batch_at`], but each batch of results is lent to
+    /// `consume` as soon as it is decoded, and its storage is reused after:
+    /// the decode keeps a bounded number of results alive, not all of them.
+    /// Batches arrive grouped by VIN prefix for locality, not in input
+    /// order; [`NativeBatch::input_indices`] gives each result's input
+    /// position. This is the batch calls' engine, the native stream
+    /// ([`Db::decode_native_stream_at`]) with one caller year per VIN and
+    /// the automatic plan without calibration.
+    pub fn decode_batch_stream_at<'db, F>(
+        &'db self,
         inputs: &[String],
         years: Option<&[Option<i32>]>,
-    ) -> BatchResults<DecodeResult<'_>> {
-        BatchResults::new(self.decode_batch(inputs, years))
+        now_micros: i64,
+        mut consume: F,
+    ) -> Result<(), NativeStreamError>
+    where
+        F: for<'batch> FnMut(NativeBatch<'batch, 'db>),
+    {
+        self.batch_stream_at(
+            inputs,
+            years,
+            now_micros,
+            |_| {},
+            |batch, ()| consume(batch),
+        )
     }
 
-    /// [`Db::decode_batch_managed`] at an explicit instant.
-    pub fn decode_batch_managed_at(
+    /// [`Db::decode_batch_stream_at`] with a converter run on the workers.
+    fn batch_stream_at<'db, T, C, F>(
+        &'db self,
+        inputs: &[String],
+        years: Option<&[Option<i32>]>,
+        now_micros: i64,
+        convert: C,
+        consume: F,
+    ) -> Result<(), NativeStreamError>
+    where
+        T: Send,
+        C: Fn(&NativeBatch<'_, 'db>) -> T + Sync,
+        F: for<'batch> FnMut(NativeBatch<'batch, 'db>, T),
+    {
+        let order = install_batch_work(|| locality_order(inputs));
+        self.stream_at(
+            inputs,
+            Some(&order),
+            native_stream::Years::each(years),
+            now_micros,
+            native_auto::batch_config(inputs.len()),
+            result_cache::configured_entries(),
+            convert,
+            consume,
+        )
+    }
+
+    /// Full JSON of every input: an array, or with `jsonl` one object per
+    /// line, each line ending in a newline. Workers write each row's text.
+    fn batch_json_at(
         &self,
         inputs: &[String],
         years: Option<&[Option<i32>]>,
         now_micros: i64,
-    ) -> BatchResults<DecodeResult<'_>> {
-        BatchResults::new(self.decode_batch_at(inputs, years, now_micros))
+        jsonl: bool,
+    ) -> String {
+        let mut parts = vec![String::new(); inputs.len()];
+        let encode = |batch: &NativeBatch<'_, '_>| {
+            let encode = |result| json::encode(self, result);
+            batch.iter().map(encode).collect::<Vec<_>>()
+        };
+        self.batch_stream_at(inputs, years, now_micros, encode, |batch, texts| {
+            for (index, text) in batch.input_indices().zip(texts) {
+                parts[index] = text;
+            }
+        })
+        .expect("native decode workers");
+        frame_json(parts, jsonl)
     }
-
     /// [`decode_batch_flat`](fn@decode_batch_flat) against this database.
     pub fn decode_batch_flat(
         &self,
@@ -823,13 +873,8 @@ pub fn decode_json(input: &str, year: Option<i32>) -> String {
 
 /// [`decode_json`] at an explicit instant.
 pub fn decode_json_at(input: &str, year: Option<i32>, now_micros: i64) -> String {
-    json::encode(decode_items(
-        Db::embedded(),
-        input,
-        now_micros,
-        current_year_at(now_micros),
-        year,
-    ))
+    let db = Db::embedded();
+    json::encode(db, &db.decode_at(input, year, now_micros))
 }
 
 /// [`decode_json`] with the [`FlatResult`] shape.
@@ -845,12 +890,13 @@ pub fn decode_json_flat_at(input: &str, year: Option<i32>, now_micros: i64) -> S
 
 /// Decode many VINs to a single compact JSON array string, in parallel.
 ///
-/// Decode **and** serialization run with the GIL released across rayon's pool;
-/// only the final array assembly is serial. This is the high-throughput batch
-/// path: the caller receives one string (one Python allocation) instead of a
-/// list of ~60-key dicts per VIN, sidestepping the GIL-serial marshalling that
-/// otherwise caps `decode_batch`. `json.loads` of the output equals
-/// `decode_batch` element-for-element.
+/// Decode **and** serialization run on the native stream's workers (with the
+/// GIL released, from Python); the calling thread only appends each batch's
+/// text in order. This is the high-throughput batch path: the caller receives
+/// one string (one Python allocation) instead of a list of ~60-key dicts per
+/// VIN, sidestepping the GIL-serial marshalling that otherwise caps
+/// `decode_batch`. The text is exactly what `serde_json` writes for
+/// [`decode_batch`]'s results.
 pub fn decode_batch_json(inputs: &[String], years: Option<&[Option<i32>]>) -> String {
     decode_batch_json_at(inputs, years, now_micros())
 }
@@ -861,7 +907,7 @@ pub fn decode_batch_json_at(
     years: Option<&[Option<i32>]>,
     now_micros: i64,
 ) -> String {
-    batch_json_framed(inputs, years, now_micros, json::encode, false)
+    Db::embedded().batch_json_at(inputs, years, now_micros, false)
 }
 
 /// [`decode_batch_json`] with the [`FlatResult`] shape.
@@ -875,13 +921,7 @@ pub fn decode_batch_json_flat_at(
     years: Option<&[Option<i32>]>,
     now_micros: i64,
 ) -> String {
-    batch_json_framed(
-        inputs,
-        years,
-        now_micros,
-        |r| serde_json::to_string(&r.flat()).expect("FlatResult is infallibly serializable"),
-        false,
-    )
+    batch_json_flat(inputs, years, now_micros, false)
 }
 
 /// Decode a batch as newline-delimited JSON, including a trailing newline.
@@ -892,23 +932,16 @@ pub fn decode_batch_jsonl_at(
     full: bool,
 ) -> String {
     if full {
-        batch_json_framed(inputs, years, now_micros, json::encode, true)
+        Db::embedded().batch_json_at(inputs, years, now_micros, true)
     } else {
-        batch_json_framed(
-            inputs,
-            years,
-            now_micros,
-            |r| serde_json::to_string(&r.flat()).expect("FlatResult is infallibly serializable"),
-            true,
-        )
+        batch_json_flat(inputs, years, now_micros, true)
     }
 }
 
-fn batch_json_framed(
+fn batch_json_flat(
     inputs: &[String],
     years: Option<&[Option<i32>]>,
     now_micros: i64,
-    encode: impl Fn(RawResult<'static>) -> String + Sync,
     jsonl: bool,
 ) -> String {
     use rayon::prelude::*;
@@ -922,34 +955,41 @@ fn batch_json_framed(
         order
             .par_iter()
             .map(|&i| {
-                encode(decode_items(
+                let flat = decode_items(
                     db,
                     &inputs[i as usize],
                     now_micros,
                     current_year,
                     year_at(years, i as usize),
-                ))
+                )
+                .flat();
+                serde_json::to_string(&flat).expect("FlatResult is infallibly serializable")
             })
             .collect_into_vec(&mut decoded);
         restore_input_order(&mut order, &mut decoded);
         decoded
     });
+    frame_json(parts, jsonl)
+}
+
+/// Join JSON objects as an array, or with `jsonl` as lines that each end in
+/// a newline.
+fn frame_json(parts: Vec<String>, jsonl: bool) -> String {
     let cap = parts.iter().map(|part| part.len() + 1).sum::<usize>() + usize::from(!jsonl) * 2;
     let mut out = String::with_capacity(cap);
     if !jsonl {
         out.push('[');
     }
     for (index, part) in parts.into_iter().enumerate() {
-        if index > 0 {
-            out.push(if jsonl { '\n' } else { ',' });
+        if index > 0 && !jsonl {
+            out.push(',');
         }
         out.push_str(&part);
-    }
-    if jsonl {
-        if !inputs.is_empty() {
+        if jsonl {
             out.push('\n');
         }
-    } else {
+    }
+    if !jsonl {
         out.push(']');
     }
     out
@@ -1876,12 +1916,6 @@ fn cmp_year_nulls_last(a: Option<i32>, b: Option<i32>) -> std::cmp::Ordering {
         (None, Some(_)) => std::cmp::Ordering::Less,
         (None, None) => std::cmp::Ordering::Equal,
     }
-}
-
-fn projection_order(db: &Db, items: &[decode::DecodingItem<'_>]) -> Vec<(u32, usize)> {
-    let mut order = Vec::new();
-    fill_projection_order(&mut order, db, items);
-    order
 }
 
 /// Projected items as `(output rank, item index)` in output order. Each
@@ -2882,7 +2916,64 @@ mod tests {
     }
 
     #[test]
-    fn managed_full_and_flat_batches_match_legacy_results() {
+    fn full_batch_calls_equal_single_decodes_for_every_row_and_year() {
+        if !db().is_loaded() {
+            return;
+        }
+        // Serial siblings (cache hits), errors, malformed and messy input, over
+        // many stream batches, with per-row years mixed with `None` and a short
+        // year list leaving the tail without one.
+        let samples = [
+            "1HGCM82633A004352",
+            "1HGCM82633A004353",
+            "  1hgcm82633a004352\t",
+            "1FTFW1ET5DFC10312",
+            "INVALID",
+            "",
+            "1HGCM8263Ł3A00435",
+            "5YJ3E1EA7KF317000",
+        ];
+        let inputs: Vec<String> = (0..1_000).map(|i| samples[i % 8].into()).collect();
+        let years: Vec<Option<i32>> = (0..900)
+            .map(|i| (i % 3 != 0).then_some(1995 + i % 31))
+            .collect();
+        let now = 1_750_000_000_000_000;
+        let expected: Vec<_> = inputs
+            .iter()
+            .enumerate()
+            .map(|(i, vin)| decode_at(vin, years.get(i).copied().flatten(), now))
+            .collect();
+        let json: Vec<_> = expected
+            .iter()
+            .map(|r| serde_json::to_string(r).expect("JSON"))
+            .collect();
+        assert_eq!(decode_batch_at(&inputs, Some(&years), now), expected);
+        assert_eq!(
+            decode_batch_json_at(&inputs, Some(&years), now),
+            format!("[{}]", json.join(","))
+        );
+        assert_eq!(
+            decode_batch_jsonl_at(&inputs, Some(&years), now, true),
+            json.iter()
+                .map(|line| format!("{line}\n"))
+                .collect::<String>()
+        );
+        let one = &inputs[..1];
+        assert_eq!(
+            decode_batch_at(one, None, now),
+            [decode_at(one[0].as_str(), None, now)]
+        );
+        assert_eq!(
+            decode_batch_json_at(one, None, now),
+            format!("[{}]", decode_json_at(&one[0], None, now))
+        );
+        assert!(decode_batch_at(&[], None, now).is_empty());
+        assert_eq!(decode_batch_json_at(&[], None, now), "[]");
+        assert_eq!(decode_batch_jsonl_at(&[], None, now, true), "");
+    }
+
+    #[test]
+    fn managed_flat_batches_match_plain_ones() {
         if !db().is_loaded() {
             return;
         }
@@ -2894,10 +2985,6 @@ mod tests {
             .map(|index| (index % 3 == 0).then_some(1995))
             .collect();
         let now = 1_750_000_000_000_000;
-
-        let full = db().decode_batch_at(&inputs, Some(&years), now);
-        let managed_full = db().decode_batch_managed_at(&inputs, Some(&years), now);
-        assert_eq!(managed_full, full);
 
         let flat = db().decode_batch_flat_at(&inputs, Some(&years), now);
         let managed_flat = db().decode_batch_flat_managed_at(&inputs, Some(&years), now);
@@ -2915,8 +3002,6 @@ mod tests {
         let inputs: Vec<String> = (0..64).map(|_| "1HGCM82633A004352".to_string()).collect();
         let native_workers = Mutex::new(Vec::new());
         let native_threads = Mutex::new(HashSet::new());
-        let json_workers = Mutex::new(Vec::new());
-        let json_threads = Mutex::new(HashSet::new());
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(1)
             .build()
@@ -2938,40 +3023,20 @@ mod tests {
                             .lock()
                             .expect("native thread observations")
                             .insert(std::thread::current().id());
-                        result.full()
+                        result.flat()
                     },
                 ));
-                drop(batch_json_framed(
-                    &inputs,
-                    None,
-                    1_750_000_000_000_000,
-                    |result| {
-                        json_workers
-                            .lock()
-                            .expect("JSONL worker observations")
-                            .push(rayon::current_num_threads());
-                        json_threads
-                            .lock()
-                            .expect("JSONL thread observations")
-                            .insert(std::thread::current().id());
-                        json::encode(result)
-                    },
-                    true,
-                ));
+                assert_eq!(native_auto::batch_config(inputs.len()).workers, 1);
             });
         });
 
         let native_workers = native_workers.into_inner().expect("native workers");
-        let json_workers = json_workers.into_inner().expect("JSONL workers");
         assert_eq!(native_workers.len(), inputs.len());
         assert!(native_workers.iter().all(|workers| *workers == 1));
         assert_eq!(
             native_threads.into_inner().expect("native threads").len(),
             1
         );
-        assert_eq!(json_workers.len(), inputs.len());
-        assert!(json_workers.iter().all(|workers| *workers == 1));
-        assert_eq!(json_threads.into_inner().expect("JSONL threads").len(), 1);
     }
 
     #[test]

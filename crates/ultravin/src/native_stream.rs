@@ -77,11 +77,37 @@ impl NativeStreamConfig {
     }
 }
 
-/// A complete input-order batch borrowed from a worker-owned result slot.
+/// The caller model year of each input row.
+#[derive(Clone, Copy)]
+pub(crate) enum Years<'a> {
+    /// The same year, or none, for every row.
+    All(Option<i32>),
+    /// Entry `i` for row `i`; a `None` or missing entry means none.
+    Each(&'a [Option<i32>]),
+}
+
+impl<'a> Years<'a> {
+    pub(crate) fn each(years: Option<&'a [Option<i32>]>) -> Self {
+        years.map_or(Self::All(None), Self::Each)
+    }
+
+    pub(crate) fn at(self, row: usize) -> Option<i32> {
+        match self {
+            Self::All(year) => year,
+            Self::Each(years) => years.get(row).copied().flatten(),
+        }
+    }
+}
+
+/// A complete batch borrowed from a worker-owned result slot, delivered in
+/// stream order: input order, unless the stream visits the inputs in another
+/// order (see [`NativeBatch::input_indices`]).
 pub struct NativeBatch<'batch, 'db> {
     batch_index: usize,
     start_index: usize,
-    results: &'batch [Option<DecodeResult<'db>>],
+    results: &'batch mut [Option<DecodeResult<'db>>],
+    /// The input index of each row, when the stream reorders its inputs.
+    order: Option<&'batch [u32]>,
 }
 
 impl<'batch, 'db> NativeBatch<'batch, 'db> {
@@ -106,13 +132,35 @@ impl<'batch, 'db> NativeBatch<'batch, 'db> {
             .iter()
             .map(|result| result.as_ref().expect("published native slot is complete"))
     }
+
+    /// The position in the stream's inputs of each result, in [`Self::iter`]
+    /// order: `start_index..start_index + len` unless the stream reorders.
+    pub fn input_indices(&self) -> impl ExactSizeIterator<Item = usize> + '_ {
+        let (start, order) = (self.start_index, self.order);
+        (0..self.len()).map(move |row| order.map_or(start + row, |order| order[row] as usize))
+    }
+
+    /// Move the results out with their input indices; their rows decode into
+    /// new storage next time.
+    pub(crate) fn take(&mut self) -> impl Iterator<Item = (usize, DecodeResult<'db>)> + '_ {
+        let (start, order) = (self.start_index, self.order);
+        self.results
+            .iter_mut()
+            .enumerate()
+            .map(move |(row, result)| {
+                let index = order.map_or(start + row, |order| order[row] as usize);
+                (
+                    index,
+                    result.take().expect("published native slot is complete"),
+                )
+            })
+    }
 }
 
-/// Failure to configure or start native streaming.
+/// Failure to configure or finish native streaming.
 #[derive(Debug)]
 pub enum NativeStreamError {
     InvalidConfig(&'static str),
-    Spawn(std::io::Error),
     WorkerStopped,
 }
 
@@ -120,20 +168,12 @@ impl fmt::Display for NativeStreamError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidConfig(message) => write!(f, "invalid native stream config: {message}"),
-            Self::Spawn(error) => write!(f, "failed to spawn native decode worker: {error}"),
             Self::WorkerStopped => f.write_str("native decode worker stopped before completion"),
         }
     }
 }
 
-impl std::error::Error for NativeStreamError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        match self {
-            Self::Spawn(error) => Some(error),
-            _ => None,
-        }
-    }
-}
+impl std::error::Error for NativeStreamError {}
 
 /// Stream decoded batches from the embedded database in input order.
 pub fn decode_native_stream_at<F>(
@@ -155,15 +195,18 @@ enum SlotState {
     Recycle { len: usize, permit: Permit },
 }
 
-struct Slot<'db> {
+struct Slot<'db, T> {
     results: Vec<Option<DecodeResult<'db>>>,
+    /// What the converter made of the published batch.
+    output: Option<T>,
     state: SlotState,
 }
 
-impl<'db> Slot<'db> {
+impl<'db, T> Slot<'db, T> {
     fn new(batch_size: usize) -> Self {
         Self {
             results: (0..batch_size).map(|_| None).collect(),
+            output: None,
             state: SlotState::Free,
         }
     }
@@ -310,16 +353,17 @@ enum Published {
     Panicked(Box<dyn Any + Send>),
 }
 
-fn clear_slot(slot: &mut Slot<'_>, len: usize) {
+fn clear_slot<T>(slot: &mut Slot<'_, T>, len: usize) {
     for result in &mut slot.results[..len] {
         drop(result.take());
     }
+    slot.output = None;
 }
 
 /// Empty each row but keep its buffers. A row sharing a result-table
 /// entry's elements keeps that result too: a hit on the same entry then
 /// rewrites only `vin`, and any other decode resets every field itself.
-fn prepare_slot_reuse(slot: &mut Slot<'_>, len: usize) {
+fn prepare_slot_reuse<T>(slot: &mut Slot<'_, T>, len: usize) {
     for result in slot.results[..len].iter_mut().flatten() {
         result.vin.clear();
         if result.vin.capacity() > MAX_RETAINED_VIN_BYTES {
@@ -340,7 +384,7 @@ fn prepare_slot_reuse(slot: &mut Slot<'_>, len: usize) {
     }
 }
 
-fn clear_all_slots(slots: &[Mutex<Slot<'_>>]) {
+fn clear_all_slots<T>(slots: &[Mutex<Slot<'_, T>>]) {
     for mutex in slots {
         let mut slot = lock(mutex);
         let len = slot.results.len();
@@ -349,8 +393,8 @@ fn clear_all_slots(slots: &[Mutex<Slot<'_>>]) {
     }
 }
 
-fn recycle(
-    slots: &[Mutex<Slot<'_>>],
+fn recycle<T>(
+    slots: &[Mutex<Slot<'_, T>>],
     free: &mut Vec<usize>,
     cancelled: bool,
     retain_results: bool,
@@ -379,28 +423,37 @@ fn recycle(
     }
 }
 
-// Keep the immutable job inputs and the worker's transport/slot endpoints explicit.
-#[allow(clippy::too_many_arguments)]
-fn worker<'db>(
-    owner: usize,
+/// What every worker of one stream shares.
+struct Job<'a, 'db, C> {
     db: &'db Db,
-    inputs: &[String],
-    model_year: Option<i32>,
+    inputs: &'a [String],
+    /// The input index of each stream row, or input order.
+    order: Option<&'a [u32]>,
+    years: Years<'a>,
     now_micros: i64,
     current_year: i32,
     batch_size: usize,
     retain_results: bool,
-    result_table: &crate::result_cache::Table<'db>,
-    slots: &[Mutex<Slot<'db>>],
+    result_table: &'a crate::result_cache::Table<'db>,
+    convert: &'a C,
+}
+
+fn worker<'db, T, C>(
+    owner: usize,
+    job: &Job<'_, 'db, C>,
+    slots: &[Mutex<Slot<'db, T>>],
     coordinator: &Arc<Coordinator>,
     published: &mpsc::Sender<Published>,
-) {
+) where
+    C: Fn(&NativeBatch<'_, 'db>) -> T,
+{
+    let inputs = job.inputs;
     let mut free = (0..slots.len()).rev().collect::<Vec<_>>();
-    let mut order = Vec::<(u64, usize)>::with_capacity(batch_size.min(inputs.len()));
+    let mut order = Vec::<(u64, usize)>::with_capacity(job.batch_size.min(inputs.len()));
     let mut decode_workspace = DecodeWorkspace::default();
     loop {
         let cancelled = coordinator.cancelled();
-        recycle(slots, &mut free, cancelled, retain_results);
+        recycle(slots, &mut free, cancelled, job.retain_results);
         if cancelled {
             clear_all_slots(slots);
             return;
@@ -409,7 +462,7 @@ fn worker<'db>(
             coordinator.wakes[owner].wait();
             continue;
         }
-        match coordinator.claim(inputs.len(), batch_size) {
+        match coordinator.claim(inputs.len(), job.batch_size) {
             Claim::Work {
                 batch,
                 start,
@@ -433,22 +486,26 @@ fn worker<'db>(
                 let slot_index = free.pop().expect("checked nonempty free slots");
                 let mut slot = lock(&slots[slot_index]);
                 let decoded = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    let input = |row: usize| job.order.map_or(row, |order| order[row] as usize);
                     order.clear();
                     order.extend(
-                        (start..end).map(|index| (crate::locality_key(&inputs[index]), index)),
+                        (start..end).map(|row| (crate::locality_key(&inputs[input(row)]), row)),
                     );
                     order.sort_unstable_by_key(|&(key, _)| key);
-                    let results = &mut slot.results;
-                    for (_, index) in order.iter().copied() {
-                        let result_slot = &mut results[index - start];
+                    let Slot {
+                        results, output, ..
+                    } = &mut *slot;
+                    for (_, row) in order.iter().copied() {
+                        let index = input(row);
+                        let result_slot = &mut results[row - start];
                         *result_slot = Some(decode_full_cached(
-                            db,
+                            job.db,
                             &inputs[index],
-                            now_micros,
-                            current_year,
-                            model_year,
+                            job.now_micros,
+                            job.current_year,
+                            job.years.at(index),
                             result_slot.take(),
-                            result_table,
+                            job.result_table,
                             &mut decode_workspace,
                         ));
                         #[cfg(test)]
@@ -466,6 +523,12 @@ fn worker<'db>(
                             panic!("injected partial native decode panic");
                         }
                     }
+                    *output = Some((job.convert)(&NativeBatch {
+                        batch_index: batch,
+                        start_index: start,
+                        results: &mut results[..end - start],
+                        order: job.order.map(|order| &order[start..end]),
+                    }));
                 }));
                 match decoded {
                     Ok(()) => {
@@ -515,31 +578,47 @@ impl Db {
         model_year: Option<i32>,
         now_micros: i64,
         config: NativeStreamConfig,
-        consume: F,
-    ) -> Result<(), NativeStreamError>
-    where
-        F: for<'batch> FnMut(NativeBatch<'batch, 'db>),
-    {
-        let entries = crate::result_cache::configured_entries();
-        self.decode_native_stream_cached_at(
-            inputs, model_year, now_micros, config, entries, consume,
-        )
-    }
-
-    /// [`Db::decode_native_stream_at`] with a result table of
-    /// `result_cache_entries` shared by the stream's workers.
-    pub(crate) fn decode_native_stream_cached_at<'db, F>(
-        &'db self,
-        inputs: &[String],
-        model_year: Option<i32>,
-        now_micros: i64,
-        config: NativeStreamConfig,
-        result_cache_entries: usize,
         mut consume: F,
     ) -> Result<(), NativeStreamError>
     where
         F: for<'batch> FnMut(NativeBatch<'batch, 'db>),
     {
+        self.stream_at(
+            inputs,
+            None,
+            Years::All(model_year),
+            now_micros,
+            config,
+            crate::result_cache::configured_entries(),
+            |_| {},
+            |batch, ()| consume(batch),
+        )
+    }
+
+    /// The stream itself: workers on the decoder pool decode the inputs in
+    /// batches, visiting row `r` of the stream at input `order[r]` (or `r`),
+    /// share a result table of `result_cache_entries`, and pass each batch
+    /// to `convert`; `consume` then gets the batches in stream order on the
+    /// calling thread, each with what `convert` made of it.
+    // The decode inputs, the cache size, then the two per-batch steps.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn stream_at<'db, T, C, F>(
+        &'db self,
+        inputs: &[String],
+        order: Option<&[u32]>,
+        years: Years<'_>,
+        now_micros: i64,
+        config: NativeStreamConfig,
+        result_cache_entries: usize,
+        convert: C,
+        mut consume: F,
+    ) -> Result<(), NativeStreamError>
+    where
+        T: Send,
+        C: Fn(&NativeBatch<'_, 'db>) -> T + Sync,
+        F: for<'batch> FnMut(NativeBatch<'batch, 'db>, T),
+    {
+        debug_assert!(order.is_none_or(|order| order.len() == inputs.len()));
         let config = config.validate()?;
         if inputs.is_empty() {
             return Ok(());
@@ -567,52 +646,44 @@ impl Db {
             })
             .collect::<Vec<_>>();
         let result_table = crate::result_cache::Table::new(result_cache_entries);
+        let job = Job {
+            db: self,
+            inputs,
+            order,
+            years,
+            now_micros,
+            current_year: current_year_at(now_micros),
+            batch_size: config.batch_size,
+            retain_results,
+            result_table: &result_table,
+            convert: &convert,
+        };
         let (published_tx, published_rx) = mpsc::channel();
         let mut panic_payload = None;
         let mut stream_error = None;
-        std::thread::scope(|scope| {
-            let mut handles = Vec::with_capacity(active_workers);
+        // Workers run on the decoder pool's long-lived threads rather than
+        // threads of their own: results that outlive the stream (a batch
+        // call's `Vec`) are then freed into heaps that keep their pages, not
+        // into the abandoned heaps of exited threads.
+        crate::batch_pool().in_place_scope(|scope| {
             for (owner, owner_slots) in all_slots.iter().enumerate() {
                 let tx = published_tx.clone();
                 let coordinator_ref = Arc::clone(&coordinator);
-                let result_table = &result_table;
-                let spawned = std::thread::Builder::new()
-                    .name(format!("ultravin-native-{owner}"))
-                    .spawn_scoped(scope, move || {
-                        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                            worker(
-                                owner,
-                                self,
-                                inputs,
-                                model_year,
-                                now_micros,
-                                current_year_at(now_micros),
-                                config.batch_size,
-                                retain_results,
-                                result_table,
-                                owner_slots,
-                                &coordinator_ref,
-                                &tx,
-                            )
-                        }));
-                        if let Err(payload) = result {
-                            coordinator_ref.cancel();
-                            recycle(owner_slots, &mut Vec::new(), true, false);
-                            clear_all_slots(owner_slots);
-                            let _ = tx.send(Published::Panicked(payload));
-                        }
-                    });
-                match spawned {
-                    Ok(handle) => handles.push(handle),
-                    Err(error) => {
-                        coordinator.cancel();
-                        stream_error = Some(NativeStreamError::Spawn(error));
-                        break;
+                let job = &job;
+                scope.spawn(move |_| {
+                    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        worker(owner, job, owner_slots, &coordinator_ref, &tx)
+                    }));
+                    if let Err(payload) = result {
+                        coordinator_ref.cancel();
+                        recycle(owner_slots, &mut Vec::new(), true, false);
+                        clear_all_slots(owner_slots);
+                        let _ = tx.send(Published::Panicked(payload));
                     }
-                }
+                });
             }
             drop(published_tx);
-            if stream_error.is_none() {
+            {
                 let consumed = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
                     let mut waiting = BTreeMap::new();
                     let mut next = 0;
@@ -637,11 +708,18 @@ impl Db {
                                     };
                                     let consumed = std::panic::catch_unwind(
                                         std::panic::AssertUnwindSafe(|| {
-                                            consume(NativeBatch {
-                                                batch_index: next,
-                                                start_index: next * config.batch_size,
-                                                results: &slot.results[..len],
-                                            });
+                                            let start = next * config.batch_size;
+                                            let output = slot.output.take();
+                                            consume(
+                                                NativeBatch {
+                                                    batch_index: next,
+                                                    start_index: start,
+                                                    results: &mut slot.results[..len],
+                                                    order: order
+                                                        .map(|order| &order[start..start + len]),
+                                                },
+                                                output.expect("a published slot holds its output"),
+                                            );
                                         }),
                                     );
                                     slot.state = SlotState::Recycle { len, permit };
@@ -671,14 +749,9 @@ impl Db {
                     coordinator.cancel();
                 }
             }
-            for handle in handles {
-                if let Err(payload) = handle.join() {
-                    coordinator.cancel();
-                    if panic_payload.is_none() {
-                        panic_payload = Some(payload);
-                    }
-                }
-            }
+        });
+        // The scope has joined every worker.
+        {
             if panic_payload.is_none() {
                 panic_payload = published_rx.try_iter().find_map(|message| match message {
                     Published::Panicked(payload) => Some(payload),
@@ -690,7 +763,7 @@ impl Db {
                 let slot = lock(mutex);
                 matches!(slot.state, SlotState::Free) && slot.results.iter().all(Option::is_none)
             }));
-        });
+        }
         if let Some(payload) = panic_payload {
             std::panic::resume_unwind(payload);
         }
@@ -999,6 +1072,85 @@ mod tests {
         }
         PANIC_DECODE_BATCH.store(usize::MAX, std::sync::atomic::Ordering::SeqCst);
         PANIC_DECODE_INPUT.store(usize::MAX, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// Stream the inputs in reverse order with a converter that joins each
+    /// batch's VINs; returns each batch's input indices, text and years.
+    fn converted(
+        inputs: &[String],
+        years: &[Option<i32>],
+        convert_panics_at: Option<usize>,
+    ) -> Vec<(Vec<usize>, String, Vec<Option<i32>>)> {
+        let order: Vec<u32> = (0..inputs.len() as u32).rev().collect();
+        let mut seen = Vec::new();
+        Db::embedded()
+            .stream_at(
+                inputs,
+                Some(&order),
+                Years::Each(years),
+                NOW,
+                recycling_config(),
+                16,
+                |batch| {
+                    if convert_panics_at == Some(batch.batch_index()) {
+                        panic!("injected converter panic");
+                    }
+                    batch
+                        .iter()
+                        .map(|r| r.vin.as_str())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                },
+                |batch, text| {
+                    let years = batch.iter().map(|r| r.model_year).collect();
+                    seen.push((batch.input_indices().collect(), text, years));
+                },
+            )
+            .unwrap();
+        seen
+    }
+
+    #[test]
+    fn converter_output_and_per_row_years_follow_the_stream_order() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
+        let inputs: Vec<_> = inputs().into_iter().cycle().take(31).collect();
+        let years: Vec<_> = (0..inputs.len())
+            .map(|row| (row % 2 == 0).then_some(2004))
+            .collect();
+        let expected = crate::decode_batch_at(&inputs, Some(&years), NOW);
+        let seen = converted(&inputs, &years, None);
+        assert_eq!(seen.len(), inputs.len().div_ceil(2));
+        let mut visited = Vec::new();
+        for (indices, text, model_years) in seen {
+            let rows: Vec<_> = indices.iter().map(|&index| &expected[index]).collect();
+            let vins: Vec<_> = rows.iter().map(|r| r.vin.as_str()).collect();
+            assert_eq!(text, vins.join(","));
+            let decoded: Vec<_> = rows.iter().map(|r| r.model_year).collect();
+            assert_eq!(model_years, decoded);
+            visited.extend(indices);
+        }
+        assert_eq!(visited, (0..inputs.len()).rev().collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn converter_panic_is_cancelled_joined_and_propagated() {
+        if crate::Db::try_embedded().is_none() {
+            eprintln!("skip: artifact not built");
+            return;
+        }
+        let inputs: Vec<_> = inputs().into_iter().cycle().take(31).collect();
+        for batch in [0, 3, 15] {
+            let panic = std::panic::catch_unwind(|| converted(&inputs, &[], Some(batch)));
+            let payload = panic.expect_err("the converter panic propagates");
+            assert_eq!(
+                payload.downcast_ref::<&str>(),
+                Some(&"injected converter panic")
+            );
+        }
+        assert_eq!(converted(&inputs, &[], None).len(), 16);
     }
 
     #[test]

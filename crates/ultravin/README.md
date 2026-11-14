@@ -20,7 +20,7 @@ assert_eq!(r.model_year, Some(2003));
 let make = r.elements.iter().find(|e| e.variable == "Make").unwrap();
 assert_eq!(make.value, "HONDA");
 
-// Parallel over rayon; output order matches input.
+// Parallel on native workers; output order matches input.
 let vins = vec!["1HGCM82633A004352".to_string(), "5YJ3E1EA7KF317000".to_string()];
 let results = ultravin::decode_batch(&vins, None);
 
@@ -39,13 +39,23 @@ let prediction = ultravin::decode_native_stream(&vins, None, |batch| {
 })?;
 ```
 
-Workers decode whole batches. Callbacks receive full results in input order;
+Workers (threads of the decoder pool that `RAYON_NUM_THREADS` sizes) decode
+whole batches. Callbacks receive full results in input order;
 the owning worker clears and reuses each slot after the callback returns.
 One captured clock covers the entire job, including calibration.
 `decode_native_stream_auto_at` accepts a fixed clock and `NativeAutoOptions`;
 `decode_native_stream_at` accepts an explicit `NativeStreamConfig` to bypass
 automatic selection. The default working-output budget is 512 MiB, excluding
-the input and database. Existing owned batch APIs retain their behavior.
+the input and database.
+
+`decode_batch`, `decode_batch_json` and full JSON lines run on this stream.
+`Db::decode_batch_stream_at` is the same engine with a caller year per VIN
+and no calibration step: it lends each batch to a callback instead of
+returning a `Vec`, so only a bounded number of results are ever alive. It
+visits the VINs sorted by prefix, for memory locality, so its batches arrive
+out of input order; `NativeBatch::input_indices` places each result. Within
+one call, a clean VIN that differs from an earlier one only in its
+serial shares that result instead of decoding again.
 
 ## The data
 
@@ -130,16 +140,13 @@ flags. Cache keys never contain VINs or timestamps, so more input rows do not
 grow the cache beyond the fixed set of supported combinations. Projection also
 reuses a bounded scratch buffer per worker.
 
-For native batches processed by reference, `decode_batch_managed` and
-`decode_batch_managed_at` return `BatchResults<DecodeResult>` with indexing,
-iteration, and serialization. Dropping a large batch completes its cleanup
-across decoder workers before returning. The corresponding flat functions and
-`Db` methods support the same ownership model.
-
-Existing `decode_batch` functions still return `Vec`. Calling `.into_vec()` or
-consuming a managed batch with `.into_iter()` transfers cleanup responsibility
-to the returned vector or iterator; iterate over `&batch` to retain managed
-cleanup.
+For flat batches processed by reference, `decode_batch_flat_managed` and
+`decode_batch_flat_managed_at` return `BatchResults<FlatResult>` with
+indexing, iteration, and serialization. Dropping a large batch completes its
+cleanup across decoder workers before returning. Calling `.into_vec()` or
+consuming it with `.into_iter()` transfers cleanup responsibility to the
+returned vector or iterator. For full results, lend batches from
+`Db::decode_batch_stream_at` instead of keeping them all.
 
 Rust callers migrating the first three fields from `String` can read them with
 `.as_ref()`, construct them with `"text".into()`, or obtain an owned `String`

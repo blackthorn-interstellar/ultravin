@@ -1,13 +1,14 @@
-//! Full JSON output directly from resolved items. Constant metadata is escaped
-//! once per database; each decode writes its variable fields into one buffer.
+//! Full JSON output from a decoded result. Constant element metadata is
+//! escaped once per database; each result writes its variable fields into one
+//! buffer.
 
-use crate::{public_decode, tables::ArchivedElement, Db, RawResult};
+use crate::{public_decode, tables::ArchivedElement, Db, DecodeResult};
 
 pub(crate) struct ElementJson {
     before_value: Vec<u8>,
     before_attribute: Vec<u8>,
     before_source: Vec<u8>,
-    default: std::sync::OnceLock<(i64, Vec<u8>)>,
+    default: std::sync::OnceLock<(Option<i64>, Vec<u8>)>,
 }
 
 fn value(out: &mut Vec<u8>, value: impl serde::Serialize) {
@@ -69,7 +70,7 @@ impl ElementJson {
     /// Keep one complete "Not Applicable" default per element. Its timestamp
     /// is archive data, but can differ between vehicle types. A mismatch takes
     /// the ordinary encoder, so cache fill order never affects output.
-    fn default(&self, created_on: i64) -> Option<&[u8]> {
+    fn default(&self, created_on: Option<i64>) -> Option<&[u8]> {
         let (timestamp, bytes) = self.default.get_or_init(|| {
             let mut out = self.before_value.clone();
             out.extend_from_slice(b"\"Not Applicable\"");
@@ -78,7 +79,7 @@ impl ElementJson {
             out.extend_from_slice(&self.before_source);
             out.extend_from_slice(b"\"Default\"");
             out.extend_from_slice(NULL_PROVENANCE);
-            value(&mut out, crate::opt_i64(created_on));
+            value(&mut out, created_on);
             out.extend_from_slice(NULL_WMI);
             (created_on, out)
         });
@@ -90,35 +91,32 @@ const NULL_PROVENANCE: &[u8] =
     b",\"pattern_id\":null,\"vin_schema_id\":null,\"keys\":\"\",\"created_on\":";
 const NULL_WMI: &[u8] = b",\"wmi_id\":null,\"to_be_qced\":false}";
 
-pub(crate) fn encode(mut result: RawResult<'_>) -> String {
-    result.materialize_defaults();
-    crate::resolve::resolve_xxx(result.db, &mut result.items);
-    let order = crate::projection_order(result.db, &result.items);
-    let mut out = Vec::with_capacity(order.len() * 400 + 512);
+/// Append `result` to `out` as the JSON object `serde_json` writes for it.
+/// `db` is the database that decoded it.
+pub(crate) fn encode_into(db: &Db, result: &DecodeResult<'_>, out: &mut Vec<u8>) {
     out.extend_from_slice(b"{\"vin\":");
-    string(&mut out, &result.vin);
+    string(out, &result.vin);
     out.extend_from_slice(b",\"wmi\":");
-    string(&mut out, &result.wmi);
+    string(out, &result.wmi);
     out.extend_from_slice(b",\"descriptor\":");
-    string(&mut out, &result.descriptor);
+    string(out, &result.descriptor);
     out.extend_from_slice(b",\"model_year\":");
-    value(&mut out, result.model_year);
+    value(out, result.model_year);
     out.extend_from_slice(b",\"error_codes\":");
-    value(&mut out, &result.error_codes);
+    value(out, &result.error_codes);
     out.extend_from_slice(b",\"check_digit_valid\":");
-    value(&mut out, result.check_digit_valid);
+    value(out, result.check_digit_valid);
     out.extend_from_slice(b",\"corrected_vin\":");
-    string(&mut out, &result.corrected_vin);
+    string(out, &result.corrected_vin);
     out.extend_from_slice(b",\"elements\":[");
-    for (n, (_, i)) in order.into_iter().enumerate() {
+    for (n, it) in result.elements.iter().enumerate() {
         if n != 0 {
             out.push(b',');
         }
-        let it = &result.items[i];
-        let template = result.db.element_json(it.element_id);
-        let null_provenance = it.pattern_id == crate::tables::NULL_I32
-            && it.vin_schema_id == crate::tables::NULL_I32
-            && it.wmi_id == crate::tables::NULL_I32
+        let template = db.element_json(it.element_id);
+        let null_provenance = it.pattern_id.is_none()
+            && it.vin_schema_id.is_none()
+            && it.wmi_id.is_none()
             && it.keys.is_empty()
             && !it.to_be_qced;
         if null_provenance
@@ -132,32 +130,38 @@ pub(crate) fn encode(mut result: RawResult<'_>) -> String {
             }
         }
         out.extend_from_slice(&template.before_value);
-        string(&mut out, &it.value);
+        string(out, &it.value);
         out.extend_from_slice(&template.before_attribute);
-        string(&mut out, &it.attribute_id);
+        string(out, &it.attribute_id);
         out.extend_from_slice(&template.before_source);
-        string(&mut out, &it.source);
+        string(out, &it.source);
         if null_provenance {
             out.extend_from_slice(NULL_PROVENANCE);
-            value(&mut out, crate::opt_i64(it.created_on));
+            value(out, it.created_on);
             out.extend_from_slice(NULL_WMI);
             continue;
         }
         out.extend_from_slice(b",\"pattern_id\":");
-        value(&mut out, crate::opt_i32(it.pattern_id));
+        value(out, it.pattern_id);
         out.extend_from_slice(b",\"vin_schema_id\":");
-        value(&mut out, crate::opt_i32(it.vin_schema_id));
+        value(out, it.vin_schema_id);
         out.extend_from_slice(b",\"keys\":");
-        string(&mut out, &it.keys);
+        string(out, &it.keys);
         out.extend_from_slice(b",\"created_on\":");
-        value(&mut out, crate::opt_i64(it.created_on));
+        value(out, it.created_on);
         out.extend_from_slice(b",\"wmi_id\":");
-        value(&mut out, crate::opt_i32(it.wmi_id));
+        value(out, it.wmi_id);
         out.extend_from_slice(b",\"to_be_qced\":");
-        value(&mut out, it.to_be_qced);
+        value(out, it.to_be_qced);
         out.push(b'}');
     }
     out.extend_from_slice(b"]}");
+}
+
+/// [`encode_into`] a new string.
+pub(crate) fn encode(db: &Db, result: &DecodeResult<'_>) -> String {
+    let mut out = Vec::with_capacity(result.elements.len() * 400 + 512);
+    encode_into(db, result, &mut out);
     String::from_utf8(out).expect("JSON strings and literals are UTF-8")
 }
 
@@ -166,6 +170,7 @@ mod tests {
     use super::*;
     use crate::decode::DecodingItem;
     use crate::tables::{serialize_artifact, Element, VpicData, NULL_I32, NULL_I64};
+    use crate::RawResult;
     use std::borrow::Cow;
 
     fn fixture(name: &str) -> Db {
@@ -299,7 +304,7 @@ mod tests {
         // extreme integers and different databases sharing the same element ids.
         for db in [&a, &b, &a] {
             assert_eq!(
-                encode(raw(db)),
+                encode(db, &raw(db).full()),
                 serde_json::to_string(&raw(db).full()).unwrap()
             );
         }
@@ -307,7 +312,7 @@ mod tests {
         empty.items.clear();
         empty.error_codes.clear();
         empty.model_year = None;
-        let actual = encode(empty);
+        let actual = encode(&a, &empty.full());
         assert!(actual.ends_with("\"elements\":[]}"));
         assert!(actual.contains("\"model_year\":null,\"error_codes\":[]"));
     }
@@ -333,7 +338,7 @@ mod tests {
             for year in [None, Some(1980), Some(2003), Some(2026), Some(0)] {
                 let decode = || crate::decode_items(db, &vin, 1_788_739_200_000_000, 2026, year);
                 assert_eq!(
-                    encode(decode()),
+                    encode(db, &decode().full()),
                     serde_json::to_string(&decode().full()).unwrap(),
                     "{vin:?}, {year:?}"
                 );
@@ -349,7 +354,7 @@ mod tests {
                 scope.spawn(|| {
                     for _ in 0..20 {
                         assert_eq!(
-                            encode(raw(&db)),
+                            encode(&db, &raw(&db).full()),
                             serde_json::to_string(&raw(&db).full()).unwrap()
                         );
                     }

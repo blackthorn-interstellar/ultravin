@@ -131,7 +131,7 @@ fn main() {
             "output_estimator_sample_rows": 16,
             "calibration_median_single_core_rows_per_second": calibration_median,
             "frozen_now_micros": FROZEN_NOW_MICROS,
-            "result_owner": "BatchResults",
+            "result_owner": "Vec",
         });
         println!("{record}");
         std::io::stdout().flush().expect("flush completed cell");
@@ -215,7 +215,7 @@ fn calibration_rates(inputs: &[String], _workers: usize) -> Vec<f64> {
 
 fn run_whole_pass(inputs: &[String], batch_size: usize) {
     for chunk in inputs.chunks(batch_size) {
-        let results = ultravin::decode_batch_managed_at(chunk, None, FROZEN_NOW_MICROS);
+        let results = ultravin::decode_batch_at(chunk, None, FROZEN_NOW_MICROS);
         drop(black_box(results));
     }
 }
@@ -226,7 +226,7 @@ fn measured_batch(
 ) -> CellTimings {
     let mut timings = CellTimings::default();
     let decode_started = Instant::now();
-    let results = ultravin::decode_batch_managed_at(chunk, None, FROZEN_NOW_MICROS);
+    let results = ultravin::decode_batch_at(chunk, None, FROZEN_NOW_MICROS);
     timings.decode = decode_started.elapsed();
 
     let sample_started = Instant::now();

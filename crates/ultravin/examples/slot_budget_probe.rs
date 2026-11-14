@@ -565,7 +565,7 @@ fn run_pass(
 fn shared_pass(vins: &[String], measure_bytes: bool) -> usize {
     let mut peak = 0;
     for chunk in vins.chunks(SHARED_ROW_BUDGET) {
-        let results = ultravin::decode_batch_managed_at(chunk, None, NOW);
+        let results = ultravin::decode_batch_at(chunk, None, NOW);
         if measure_bytes {
             peak = peak.max(
                 results.capacity() * std::mem::size_of::<ultravin::DecodeResult<'_>>()

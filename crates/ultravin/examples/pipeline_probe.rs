@@ -1,10 +1,10 @@
-//! Diagnostic for overlapping managed decode and cleanup on one decoder pool.
+//! Diagnostic for overlapping batch decode and result cleanup.
 //!
 //! This does not change the public API. The pipeline hands complete, ordered
-//! `BatchResults` from a producer to the consuming thread through a rendezvous
+//! result `Vec`s from a producer to the consuming thread through a rendezvous
 //! channel. While the consumer destroys batch N, the producer may decode batch
-//! N+1. Both operations use ultravin's process decoder pool; this example does
-//! not initialize or submit work to Rayon's global pool.
+//! N+1. (Until 2026-11-13 this measured the rayon `decode_batch_managed` path;
+//! `decode_batch_at` now runs on native stream workers.)
 //!
 //! `pipeline_probe CORPUS SECONDS WORKERS LIVE_ROW_BUDGET MODE`
 //!
@@ -239,7 +239,7 @@ fn sequential_pass(inputs: &[String], batch_rows: usize) -> Timings {
     for chunk in inputs.chunks(batch_rows) {
         timings.maximum_observed_live_rows = timings.maximum_observed_live_rows.max(chunk.len());
         let decode_started = Instant::now();
-        let results = ultravin::decode_batch_managed_at(chunk, None, FROZEN_NOW_MICROS);
+        let results = ultravin::decode_batch_at(chunk, None, FROZEN_NOW_MICROS);
         timings.decode += decode_started.elapsed();
         black_box(&results);
 
@@ -270,7 +270,7 @@ fn pipeline_pass(inputs: &[String], batch_rows: usize) -> Timings {
                     producer_live_rows.fetch_add(chunk.len(), Ordering::Relaxed) + chunk.len();
                 update_maximum(&producer_maximum_live_rows, now_live);
                 let decode_started = Instant::now();
-                let results = ultravin::decode_batch_managed_at(chunk, None, FROZEN_NOW_MICROS);
+                let results = ultravin::decode_batch_at(chunk, None, FROZEN_NOW_MICROS);
                 decode += decode_started.elapsed();
                 if sender.send((index, chunk.len(), results)).is_err() {
                     break;

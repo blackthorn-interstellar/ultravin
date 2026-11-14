@@ -267,8 +267,9 @@ fn decode<'py>(
 
 /// Decode a batch of VINs to a list of dicts.
 ///
-/// The decode work runs in parallel with the GIL released; only the final
-/// marshalling of results into Python dicts holds the GIL.
+/// The decode work runs in parallel with the GIL released; only marshalling
+/// results into Python dicts holds the GIL (with `full=True`, batch by batch
+/// while the decode goes on).
 #[pyfunction]
 #[pyo3(signature = (vins, *, years = None, full = false, now = None))]
 fn decode_batch<'py>(
@@ -294,33 +295,43 @@ fn decode_batch<'py>(
         };
         return Ok(vec![result]);
     }
-    // Bound native results retained beside the growing Python list. This matters
-    // most for `full=True`, where a 50k-row native batch can approach a GiB
-    // before any of its element dictionaries are built. Every chunk shares the
-    // clock captured above, and chunks plus their rows are appended in order.
-    const PYTHON_BATCH_ROWS: usize = 8_192;
-    let mut out = Vec::with_capacity(vins.len());
     if !full {
         let results =
             py.detach(|| ultravin::Db::embedded().decode_batch_flat_at(&vins, years, now_micros));
+        let mut out = Vec::with_capacity(vins.len());
         for result in results {
             out.push(flat_to_dict(py, &result)?);
         }
         return Ok(out);
     }
-    for (chunk_index, vin_chunk) in vins.chunks(PYTHON_BATCH_ROWS).enumerate() {
-        let offset = chunk_index * PYTHON_BATCH_ROWS;
-        let year_chunk = years.and_then(|values| {
-            let end = (offset + vin_chunk.len()).min(values.len());
-            values.get(offset..end)
-        });
-        let results = py
-            .detach(|| ultravin::Db::embedded().decode_batch_at(vin_chunk, year_chunk, now_micros));
-        for result in results {
-            out.push(result_to_dict(py, &result)?);
-        }
+    // The stream decodes with the GIL released and lends each batch here;
+    // taking the GIL per batch to build its dicts lets the workers decode the
+    // next ones meanwhile, and keeps only a bounded number of native results
+    // alive beside the growing list.
+    let mut out: Vec<Option<Py<PyDict>>> = vins.iter().map(|_| None).collect();
+    let mut failed = None;
+    py.detach(|| {
+        ultravin::Db::embedded().decode_batch_stream_at(&vins, years, now_micros, |batch| {
+            if failed.is_none() {
+                Python::attach(|py| {
+                    for (index, result) in batch.input_indices().zip(batch.iter()) {
+                        match result_to_dict(py, result) {
+                            Ok(dict) => out[index] = Some(dict.unbind()),
+                            Err(error) => return failed = Some(error),
+                        }
+                    }
+                });
+            }
+        })
+    })
+    .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+    if let Some(error) = failed {
+        return Err(error);
     }
-    Ok(out)
+    Ok(out
+        .into_iter()
+        .map(|dict| dict.expect("every input is decoded").into_bound(py))
+        .collect())
 }
 
 /// Decode a single VIN to a JSON object string (same shape as `decode`).

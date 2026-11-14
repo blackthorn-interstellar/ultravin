@@ -187,7 +187,7 @@ fn managed_pass(inputs: &[String], live_row_budget: usize) -> Timings {
     let mut timings = Timings::default();
     for chunk in inputs.chunks(live_row_budget) {
         let decode_started = Instant::now();
-        let results = ultravin::decode_batch_managed_at(chunk, None, FROZEN_NOW_MICROS);
+        let results = ultravin::decode_batch_at(chunk, None, FROZEN_NOW_MICROS);
         timings.decode += decode_started.elapsed();
         black_box(&results);
 

@@ -158,7 +158,7 @@ fn dispatch(sender: &mpsc::SyncSender<Command>, batch_id: usize, batch_size: usi
 
 fn shared_pass(vins: &[String], batch_size: usize) {
     for chunk in vins.chunks(batch_size) {
-        let results = ultravin::decode_batch_managed_at(chunk, None, NOW_MICROS);
+        let results = ultravin::decode_batch_at(chunk, None, NOW_MICROS);
         std::hint::black_box(&results);
         drop(results);
     }
