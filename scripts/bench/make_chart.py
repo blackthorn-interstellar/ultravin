@@ -3,6 +3,8 @@
 Horizontal bars on a linear x-axis: the engines span ~3 orders of magnitude, so
 every SQL procedure collapses to a sliver next to ultravin — which is the honest
 visual of how far ahead the in-process engine is. ultravin rows are highlighted.
+One ultravin row carries every core count: its bars overlap, the fewest cores
+darkest and in front, so the row reads left to right as cores are added.
 
 Reads scripts/bench/results.json, which carries both the figures
 (`engines`: {engine: vins_per_second}) and the run's `provenance` — commit,
@@ -21,14 +23,10 @@ from pathlib import Path
 RESULTS = Path(__file__).parent / "results.json"
 OUT = Path(__file__).resolve().parents[2] / "assets" / "benchmark.svg"
 
-# (label, results-key, highlighted?) top -> bottom: ultravin by core count, then the rest.
-ROWS = [
-    ("ultravin — 12 cores, sorted", "ultravin-sorted-12", True),
-    ("ultravin — 12 cores, random", "ultravin-auto-12", True),
-    ("ultravin — 4 cores, sorted", "ultravin-sorted-4", True),
-    ("ultravin — 4 cores, random", "ultravin-batch", True),
-    ("ultravin — 1 core, sorted", "ultravin-sorted-1", True),
-    ("ultravin — 1 core, random", "ultravin", True),
+# (label, results-key or {cores: results-key}, highlighted?) top -> bottom.
+ROWS: list[tuple[str, str | dict[int, str], bool]] = [
+    ("ultravin — sorted", {1: "ultravin-sorted-1", 4: "ultravin-sorted-4", 12: "ultravin-sorted-12"}, True),
+    ("ultravin — random", {1: "ultravin", 4: "ultravin-batch", 12: "ultravin-auto-12"}, True),
     ("corgi v3", "corgi-v3", False),
     ("corgi v2", "corgi-v2", False),
     ("NHTSA MSSQL", "mssql", False),
@@ -40,6 +38,8 @@ X0, X1 = 220, 690  # plot area (px); X0 leaves room for the longest label
 WIDTH = X1 + 70  # leave room for the value label beside a bar near AXIS_MAX
 ROW_H, TOP = 30, 16
 BAR_H = 18
+STACK_H = 26  # an overlapping row is taller: it carries a label per core count
+CHAR_W = 6.1  # rough width of one 11px character, to decide whether a label fits
 
 
 def human(n: float) -> str:
@@ -48,6 +48,16 @@ def human(n: float) -> str:
     if n >= 100:
         return f"{n:.0f}"
     return f"{n:.1f}".rstrip("0").rstrip(".")
+
+
+def short(n: float) -> str:
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    return f"{n / 1000:.0f}k"
+
+
+def cores(n: int) -> str:
+    return "1 core" if n == 1 else f"{n} cores"
 
 
 def tick_label(value: int) -> str:
@@ -73,8 +83,14 @@ def x(value: float, axis_max: int) -> float:
 def render(data: dict) -> str:
     """Return the SVG text for one parsed results.json."""
     prov, engines = data["provenance"], data["engines"]
-    rows = [(lbl, engines[key], hi) for lbl, key, hi in ROWS if key in engines]
-    step, axis_max = axis(max(value for _, value, _ in rows))
+    # Each row is a list of (cores, value), fewest cores first; other engines have one bar.
+    rows: list[tuple[str, list[tuple[int, float]], bool]] = []
+    for lbl, key, hi in ROWS:
+        keys = key if isinstance(key, dict) else {0: key}
+        bars = sorted((n, engines[k]) for n, k in keys.items() if k in engines)
+        if bars:
+            rows.append((lbl, bars, hi))
+    step, axis_max = axis(max(value for _, bars, _ in rows for _, value in bars))
     ticks = [(value, tick_label(value)) for value in range(0, axis_max + 1, step)]
     height = TOP + len(rows) * ROW_H + 42
 
@@ -86,8 +102,8 @@ def render(data: dict) -> str:
     )
     s.append(
         f"<desc>Ultravin: {prov['date']}, {prov['machine']}, {prov['corpus']}; "
-        "Ultravin rows decode the corpus in random or sorted order, as marked, "
-        "at the worker count shown. "
+        "Ultravin rows decode the corpus in random or sorted order, as marked; "
+        "the overlapping bars in a row are the worker counts labelled on them. "
         "Other engines retain historical comparison figures.</desc>"
     )
     s.append(
@@ -95,9 +111,12 @@ def render(data: dict) -> str:
         ".background{fill:#ffffff}.label{fill:#57606a;font-size:13px}.value{fill:#57606a;font-size:13px}"
         ".strong{fill:#1f2328;font-weight:700}.axis{fill:#8c8c98;font-size:11px}"
         ".grid{stroke:#d8dee4;stroke-width:1}.bar{fill:#c3aef5}.bar-hi{fill:#7c4dff}"
+        ".s0{fill:#4a1fd6}.s1{fill:#7c4dff}.s2{fill:#b9a4ff}.s3{fill:#ddd3ff}"
+        ".on{fill:#ffffff;font-size:11px;font-weight:600}.on2,.on3{fill:#2a1466}"
         "@media(prefers-color-scheme:dark){"
         ".background{fill:#0d1117}.label,.value{fill:#9198a1}.strong{fill:#f0f6fc}.axis{fill:#7d8590}"
-        ".grid{stroke:#30363d}.bar{fill:#6b5bb0}.bar-hi{fill:#a786ff}}"
+        ".grid{stroke:#30363d}.bar{fill:#6b5bb0}.bar-hi{fill:#a786ff}"
+        ".s0{fill:#5b33e0}.s1{fill:#8a63ff}.s2{fill:#b9a4ff}.s3{fill:#ddd3ff}}"
         "</style>"
     )
 
@@ -109,17 +128,33 @@ def render(data: dict) -> str:
         gx = x(val, axis_max)
         s.append(f'<line class="grid" x1="{gx:.1f}" y1="{TOP - 2}" x2="{gx:.1f}" y2="{plot_bottom}"/>')
 
-    for i, (lbl, val, hi) in enumerate(rows):
+    for i, (lbl, bars, hi) in enumerate(rows):
         cy = TOP + i * ROW_H
-        by = cy + (ROW_H - BAR_H) / 2
-        text_y = by + BAR_H - 5
-        bw = x(val, axis_max) - X0
-        cls = "bar-hi" if hi else "bar"
+        bar_h = STACK_H if len(bars) > 1 else BAR_H
+        by = cy + (ROW_H - bar_h) / 2
+        text_y = cy + ROW_H / 2 + 4.5
+        peak = bars[-1][1]
+        bw = x(peak, axis_max) - X0
         lcls = "label strong" if hi else "label"
         vcls = "value strong" if hi else "value"
         s.append(f'<text class="{lcls}" x="{X0 - 10}" y="{text_y:.1f}" text-anchor="end">{lbl}</text>')
-        s.append(f'<rect class="{cls}" x="{X0}" y="{by:.1f}" width="{max(bw, 2):.1f}" height="{BAR_H}" rx="2"/>')
-        s.append(f'<text class="{vcls}" x="{X0 + bw + 6:.1f}" y="{text_y:.1f}">{human(val)}</text>')
+        if len(bars) == 1:
+            cls = "bar-hi" if hi else "bar"
+            s.append(f'<rect class="{cls}" x="{X0}" y="{by:.1f}" width="{max(bw, 2):.1f}" height="{bar_h}" rx="2"/>')
+        # Widest first, so the bar for fewer cores sits in front of the bar for more.
+        for level in reversed(range(len(bars) if len(bars) > 1 else 0)):
+            n, val = bars[level]
+            end = x(val, axis_max)
+            start = x(bars[level - 1][1], axis_max) if level else X0
+            s.append(f'<rect class="s{level}" x="{X0}" y="{by:.1f}" width="{end - X0:.1f}" height="{bar_h}" rx="2"/>')
+            # The widest bar's rate is printed beside the row, so its own label is the count alone.
+            wanted = [cores(n)] if level == len(bars) - 1 else [f"{cores(n)} · {short(val)}", str(n)]
+            fits = next((t for t in wanted if len(t) * CHAR_W + 10 <= end - start), None)
+            if fits:
+                s.append(
+                    f'<text class="on on{level}" x="{end - 5:.1f}" y="{text_y - 1:.1f}" text-anchor="end">{fits}</text>'
+                )
+        s.append(f'<text class="{vcls}" x="{X0 + bw + 6:.1f}" y="{text_y:.1f}">{human(peak)}</text>')
 
     # axis
     s.append(f'<line class="grid" x1="{X0}" y1="{plot_bottom}" x2="{X1}" y2="{plot_bottom}"/>')
