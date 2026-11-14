@@ -24,6 +24,8 @@ Fetch = Callable[[], Iterable[str]]
 
 def fetch_vins() -> Iterator[str]:
     """Stream the dataset's VIN column in its published order."""
+    # Fixed https://data.ny.gov URL; nothing in it is caller-controlled.
+    # nosemgrep: dynamic-urllib-use-detected
     with urllib.request.urlopen(URL, timeout=600) as response:  # noqa: S310 - fixed https URL
         rows = csv.reader(line.decode() for line in response)
         next(rows)
