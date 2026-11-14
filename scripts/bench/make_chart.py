@@ -4,7 +4,7 @@ Horizontal bars on a linear x-axis: the engines span ~3 orders of magnitude, so
 every SQL procedure collapses to a sliver next to ultravin — which is the honest
 visual of how far ahead the in-process engine is. ultravin rows are highlighted.
 One ultravin row carries every core count: its bars overlap, the fewest cores
-darkest and in front, so the row reads left to right as cores are added.
+darkest and in front, each ending in its own rate, with a legend for the shades.
 
 Reads scripts/bench/results.json, which carries both the figures
 (`engines`: {engine: vins_per_second}) and the run's `provenance` — commit,
@@ -36,10 +36,10 @@ ROWS: list[tuple[str, str | dict[int, str], bool]] = [
 
 X0, X1 = 220, 690  # plot area (px); X0 leaves room for the longest label
 WIDTH = X1 + 70  # leave room for the value label beside a bar near AXIS_MAX
-ROW_H, TOP = 30, 16
+ROW_H, TOP = 30, 34
 BAR_H = 18
 STACK_H = 26  # an overlapping row is taller: it carries a label per core count
-CHAR_W = 6.1  # rough width of one 11px character, to decide whether a label fits
+CHAR_W = 6.1  # rough width of one 11px character, to space the legend
 
 
 def human(n: float) -> str:
@@ -54,6 +54,16 @@ def short(n: float) -> str:
     if n >= 1_000_000:
         return f"{n / 1_000_000:.1f}M"
     return f"{n / 1000:.0f}k"
+
+
+def legend(counts: list[int]) -> list[str]:
+    """One swatch per core count, in the bars' own shades, above the plot."""
+    out, lx = [], float(X0)
+    for level, n in enumerate(counts):
+        out.append(f'<rect class="s{level}" x="{lx:.1f}" y="{TOP - 22}" width="11" height="11" rx="2"/>')
+        out.append(f'<text class="axis" x="{lx + 16:.1f}" y="{TOP - 12.5}">{cores(n)}</text>')
+        lx += 16 + len(cores(n)) * CHAR_W + 14
+    return out
 
 
 def cores(n: int) -> str:
@@ -103,7 +113,7 @@ def render(data: dict) -> str:
     s.append(
         f"<desc>Ultravin: {prov['date']}, {prov['machine']}, {prov['corpus']}; "
         "Ultravin rows decode the corpus in random or sorted order, as marked; "
-        "the overlapping bars in a row are the worker counts labelled on them. "
+        "the overlapping bars in a row are the worker counts in the legend. "
         "Other engines retain historical comparison figures.</desc>"
     )
     s.append(
@@ -123,6 +133,7 @@ def render(data: dict) -> str:
     s.append(f'<rect class="background" width="{WIDTH}" height="{height}" rx="8"/>')
 
     plot_bottom = TOP + len(rows) * ROW_H
+    s.extend(legend(sorted({n for _, bars, _ in rows if len(bars) > 1 for n, _ in bars})))
     # gridlines
     for val, _ in ticks:
         gx = x(val, axis_max)
@@ -143,18 +154,14 @@ def render(data: dict) -> str:
             s.append(f'<rect class="{cls}" x="{X0}" y="{by:.1f}" width="{max(bw, 2):.1f}" height="{bar_h}" rx="2"/>')
         # Widest first, so the bar for fewer cores sits in front of the bar for more.
         for level in reversed(range(len(bars) if len(bars) > 1 else 0)):
-            n, val = bars[level]
-            end = x(val, axis_max)
-            start = x(bars[level - 1][1], axis_max) if level else X0
+            end = x(bars[level][1], axis_max)
             s.append(f'<rect class="s{level}" x="{X0}" y="{by:.1f}" width="{end - X0:.1f}" height="{bar_h}" rx="2"/>')
-            # The widest bar's rate is printed beside the row, so its own label is the count alone.
-            wanted = [cores(n)] if level == len(bars) - 1 else [f"{cores(n)} · {short(val)}", str(n)]
-            fits = next((t for t in wanted if len(t) * CHAR_W + 10 <= end - start), None)
-            if fits:
-                s.append(
-                    f'<text class="on on{level}" x="{end - 5:.1f}" y="{text_y - 1:.1f}" text-anchor="end">{fits}</text>'
-                )
-        s.append(f'<text class="{vcls}" x="{X0 + bw + 6:.1f}" y="{text_y:.1f}">{human(peak)}</text>')
+            s.append(
+                f'<text class="on on{level}" x="{end - 5:.1f}" y="{text_y - 1:.1f}" '
+                f'text-anchor="end">{short(bars[level][1])}</text>'
+            )
+        if len(bars) == 1:
+            s.append(f'<text class="{vcls}" x="{X0 + bw + 6:.1f}" y="{text_y:.1f}">{human(peak)}</text>')
 
     # axis
     s.append(f'<line class="grid" x1="{X0}" y1="{plot_bottom}" x2="{X1}" y2="{plot_bottom}"/>')

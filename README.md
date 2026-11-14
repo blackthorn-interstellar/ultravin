@@ -302,7 +302,7 @@ MSSQL `spVinDecode` baseline of 22.5 VIN/s.
 
 | engine | VIN/s | vs NHTSA MSSQL |
 |---|---:|---:|
-| **ultravin** — 12 cores, sorted input | **2,375,066** | ~105,559× faster |
+| **ultravin** — 12 cores, sorted input | **2,375,066** | ~105,558× faster |
 | **ultravin** — 12 cores | **1,439,568** | ~63,981× faster |
 | **ultravin** — 4 cores, sorted input | **1,606,742** | ~71,411× faster |
 | **ultravin** — 4 cores | **891,536** | ~39,624× faster |
@@ -312,7 +312,7 @@ MSSQL `spVinDecode` baseline of 22.5 VIN/s.
 | corgi v2 — `@cardog/corgi` 2.0.1 (SQLite) | ~33 | ~1.5× faster |
 | NHTSA MSSQL — `spVinDecode` (SQL Server) | 22.5 | 1× (baseline) |
 | NHTSA Postgres — `spvindecode` | 19.5 | ~1.2× slower |
-| NHTSA vPIC web API — public rate limit | ~10 | ~2.3× slower |
+| NHTSA vPIC web API — public rate limit | ~10 | ~2.25× slower |
 
 Commit `56cf2e9`, September 25, 2026, Apple M2 Max (eight performance and four
 efficiency cores), 20,000,000 unique synthetic VINs on one, four, or twelve

@@ -118,7 +118,7 @@ count and input order ran this build and the previous headline's decoder
 
 | workers | input | previous VIN/s | this build VIN/s | cycles/VIN, previous → this | vs NHTSA MSSQL |
 |---:|---|---:|---:|---:|---:|
-| 12 | sorted | 2,078,726 | **2,375,066** | 11.96k → 10.34k (1.16×) | ~105,559× faster |
+| 12 | sorted | 2,078,726 | **2,375,066** | 11.96k → 10.34k (1.16×) | ~105,558× faster |
 | 12 | random | 1,111,145 | **1,439,568** | 21.39k → 19.15k (1.12×) | ~63,981× faster |
 | 4 | sorted | 1,405,328 | **1,606,742** | 9.31k → 7.92k (1.18×) | ~71,411× faster |
 | 4 | random | 709,574 | **891,536** | 17.34k → 14.51k (1.19×) | ~39,624× faster |
