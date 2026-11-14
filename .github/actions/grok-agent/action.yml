@@ -89,11 +89,6 @@ inputs:
     default: 79f49625f153923db491a5c290e9b04c3444da488b6b9d6aac533ccb5bff2455
 
 outputs:
-  execution_file:
-    description: >-
-      Path to the session transcript (streaming-json JSONL). With a schema it is
-      the investigation transcript with the formalization's events appended.
-    value: ${{ steps.run.outputs.execution_file }}
   structured_output:
     description: Compact JSON matching json_schema, or empty when no schema was given.
     value: ${{ steps.run.outputs.structured_output }}
@@ -236,10 +231,7 @@ runs:
           if [ "$rc" = 0 ]; then rc="$verdict_rc"; fi
         fi
 
-        {
-          echo "execution_file=$transcript"
-          echo "structured_output=$structured"
-        } >> "$GITHUB_OUTPUT"
+        echo "structured_output=$structured" >> "$GITHUB_OUTPUT"
 
         case "$rc" in
           0) ;;

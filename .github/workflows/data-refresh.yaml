@@ -428,7 +428,7 @@ jobs:
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: agent-fix-transcript
-          # The literal path, not steps.agent.outputs.execution_file: a failed
+          # The literal path, not an action output: a failed
           # composite step's outputs may not propagate, and a lost session is
           # exactly when the transcript matters most.
           path: ${{ runner.temp }}/grok-transcript.jsonl
