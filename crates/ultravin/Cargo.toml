@@ -97,3 +97,8 @@ libc = "0.2.189"
 [[bench]]
 name = "decode"
 harness = false
+
+# scripts/bench/api_compare.py: every public output path, including Arrow and Parquet.
+[[example]]
+name = "api_compare"
+required-features = ["parquet"]
