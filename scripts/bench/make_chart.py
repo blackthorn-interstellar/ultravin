@@ -36,7 +36,7 @@ ROWS: list[tuple[str, str | dict[int, str], bool]] = [
 
 X0, X1 = 220, 690  # plot area (px); X0 leaves room for the longest label
 WIDTH = X1 + 70  # leave room for the value label beside a bar near AXIS_MAX
-ROW_H, TOP = 30, 34
+ROW_H, TOP = 30, 16
 BAR_H = 18
 STACK_H = 26  # an overlapping row is taller: it carries a label per core count
 CHAR_W = 6.1  # rough width of one 11px character, to space the legend
@@ -56,13 +56,15 @@ def short(n: float) -> str:
     return f"{n / 1000:.0f}k"
 
 
-def legend(counts: list[int]) -> list[str]:
-    """One swatch per core count, in the bars' own shades, above the plot."""
-    out, lx = [], float(X0)
-    for level, n in enumerate(counts):
-        out.append(f'<rect class="s{level}" x="{lx:.1f}" y="{TOP - 22}" width="11" height="11" rx="2"/>')
-        out.append(f'<text class="axis" x="{lx + 16:.1f}" y="{TOP - 12.5}">{cores(n)}</text>')
-        lx += 16 + len(cores(n)) * CHAR_W + 14
+def legend(counts: list[int], y: float) -> list[str]:
+    """One swatch per core count, in the bars' own shades, centred under the axis title."""
+    widths = [16 + len(cores(n)) * CHAR_W for n in counts]
+    lx = (X0 + X1) / 2 - (sum(widths) + 14 * (len(counts) - 1)) / 2
+    out = []
+    for level, (n, width) in enumerate(zip(counts, widths, strict=True)):
+        out.append(f'<rect class="s{level}" x="{lx:.1f}" y="{y - 9.5:.1f}" width="11" height="11" rx="2"/>')
+        out.append(f'<text class="axis" x="{lx + 16:.1f}" y="{y:.1f}">{cores(n)}</text>')
+        lx += width + 14
     return out
 
 
@@ -102,7 +104,8 @@ def render(data: dict) -> str:
             rows.append((lbl, bars, hi))
     step, axis_max = axis(max(value for _, bars, _ in rows for _, value in bars))
     ticks = [(value, tick_label(value)) for value in range(0, axis_max + 1, step)]
-    height = TOP + len(rows) * ROW_H + 42
+    counts = sorted({n for _, bars, _ in rows if len(bars) > 1 for n, _ in bars})
+    height = TOP + len(rows) * ROW_H + (64 if counts else 42)
 
     s: list[str] = []
     s.append(
@@ -133,7 +136,6 @@ def render(data: dict) -> str:
     s.append(f'<rect class="background" width="{WIDTH}" height="{height}" rx="8"/>')
 
     plot_bottom = TOP + len(rows) * ROW_H
-    s.extend(legend(sorted({n for _, bars, _ in rows if len(bars) > 1 for n, _ in bars})))
     # gridlines
     for val, _ in ticks:
         gx = x(val, axis_max)
@@ -172,6 +174,7 @@ def render(data: dict) -> str:
         f'<text class="axis" x="{(X0 + X1) / 2:.1f}" y="{plot_bottom + 32}" '
         'text-anchor="middle">VINs decoded per second — higher is better</text>'
     )
+    s.extend(legend(counts, plot_bottom + 52) if counts else [])
     s.append("</svg>")
     return "\n".join(s) + "\n"
 
