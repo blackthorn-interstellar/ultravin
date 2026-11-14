@@ -1,9 +1,8 @@
 //! Diagnostic-only stage and Rayon-worker spans.
 //!
-//! Decode and cleanup IDs are independent phase ordinals. They align in the
-//! diagnostic probe, which drops one managed result per decode in FIFO order;
-//! they are not correlation IDs for arbitrary concurrent API use or `into_vec`.
-//! Reset and snapshot only while the decoder pool is quiescent.
+//! Decode IDs are phase ordinals, not correlation IDs for arbitrary
+//! concurrent API use. Reset and snapshot only while the decoder pool is
+//! quiescent.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -47,7 +46,6 @@ struct Recorder {
     buckets: [Mutex<Vec<RawEvent>>; MAX_WORKERS + 1],
     dropped: AtomicUsize,
     decode_batches: AtomicUsize,
-    cleanup_batches: AtomicUsize,
     sample_every: usize,
 }
 
@@ -58,7 +56,6 @@ fn recorder() -> &'static Recorder {
         buckets: std::array::from_fn(|_| Mutex::new(Vec::new())),
         dropped: AtomicUsize::new(0),
         decode_batches: AtomicUsize::new(0),
-        cleanup_batches: AtomicUsize::new(0),
         sample_every: std::env::var("ULTRAVIN_STAGE_TRACE_EVERY")
             .ok()
             .and_then(|value| value.parse().ok())
@@ -99,10 +96,6 @@ fn sample(counter: &AtomicUsize) -> Option<usize> {
 
 pub(crate) fn sample_decode_batch() -> Option<usize> {
     sample(&recorder().decode_batches)
-}
-
-pub(crate) fn sample_cleanup_batch() -> Option<usize> {
-    sample(&recorder().cleanup_batches)
 }
 
 pub(crate) struct WorkerSpan {
@@ -182,7 +175,6 @@ pub fn reset() {
     }
     recorder.dropped.store(0, Ordering::Relaxed);
     recorder.decode_batches.store(0, Ordering::Relaxed);
-    recorder.cleanup_batches.store(0, Ordering::Relaxed);
 }
 
 /// Copy the bounded event stream for diagnostic serialization.

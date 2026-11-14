@@ -295,43 +295,73 @@ fn decode_batch<'py>(
         };
         return Ok(vec![result]);
     }
-    if !full {
-        let results =
-            py.detach(|| ultravin::Db::embedded().decode_batch_flat_at(&vins, years, now_micros));
-        let mut out = Vec::with_capacity(vins.len());
-        for result in results {
-            out.push(flat_to_dict(py, &result)?);
+    // The stream decodes with the GIL released and hands over each batch
+    // here (flat results already flattened on the workers); taking the GIL
+    // per batch to build its dicts lets the workers decode the next ones
+    // meanwhile, and keeps only a bounded number of native results alive
+    // beside the growing list.
+    let db = ultravin::Db::embedded();
+    let mut dicts = Dicts::new(vins.len());
+    let decoded = py.detach(|| {
+        if full {
+            db.decode_batch_stream_at(&vins, years, now_micros, |batch| {
+                dicts.build(batch.input_indices().zip(batch.iter()), result_to_dict)
+            })
+        } else {
+            let flatten = |result: &DecodeResult<'static>| db.flatten(result);
+            db.decode_batch_map_at(&vins, years, now_micros, flatten, |rows| {
+                dicts.build(rows.into_iter(), |py, r| flat_to_dict(py, &r))
+            })
         }
-        return Ok(out);
+    });
+    decoded.map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
+    dicts.finish(py)
+}
+
+/// A batch call's dicts, placed by input index as batches arrive.
+struct Dicts {
+    out: Vec<Option<Py<PyDict>>>,
+    /// The first conversion error; no dicts are built after it.
+    failed: Option<PyErr>,
+}
+
+impl Dicts {
+    fn new(rows: usize) -> Self {
+        Self {
+            out: (0..rows).map(|_| None).collect(),
+            failed: None,
+        }
     }
-    // The stream decodes with the GIL released and lends each batch here;
-    // taking the GIL per batch to build its dicts lets the workers decode the
-    // next ones meanwhile, and keeps only a bounded number of native results
-    // alive beside the growing list.
-    let mut out: Vec<Option<Py<PyDict>>> = vins.iter().map(|_| None).collect();
-    let mut failed = None;
-    py.detach(|| {
-        ultravin::Db::embedded().decode_batch_stream_at(&vins, years, now_micros, |batch| {
-            if failed.is_none() {
-                Python::attach(|py| {
-                    for (index, result) in batch.input_indices().zip(batch.iter()) {
-                        match result_to_dict(py, result) {
-                            Ok(dict) => out[index] = Some(dict.unbind()),
-                            Err(error) => return failed = Some(error),
-                        }
-                    }
-                });
+
+    /// Build one batch's dicts, taking the GIL once.
+    fn build<R>(
+        &mut self,
+        rows: impl Iterator<Item = (usize, R)>,
+        to_dict: impl for<'py> Fn(Python<'py>, R) -> PyResult<Bound<'py, PyDict>>,
+    ) {
+        if self.failed.is_some() {
+            return;
+        }
+        Python::attach(|py| {
+            for (index, row) in rows {
+                match to_dict(py, row) {
+                    Ok(dict) => self.out[index] = Some(dict.unbind()),
+                    Err(error) => return self.failed = Some(error),
+                }
             }
-        })
-    })
-    .map_err(|error| PyRuntimeError::new_err(error.to_string()))?;
-    if let Some(error) = failed {
-        return Err(error);
+        });
     }
-    Ok(out
-        .into_iter()
-        .map(|dict| dict.expect("every input is decoded").into_bound(py))
-        .collect())
+
+    fn finish(self, py: Python<'_>) -> PyResult<Vec<Bound<'_, PyDict>>> {
+        if let Some(error) = self.failed {
+            return Err(error);
+        }
+        Ok(self
+            .out
+            .into_iter()
+            .map(|dict| dict.expect("every input is decoded").into_bound(py))
+            .collect())
+    }
 }
 
 /// Decode a single VIN to a JSON object string (same shape as `decode`).

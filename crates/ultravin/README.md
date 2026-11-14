@@ -48,9 +48,10 @@ One captured clock covers the entire job, including calibration.
 automatic selection. The default working-output budget is 512 MiB, excluding
 the input and database.
 
-`decode_batch`, `decode_batch_json` and full JSON lines of 8,192 VINs or more
-run on this stream; shorter calls decode directly, where the stream's
-start-up would cost more than it saves.
+Every batch call (`decode_batch`, `decode_batch_flat`, `decode_batch_json`,
+`decode_batch_json_flat` and JSON lines) of 8,192 VINs or more runs on this
+stream; shorter calls decode directly, where the stream's start-up would cost
+more than it saves. Flat results are full results collapsed by `Db::flatten`.
 `Db::decode_batch_stream_at` is the same engine with a caller year per VIN
 and no calibration step: it lends each batch to a callback instead of
 returning a `Vec`, so only a bounded number of results are ever alive. It
@@ -58,6 +59,9 @@ visits the VINs sorted by prefix, for memory locality, so its batches arrive
 out of input order; `NativeBatch::input_indices` places each result. Within
 one call, a clean VIN that differs from an earlier one only in its
 serial shares that result instead of decoding again.
+`Db::decode_batch_map_at` is the same, but converts each result on the
+workers (`|r| db.flatten(r)`, say) and hands over the converted values with
+their input positions.
 
 ## The data
 
@@ -142,13 +146,9 @@ flags. Cache keys never contain VINs or timestamps, so more input rows do not
 grow the cache beyond the fixed set of supported combinations. Projection also
 reuses a bounded scratch buffer per worker.
 
-For flat batches processed by reference, `decode_batch_flat_managed` and
-`decode_batch_flat_managed_at` return `BatchResults<FlatResult>` with
-indexing, iteration, and serialization. Dropping a large batch completes its
-cleanup across decoder workers before returning. Calling `.into_vec()` or
-consuming it with `.into_iter()` transfers cleanup responsibility to the
-returned vector or iterator. For full results, lend batches from
-`Db::decode_batch_stream_at` instead of keeping them all.
+To process a large batch without keeping every result alive, lend batches
+from `Db::decode_batch_stream_at` or `Db::decode_batch_map_at` instead of
+collecting a `Vec`.
 
 Rust callers migrating the first three fields from `String` can read them with
 `.as_ref()`, construct them with `"text".into()`, or obtain an owned `String`

@@ -13,7 +13,6 @@
 pub mod adaptive;
 #[cfg(feature = "arrow")]
 pub mod arrow_io;
-mod batch_results;
 mod checkdigit;
 mod conversion;
 pub mod cover;
@@ -49,7 +48,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 pub use arrow_io::{
     ArrowDecoder, ArrowError, ArrowOpts, ColumnNames, ELEMENT_ID_KEY, VARIABLE_KEY,
 };
-pub use batch_results::BatchResults;
 pub use checkdigit::check_digit;
 pub use db::Db;
 pub use elements::Elements;
@@ -158,9 +156,9 @@ pub enum FlatValue {
 ///
 /// Same header fields as [`DecodeResult`]; `elements` is replaced by
 /// `attributes`, which drops the 13 per-element provenance columns and keeps the
-/// pair almost every caller actually reads. Its decode path resolves only the
-/// output values, avoiding owned provenance strings; Python marshalling then
-/// builds one attribute entry instead of a 15-key dict per element.
+/// pair almost every caller actually reads. It is a full result collapsed
+/// ([`Db::flatten`]); Python marshalling then builds one attribute entry
+/// instead of a 15-key dict per element.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct FlatResult<'a> {
     pub vin: String,
@@ -416,14 +414,8 @@ pub fn decode_flat(input: &str, year: Option<i32>) -> FlatResult<'static> {
 
 /// [`decode_flat`] at an explicit instant.
 pub fn decode_flat_at(input: &str, year: Option<i32>, now_micros: i64) -> FlatResult<'static> {
-    decode_items(
-        Db::embedded(),
-        input,
-        now_micros,
-        current_year_at(now_micros),
-        year,
-    )
-    .flat()
+    let db = Db::embedded();
+    db.flatten(&db.decode_at(input, year, now_micros))
 }
 
 /// Decode a VIN against an explicit database and clock (injectable for tests),
@@ -462,8 +454,8 @@ pub fn decode_batch_at(
     Db::embedded().decode_batch_at(inputs, years, now_micros)
 }
 
-/// [`decode_batch`] with the [`FlatResult`] shape. Flattening runs inside the
-/// parallel region, so only the (much smaller) marshalling is left to the caller.
+/// [`decode_batch`] with the [`FlatResult`] shape: each result is flattened
+/// ([`Db::flatten`]) on the decode workers.
 pub fn decode_batch_flat(
     inputs: &[String],
     years: Option<&[Option<i32>]>,
@@ -478,23 +470,6 @@ pub fn decode_batch_flat_at(
     now_micros: i64,
 ) -> Vec<FlatResult<'static>> {
     Db::embedded().decode_batch_flat_at(inputs, years, now_micros)
-}
-
-/// [`decode_batch_flat`] with parallel cleanup when the returned container is dropped.
-pub fn decode_batch_flat_managed(
-    inputs: &[String],
-    years: Option<&[Option<i32>]>,
-) -> BatchResults<FlatResult<'static>> {
-    Db::embedded().decode_batch_flat_managed(inputs, years)
-}
-
-/// [`decode_batch_flat_managed`] at an explicit instant.
-pub fn decode_batch_flat_managed_at(
-    inputs: &[String],
-    years: Option<&[Option<i32>]>,
-    now_micros: i64,
-) -> BatchResults<FlatResult<'static>> {
-    Db::embedded().decode_batch_flat_managed_at(inputs, years, now_micros)
 }
 
 /// The decode API against an explicit database, for a [`Db`] you loaded yourself
@@ -564,7 +539,7 @@ impl Db {
         F: for<'batch> FnMut(NativeBatch<'batch, 'db>),
     {
         if inputs.len() < STREAM_MIN_ROWS {
-            let mut results = batch_at(self, inputs, years, now_micros, |r| Some(r.full()));
+            let mut results = batch_at(self, inputs, years, now_micros, |_, r| Some(r.full()));
             if !results.is_empty() {
                 consume(NativeBatch::whole(&mut results));
             }
@@ -606,39 +581,102 @@ impl Db {
         )
     }
 
-    /// Full JSON of every input: an array, or with `jsonl` one object per
-    /// line, each line ending in a newline. Workers write each row's text.
+    /// [`Db::decode_batch_stream_at`], but `convert` turns each result into a
+    /// `T` on the workers, and `consume` gets each batch's values paired with
+    /// their input positions; batches arrive grouped by VIN prefix, not in
+    /// input order. A call shorter than 8,192 VINs decodes directly and hands
+    /// over all its values at once. It must not be called from a
+    /// decoder-pool thread either.
+    pub fn decode_batch_map_at<'db, T, C, F>(
+        &'db self,
+        inputs: &[String],
+        years: Option<&[Option<i32>]>,
+        now_micros: i64,
+        convert: C,
+        mut consume: F,
+    ) -> Result<(), NativeStreamError>
+    where
+        T: Send,
+        C: Fn(&DecodeResult<'db>) -> T + Sync,
+        F: FnMut(Vec<(usize, T)>),
+    {
+        if inputs.len() < STREAM_MIN_ROWS {
+            let values = batch_at(self, inputs, years, now_micros, |i, r| {
+                (i, convert(&r.full()))
+            });
+            if !values.is_empty() {
+                consume(values);
+            }
+            return Ok(());
+        }
+        let convert = |batch: &NativeBatch<'_, 'db>| {
+            let values = batch.iter().map(&convert);
+            batch.input_indices().zip(values).collect::<Vec<_>>()
+        };
+        self.batch_stream_at(inputs, years, now_micros, convert, |_, values| {
+            consume(values)
+        })
+    }
+
+    /// [`Db::decode_batch_map_at`] collected in input order, streaming only
+    /// calls of at least `stream_min_rows`.
+    fn batch_map_at<'db, T: Send>(
+        &'db self,
+        inputs: &[String],
+        years: Option<&[Option<i32>]>,
+        now_micros: i64,
+        stream_min_rows: usize,
+        convert: impl Fn(&DecodeResult<'db>) -> T + Sync,
+    ) -> Vec<T> {
+        if inputs.len() < stream_min_rows {
+            return batch_at(self, inputs, years, now_micros, |_, r| convert(&r.full()));
+        }
+        let mut out: Vec<Option<T>> = inputs.iter().map(|_| None).collect();
+        self.decode_batch_map_at(inputs, years, now_micros, convert, |values| {
+            for (index, value) in values {
+                out[index] = Some(value);
+            }
+        })
+        .expect("native decode workers");
+        out.into_iter()
+            .map(|value| value.expect("every input is decoded"))
+            .collect()
+    }
+
+    /// JSON of every input, full or flat: an array, or with `jsonl` one
+    /// object per line, each line ending in a newline. Workers write each
+    /// row's text.
     fn batch_json_at(
         &self,
         inputs: &[String],
         years: Option<&[Option<i32>]>,
         now_micros: i64,
+        full: bool,
         jsonl: bool,
     ) -> String {
-        if inputs.len() < STREAM_MIN_ROWS {
-            let encode = |r: RawResult<'_>| json::encode(self, &r.full());
-            return frame_json(batch_at(self, inputs, years, now_micros, encode), jsonl);
-        }
-        let mut parts = vec![String::new(); inputs.len()];
-        let encode = |batch: &NativeBatch<'_, '_>| {
-            let encode = |result| json::encode(self, result);
-            batch.iter().map(encode).collect::<Vec<_>>()
+        let min_rows = if full {
+            STREAM_MIN_ROWS
+        } else {
+            FLAT_STREAM_MIN_ROWS
         };
-        self.batch_stream_at(inputs, years, now_micros, encode, |batch, texts| {
-            for (index, text) in batch.input_indices().zip(texts) {
-                parts[index] = text;
+        let parts = self.batch_map_at(inputs, years, now_micros, min_rows, |result| {
+            if full {
+                json::encode(self, result)
+            } else {
+                serde_json::to_string(&self.flatten(result))
+                    .expect("FlatResult is infallibly serializable")
             }
-        })
-        .expect("native decode workers");
+        });
         frame_json(parts, jsonl)
     }
+
     /// [`decode_batch_flat`](fn@decode_batch_flat) against this database.
     pub fn decode_batch_flat(
         &self,
         inputs: &[String],
         years: Option<&[Option<i32>]>,
     ) -> Vec<FlatResult<'_>> {
-        batch_at(self, inputs, years, now_micros(), RawResult::flat)
+        self.decode_batch_flat_at(inputs, years, now_micros())
     }
 
     /// [`Db::decode_batch_flat`] at an explicit instant.
@@ -648,33 +686,43 @@ impl Db {
         years: Option<&[Option<i32>]>,
         now_micros: i64,
     ) -> Vec<FlatResult<'_>> {
-        batch_at(self, inputs, years, now_micros, RawResult::flat)
+        self.batch_map_at(inputs, years, now_micros, FLAT_STREAM_MIN_ROWS, |result| {
+            self.flatten(result)
+        })
     }
 
-    /// [`Db::decode_batch_flat`] with parallel cleanup for large returned batches.
-    pub fn decode_batch_flat_managed(
-        &self,
-        inputs: &[String],
-        years: Option<&[Option<i32>]>,
-    ) -> BatchResults<FlatResult<'_>> {
-        BatchResults::new(self.decode_batch_flat(inputs, years))
-    }
-
-    /// [`Db::decode_batch_flat_managed`] at an explicit instant.
-    pub fn decode_batch_flat_managed_at(
-        &self,
-        inputs: &[String],
-        years: Option<&[Option<i32>]>,
-        now_micros: i64,
-    ) -> BatchResults<FlatResult<'_>> {
-        BatchResults::new(self.decode_batch_flat_at(inputs, years, now_micros))
+    /// `result` as a [`FlatResult`], as `FlatResult::from` makes it.
+    pub fn flatten<'a>(&self, result: &DecodeResult<'a>) -> FlatResult<'a> {
+        let values = result
+            .elements
+            .iter()
+            .map(|e| (e.variable, e.element_id, e.value.to_string()));
+        FlatResult {
+            vin: result.vin.clone(),
+            wmi: result.wmi.clone(),
+            descriptor: result.descriptor.clone(),
+            model_year: result.model_year,
+            error_codes: result.error_codes.clone(),
+            check_digit_valid: result.check_digit_valid,
+            corrected_vin: result.corrected_vin.clone(),
+            attributes: if self.unique_public_variables() {
+                flatten_unique_variables(values)
+            } else {
+                flatten_values(values)
+            },
+        }
     }
 }
 
-/// Below this many rows a full or JSON batch call decodes directly on the
-/// pool, uncached: the stream's start-up and hand-offs measured 5% slower at
-/// 4,096 never-repeating VINs on 12 workers, 3% at 8,192 (more at 100-1,000).
+/// Below this many rows a batch call decodes directly on the pool, uncached:
+/// the stream's start-up and hand-offs measured 5% slower at 4,096
+/// never-repeating VINs on 12 workers, 3% at 8,192 (more at 100-1,000).
 const STREAM_MIN_ROWS: usize = 8192;
+
+/// The same for the flat Rust and JSON batch calls, which hand every row's
+/// text back to the caller: on the stream, calls of 10,000-50,000
+/// never-repeating VINs measured 1-20% slower than decoding directly.
+const FLAT_STREAM_MIN_ROWS: usize = 65_536;
 
 /// The thread pool the batch paths run on, rebuilt whenever the pid changes.
 ///
@@ -852,38 +900,26 @@ fn collect_in_input_order<T: Send>(
     }
 }
 
-/// Shared body of the batch paths: decode every input in parallel over the shared
-/// archive, mapped through `shape`. Output order matches `inputs`.
+/// The short batch calls' body: decode every input in parallel over the
+/// shared archive, uncached, mapped through `shape` with its input index.
+/// Output order matches `inputs`.
 fn batch_at<'a, T: Send>(
     db: &'a Db,
     inputs: &[String],
     years: Option<&[Option<i32>]>,
     now_micros: i64,
-    shape: impl Fn(RawResult<'a>) -> T + Sync,
+    shape: impl Fn(usize, RawResult<'a>) -> T + Sync,
 ) -> Vec<T> {
     let current_year = current_year_at(now_micros);
     install_batch_work(|| {
         collect_in_input_order(inputs, |i| {
-            shape(decode_items(
-                db,
-                &inputs[i],
-                now_micros,
-                current_year,
-                year_at(years, i),
-            ))
+            let year = year_at(years, i);
+            shape(
+                i,
+                decode_items(db, &inputs[i], now_micros, current_year, year),
+            )
         })
     })
-}
-
-fn restore_input_order<T>(order: &mut [u32], values: &mut [T]) {
-    debug_assert_eq!(order.len(), values.len());
-    for position in 0..order.len() {
-        while order[position] as usize != position {
-            let destination = order[position] as usize;
-            order.swap(position, destination);
-            values.swap(position, destination);
-        }
-    }
 }
 
 /// Decode one VIN to a compact JSON object string (same shape as the [`decode`]
@@ -928,7 +964,7 @@ pub fn decode_batch_json_at(
     years: Option<&[Option<i32>]>,
     now_micros: i64,
 ) -> String {
-    Db::embedded().batch_json_at(inputs, years, now_micros, false)
+    Db::embedded().batch_json_at(inputs, years, now_micros, true, false)
 }
 
 /// [`decode_batch_json`] with the [`FlatResult`] shape.
@@ -942,7 +978,7 @@ pub fn decode_batch_json_flat_at(
     years: Option<&[Option<i32>]>,
     now_micros: i64,
 ) -> String {
-    batch_json_flat(inputs, years, now_micros, false)
+    Db::embedded().batch_json_at(inputs, years, now_micros, false, false)
 }
 
 /// Decode a batch as newline-delimited JSON, including a trailing newline.
@@ -952,45 +988,7 @@ pub fn decode_batch_jsonl_at(
     now_micros: i64,
     full: bool,
 ) -> String {
-    if full {
-        Db::embedded().batch_json_at(inputs, years, now_micros, true)
-    } else {
-        batch_json_flat(inputs, years, now_micros, true)
-    }
-}
-
-fn batch_json_flat(
-    inputs: &[String],
-    years: Option<&[Option<i32>]>,
-    now_micros: i64,
-    jsonl: bool,
-) -> String {
-    use rayon::prelude::*;
-    let current_year = current_year_at(now_micros);
-    let db = Db::embedded();
-    // Fuse decode + serialize so both happen in parallel; reorder the object
-    // strings in place to avoid two additional whole-batch vectors.
-    let parts: Vec<String> = install_batch_work(|| {
-        let mut order = locality_order(inputs);
-        let mut decoded = Vec::new();
-        order
-            .par_iter()
-            .map(|&i| {
-                let flat = decode_items(
-                    db,
-                    &inputs[i as usize],
-                    now_micros,
-                    current_year,
-                    year_at(years, i as usize),
-                )
-                .flat();
-                serde_json::to_string(&flat).expect("FlatResult is infallibly serializable")
-            })
-            .collect_into_vec(&mut decoded);
-        restore_input_order(&mut order, &mut decoded);
-        decoded
-    });
-    frame_json(parts, jsonl)
+    Db::embedded().batch_json_at(inputs, years, now_micros, full, true)
 }
 
 /// Join JSON objects as an array, or with `jsonl` as lines that each end in
@@ -1545,45 +1543,6 @@ impl<'a> RawResult<'a> {
         };
         workspace.put_items(self.items);
         result
-    }
-
-    fn flat(mut self) -> FlatResult<'a> {
-        self.materialize_defaults();
-        resolve::resolve_xxx(self.db, &mut self.items);
-        let mut values: Vec<_> = self
-            .items
-            .into_iter()
-            .filter_map(|it| {
-                let e = self.db.element_by_id(it.element_id)?;
-                public_decode(self.db, e)?;
-                Some((
-                    tables::group_rank(self.db.s(e.groupname.to_native())),
-                    it.element_id,
-                    self.db.s(e.name.to_native()),
-                    it.value.into_owned(),
-                ))
-            })
-            .collect();
-        // Stable within an element: repeated notes keep their original order.
-        values.sort_by_key(|&(rank, id, _, _)| (rank, id));
-        let values = values
-            .into_iter()
-            .map(|(_, id, name, value)| (name, id, value));
-        let attributes = if self.db.unique_public_variables() {
-            flatten_unique_variables(values)
-        } else {
-            flatten_values(values)
-        };
-        FlatResult {
-            vin: self.vin,
-            wmi: self.wmi,
-            descriptor: self.descriptor,
-            model_year: self.model_year,
-            error_codes: self.error_codes,
-            check_digit_valid: self.check_digit_valid,
-            corrected_vin: self.corrected_vin,
-            attributes,
-        }
     }
 }
 
@@ -2811,7 +2770,7 @@ mod tests {
     }
 
     #[test]
-    fn direct_flat_projection_preserves_full_output_order_and_values() {
+    fn flatten_matches_the_general_conversion() {
         let Some(db) = Db::try_embedded() else { return };
         for vin in [
             "",
@@ -2830,10 +2789,9 @@ mod tests {
                 Some(2028),
                 Some(2029),
             ] {
-                let raw = decode_items(db, vin, 1_788_739_200_000_000, 2026, year);
                 let full = decode_full(db, vin, 1_788_739_200_000_000, 2026, year);
+                let actual = db.flatten(&full);
                 let expected = FlatResult::from(full);
-                let actual = raw.flat();
                 assert_eq!(actual, expected, "{vin:?}, {year:?}");
                 assert_eq!(
                     serde_json::to_string(&actual).unwrap(),
@@ -2974,6 +2932,40 @@ mod tests {
     }
 
     #[test]
+    fn flat_batch_calls_agree_across_their_direct_path_threshold() {
+        if !db().is_loaded() {
+            return;
+        }
+        let samples = [
+            "1HGCM82633A004352",
+            "1HGCM82633A004353",
+            "INVALID",
+            "5YJ3E1EA7KF317000",
+        ];
+        let rows = FLAT_STREAM_MIN_ROWS;
+        let inputs: Vec<String> = (0..rows).map(|i| samples[i % 4].into()).collect();
+        let years: Vec<Option<i32>> = (0..rows).map(|i| (i % 3 != 0).then_some(2003)).collect();
+        let now = 1_750_000_000_000_000;
+        // Rows repeat with period 12, so decode each distinct row once.
+        let flat: Vec<_> = (0..12)
+            .map(|i| decode_flat_at(&inputs[i], years[i], now))
+            .collect();
+        let json: Vec<_> = flat
+            .iter()
+            .map(|r| serde_json::to_string(r).expect("JSON"))
+            .collect();
+        for n in [rows - 1, rows] {
+            let (inputs, years) = (&inputs[..n], Some(&years[..n]));
+            let batch = decode_batch_flat_at(inputs, years, now);
+            assert_eq!(batch.len(), n);
+            assert!(batch.iter().enumerate().all(|(i, r)| *r == flat[i % 12]));
+            let lines = decode_batch_jsonl_at(inputs, years, now, false);
+            assert!(lines.lines().enumerate().all(|(i, l)| l == json[i % 12]));
+            assert_eq!(lines.lines().count(), n);
+        }
+    }
+
+    #[test]
     #[cfg(debug_assertions)]
     fn a_stream_started_on_the_decoder_pool_is_refused() {
         if !db().is_loaded() {
@@ -3047,25 +3039,6 @@ mod tests {
     }
 
     #[test]
-    fn managed_flat_batches_match_plain_ones() {
-        if !db().is_loaded() {
-            return;
-        }
-        let samples = ["1HGCM82633A004352", "1FTFW1ET5DFC10312"];
-        let inputs: Vec<String> = (0..600)
-            .map(|index| samples[index % samples.len()].to_string())
-            .collect();
-        let years: Vec<Option<i32>> = (0..inputs.len())
-            .map(|index| (index % 3 == 0).then_some(1995))
-            .collect();
-        let now = 1_750_000_000_000_000;
-
-        let flat = db().decode_batch_flat_at(&inputs, Some(&years), now);
-        let managed_flat = db().decode_batch_flat_managed_at(&inputs, Some(&years), now);
-        assert_eq!(managed_flat, flat);
-    }
-
-    #[test]
     fn private_calibration_scope_keeps_per_vin_batch_work_serial() {
         use std::collections::HashSet;
         use std::sync::Mutex;
@@ -3088,7 +3061,7 @@ mod tests {
                     &inputs,
                     None,
                     1_750_000_000_000_000,
-                    |result| {
+                    |_, result| {
                         native_workers
                             .lock()
                             .expect("native worker observations")
@@ -3097,7 +3070,7 @@ mod tests {
                             .lock()
                             .expect("native thread observations")
                             .insert(std::thread::current().id());
-                        result.flat()
+                        result.full()
                     },
                 ));
                 assert_eq!(native_auto::batch_config(inputs.len()).workers, 1);
@@ -3120,15 +3093,6 @@ mod tests {
         });
         assert!(panic.is_err());
         assert!(!PRIVATE_CALIBRATION_POOL_DEPTH.with(|depth| depth.get() > 0));
-    }
-
-    #[test]
-    fn restore_input_order_handles_nontrivial_permutation_cycles() {
-        let mut order = [2, 0, 3, 1];
-        let mut values = ["c", "a", "d", "b"];
-        restore_input_order(&mut order, &mut values);
-        assert_eq!(order, [0, 1, 2, 3]);
-        assert_eq!(values, ["a", "b", "c", "d"]);
     }
 
     #[test]

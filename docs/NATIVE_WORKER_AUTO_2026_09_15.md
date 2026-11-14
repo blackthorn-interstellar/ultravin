@@ -34,7 +34,9 @@ calibration and prediction.
 The callback borrows results from a slot until it returns. Cloning results to
 retain them is possible, but those copies become caller-owned storage outside
 the slot budget. `decode_batch` returns owned results; since 2026-11-13 it
-runs on this stream too, and `decode_batch_managed` is gone.
+runs on this stream too, and `decode_batch_managed` is gone; the flat
+batch calls followed later that day, taking `BatchResults` and
+`decode_batch_flat_managed` with them.
 
 Python's `predict_batch_size(output="native", ...)` returns the same plan.
 Its `batch_size` now means rows **per worker batch**. New fields are

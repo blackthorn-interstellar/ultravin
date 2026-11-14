@@ -17,7 +17,7 @@ The fastest sample was 495,824 VIN/s. Five million unique VINs therefore cover 1
 
 ## What changed
 
-The new path adds `BatchResults`, an owning result container used by `decode_batch_managed`, its explicit-clock variant, and the corresponding flat and `Db` APIs. Dropping a large container completes cleanup across decoder workers. The native automatic-batch benchmark uses this public path. Existing `Vec`-returning signatures are preserved and retain ordinary caller-thread destruction. Consuming iteration or `into_vec()` transfers cleanup responsibility; iteration over `&batch` retains managed cleanup.
+The new path adds `BatchResults`, an owning result container used by `decode_batch_managed`, its explicit-clock variant, and the corresponding flat and `Db` APIs. Dropping a large container completes cleanup across decoder workers. The native automatic-batch benchmark uses this public path. Existing `Vec`-returning signatures are preserved and retain ordinary caller-thread destruction. Consuming iteration or `into_vec()` transfers cleanup responsibility; iteration over `&batch` retains managed cleanup. (All of these were removed on 2026-11-13, when every batch call moved onto the native stream; see PERFORMANCE_IMPROVEMENTS.md.)
 
 The database now owns cached canonical correction text in sparse `OnceLock` storage. Decode workers reuse thread-local scratch space and borrow common correction CSV and message values from the database instead of rebuilding equivalent owned values for every result. This changes result ownership and repeated allocation; it does not change the predictor's calibrated domain. The model remains calibrated through 5,000 rows, while runtime batches may grow to 16,384 rows when the memory limit permits.
 

@@ -32,6 +32,11 @@ fn main() {
     elements += ultravin::decode_batch_flat(&vins, None).len();
     bytes += ultravin::decode_batch_json(&vins, None).len();
     bytes += ultravin::decode_batch_json_flat(&vins, None).len();
+    let db = ultravin::Db::embedded();
+    let columns = ultravin::resolve_ids(db, &ultravin::all_public_ids(db)).expect("public ids");
+    elements += ultravin::decode_batch_ids(&vins, None, &columns)
+        .model_year
+        .len();
 
     eprintln!(
         "covrun: {} VINs, {elements} elements, {bytes} json bytes",
