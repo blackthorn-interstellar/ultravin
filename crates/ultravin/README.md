@@ -48,7 +48,9 @@ One captured clock covers the entire job, including calibration.
 automatic selection. The default working-output budget is 512 MiB, excluding
 the input and database.
 
-`decode_batch`, `decode_batch_json` and full JSON lines run on this stream.
+`decode_batch`, `decode_batch_json` and full JSON lines of 8,192 VINs or more
+run on this stream; shorter calls decode directly, where the stream's
+start-up would cost more than it saves.
 `Db::decode_batch_stream_at` is the same engine with a caller year per VIN
 and no calibration step: it lends each batch to a callback instead of
 returning a `Vec`, so only a bounded number of results are ever alive. It

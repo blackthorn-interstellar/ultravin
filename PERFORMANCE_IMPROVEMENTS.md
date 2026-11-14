@@ -1074,15 +1074,30 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
 
   Dict building under the GIL still dominates the dict call, and the
   conversion of the Rust string to a Python one the JSON call.
-- **Short calls got slower.** Twelve workers, full results, many calls in a
-  row: 100-VIN synthetic calls 523k → 301k VIN/s (−42%), 1,000-VIN synthetic
-  calls 798k → 624k (−22%), 1,000-VIN shuffled NY 520k → 458k (−12%); but
-  1,000-VIN sorted NY 708k → 1.85M and 100-VIN sorted NY 475k → 494k. One
-  worker, 1,000-VIN synthetic: 238k → 235k. In a short call nearly every row
-  is a store (each worker's admission allows 16 before it throttles), and a
-  store costs a fifth of a decode; with the cache off the 1,000-VIN synthetic
-  call runs 752k. The cache was kept: at 1,000 VINs it is worth 2.6× on
-  sorted NY.
+- **Short calls decode directly.** On the stream, 12-worker calls of 100
+  and 1,000 never-repeating VINs ran 9-42% slower than before, 4,096 VINs 5%
+  and 8,192 VINs 3%: worker start-up and per-batch hand-offs dominate a call
+  of a millisecond, and in a short call nearly every row is a store (each
+  worker may store 16 before hits must pay). Tried and dropped: scaling the
+  free stores to the call's length, fewer workers, a serial sort, chained
+  worker starts, workers leaving without waiting for their last slots; the
+  best combination still left 100-VIN calls 11% behind. Calls under
+  `STREAM_MIN_ROWS` (8,192) now take the old driver's path (rayon over the
+  uncached full decode in prefix order, JSON likewise), and only the longer
+  ones stream. A stream's table also now makes a slot's `ArcSwapOption` on
+  its first store: dropping one walks every thread's `arc-swap` debt list,
+  and a 16,384-slot table paid that per slot on every call (8,192-VIN calls
+  −8% → −3%, 10,000-VIN sorted NY 2.6M → 5.2M VIN/s). One run per cell, 12
+  workers, before (0f4fe7d) / streaming every call (568e5ba) / now:
+
+  | VINs per call | synthetic | NY shuffled | NY sorted |
+  |---:|---:|---:|---:|
+  | 100 | 515k / 299k / 529k | 354k / 228k / 337k | 492k / 520k / 491k |
+  | 1,000 | 743k / 630k / 773k | 513k / 427k / 514k | 736k / 2.19M / 731k |
+  | 10,000 | 649k / 558k / 620k | 509k / 483k / 527k | 644k / 2.65M / 5.21M |
+  | 200,000 | 706k / 697k / 702k | 562k / 1.43M / 1.42M | 652k / 5.27M / 5.54M |
+
+  One worker, 1,000-VIN synthetic calls: 240k / 237k / 235k.
 - **Flat derived from full results (measured, not built).** A temporary
   converter built each `FlatResult` from the stream's full result
   (`flatten_unique_variables` over its elements) on the workers. Its

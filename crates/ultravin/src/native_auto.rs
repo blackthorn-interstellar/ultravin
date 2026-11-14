@@ -169,19 +169,13 @@ fn config(prediction: &BatchPrediction) -> NativeStreamConfig {
 /// The automatic plan for a batch call of `rows` rows, without calibration:
 /// the plan depends only on the workers and the memory budget, so the
 /// default budget and the reference row width stand in for a measurement.
-/// Fewer rows than the plan's batches would give every worker are split
-/// evenly instead, so a short call still uses them all.
 pub(crate) fn batch_config(rows: usize) -> NativeStreamConfig {
     let workers = crate::predictor::worker_count().min(rows).max(1);
     let format = BatchFormat::Native;
     let budget = NativeAutoOptions::default().memory_bytes;
     let prediction = predict_batch(workers, 1.0, format, budget, format.default_bytes_per_row())
         .expect("the default budget fits one row per worker");
-    let plan = config(&prediction);
-    NativeStreamConfig {
-        batch_size: plan.batch_size.min(rows.div_ceil(workers).max(1)),
-        ..plan
-    }
+    config(&prediction)
 }
 
 fn owned_row_bytes(result: &DecodeResult<'_>) -> usize {

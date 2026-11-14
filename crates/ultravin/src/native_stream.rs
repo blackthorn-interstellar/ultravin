@@ -140,6 +140,16 @@ impl<'batch, 'db> NativeBatch<'batch, 'db> {
         (0..self.len()).map(move |row| order.map_or(start + row, |order| order[row] as usize))
     }
 
+    /// All of a call's results, in input order, as one batch.
+    pub(crate) fn whole(results: &'batch mut [Option<DecodeResult<'db>>]) -> Self {
+        Self {
+            batch_index: 0,
+            start_index: 0,
+            results,
+            order: None,
+        }
+    }
+
     /// Move the results out with their input indices; their rows decode into
     /// new storage next time.
     pub(crate) fn take(&mut self) -> impl Iterator<Item = (usize, DecodeResult<'db>)> + '_ {
@@ -619,6 +629,12 @@ impl Db {
         F: for<'batch> FnMut(NativeBatch<'batch, 'db>, T),
     {
         debug_assert!(order.is_none_or(|order| order.len() == inputs.len()));
+        // Workers are jobs on the decoder pool: a caller that is one of its
+        // threads would wait on workers that may need that very thread.
+        debug_assert!(
+            crate::batch_pool().current_thread_index().is_none(),
+            "a native stream must not be started from a decoder-pool thread"
+        );
         let config = config.validate()?;
         if inputs.is_empty() {
             return Ok(());

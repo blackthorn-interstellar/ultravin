@@ -107,7 +107,10 @@ struct Entry<'a> {
 /// One stream's results, shared by its workers; disabled at capacity 0. It
 /// holds for one database and one clock, so it must not outlive the stream.
 pub(crate) struct Table<'a> {
-    slots: OnceLock<Box<[ArcSwapOption<Entry<'a>>]>>,
+    /// A slot's `ArcSwapOption` is made by its first store: dropping one
+    /// waits out `arc-swap`'s readers, a walk of every thread's debt list,
+    /// so a table costs that once per slot ever stored, not once per slot.
+    slots: OnceLock<Box<[OnceLock<ArcSwapOption<Entry<'a>>>]>>,
     capacity: usize,
 }
 
@@ -124,10 +127,10 @@ impl<'a> Table<'a> {
         }
     }
 
-    fn slot(&self, index: usize) -> &ArcSwapOption<Entry<'a>> {
+    fn slot(&self, index: usize) -> &OnceLock<ArcSwapOption<Entry<'a>>> {
         &self
             .slots
-            .get_or_init(|| (0..self.capacity).map(|_| ArcSwapOption::empty()).collect())[index]
+            .get_or_init(|| (0..self.capacity).map(|_| OnceLock::new()).collect())[index]
     }
 }
 
@@ -262,13 +265,13 @@ impl Worker {
             return Probe::Skip;
         }
         let index = key.index(table.capacity - 1);
-        let entry = table.slot(index).load();
-        if entry.as_ref().is_some_and(|entry| entry.key == key) {
-            self.hits += 1;
-            self.recent_hits += 1;
-            Probe::Hit(Hit(entry))
-        } else {
-            Probe::Miss(index, key)
+        match table.slot(index).get().map(ArcSwapOption::load) {
+            Some(entry) if entry.as_ref().is_some_and(|entry| entry.key == key) => {
+                self.hits += 1;
+                self.recent_hits += 1;
+                Probe::Hit(Hit(entry))
+            }
+            _ => Probe::Miss(index, key),
         }
     }
 
@@ -308,6 +311,7 @@ impl Worker {
         };
         table
             .slot(index)
+            .get_or_init(ArcSwapOption::empty)
             .store(Some(Arc::new(Entry { key, result })));
         spare
     }
@@ -536,6 +540,8 @@ mod tests {
         worker.store(&table, index, key, &mut decode(&other));
         assert!(table
             .slot(index)
+            .get()
+            .expect("stored")
             .load()
             .as_ref()
             .is_some_and(|e| e.key == key));

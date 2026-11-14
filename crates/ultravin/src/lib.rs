@@ -547,7 +547,12 @@ impl Db {
     /// order; [`NativeBatch::input_indices`] gives each result's input
     /// position. This is the batch calls' engine, the native stream
     /// ([`Db::decode_native_stream_at`]) with one caller year per VIN and
-    /// the automatic plan without calibration.
+    /// the automatic plan without calibration; a call shorter than 8,192
+    /// VINs instead decodes directly and lends all its results as one batch.
+    ///
+    /// The stream's workers are jobs on ultravin's decoder pool, so it must
+    /// not be called from one of that pool's threads (`consume` included);
+    /// debug builds assert this.
     pub fn decode_batch_stream_at<'db, F>(
         &'db self,
         inputs: &[String],
@@ -558,6 +563,13 @@ impl Db {
     where
         F: for<'batch> FnMut(NativeBatch<'batch, 'db>),
     {
+        if inputs.len() < STREAM_MIN_ROWS {
+            let mut results = batch_at(self, inputs, years, now_micros, |r| Some(r.full()));
+            if !results.is_empty() {
+                consume(NativeBatch::whole(&mut results));
+            }
+            return Ok(());
+        }
         self.batch_stream_at(
             inputs,
             years,
@@ -603,6 +615,10 @@ impl Db {
         now_micros: i64,
         jsonl: bool,
     ) -> String {
+        if inputs.len() < STREAM_MIN_ROWS {
+            let encode = |r: RawResult<'_>| json::encode(self, &r.full());
+            return frame_json(batch_at(self, inputs, years, now_micros, encode), jsonl);
+        }
         let mut parts = vec![String::new(); inputs.len()];
         let encode = |batch: &NativeBatch<'_, '_>| {
             let encode = |result| json::encode(self, result);
@@ -654,6 +670,11 @@ impl Db {
         BatchResults::new(self.decode_batch_flat_at(inputs, years, now_micros))
     }
 }
+
+/// Below this many rows a full or JSON batch call decodes directly on the
+/// pool, uncached: the stream's start-up and hand-offs measured 5% slower at
+/// 4,096 never-repeating VINs on 12 workers, 3% at 8,192 (more at 100-1,000).
+const STREAM_MIN_ROWS: usize = 8192;
 
 /// The thread pool the batch paths run on, rebuilt whenever the pid changes.
 ///
@@ -2913,6 +2934,59 @@ mod tests {
             .iter()
             .zip(&inputs)
             .all(|(result, vin)| &result.vin == vin));
+    }
+
+    #[test]
+    fn batch_calls_agree_across_the_direct_path_threshold() {
+        if !db().is_loaded() {
+            return;
+        }
+        let samples = [
+            "1HGCM82633A004352",
+            "1HGCM82633A004353",
+            "INVALID",
+            "5YJ3E1EA7KF317000",
+        ];
+        let rows = STREAM_MIN_ROWS + 1;
+        let inputs: Vec<String> = (0..rows).map(|i| samples[i % 4].into()).collect();
+        let years: Vec<Option<i32>> = (0..rows).map(|i| (i % 3 != 0).then_some(2003)).collect();
+        let now = 1_750_000_000_000_000;
+        let expected: Vec<_> = (0..rows)
+            .map(|i| decode_at(&inputs[i], years[i], now))
+            .collect();
+        let json: Vec<_> = expected
+            .iter()
+            .map(|r| serde_json::to_string(r).expect("JSON"))
+            .collect();
+        for n in [STREAM_MIN_ROWS - 1, STREAM_MIN_ROWS, rows] {
+            let (inputs, years) = (&inputs[..n], Some(&years[..n]));
+            assert_eq!(
+                decode_batch_at(inputs, years, now),
+                expected[..n],
+                "{n} rows"
+            );
+            assert_eq!(
+                decode_batch_json_at(inputs, years, now),
+                format!("[{}]", json[..n].join(",")),
+                "{n} rows"
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    fn a_stream_started_on_the_decoder_pool_is_refused() {
+        if !db().is_loaded() {
+            return;
+        }
+        let inputs: Vec<String> = vec!["1HGCM82633A004352".into(); STREAM_MIN_ROWS];
+        let started = std::panic::catch_unwind(|| {
+            batch_pool().install(|| decode_batch_at(&inputs, None, 0).len())
+        });
+        let payload = started.expect_err("refused");
+        assert!(payload
+            .downcast_ref::<&str>()
+            .is_some_and(|message| message.contains("decoder-pool thread")));
     }
 
     #[test]
