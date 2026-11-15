@@ -365,29 +365,31 @@ written, strings built, every field of every result read.
 
 | output | 1 core | 4 cores | 8 cores | peak memory |
 |---|---:|---:|---:|---:|
-| `ultravin decode-compact` — `vins.parquet` + `vehicles.parquet` on disk | 1,613,510 | 3,844,678 | 4,973,422 | 0.6 GB |
-| Rust `decode_batch_json_at`, flat — one JSON string | 344,143 | 1,111,172 | 1,847,685 | 1.5 GB |
-| Python `decode_batch_json` — one JSON string | 321,974 | 861,609 | 1,182,950 | 4.3 GB |
-| Rust `decode_batch_flat_at` — flat results, every field read | 519,307 | 912,151 | 1,032,922 | 1.2 GB |
-| Rust `decode_batch_stream_at` — full results, every field read on the calling thread | 709,516 | 814,131 | 810,598 | 0.6 GB |
-| Rust `ArrowDecoder::decode_batch` — all columns in memory | 132,347 | 447,496 | 770,666 | 0.6 GB |
-| Python `decode_stream` — Arrow batches into pyarrow | 136,979 | 460,541 | 743,301 | 0.3 GB |
-| Rust `decode_batch_at` — full results, every field read | 597,607 | 690,612 | 710,531 | 0.7 GB |
-| Rust `decode_batch_json_at`, full — one JSON string | 157,988 | 369,230 | 475,813 | 9.4 GB |
-| `ultravin decode-parquet` — one wide Parquet file on disk | 116,989 | 316,884 | 439,445 | 0.3 GB |
-| `ultravin decode-batch --jsonl` — JSON lines on disk | 90,439 | 253,186 | 345,439 | 0.3 GB |
-| Python `decode_batch` — a dict per VIN | 211,780 | 225,095 | 217,209 | 0.4 GB |
-| Python `decode_batch(full=True)` — a dict per VIN with every element | 43,266 | 43,673 | 43,604 | 1.1 GB |
+| Rust `decode_batch_json_at`, flat — one JSON string | 1,654,481 | 4,482,992 | 6,213,236 | 1.4 GB |
+| `ultravin decode-compact` — `vins.parquet` + `vehicles.parquet` on disk | 1,610,560 | 3,867,944 | 5,055,862 | 0.6 GB |
+| Python `decode_batch_json` — one JSON string | 1,154,619 | 2,062,928 | 2,430,301 | 3.8 GB |
+| Rust `decode_batch_json_at`, full — one JSON string | 535,903 | 1,332,286 | 1,715,028 | 4.8 GB |
+| `ultravin decode-batch --jsonl` — JSON lines on disk | 341,361 | 1,133,238 | 1,502,185 | 0.3 GB |
+| Rust `decode_batch_flat_at` — flat results, every field read | 516,156 | 907,743 | 1,026,876 | 1.2 GB |
+| Rust `decode_batch_stream_at` — full results, every field read on the calling thread | 718,796 | 807,834 | 824,876 | 0.6 GB |
+| Rust `ArrowDecoder::decode_batch` — all columns in memory | 131,684 | 443,445 | 768,677 | 0.6 GB |
+| Python `decode_stream` — Arrow batches into pyarrow | 131,641 | 463,322 | 762,752 | 0.3 GB |
+| Rust `decode_batch_at` — full results, every field read | 593,173 | 702,048 | 748,524 | 0.7 GB |
+| Python `decode_batch` — a dict per VIN | 468,946 | 522,032 | 506,452 | 0.3 GB |
+| `ultravin decode-parquet` — one wide Parquet file on disk | 116,105 | 317,250 | 454,027 | 0.3 GB |
+| Python `decode_batch(full=True)` — a dict per VIN with every element | 82,123 | 83,071 | 83,190 | 0.9 GB |
 
 What the result is made of decides the speed, not the decode. A full result
 carries every vPIC element with 15 fields each; building a Python dict or a JSON
 object for each costs far more than decoding it, and Python builds dicts on one
 thread.
-The compact output is fastest because it writes each distinct vehicle once.
-`decode-compact` reads 4,973,421 VIN/s here against 6,906,661 above because
-process startup is a larger share of a 2,000,000-VIN job.
+Where vehicles repeat, the compact files, the JSON paths and the Python dicts
+build each distinct vehicle's output once and reuse it. Flat JSON in memory edges
+out `decode-compact` here only because the command's process startup is a large
+share of a 2,000,000-VIN job: it reads 5,055,862 VIN/s here against 6,906,661
+on the whole file above.
 Reproduce with `uv run --frozen python -m scripts.bench.api_compare --workers 1 --workers 4 --workers 8`;
-the synthetic corpus is in [the benchmark notes](docs/BENCHMARKS.md#by-output-november-14-2026-commit-5ab93e6).
+the synthetic corpus is in [the benchmark notes](docs/BENCHMARKS.md#by-output-november-14-2026-commit-2332c48).
 
 ultravin runs in-process with the database embedded — no server, no round-trip.
 The corgi rows are derived from that project's published per-VIN latency, and

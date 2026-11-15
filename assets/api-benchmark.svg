@@ -1,95 +1,89 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 470" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
-<desc>Ultravin output paths on ny-sorted-2m at commit 5ab93e6-dirty: VINs per second with the output consumed, at the worker counts in the legend.</desc>
+<desc>Ultravin output paths on ny-sorted-2m at commit 2332c48: VINs per second with the output consumed, at the worker counts in the legend.</desc>
 <style>.background{fill:#ffffff}.label{fill:#57606a;font-size:13px}.value{fill:#57606a;font-size:13px}.strong{fill:#1f2328;font-weight:700}.axis{fill:#8c8c98;font-size:11px}.grid{stroke:#d8dee4;stroke-width:1}.bar{fill:#c3aef5}.bar-hi{fill:#7c4dff}.s0{fill:#4a1fd6}.s1{fill:#7c4dff}.s2{fill:#b9a4ff}.s3{fill:#ddd3ff}.on{fill:#ffffff;font-size:11px;font-weight:600}.on2,.on3{fill:#2a1466}.off{fill:#1f2328;font-size:12px;font-weight:600}@media(prefers-color-scheme:dark){.background{fill:#0d1117}.label,.value{fill:#9198a1}.strong,.off{fill:#f0f6fc}.axis{fill:#7d8590}.grid{stroke:#30363d}.bar{fill:#6b5bb0}.bar-hi{fill:#a786ff}.s0{fill:#5b33e0}.s1{fill:#8a63ff}.s2{fill:#b9a4ff}.s3{fill:#ddd3ff}}</style>
 <rect class="background" width="900" height="470" rx="8"/>
 <line class="grid" x1="280.0" y1="14" x2="280.0" y2="406"/>
-<line class="grid" x1="327.0" y1="14" x2="327.0" y2="406"/>
-<line class="grid" x1="374.0" y1="14" x2="374.0" y2="406"/>
-<line class="grid" x1="421.0" y1="14" x2="421.0" y2="406"/>
-<line class="grid" x1="468.0" y1="14" x2="468.0" y2="406"/>
-<line class="grid" x1="515.0" y1="14" x2="515.0" y2="406"/>
-<line class="grid" x1="562.0" y1="14" x2="562.0" y2="406"/>
-<line class="grid" x1="609.0" y1="14" x2="609.0" y2="406"/>
-<line class="grid" x1="656.0" y1="14" x2="656.0" y2="406"/>
-<line class="grid" x1="703.0" y1="14" x2="703.0" y2="406"/>
+<line class="grid" x1="347.1" y1="14" x2="347.1" y2="406"/>
+<line class="grid" x1="414.3" y1="14" x2="414.3" y2="406"/>
+<line class="grid" x1="481.4" y1="14" x2="481.4" y2="406"/>
+<line class="grid" x1="548.6" y1="14" x2="548.6" y2="406"/>
+<line class="grid" x1="615.7" y1="14" x2="615.7" y2="406"/>
+<line class="grid" x1="682.9" y1="14" x2="682.9" y2="406"/>
 <line class="grid" x1="750.0" y1="14" x2="750.0" y2="406"/>
-<text class="label" x="270" y="35.5" text-anchor="end">decode-compact (two Parquet files)</text>
-<rect class="s2" x="280" y="18.0" width="467.5" height="26" rx="2"/>
-<rect class="s1" x="280" y="18.0" width="361.4" height="26" rx="2"/>
-<rect class="s0" x="280" y="18.0" width="151.7" height="26" rx="2"/>
-<text class="off" x="753.5" y="34.5">1.6M · 3.8M · 5.0M</text>
-<text class="label" x="270" y="65.5" text-anchor="end">Rust: flat JSON</text>
-<rect class="s2" x="280" y="48.0" width="173.7" height="26" rx="2"/>
-<rect class="s1" x="280" y="48.0" width="104.5" height="26" rx="2"/>
-<rect class="s0" x="280" y="48.0" width="32.3" height="26" rx="2"/>
-<text class="off" x="459.7" y="64.5">344k · 1.1M · 1.8M</text>
+<text class="label" x="270" y="35.5" text-anchor="end">Rust: flat JSON</text>
+<rect class="s2" x="280" y="18.0" width="417.2" height="26" rx="2"/>
+<rect class="s1" x="280" y="18.0" width="301.0" height="26" rx="2"/>
+<rect class="s0" x="280" y="18.0" width="111.1" height="26" rx="2"/>
+<text class="off" x="703.2" y="34.5">1.7M · 4.5M · 6.2M</text>
+<text class="label" x="270" y="65.5" text-anchor="end">decode-compact (two Parquet files)</text>
+<rect class="s2" x="280" y="48.0" width="339.5" height="26" rx="2"/>
+<rect class="s1" x="280" y="48.0" width="259.7" height="26" rx="2"/>
+<rect class="s0" x="280" y="48.0" width="108.1" height="26" rx="2"/>
+<text class="off" x="625.5" y="64.5">1.6M · 3.9M · 5.1M</text>
 <text class="label" x="270" y="95.5" text-anchor="end">Python: decode_batch_json</text>
-<rect class="s2" x="280" y="78.0" width="111.2" height="26" rx="2"/>
-<rect class="s1" x="280" y="78.0" width="81.0" height="26" rx="2"/>
-<rect class="s0" x="280" y="78.0" width="30.3" height="26" rx="2"/>
-<text class="off" x="397.2" y="94.5">322k · 862k · 1.2M</text>
-<text class="label" x="270" y="125.5" text-anchor="end">Rust: flat results</text>
-<rect class="s2" x="280" y="108.0" width="97.1" height="26" rx="2"/>
-<rect class="s1" x="280" y="108.0" width="85.7" height="26" rx="2"/>
-<rect class="s0" x="280" y="108.0" width="48.8" height="26" rx="2"/>
-<text class="off" x="383.1" y="124.5">519k · 912k · 1.0M</text>
-<text class="label" x="270" y="155.5" text-anchor="end">Rust: stream, full results</text>
-<rect class="s1" x="280" y="138.0" width="76.5" height="26" rx="2"/>
-<rect class="s2" x="280" y="138.0" width="76.2" height="26" rx="2"/>
-<rect class="s0" x="280" y="138.0" width="66.7" height="26" rx="2"/>
-<text class="off" x="362.5" y="154.5">710k · 814k · 811k</text>
-<text class="label" x="270" y="185.5" text-anchor="end">Rust: Arrow columns</text>
-<rect class="s2" x="280" y="168.0" width="72.4" height="26" rx="2"/>
-<rect class="s1" x="280" y="168.0" width="42.1" height="26" rx="2"/>
-<rect class="s0" x="280" y="168.0" width="12.4" height="26" rx="2"/>
-<text class="off" x="358.4" y="184.5">132k · 447k · 771k</text>
-<text class="label" x="270" y="215.5" text-anchor="end">Python: decode_stream (Arrow)</text>
-<rect class="s2" x="280" y="198.0" width="69.9" height="26" rx="2"/>
-<rect class="s1" x="280" y="198.0" width="43.3" height="26" rx="2"/>
-<rect class="s0" x="280" y="198.0" width="12.9" height="26" rx="2"/>
-<text class="off" x="355.9" y="214.5">137k · 461k · 743k</text>
-<text class="label" x="270" y="245.5" text-anchor="end">Rust: full results</text>
-<rect class="s2" x="280" y="228.0" width="66.8" height="26" rx="2"/>
-<rect class="s1" x="280" y="228.0" width="64.9" height="26" rx="2"/>
-<rect class="s0" x="280" y="228.0" width="56.2" height="26" rx="2"/>
-<text class="off" x="352.8" y="244.5">598k · 691k · 711k</text>
-<text class="label" x="270" y="275.5" text-anchor="end">Rust: full JSON</text>
-<rect class="s2" x="280" y="258.0" width="44.7" height="26" rx="2"/>
-<rect class="s1" x="280" y="258.0" width="34.7" height="26" rx="2"/>
-<rect class="s0" x="280" y="258.0" width="14.9" height="26" rx="2"/>
-<text class="off" x="330.7" y="274.5">158k · 369k · 476k</text>
-<text class="label" x="270" y="305.5" text-anchor="end">decode-parquet (one wide file)</text>
-<rect class="s2" x="280" y="288.0" width="41.3" height="26" rx="2"/>
-<rect class="s1" x="280" y="288.0" width="29.8" height="26" rx="2"/>
-<rect class="s0" x="280" y="288.0" width="11.0" height="26" rx="2"/>
-<text class="off" x="327.3" y="304.5">117k · 317k · 439k</text>
-<text class="label" x="270" y="335.5" text-anchor="end">decode-batch --jsonl</text>
-<rect class="s2" x="280" y="318.0" width="32.5" height="26" rx="2"/>
-<rect class="s1" x="280" y="318.0" width="23.8" height="26" rx="2"/>
-<rect class="s0" x="280" y="318.0" width="8.5" height="26" rx="2"/>
-<text class="off" x="318.5" y="334.5">90k · 253k · 345k</text>
-<text class="label" x="270" y="365.5" text-anchor="end">Python: decode_batch dicts</text>
-<rect class="s1" x="280" y="348.0" width="21.2" height="26" rx="2"/>
-<rect class="s2" x="280" y="348.0" width="20.4" height="26" rx="2"/>
-<rect class="s0" x="280" y="348.0" width="19.9" height="26" rx="2"/>
-<text class="off" x="307.2" y="364.5">212k · 225k · 217k</text>
+<rect class="s2" x="280" y="78.0" width="163.2" height="26" rx="2"/>
+<rect class="s1" x="280" y="78.0" width="138.5" height="26" rx="2"/>
+<rect class="s0" x="280" y="78.0" width="77.5" height="26" rx="2"/>
+<text class="off" x="449.2" y="94.5">1.2M · 2.1M · 2.4M</text>
+<text class="label" x="270" y="125.5" text-anchor="end">Rust: full JSON</text>
+<rect class="s2" x="280" y="108.0" width="115.2" height="26" rx="2"/>
+<rect class="s1" x="280" y="108.0" width="89.5" height="26" rx="2"/>
+<rect class="s0" x="280" y="108.0" width="36.0" height="26" rx="2"/>
+<text class="off" x="401.2" y="124.5">536k · 1.3M · 1.7M</text>
+<text class="label" x="270" y="155.5" text-anchor="end">decode-batch --jsonl</text>
+<rect class="s2" x="280" y="138.0" width="100.9" height="26" rx="2"/>
+<rect class="s1" x="280" y="138.0" width="76.1" height="26" rx="2"/>
+<rect class="s0" x="280" y="138.0" width="22.9" height="26" rx="2"/>
+<text class="off" x="386.9" y="154.5">341k · 1.1M · 1.5M</text>
+<text class="label" x="270" y="185.5" text-anchor="end">Rust: flat results</text>
+<rect class="s2" x="280" y="168.0" width="68.9" height="26" rx="2"/>
+<rect class="s1" x="280" y="168.0" width="60.9" height="26" rx="2"/>
+<rect class="s0" x="280" y="168.0" width="34.7" height="26" rx="2"/>
+<text class="off" x="354.9" y="184.5">516k · 908k · 1.0M</text>
+<text class="label" x="270" y="215.5" text-anchor="end">Rust: stream, full results</text>
+<rect class="s2" x="280" y="198.0" width="55.4" height="26" rx="2"/>
+<rect class="s1" x="280" y="198.0" width="54.2" height="26" rx="2"/>
+<rect class="s0" x="280" y="198.0" width="48.3" height="26" rx="2"/>
+<text class="off" x="341.4" y="214.5">719k · 808k · 825k</text>
+<text class="label" x="270" y="245.5" text-anchor="end">Rust: Arrow columns</text>
+<rect class="s2" x="280" y="228.0" width="51.6" height="26" rx="2"/>
+<rect class="s1" x="280" y="228.0" width="29.8" height="26" rx="2"/>
+<rect class="s0" x="280" y="228.0" width="8.8" height="26" rx="2"/>
+<text class="off" x="337.6" y="244.5">132k · 443k · 769k</text>
+<text class="label" x="270" y="275.5" text-anchor="end">Python: decode_stream (Arrow)</text>
+<rect class="s2" x="280" y="258.0" width="51.2" height="26" rx="2"/>
+<rect class="s1" x="280" y="258.0" width="31.1" height="26" rx="2"/>
+<rect class="s0" x="280" y="258.0" width="8.8" height="26" rx="2"/>
+<text class="off" x="337.2" y="274.5">132k · 463k · 763k</text>
+<text class="label" x="270" y="305.5" text-anchor="end">Rust: full results</text>
+<rect class="s2" x="280" y="288.0" width="50.3" height="26" rx="2"/>
+<rect class="s1" x="280" y="288.0" width="47.1" height="26" rx="2"/>
+<rect class="s0" x="280" y="288.0" width="39.8" height="26" rx="2"/>
+<text class="off" x="336.3" y="304.5">593k · 702k · 749k</text>
+<text class="label" x="270" y="335.5" text-anchor="end">Python: decode_batch dicts</text>
+<rect class="s1" x="280" y="318.0" width="35.1" height="26" rx="2"/>
+<rect class="s2" x="280" y="318.0" width="34.0" height="26" rx="2"/>
+<rect class="s0" x="280" y="318.0" width="31.5" height="26" rx="2"/>
+<text class="off" x="321.1" y="334.5">469k · 522k · 506k</text>
+<text class="label" x="270" y="365.5" text-anchor="end">decode-parquet (one wide file)</text>
+<rect class="s2" x="280" y="348.0" width="30.5" height="26" rx="2"/>
+<rect class="s1" x="280" y="348.0" width="21.3" height="26" rx="2"/>
+<rect class="s0" x="280" y="348.0" width="7.8" height="26" rx="2"/>
+<text class="off" x="316.5" y="364.5">116k · 317k · 454k</text>
 <text class="label" x="270" y="395.5" text-anchor="end">Python: decode_batch full dicts</text>
-<rect class="s1" x="280" y="378.0" width="4.1" height="26" rx="2"/>
-<rect class="s2" x="280" y="378.0" width="4.1" height="26" rx="2"/>
-<rect class="s0" x="280" y="378.0" width="4.1" height="26" rx="2"/>
-<text class="off" x="290.1" y="394.5">43k · 44k · 44k</text>
+<rect class="s2" x="280" y="378.0" width="5.6" height="26" rx="2"/>
+<rect class="s1" x="280" y="378.0" width="5.6" height="26" rx="2"/>
+<rect class="s0" x="280" y="378.0" width="5.5" height="26" rx="2"/>
+<text class="off" x="291.6" y="394.5">82k · 83k · 83k</text>
 <line class="grid" x1="280" y1="406" x2="750" y2="406"/>
 <text class="axis" x="280.0" y="422" text-anchor="middle">0</text>
-<text class="axis" x="327.0" y="422" text-anchor="middle">500k</text>
-<text class="axis" x="374.0" y="422" text-anchor="middle">1M</text>
-<text class="axis" x="421.0" y="422" text-anchor="middle">1.5M</text>
-<text class="axis" x="468.0" y="422" text-anchor="middle">2M</text>
-<text class="axis" x="515.0" y="422" text-anchor="middle">2.5M</text>
-<text class="axis" x="562.0" y="422" text-anchor="middle">3M</text>
-<text class="axis" x="609.0" y="422" text-anchor="middle">3.5M</text>
-<text class="axis" x="656.0" y="422" text-anchor="middle">4M</text>
-<text class="axis" x="703.0" y="422" text-anchor="middle">4.5M</text>
-<text class="axis" x="750.0" y="422" text-anchor="middle">5M</text>
+<text class="axis" x="347.1" y="422" text-anchor="middle">1M</text>
+<text class="axis" x="414.3" y="422" text-anchor="middle">2M</text>
+<text class="axis" x="481.4" y="422" text-anchor="middle">3M</text>
+<text class="axis" x="548.6" y="422" text-anchor="middle">4M</text>
+<text class="axis" x="615.7" y="422" text-anchor="middle">5M</text>
+<text class="axis" x="682.9" y="422" text-anchor="middle">6M</text>
+<text class="axis" x="750.0" y="422" text-anchor="middle">7M</text>
 <text class="axis" x="515.0" y="438" text-anchor="middle">VINs decoded per second — higher is better</text>
 <rect class="s0" x="415.5" y="448.5" width="11" height="11" rx="2"/>
 <text class="axis" x="431.5" y="458.0">1 core</text>

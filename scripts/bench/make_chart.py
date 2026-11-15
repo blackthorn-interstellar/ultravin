@@ -47,18 +47,18 @@ ROWS: list[tuple[str, str | dict[int, str], bool]] = [
 # (label, api_compare cell) top -> bottom, fastest at eight cores first.
 API_CORPUS = "ny-sorted-2m"
 API_ROWS = [
-    ("decode-compact (two Parquet files)", "cli-decode-compact"),
     ("Rust: flat JSON", "rust-json-flat"),
+    ("decode-compact (two Parquet files)", "cli-decode-compact"),
     ("Python: decode_batch_json", "py-json-flat"),
+    ("Rust: full JSON", "rust-json-full"),
+    ("decode-batch --jsonl", "cli-decode-batch"),
     ("Rust: flat results", "rust-batch-flat-read"),
     ("Rust: stream, full results", "rust-native-read"),
     ("Rust: Arrow columns", "rust-arrow"),
     ("Python: decode_stream (Arrow)", "py-stream-arrow"),
     ("Rust: full results", "rust-batch-full-read"),
-    ("Rust: full JSON", "rust-json-full"),
-    ("decode-parquet (one wide file)", "cli-decode-parquet"),
-    ("decode-batch --jsonl", "cli-decode-batch"),
     ("Python: decode_batch dicts", "py-dicts-flat"),
+    ("decode-parquet (one wide file)", "cli-decode-parquet"),
     ("Python: decode_batch full dicts", "py-dicts-full"),
 ]
 
