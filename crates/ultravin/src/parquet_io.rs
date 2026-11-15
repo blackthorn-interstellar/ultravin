@@ -746,27 +746,27 @@ impl ParquetSink {
     /// Write every batch, then install the finished file at `dst`; returns the
     /// rows written. Any error leaves `dst` untouched and removes the temp file.
     pub fn write_all(
-        mut self,
+        self,
         batches: impl Iterator<Item = Result<RecordBatch, ParquetError>>,
     ) -> Result<usize, ParquetError> {
+        let io =
+            |e: parquet::errors::ParquetError| ParquetError::Io(format!("writing row group: {e}"));
+        let (file, factory) = self.writer.into_serialized_writer().map_err(io)?;
+        let mut file = RowGroups::new(file, factory);
         let mut rows = 0usize;
         for batch in batches {
             let batch = batch?;
             rows += batch.num_rows();
             let started = Instant::now();
-            self.writer
-                .write(&batch)
-                .map_err(|e| ParquetError::Io(format!("writing row group: {e}")))?;
+            file.write(&batch).map_err(io)?;
             if let Some(feedback) = &self.feedback {
-                self.writer
-                    .flush()
+                file.flush()
                     .map_err(|e| ParquetError::Io(format!("flushing row group: {e}")))?;
                 feedback.add_output_time(started.elapsed());
             }
         }
         let tmp = &self.tmp.0;
-        self.writer
-            .close()
+        file.close()
             .map_err(|e| ParquetError::Io(format!("finalizing {}: {e}", tmp.display())))?;
         Written::new(self.tmp, self.dst, self.destination_permissions)?.install()?;
         Ok(rows)
@@ -870,6 +870,139 @@ impl Drop for TempOutput {
             let _ = std::fs::remove_file(&self.0);
         }
     }
+}
+
+/// What [`ArrowWriter`] does with its batches, the same bytes, but each
+/// batch's columns written in parallel on the decoder pool (encoding ~140
+/// columns one after another was most of a wide decode's time). A file's
+/// columns are independent: each column writer sees the same writes in the
+/// same order as under `ArrowWriter`, so its pages are the same, and so are
+/// the row groups, cut at the same rows.
+struct RowGroups {
+    file: parquet::file::writer::SerializedFileWriter<File>,
+    factory: parquet::arrow::arrow_writer::ArrowRowGroupWriterFactory,
+    max_rows: usize,
+    /// The open row group's column writers and its rows so far.
+    open: Option<(Vec<ArrowColumnWriter>, usize)>,
+}
+
+type WriteResult<T> = Result<T, parquet::errors::ParquetError>;
+
+impl RowGroups {
+    fn new(
+        file: parquet::file::writer::SerializedFileWriter<File>,
+        factory: parquet::arrow::arrow_writer::ArrowRowGroupWriterFactory,
+    ) -> Self {
+        // `ArrowWriter` also cuts row groups by size when asked to; no sink is.
+        debug_assert!(file.properties().max_row_group_bytes().is_none());
+        Self {
+            max_rows: file
+                .properties()
+                .max_row_group_row_count()
+                .unwrap_or(usize::MAX),
+            file,
+            factory,
+            open: None,
+        }
+    }
+
+    /// [`ArrowWriter::write`]: split a batch at the row-group limit, and close
+    /// the group that reaches it.
+    fn write(&mut self, batch: &RecordBatch) -> WriteResult<()> {
+        let rows = batch.num_rows();
+        if rows == 0 {
+            return Ok(());
+        }
+        let buffered = self.open.as_ref().map_or(0, |(_, rows)| *rows);
+        if buffered + rows > self.max_rows {
+            let fits = self.max_rows - buffered;
+            self.write(&batch.slice(0, fits))?;
+            return self.write(&batch.slice(fits, rows - fits));
+        }
+        if self.open.is_none() {
+            let group = self.file.flushed_row_groups().len();
+            self.open = Some((self.factory.create_column_writers(group)?, 0));
+        }
+        let (writers, buffered) = self.open.as_mut().expect("a row group is open");
+        *buffered += rows;
+        let schema = batch.schema();
+        if writers.len() == schema.fields().len() {
+            by_column(writers.iter_mut().collect(), |i, writer| {
+                compute_leaves(schema.field(i), batch.column(i))?
+                    .iter()
+                    .try_for_each(|leaf| writer.write(leaf))
+            })
+            .into_iter()
+            .collect::<WriteResult<()>>()?;
+        } else {
+            // A nested column has a writer per leaf; keep them in order.
+            let mut writers = writers.iter_mut();
+            for (field, column) in schema.fields().iter().zip(batch.columns()) {
+                for leaf in compute_leaves(field, column)? {
+                    writers.next().expect("a writer per leaf").write(&leaf)?;
+                }
+            }
+        }
+        if *buffered >= self.max_rows {
+            self.flush()?;
+        }
+        Ok(())
+    }
+
+    /// Close the open row group, if any: its columns finish in parallel and
+    /// are appended in schema order.
+    fn flush(&mut self) -> WriteResult<()> {
+        let Some((writers, _)) = self.open.take() else {
+            return Ok(());
+        };
+        let chunks = by_column(writers, |_, writer| writer.close());
+        let mut group = self.file.next_row_group()?;
+        for chunk in chunks {
+            chunk?.append_to_row_group(&mut group)?;
+        }
+        group.close()?;
+        Ok(())
+    }
+
+    fn close(mut self) -> WriteResult<()> {
+        self.flush()?;
+        self.file.close().map(drop)
+    }
+}
+
+/// `work` on every column's item, in parallel on the decoder pool, item `i`
+/// always on the pool's thread `i % threads`; the results in item order.
+///
+/// A column writer's buffers grow on whichever thread writes to it, and each
+/// thread's allocator keeps its own high-water mark, so columns that moved
+/// between threads from batch to batch (work stealing) raised every thread's
+/// mark. Pinned, each thread holds about its own columns' share.
+fn by_column<X: Send, R: Send>(items: Vec<X>, work: impl Fn(usize, X) -> R + Sync) -> Vec<R> {
+    crate::install_batch_work(|| {
+        let threads = rayon::current_num_threads();
+        let mut shares: Vec<Vec<(usize, X)>> = (0..threads).map(|_| Vec::new()).collect();
+        for (i, item) in items.into_iter().enumerate() {
+            shares[i % threads].push((i, item));
+        }
+        let shares: Vec<std::sync::Mutex<Vec<(usize, X)>>> =
+            shares.into_iter().map(std::sync::Mutex::new).collect();
+        let mut done: Vec<(usize, R)> = rayon::broadcast(|thread| {
+            let share = std::mem::take(
+                &mut *shares[thread.index()]
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner()),
+            );
+            share
+                .into_iter()
+                .map(|(i, item)| (i, work(i, item)))
+                .collect::<Vec<_>>()
+        })
+        .into_iter()
+        .flatten()
+        .collect();
+        done.sort_unstable_by_key(|&(i, _)| i);
+        done.into_iter().map(|(_, result)| result).collect()
+    })
 }
 
 /// Encode column `i` of every batch with `writers[i]` on `encoders`, the
@@ -2622,6 +2755,108 @@ mod tests {
             out_names(&read_all(&dir.join("out").join(COMPACT_VEHICLES))),
             [VEHICLE_ID, "decoded_model_year", "Make"]
         );
+    }
+
+    /// Rows `start..start + rows` of a table with text, numbers and nulls in
+    /// a pattern that does not repeat with the row count, plus a struct column
+    /// (two leaves) when `nested`.
+    fn varied(start: usize, rows: usize, nested: bool) -> RecordBatch {
+        use arrow_array::{Float64Array, Int64Array, StructArray};
+        let at = |row: usize| start + row;
+        let text: StringArray = (0..rows)
+            .map(|r| (at(r) % 7 != 3).then(|| format!("value-{}", at(r) * 31 % 997)))
+            .collect();
+        let ints: Int64Array = (0..rows)
+            .map(|r| (at(r) % 5 != 0).then_some((at(r) % 13) as i64))
+            .collect();
+        let floats: Float64Array = (0..rows).map(|r| Some(at(r) as f64 / 8.0)).collect();
+        let mut fields = vec![
+            Field::new("text", DataType::Utf8, true),
+            Field::new("ints", DataType::Int64, true),
+            Field::new("floats", DataType::Float64, true),
+        ];
+        let mut columns: Vec<ArrayRef> =
+            vec![Arc::new(text), Arc::new(ints), Arc::new(floats.clone())];
+        if nested {
+            let parts = StructArray::from(vec![
+                (
+                    Arc::new(Field::new("a", DataType::Utf8, true)),
+                    columns[0].clone(),
+                ),
+                (
+                    Arc::new(Field::new("b", DataType::Float64, true)),
+                    Arc::new(floats) as ArrayRef,
+                ),
+            ]);
+            fields.push(Field::new("parts", parts.data_type().clone(), true));
+            columns.push(Arc::new(parts));
+        }
+        RecordBatch::try_new(Arc::new(Schema::new(fields)), columns).expect("batch")
+    }
+
+    #[test]
+    fn row_groups_write_the_bytes_arrow_writer_does() {
+        let scratch = Scratch::new();
+        // Batches that fill, straddle and overrun 4,096-row groups, with a
+        // flush after some of them (what an adaptive sink does after each).
+        let plan = [
+            (1_000, false),
+            (5_000, true),
+            (3, false),
+            (4_096, false),
+            (9_999, true),
+            (0, true),
+            (700, false),
+        ];
+        for nested in [false, true] {
+            let batches: Vec<(RecordBatch, bool)> = plan
+                .iter()
+                .scan(0, |start, &(rows, flush)| {
+                    let batch = varied(*start, rows, nested);
+                    *start += rows;
+                    Some((batch, flush))
+                })
+                .collect();
+            let schema = batches[0].0.schema();
+            let props = || {
+                WriterProperties::builder()
+                    .set_compression(Compression::SNAPPY)
+                    .set_max_row_group_row_count(Some(4_096))
+                    .set_data_page_row_count_limit(1_500)
+                    .build()
+            };
+            let expected = scratch.join("arrow_writer.parquet");
+            let mut writer = ArrowWriter::try_new(
+                File::create(&expected).unwrap(),
+                schema.clone(),
+                Some(props()),
+            )
+            .unwrap();
+            for (batch, flush) in &batches {
+                writer.write(batch).unwrap();
+                if *flush {
+                    writer.flush().unwrap();
+                }
+            }
+            writer.close().unwrap();
+            let got = scratch.join("row_groups.parquet");
+            let writer =
+                ArrowWriter::try_new(File::create(&got).unwrap(), schema, Some(props())).unwrap();
+            let (file, factory) = writer.into_serialized_writer().unwrap();
+            let mut groups = RowGroups::new(file, factory);
+            for (batch, flush) in &batches {
+                groups.write(batch).unwrap();
+                if *flush {
+                    groups.flush().unwrap();
+                }
+            }
+            groups.close().unwrap();
+            let (expected, got) = (
+                std::fs::read(expected).unwrap(),
+                std::fs::read(got).unwrap(),
+            );
+            assert!(expected == got, "nested: {nested}");
+        }
     }
 
     #[test]

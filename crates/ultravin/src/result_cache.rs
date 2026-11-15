@@ -86,7 +86,7 @@ pub fn result_cache_counters() -> (u64, u64, u64) {
 }
 
 /// VIN bytes 1-16, then byte 17 with the caller year above it.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) struct Key([u64; 3]);
 
 impl Key {
@@ -185,11 +185,63 @@ pub(crate) enum Probe<'a> {
 /// WMI depths remembered per worker, so a probe rarely searches the database.
 const DEPTH_MEMO: usize = 512;
 
+/// Cache keys of sanitized VINs, with a memo of WMI depths so a key rarely
+/// searches the database.
+#[derive(Default)]
+pub(crate) struct Keys {
+    /// `(packed WMI, depth)`, `depth` 0 for a WMI the database lacks.
+    depths: Vec<(u64, u8)>,
+}
+
+impl Keys {
+    /// [`Db::wmi_key_depth`] through the memo.
+    fn wmi_key_depth(&mut self, db: &Db, wmi: &[u8]) -> Option<u8> {
+        if self.depths.is_empty() {
+            self.depths = vec![(0, 0); DEPTH_MEMO];
+        }
+        let mut packed = [0u8; 8];
+        packed[..wmi.len()].copy_from_slice(wmi);
+        let packed = u64::from_le_bytes(packed);
+        let slot = &mut self.depths
+            [(packed.wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 55) as usize % DEPTH_MEMO];
+        if slot.0 != packed {
+            let wmi = std::str::from_utf8(wmi).expect("ASCII");
+            *slot = (packed, db.wmi_key_depth(wmi).unwrap_or(0));
+        }
+        (slot.1 != 0).then_some(slot.1)
+    }
+
+    /// The key of a sanitized VIN, or `None` when it is not 17 valid
+    /// characters with a valid check digit or its WMI is not in the
+    /// database. Check-digit exceptions are not ruled out here.
+    pub(crate) fn key(&mut self, db: &Db, vin: &str, caller_year: Option<i32>) -> Option<Key> {
+        let b = <&[u8; 17]>::try_from(vin.as_bytes()).ok()?;
+        if !b.iter().all(|&c| checkdigit::is_default_char(c))
+            || checkdigit::check_digit_with_flag(vin, false) != Some(char::from(b[8]))
+        {
+            return None;
+        }
+        let nine = b[2] == b'9';
+        let mut wmi = [0u8; 6];
+        wmi[..3].copy_from_slice(&b[..3]);
+        wmi[3..].copy_from_slice(&b[11..14]);
+        let depth = self.wmi_key_depth(db, &wmi[..if nine { 6 } else { 3 }])?;
+        let mut masked = *b;
+        masked[8] = b'*';
+        let first_collapsed = if nine { 15 } else { 12 }.max(usize::from(depth) + 1);
+        for c in &mut masked[first_collapsed - 1..] {
+            if c.is_ascii_digit() {
+                *c = b'#';
+            }
+        }
+        Some(Key::new(&masked, caller_year))
+    }
+}
+
 /// One worker's side of the cache: admission, the WMI depth memo, counters.
 #[derive(Default)]
 pub(crate) struct Worker {
-    /// `(packed WMI, depth)`, `depth` 0 for a WMI the database lacks.
-    depths: Vec<(u64, u8)>,
+    keys: Keys,
     /// Hits and stores over roughly the last few thousand probes.
     recent_hits: u32,
     recent_stores: u32,
@@ -240,23 +292,6 @@ impl Worker {
         self.recent_stores <= 4 * self.recent_hits + 16 || self.seen.is_multiple_of(64)
     }
 
-    /// [`Db::wmi_key_depth`] through the worker's memo.
-    fn wmi_key_depth(&mut self, db: &Db, wmi: &[u8]) -> Option<u8> {
-        if self.depths.is_empty() {
-            self.depths = vec![(0, 0); DEPTH_MEMO];
-        }
-        let mut packed = [0u8; 8];
-        packed[..wmi.len()].copy_from_slice(wmi);
-        let packed = u64::from_le_bytes(packed);
-        let slot = &mut self.depths
-            [(packed.wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 55) as usize % DEPTH_MEMO];
-        if slot.0 != packed {
-            let wmi = std::str::from_utf8(wmi).expect("ASCII");
-            *slot = (packed, db.wmi_key_depth(wmi).unwrap_or(0));
-        }
-        (slot.1 != 0).then_some(slot.1)
-    }
-
     /// Classify a sanitized VIN and look it up.
     pub(crate) fn probe<'a>(
         &mut self,
@@ -265,31 +300,9 @@ impl Worker {
         vin: &str,
         caller_year: Option<i32>,
     ) -> Probe<'a> {
-        let b = vin.as_bytes();
-        let Ok(b) = <&[u8; 17]>::try_from(b) else {
+        let Some(key) = self.keys.key(db, vin, caller_year) else {
             return Probe::Skip;
         };
-        if !b.iter().all(|&c| checkdigit::is_default_char(c))
-            || checkdigit::check_digit_with_flag(vin, false) != Some(char::from(b[8]))
-        {
-            return Probe::Skip;
-        }
-        let nine = b[2] == b'9';
-        let mut wmi = [0u8; 6];
-        wmi[..3].copy_from_slice(&b[..3]);
-        wmi[3..].copy_from_slice(&b[11..14]);
-        let Some(depth) = self.wmi_key_depth(db, &wmi[..if nine { 6 } else { 3 }]) else {
-            return Probe::Skip;
-        };
-        let mut masked = *b;
-        masked[8] = b'*';
-        let first_collapsed = if nine { 15 } else { 12 }.max(usize::from(depth) + 1);
-        for c in &mut masked[first_collapsed - 1..] {
-            if c.is_ascii_digit() {
-                *c = b'#';
-            }
-        }
-        let key = Key::new(&masked, caller_year);
         self.probes += 1;
         if self.probes.is_multiple_of(1024) {
             self.recent_hits /= 2;

@@ -29,6 +29,7 @@ identified as such.
 - [November 13: flat results are flattened full results](#november-13-flat-results-are-flattened-full-results)
 - [November 14: compact output writes each vehicle once](#november-14-compact-output-writes-each-vehicle-once)
 - [November 14: batch JSON and dicts reuse each vehicle's output](#november-14-batch-json-and-dicts-reuse-each-vehicles-output)
+- [November 14: wide columns decode each vehicle once and encode in parallel](#november-14-wide-columns-decode-each-vehicle-once-and-encode-in-parallel)
 - [Experiments we rejected or replaced](#experiments-we-rejected-or-replaced)
 - [SQL oracle and development resources](#sql-oracle-and-development-resources)
 - [Correctness and measurement rules](#correctness-and-measurement-rules)
@@ -1561,6 +1562,137 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
     Remembering ids across batches as well was 13% slower than within a
     batch alone on sorted input. Not shipped: it trades memory for speed.
 
+## November 14: wide columns decode each vehicle once and encode in parallel
+
+- **Where the time went.** `decode_parquet_to_file` at 8 workers, 2M VINs,
+  timed apart (temporary probe): sorted NY spent 2.84 s decoding and 1.84 s
+  encoding, synthetic 2.63 s and 4.04 s. Encoding ran on the calling thread,
+  one column after another, while the decoder pool idled; Snappy was 5-12%
+  of it (1.75 s and 3.57 s uncompressed) and no column more than 7%. The
+  wide Arrow path (`ArrowDecoder::decode_batch`, so Python's
+  `decode_stream`) decoded every row although ~97% of sorted NY rows repeat
+  a vehicle another row of their batch has.
+- **Parallel encoding** ([parquet_io.rs](crates/ultravin/src/parquet_io.rs)
+  `RowGroups`, behind `ParquetSink::write_all`, so `decode_parquet_to_file`,
+  `decode-parquet` and `DecodeStream.to_parquet`). It does what
+  `ArrowWriter::write`/`flush` do, splitting batches at the row-group limit
+  the same way, but writes each batch's columns to their
+  `ArrowColumnWriter`s on the decoder pool (decoding is not running then).
+  Every column writer sees the writes it saw before, in the same order, so
+  the file is byte-identical. Column `i` always runs on pool thread
+  `i % threads` (`rayon::broadcast`): with work stealing, columns moved
+  between threads and each thread's allocator kept its own high-water mark
+  (+34-36 MiB peak RSS on synthetic at 8 workers; a dedicated pool of 8, 4
+  or 2 encoders cost +125, +62 and +26 MiB, and 2 ran at 418k VIN/s).
+  The peak live heap was the same in every variant (313 MiB, counted by a
+  wrapping allocator), and so was macOS's physical footprint; `ru_maxrss`
+  counts the allocator's spread. Pinned, synthetic at 8 workers peaked
+  678-679 MiB against 674-676 at cd7874f, ~3% slower than stealing.
+- **Each vehicle decoded once** ([arrow_io.rs](crates/ultravin/src/arrow_io.rs)
+  `Repeats`). Before decoding, a batch of 2,048+ rows samples 16 runs of 16
+  neighbouring rows and computes their result-cache keys (`result_cache::Keys`,
+  the cache's own key, now shared with it; the VIN is sanitized as a decode
+  would). Fewer than 8 of the 256 repeating an earlier sampled key, it
+  decodes row by row exactly as before. Otherwise every row's key is
+  computed (in parallel), rows are grouped by key, and if under 90% of the
+  rows are distinct the first row of each group is decoded on the direct
+  path. A group whose first row decoded clean (codes `[0]`, no corrected
+  VIN, the results the cache stores) is equal but for `vin` in every row,
+  as the cache relies on; any other group's rows are each decoded too.
+  Rows with no key (bad check digit, unknown WMI, garbage, check-digit
+  exceptions) are their own group. The columns are then gathered a run of
+  rows at a time (neighbours mostly copy one vehicle): a primitive run is
+  one fill, a text run one copy then doubling copies within the buffer, and
+  a null run one bit range. The buffers are sized and allocated on the
+  calling thread and filled on the pool: allocated on the pool's threads
+  and freed on the caller's, they left each thread's allocator holding old
+  batches (+25-30% peak RSS for Arrow at 8 workers).
+  - Why not the native stream: it costs ~18% on input that never repeats
+    (November 13). A per-batch decision on the direct path costs that input
+    one 256-key sample per batch. Synthetic input never repeats in a
+    sample; shuffled NY repeats in 13-15 of 256 rows although three
+    quarters of a batch's rows repeat (two sampled rows match with the
+    square of a vehicle's share), which is why the bar is 1 in 32, not 1 in 4.
+  - Arrow `take` with one index per row was the first gather: NY sorted
+    1.53M / 5.43M VIN/s at 1 / 8 workers with 876 MiB peak at 8; half of
+    the time went to `take_bits` and per-value `memmove`. The run gather
+    does 1.6-1.7M / 7.1-7.2M at 535-540 MiB.
+- **Correctness.** Byte-identical files against cd7874f's `decode_files
+  wide` (fixed 65,536-row batches): sorted NY 2M, sorted NY with a year on
+  every third row, synthetic 2M, synthetic with years (each at 1, 8 and 12
+  workers) and shuffled NY 2M (1 and 8). `decode_stream(...).to_parquet`
+  with automatic batches, against cd7874f's wheel at a fixed clock: equal
+  schema with metadata and equal rows read back for both year corpora and
+  shuffled NY (row groups differ, as between two runs of cd7874f: adaptive
+  batches are timed). Tests: the grouped decode equals the row-by-row one
+  column for column on a mixed input (common VINs with 300 serial siblings,
+  generated VINs, many of which decode with errors, cover VINs, wrong check
+  digits, padded lowercase, short cuts, 3,000 VINs that share nothing,
+  garbage, the repeating part again reversed, per-row years), with and
+  without years, in four ranges, and the input is checked to exercise both
+  copied and re-decoded groups; `decode_batch` equals the row-by-row decode
+  in 2,500-, 4,096- and 9,000-row batches; only repeating batches take the
+  grouped path; `RowGroups` writes `ArrowWriter`'s bytes for batches that
+  fill, straddle and overrun row groups with flushes between, flat and with
+  a nested column. Run at 1, 2 and 12 threads. Breaking the re-decode of
+  unclean groups fails two of them.
+- **Results.** `scripts/bench/api_compare.py`, 2M VINs, two alternating
+  rounds against cd7874f (ranges are the rounds); CLI cells use automatic
+  batches and the system clock:
+
+  | path | input | workers | VIN/s before → after | peak RSS MiB before → after |
+  |---|---|---:|---:|---:|
+  | Rust `ArrowDecoder::decode_batch` ×65,536 | NY sorted | 1 | 132k → **1.60-1.69M** (12×) | 566-567 → 491-520 |
+  | Rust `ArrowDecoder::decode_batch` ×65,536 | NY sorted | 8 | 764-774k → **7.07-7.23M** (9.3×) | 636-654 → 535-540 |
+  | Rust `ArrowDecoder::decode_batch` ×65,536 | synthetic | 1 | 193-203k → 191-201k | 792 → 791 |
+  | Rust `ArrowDecoder::decode_batch` ×65,536 | synthetic | 8 | 879-938k → 890-933k | 801-819 → 802-810 |
+  | Rust `decode_parquet_to_file` | NY sorted | 1 | 117k → **636-676k** (5.6×) | 420-421 → 346-349 |
+  | Rust `decode_parquet_to_file` | NY sorted | 8 | 448-449k → **2.90-2.99M** (6.6×) | 477-480 → 374-376 |
+  | Rust `decode_parquet_to_file` | synthetic | 1 | 137-145k → 135-144k | 661-663 → 628 |
+  | Rust `decode_parquet_to_file` | synthetic | 8 | 319-334k → **660-683k** (2.1×) | 671-683 → 679-684 |
+  | Python `decode_stream` into pyarrow | NY sorted | 1 | 133-134k → **1.62-1.71M** (12×) | 286-291 → 291-308 |
+  | Python `decode_stream` into pyarrow | NY sorted | 8 | 760-765k → **4.34-4.46M** (5.8×) | 361-364 → 341-369 |
+  | Python `decode_stream` into pyarrow | synthetic | 1 | 192-204k → 194-206k | 395-410 → 380-399 |
+  | Python `decode_stream` into pyarrow | synthetic | 8 | 888-889k → 882-897k | 416-428 → 432-435 |
+  | CLI `decode-parquet` | NY sorted | 1 | 116-117k → **562-623k** (5.1×) | 259-267 → 229-232 |
+  | CLI `decode-parquet` | NY sorted | 8 | 441k → **1.88-1.95M** (4.3×) | 299-301 → 283-286 |
+  | CLI `decode-parquet` | synthetic | 1 | 122-127k → 120-124k | 379-384 → 368-371 |
+  | CLI `decode-parquet` | synthetic | 8 | 286-295k → **549-560k** (1.9×) | 406 → 409 |
+
+  The same 2M sorted NY VINs shuffled (one round; not part of the bar):
+
+  | path | workers | VIN/s before → after | peak RSS MiB before → after |
+  |---|---:|---:|---:|
+  | Rust `ArrowDecoder::decode_batch` ×65,536 | 1 | 90k → 279k (3.1×) | 559 → 473 |
+  | Rust `ArrowDecoder::decode_batch` ×65,536 | 8 | 554k → 1.53M (2.8×) | 596 → 500 |
+  | Rust `decode_parquet_to_file` | 1 | 76k → 187k (2.5×) | 397 → 324 |
+  | Rust `decode_parquet_to_file` | 8 | 288k → 994k (3.5×) | 434 → 373 |
+  | Python `decode_stream` into pyarrow | 1 | 88k → 142k (1.6×) | 227 → **283** |
+  | Python `decode_stream` into pyarrow | 8 | 541k → 839k (1.6×) | 312 → **345** |
+  | CLI `decode-parquet` | 1 | 76k → 114k (1.5×) | 248 → **274** |
+  | CLI `decode-parquet` | 8 | 270k → 607k (2.2×) | 296 → **305** |
+
+  With automatic batches the tuner now finds that larger batches are faster
+  on shuffled input (more of a batch repeats) and grows them from ~5k to
+  ~19.5k rows, inside the same `batch_memory_mb` budget; that is the higher
+  peak. On sorted NY the sizes barely move (~18.6k, probing ~22k instead of
+  ~18.7k, as exact-size gathered columns fit more rows into the budget), and
+  the Python cells' peak moves with them and with allocator spread: six
+  more alternating pairs gave 286-291 → 273-287 MiB (NY, 1 worker) and
+  414-444 → 413-427 MiB (synthetic, 8 workers). A Rust probe decoding sorted
+  NY in fixed 8,192- to 32,768-row Arrow batches at one worker peaked within
+  ±4 MiB of cd7874f; Python `decode_stream` at a fixed 65,536 rows peaked
+  531 → 434 MiB. Synthetic Arrow at 8 workers, five more
+  alternating pairs: 896-904k → 881-901k VIN/s (−0.8%), 808-810 → 807-811
+  MiB. The bare stream (`rust-native-discard`, which now takes its key from
+  `Keys`) is unchanged: NY 12.06-12.12M → 12.03-12.11M (8 workers),
+  2.83M → 2.79-2.83M (1); synthetic 1.91M → 1.86-1.91M (8).
+- **What is left.** At one worker sorted NY's Parquet output is bound by
+  encoding (1.84 s of ~3.1 s for 2M rows): the writer interns every value
+  of every row into its dictionaries, repeated or not, so repeats cannot
+  make it cheaper without writing our own encoder. In the grouped decode
+  the gather is ~45% of the time and the keys ~7%.
+
 ## Experiments we rejected or replaced
 
 Keeping these failures is part of preserving the performance work. A compatible
@@ -1589,7 +1721,9 @@ rewrite with no established end-to-end benefit did not qualify for retention.
 | Batch JSON handed over as one string per stream batch (November 13) | The caller appended each batch as it arrived, so the text stayed in input order only without the global locality sort, and the growing output was copied again on every doubling: −34% at twelve workers on never-repeating input. One string per row and one exact-size join replaced it. |
 | Flat batch calls of 8,192-65,535 VINs on the native stream (November 13) | Handing every row's owned values back in input order cost ~1 µs a row on the calling thread: 10,000-50,000-VIN calls ran 1-20% slower than decoding directly at twelve workers. They decode directly; flat calls stream from 65,536 VINs. |
 | Native stream workers on threads spawned per call (November 13) | Results that outlive the call were freed into the abandoned allocator heaps of exited threads, so each call faulted in fresh pages: −16% for a one-worker batch call. Workers now run on the decoder pool. |
-| Columnar output on the native stream (November 13) | Identical output and 1.6-4.7× on repeating input, but never-repeating input lost 3-22% at twelve workers at every call size (the stream's coordination and cache probes cost ~18% before any conversion) and 12% for all columns at one worker. A size threshold cannot tell repeating input from not; the columnar path keeps its own driver. |
+| Columnar output on the native stream (November 13) | Identical output and 1.6-4.7× on repeating input, but never-repeating input lost 3-22% at twelve workers at every call size (the stream's coordination and cache probes cost ~18% before any conversion) and 12% for all columns at one worker. A size threshold cannot tell repeating input from not; the columnar path keeps its own driver. Replaced by a per-batch sample on the direct path (November 14). |
+| Parquet columns encoded on rayon's work-stealing pool, or on a dedicated encoder pool (November 14) | Same bytes, ~3% faster than pinned columns on synthetic at 8 workers, but columns moved between threads and every thread's allocator kept a high-water mark: +34-36 MiB peak RSS on synthetic at 8 workers stealing, +26 to +125 MiB with 2 to 8 dedicated encoders. Pinning column `i` to thread `i % threads` keeps RSS flat. |
+| Gathering repeated rows with Arrow `take` (November 14) | One index per row: `take_bits` and per-value `memmove` were half the grouped decode, and output allocated on pool threads but freed by the caller raised peak RSS 25-30% at 8 workers. Replaced by run-at-a-time copies into buffers the caller allocates. |
 
 The earlier ablations and Python interning experiment are recorded in
 [BENCHMARKS.md](docs/BENCHMARKS.md). The September experiment outcomes above were

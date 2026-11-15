@@ -194,6 +194,10 @@ impl ColumnWriter for ColumnValues {
 pub(crate) struct ColumnChunk<C> {
     pub(crate) model_year: Vec<Option<i32>>,
     pub(crate) columns: Vec<C>,
+    /// Whether each row decoded clean (codes `[0]`, no corrected VIN): the
+    /// results the result cache would share.
+    #[cfg_attr(not(feature = "arrow"), allow(dead_code))]
+    pub(crate) clean: Vec<bool>,
 }
 
 /// Move one chunk into its final column, releasing the chunk's allocation.
@@ -304,6 +308,7 @@ pub(crate) fn decode_chunks_at<I: AsRef<str> + Sync, C: ColumnWriter>(
                     .map(|m| make_column(m.dtype, vins.len()))
                     .collect();
                 let mut model_year = Vec::with_capacity(vins.len());
+                let mut clean = Vec::with_capacity(vins.len());
                 for (row, vin) in vins.iter().enumerate() {
                     let input_index = chunk_index * CHUNK_ROWS + row;
                     let mut r = decode_items(
@@ -315,6 +320,7 @@ pub(crate) fn decode_chunks_at<I: AsRef<str> + Sync, C: ColumnWriter>(
                     );
                     r.materialize_defaults();
                     model_year.push(r.model_year);
+                    clean.push(r.error_codes == [0] && r.corrected_vin.is_empty());
                     let mut seen = ElementSet::default();
                     for it in r.items {
                         let Some(&ci) = index.get(&it.element_id) else {
@@ -346,6 +352,7 @@ pub(crate) fn decode_chunks_at<I: AsRef<str> + Sync, C: ColumnWriter>(
                 ColumnChunk {
                     model_year,
                     columns,
+                    clean,
                 }
             })
             .collect()

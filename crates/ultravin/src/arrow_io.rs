@@ -8,6 +8,11 @@
 //! output schema are settled once, so a chunk costs a decode and two casts.
 //! Memory is O(batch) and flat in the input's width — only the VIN and
 //! caller-year columns are read.
+//!
+//! A batch whose VINs repeat a vehicle (most of a sorted registration file)
+//! decodes one row per vehicle and copies its columns to the rest; a sample
+//! of each batch decides, so input that does not repeat decodes row by row as
+//! before. See `Repeats`.
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
@@ -540,13 +545,369 @@ mod results {
 #[cfg(feature = "parquet")]
 pub(crate) use results::{ResultColumns, ResultProjection};
 
+/// The decoded model year and one array per projected column, a row per VIN.
+type Decoded = (Vec<Option<i32>>, Vec<ArrayRef>);
+
 fn decode_arrays(
     vins: &[&str],
     years: Option<&[Option<i32>]>,
     metas: &[IdMeta],
     now_micros: i64,
-) -> Result<(Vec<Option<i32>>, Vec<ArrayRef>), ArrowError> {
+) -> Result<Decoded, ArrowError> {
+    match Repeats::find(vins, years) {
+        Some(repeats) => repeats.decode(vins, years, metas, now_micros),
+        None => decode_rows(vins, years, metas, now_micros).map(|(decoded, _)| decoded),
+    }
+}
+
+/// Batches shorter than this always decode every row.
+const REPEATS_MIN_ROWS: usize = 2_048;
+/// Runs of neighbouring rows sampled to tell whether a batch repeats, and
+/// their length: sorted input repeats between neighbours, shuffled input
+/// between any rows.
+const SAMPLE_RUNS: usize = 16;
+const SAMPLE_RUN_ROWS: usize = 16;
+
+/// Result-cache keys of a batch's rows: `None` for a row the cache would not
+/// look up (see [`crate::result_cache`]).
+struct BatchKeys<'v> {
+    vins: &'v [&'v str],
+    years: Option<&'v [Option<i32>]>,
+    db: &'static Db,
+    keys: crate::result_cache::Keys,
+    vin: String,
+}
+
+impl<'v> BatchKeys<'v> {
+    fn new(vins: &'v [&'v str], years: Option<&'v [Option<i32>]>) -> Self {
+        Self {
+            vins,
+            years,
+            db: Db::embedded(),
+            keys: crate::result_cache::Keys::default(),
+            vin: String::new(),
+        }
+    }
+
+    fn key(&mut self, row: usize) -> Option<crate::result_cache::Key> {
+        self.vin = crate::sanitize_into(self.vins[row], std::mem::take(&mut self.vin));
+        let key = self
+            .keys
+            .key(self.db, &self.vin, crate::year_at(self.years, row))?;
+        (!self.db.vinexception_checkdigit(&self.vin)).then_some(key)
+    }
+}
+
+/// A batch's rows by result-cache key ([`crate::result_cache`]). Rows with
+/// one key have results equal but for `vin` once one of them decodes clean,
+/// so such a group decodes one row and copies its columns to the rest.
+struct Repeats {
+    /// For each row, the first row with its key: itself when it has no key
+    /// or is that first row.
+    first: Vec<u32>,
+}
+
+impl Repeats {
+    /// The batch's groups, or `None` when it should decode row by row: it is
+    /// short, a sample of it barely repeats, or its rows barely do.
+    fn find(vins: &[&str], years: Option<&[Option<i32>]>) -> Option<Repeats> {
+        let n = vins.len();
+        if n < REPEATS_MIN_ROWS {
+            return None;
+        }
+        let mut keys = BatchKeys::new(vins, years);
+        let mut sampled = crate::hash::IntSet::default();
+        let stride = n / SAMPLE_RUNS;
+        let repeated = (0..SAMPLE_RUNS)
+            .flat_map(|run| run * stride..run * stride + SAMPLE_RUN_ROWS)
+            .filter_map(|row| keys.key(row))
+            .filter(|k| !sampled.insert(*k))
+            .count();
+        // Input that never repeats (generated VINs) repeats in no sample.
+        // Shuffled registrations repeat in ~5% of one (13-15 of 256 rows)
+        // though three quarters of their batch's rows repeat: two sampled
+        // rows share a key with the square of its share of the batch.
+        if repeated * 32 < SAMPLE_RUNS * SAMPLE_RUN_ROWS {
+            return None;
+        }
+        let repeats = Self::group(vins, years);
+        let distinct = (0..n)
+            .filter(|&row| repeats.first[row] as usize == row)
+            .count();
+        // Copying a row's columns costs about a tenth of decoding it.
+        (distinct * 10 < n * 9).then_some(repeats)
+    }
+
+    /// Group every row of the batch.
+    fn group(vins: &[&str], years: Option<&[Option<i32>]>) -> Repeats {
+        use rayon::prelude::*;
+        const KEY_ROWS: usize = 4_096;
+        let keys: Vec<_> = crate::install_batch_work(|| {
+            (0..vins.len().div_ceil(KEY_ROWS))
+                .into_par_iter()
+                .flat_map_iter(|chunk| {
+                    let mut keys = BatchKeys::new(vins, years);
+                    let rows = chunk * KEY_ROWS..vins.len().min((chunk + 1) * KEY_ROWS);
+                    rows.map(move |row| keys.key(row))
+                })
+                .collect()
+        });
+        let mut firsts: HashMap<_, u32, crate::hash::FxBuildHasher> =
+            HashMap::with_capacity_and_hasher(vins.len() / 8, Default::default());
+        // Neighbours often share a key: only a new one is looked up.
+        let mut last = None;
+        let first = keys
+            .iter()
+            .enumerate()
+            .map(|(row, key)| {
+                let row = row as u32;
+                let Some(key) = key else {
+                    return row;
+                };
+                match last {
+                    Some((k, first)) if k == *key => first,
+                    _ => {
+                        let first = *firsts.entry(*key).or_insert(row);
+                        last = Some((*key, first));
+                        first
+                    }
+                }
+            })
+            .collect();
+        Repeats { first }
+    }
+
+    /// Decode the first row of every group, then every other row of a group
+    /// whose first row was not clean, and gather each row's columns.
+    fn decode(
+        &self,
+        vins: &[&str],
+        years: Option<&[Option<i32>]>,
+        metas: &[IdMeta],
+        now_micros: i64,
+    ) -> Result<Decoded, ArrowError> {
+        let pick = |rows: &[u32]| {
+            let vins: Vec<&str> = rows.iter().map(|&r| vins[r as usize]).collect();
+            let years: Option<Vec<Option<i32>>> = years.map(|_| {
+                rows.iter()
+                    .map(|&r| crate::year_at(years, r as usize))
+                    .collect()
+            });
+            (vins, years)
+        };
+        let firsts: Vec<u32> = (0..self.first.len() as u32)
+            .filter(|&row| self.first[row as usize] == row)
+            .collect();
+        let (first_vins, first_years) = pick(&firsts);
+        let ((mut model_year, mut columns), clean) =
+            decode_rows(&first_vins, first_years.as_deref(), metas, now_micros)?;
+        // Where each row's columns are: an index into the decoded rows.
+        let mut slot = vec![u32::MAX; self.first.len()];
+        for (at, &row) in firsts.iter().enumerate() {
+            slot[row as usize] = at as u32;
+        }
+        let rest: Vec<u32> = (0..self.first.len() as u32)
+            .filter(|&row| {
+                let first = self.first[row as usize];
+                first != row && !clean[slot[first as usize] as usize]
+            })
+            .collect();
+        if !rest.is_empty() {
+            let (rest_vins, rest_years) = pick(&rest);
+            let ((rest_year, rest_columns), _) =
+                decode_rows(&rest_vins, rest_years.as_deref(), metas, now_micros)?;
+            for (at, &row) in rest.iter().enumerate() {
+                slot[row as usize] = (firsts.len() + at) as u32;
+            }
+            model_year.extend(rest_year);
+            columns = columns
+                .iter()
+                .zip(&rest_columns)
+                .map(|(a, b)| concat(&[a.as_ref(), b.as_ref()]))
+                .collect::<Result<_, _>>()
+                .map_err(|e| ArrowError::Io(format!("assembling decoded columns: {e}")))?;
+        }
+        for (row, &first) in self.first.iter().enumerate() {
+            if slot[row] == u32::MAX {
+                slot[row] = slot[first as usize];
+            }
+        }
+        let model_year = slot.iter().map(|&s| model_year[s as usize]).collect();
+        Ok((model_year, Runs::of(&slot).gather(&columns)))
+    }
+}
+
+/// A batch's rows as runs of rows copying one decoded row: neighbours in
+/// sorted input mostly share a vehicle, so a column is copied a run at a
+/// time rather than a row at a time.
+struct Runs {
+    /// `(decoded row, rows)` in output order.
+    runs: Vec<(u32, u32)>,
+    rows: usize,
+}
+
+impl Runs {
+    fn of(slot: &[u32]) -> Self {
+        let mut runs: Vec<(u32, u32)> = Vec::new();
+        for &s in slot {
+            match runs.last_mut() {
+                Some((last, n)) if *last == s => *n += 1,
+                _ => runs.push((s, 1)),
+            }
+        }
+        Self {
+            runs,
+            rows: slot.len(),
+        }
+    }
+
+    /// Every column's rows, in output order. The buffers are allocated here
+    /// and filled on the decoder pool: allocating them on its threads and
+    /// freeing them on the caller's left each pool thread's allocator holding
+    /// its own share of old batches (+25% peak RSS at 8 workers).
+    fn gather(&self, columns: &[ArrayRef]) -> Vec<ArrayRef> {
+        use rayon::prelude::*;
+        let space: Vec<Space> = columns.iter().map(|column| self.space(column)).collect();
+        crate::install_batch_work(|| {
+            columns
+                .par_iter()
+                .zip(space)
+                .map(|(column, space)| self.fill(column, space))
+                .collect()
+        })
+    }
+
+    fn space(&self, column: &ArrayRef) -> Space {
+        let nulls = column
+            .nulls()
+            .map(|_| arrow_buffer::BooleanBufferBuilder::new(self.rows));
+        let values = match column.data_type() {
+            DataType::Utf8 => {
+                let offsets = column.as_string::<i32>().value_offsets();
+                let bytes: usize = self
+                    .runs
+                    .iter()
+                    .map(|&(s, n)| {
+                        (offsets[s as usize + 1] - offsets[s as usize]) as usize * n as usize
+                    })
+                    .sum();
+                // As a `StringBuilder` would, refuse what `i32` offsets cannot hold.
+                assert!(
+                    i32::try_from(bytes).is_ok(),
+                    "a decoded text column holds over 2 GiB in one batch"
+                );
+                Values::Str(Vec::with_capacity(bytes), Vec::with_capacity(self.rows + 1))
+            }
+            DataType::Int64 => Values::Int(Vec::with_capacity(self.rows)),
+            DataType::Float64 => Values::Float(Vec::with_capacity(self.rows)),
+            other => unreachable!("decoded columns are text or numbers, not {other}"),
+        };
+        Space { values, nulls }
+    }
+
+    fn fill(&self, column: &ArrayRef, space: Space) -> ArrayRef {
+        use arrow_array::types::{Float64Type, Int64Type};
+        let nulls = space.nulls.map(|mut nulls| {
+            let source = column
+                .nulls()
+                .expect("space for nulls only when there are some");
+            for &(s, n) in &self.runs {
+                nulls.append_n(n as usize, source.is_valid(s as usize));
+            }
+            arrow_buffer::NullBuffer::new(nulls.finish())
+        });
+        match space.values {
+            Values::Str(values, ends) => {
+                Arc::new(self.strings(column.as_string::<i32>(), values, ends, nulls))
+            }
+            Values::Int(values) => {
+                Arc::new(self.primitives(column.as_primitive::<Int64Type>(), values, nulls))
+            }
+            Values::Float(values) => {
+                Arc::new(self.primitives(column.as_primitive::<Float64Type>(), values, nulls))
+            }
+        }
+    }
+
+    fn primitives<T: arrow_array::ArrowPrimitiveType>(
+        &self,
+        column: &arrow_array::PrimitiveArray<T>,
+        mut values: Vec<T::Native>,
+        nulls: Option<arrow_buffer::NullBuffer>,
+    ) -> arrow_array::PrimitiveArray<T> {
+        let source = column.values();
+        for &(s, n) in &self.runs {
+            values.extend(std::iter::repeat_n(source[s as usize], n as usize));
+        }
+        arrow_array::PrimitiveArray::new(values.into(), nulls)
+    }
+
+    fn strings(
+        &self,
+        column: &arrow_array::StringArray,
+        mut values: Vec<u8>,
+        mut ends: Vec<i32>,
+        nulls: Option<arrow_buffer::NullBuffer>,
+    ) -> arrow_array::StringArray {
+        let offsets = column.value_offsets();
+        let source = column.values().as_slice();
+        ends.push(0);
+        for &(s, n) in &self.runs {
+            let value = &source[offsets[s as usize] as usize..offsets[s as usize + 1] as usize];
+            let start = values.len();
+            if !value.is_empty() {
+                // Copy the value once, then the copies made so far.
+                values.extend_from_slice(value);
+                let full = value.len() * n as usize;
+                while values.len() - start < full {
+                    let copied = values.len() - start;
+                    values.extend_from_within(start..start + copied.min(full - copied));
+                }
+            }
+            let mut end = start as i32;
+            for _ in 0..n {
+                end += value.len() as i32;
+                ends.push(end);
+            }
+        }
+        // SAFETY: each run copies whole values of a valid string column, and
+        // `ends` marks where each copy ends, so offsets rise monotonically
+        // over `values` and every slice between two of them is UTF-8.
+        unsafe {
+            arrow_array::StringArray::new_unchecked(
+                arrow_buffer::OffsetBuffer::new_unchecked(ends.into()),
+                values.into(),
+                nulls,
+            )
+        }
+    }
+}
+
+/// A gathered column's buffers, allocated to size.
+struct Space {
+    values: Values,
+    nulls: Option<arrow_buffer::BooleanBufferBuilder>,
+}
+
+enum Values {
+    /// Value bytes and offsets.
+    Str(Vec<u8>, Vec<i32>),
+    Int(Vec<i64>),
+    Float(Vec<f64>),
+}
+
+/// Decode every row; also says which rows decoded clean.
+fn decode_rows(
+    vins: &[&str],
+    years: Option<&[Option<i32>]>,
+    metas: &[IdMeta],
+    now_micros: i64,
+) -> Result<(Decoded, Vec<bool>), ArrowError> {
     let mut chunks = decode_chunks_at(vins, years, metas, ArrowColumn::new, now_micros);
+    let clean = chunks
+        .iter_mut()
+        .flat_map(|c| std::mem::take(&mut c.clean))
+        .collect();
     let model_year = chunks
         .iter_mut()
         .flat_map(|c| std::mem::take(&mut c.model_year))
@@ -569,7 +930,7 @@ fn decode_arrays(
             }
         })
         .collect::<Result<Vec<_>, _>>()?;
-    Ok((model_year, columns))
+    Ok(((model_year, columns), clean))
 }
 
 /// Whole numbers, including the dictionary encoding an integer column can
@@ -1217,5 +1578,160 @@ mod tests {
         let output = decoder.decode_batch(&input).expect("decode");
         assert!(decoder.batch_working_bytes(&output) < 10_000);
         assert!(output.column(0).get_array_memory_size() > 1_000_000);
+    }
+
+    const NOW: i64 = 1_788_220_800_000_000;
+
+    /// `vin` with the check digit it needs, if it can have one.
+    fn with_check_digit(vin: &str) -> Option<String> {
+        let digit = crate::checkdigit::check_digit_with_flag(vin, false).filter(|&d| d != '?')?;
+        let mut bytes = vin.as_bytes().to_vec();
+        bytes[8] = digit as u8;
+        String::from_utf8(bytes).ok()
+    }
+
+    /// Input that repeats in places and nowhere else: seeds (common VINs,
+    /// generated ones, many of which decode with errors, and the cover's),
+    /// each followed by serial siblings that share its vehicle and by a wrong
+    /// check digit, padded lowercase and a short cut; then VINs that share
+    /// nothing; then garbage; then the repeating part again, reversed, so
+    /// repeats are also far apart. Years go by row, so one vehicle's siblings
+    /// fall in several groups.
+    fn mixed_input() -> (Vec<String>, Vec<Option<i32>>, std::ops::Range<usize>) {
+        let db = Db::embedded();
+        let year = crate::current_year_at(NOW);
+        let filter = crate::Filter::default();
+        let mut seeds: Vec<String> = [HONDA, FORD, "5YJ3E1EA7KF317000", "JH4KA8260MC000000"]
+            .map(str::to_owned)
+            .into();
+        seeds.extend(crate::generate(db, 120, 11, &filter, NOW, year));
+        seeds.extend(db.cover().into_iter().filter(|s| s.len() == 17).take(100));
+        let mut repeating = Vec::new();
+        for (k, seed) in seeds.into_iter().enumerate() {
+            repeating.push(seed.clone());
+            let Some(clean) = with_check_digit(&seed) else {
+                continue;
+            };
+            for step in 1..=if k < 4 { 300 } else { 12 } {
+                let mut sibling = clean.clone().into_bytes();
+                let serial = (100_000 + step * 7_919 % 900_000).to_string();
+                for (c, digit) in sibling[11..].iter_mut().zip(serial.bytes()) {
+                    if c.is_ascii_digit() {
+                        *c = digit;
+                    }
+                }
+                repeating.extend(with_check_digit(&String::from_utf8(sibling).unwrap()));
+            }
+            let mut wrong = clean.clone().into_bytes();
+            wrong[8] = if wrong[8] == b'1' { b'2' } else { b'1' };
+            repeating.push(String::from_utf8(wrong).unwrap());
+            repeating.push(format!("  {}\t", clean.to_ascii_lowercase()));
+            repeating.push(clean[..11].to_string());
+        }
+        let mut vins = repeating.clone();
+        vins.extend(crate::generate(db, 3_000, 12, &filter, NOW, year));
+        let distinct = repeating.len()..vins.len();
+        vins.extend(["", "INVALID", "1HGCM82633A00435Ł", "1HGCM82633A0043521"].map(str::to_owned));
+        vins.extend(repeating.into_iter().rev());
+        let years = (0..vins.len())
+            .map(|row| [None, Some(2010), None, Some(1979), None, Some(2003)][row % 6])
+            .collect();
+        (vins, years, distinct)
+    }
+
+    fn all_columns() -> Vec<IdMeta> {
+        let db = Db::embedded();
+        let ids: Vec<ColumnSpec> = crate::all_public_ids(db)
+            .into_iter()
+            .map(ColumnSpec::Id)
+            .collect();
+        resolve_columns(db, &ids).expect("public columns")
+    }
+
+    #[test]
+    fn grouped_rows_decode_as_every_row_does() {
+        if !loaded() {
+            return;
+        }
+        let (vins, years, _) = mixed_input();
+        let vins: Vec<&str> = vins.iter().map(String::as_str).collect();
+        let metas = all_columns();
+        let n = vins.len();
+        // The input exercises both kinds of group: one copied from its clean
+        // first row, and one decoded row by row because its first row was not.
+        let (mut copied, mut decoded) = (false, false);
+        for range in [
+            0..n,
+            0..REPEATS_MIN_ROWS,
+            n / 3..n / 3 + 5_000,
+            n - 3_000..n,
+        ] {
+            for years in [None, Some(&years[range.clone()])] {
+                let vins = &vins[range.clone()];
+                let ((model_year, columns), clean) =
+                    decode_rows(vins, years, &metas, NOW).expect("direct");
+                let repeats = Repeats::group(vins, years);
+                let (reused_year, reused) =
+                    repeats.decode(vins, years, &metas, NOW).expect("reused");
+                assert_eq!(reused_year, model_year, "rows {range:?}");
+                assert_eq!(reused.len(), columns.len());
+                for ((got, want), meta) in reused.iter().zip(&columns).zip(&metas) {
+                    assert_eq!(got, want, "column {} of rows {range:?}", meta.name);
+                }
+                for (row, &first) in repeats.first.iter().enumerate() {
+                    if first as usize != row {
+                        copied |= clean[first as usize];
+                        decoded |= !clean[first as usize];
+                    }
+                }
+            }
+        }
+        assert!(copied && decoded);
+    }
+
+    #[test]
+    fn only_repeating_batches_take_the_grouped_path() {
+        if !loaded() {
+            return;
+        }
+        let (vins, years, distinct) = mixed_input();
+        let vins: Vec<&str> = vins.iter().map(String::as_str).collect();
+        assert!(distinct.len() > REPEATS_MIN_ROWS);
+        assert!(Repeats::find(&vins[..4_096], Some(&years[..4_096])).is_some());
+        assert!(Repeats::find(&vins[distinct], None).is_none());
+        assert!(Repeats::find(&vins[..REPEATS_MIN_ROWS - 1], None).is_none());
+    }
+
+    #[test]
+    fn a_batch_decodes_the_same_whichever_way_it_goes() {
+        if !loaded() {
+            return;
+        }
+        let (vins, years, _) = mixed_input();
+        let input = batch(vec![
+            utf8(
+                "vin",
+                &vins.iter().map(|v| Some(v.as_str())).collect::<Vec<_>>(),
+            ),
+            i32s("year", &years),
+        ]);
+        let specs: Vec<ColumnSpec> = all_columns().iter().map(|m| ColumnSpec::Id(m.id)).collect();
+        let decoder = ArrowDecoder::new_at(&input.schema(), &opts(specs), NOW).expect("decoder");
+        for rows in [2_500, 4_096, 9_000] {
+            for start in (0..input.num_rows()).step_by(rows) {
+                let part = input.slice(start, rows.min(input.num_rows() - start));
+                let got = decoder.decode_batch(&part).expect("decode");
+                let vin = part.column(0).as_string::<i32>();
+                let part_vins: Vec<&str> = vin.iter().map(|v| v.unwrap_or("")).collect();
+                let part_years = &years[start..start + part.num_rows()];
+                let ((model_year, columns), _) =
+                    decode_rows(&part_vins, Some(part_years), decoder.columns(), NOW)
+                        .expect("direct");
+                assert_eq!(got.column(2).as_ref(), &Int32Array::from(model_year));
+                for (got, want) in got.columns()[3..].iter().zip(&columns) {
+                    assert_eq!(got, want, "rows {start}..+{rows}");
+                }
+            }
+        }
     }
 }
