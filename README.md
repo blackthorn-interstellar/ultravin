@@ -372,7 +372,7 @@ written, strings built, every field of every result read.
 | Python `decode_batch_json` — one JSON string | 1,175,335 | 2,067,857 | 2,418,994 | 3.9 GB |
 | `ultravin decode-parquet` — one wide Parquet file on disk | 595,253 | 1,500,600 | 1,886,824 | 0.3 GB |
 | Rust `decode_batch_json_at`, full — one JSON string | 541,702 | 1,318,509 | 1,739,243 | 4.8 GB |
-| `ultravin decode-batch --jsonl` — JSON lines on disk | 337,840 | 1,148,479 | 1,499,262 | 0.3 GB |
+| `ultravin decode-batch --jsonl` — JSON lines on disk | 1,028,041 | 1,368,957 | 1,422,473 | 0.3 GB |
 | Rust `decode_batch_flat_at` — flat results, every field read | 522,491 | 940,971 | 1,038,778 | 1.2 GB |
 | Rust `decode_batch_stream_at` — full results, every field read on the calling thread | 730,758 | 822,500 | 806,355 | 0.6 GB |
 | Rust `decode_batch_at` — full results, every field read | 603,838 | 720,367 | 721,650 | 0.6 GB |
