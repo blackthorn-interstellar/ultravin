@@ -28,6 +28,7 @@ identified as such.
 - [November 13: batch calls run on the native stream](#november-13-batch-calls-run-on-the-native-stream)
 - [November 13: flat results are flattened full results](#november-13-flat-results-are-flattened-full-results)
 - [November 14: compact output writes each vehicle once](#november-14-compact-output-writes-each-vehicle-once)
+- [November 14: batch JSON and dicts reuse each vehicle's output](#november-14-batch-json-and-dicts-reuse-each-vehicles-output)
 - [Experiments we rejected or replaced](#experiments-we-rejected-or-replaced)
 - [SQL oracle and development resources](#sql-oracle-and-development-resources)
 - [Correctness and measurement rules](#correctness-and-measurement-rules)
@@ -1438,6 +1439,127 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
   | 12 | synthetic 2M | 2.04-2.09M → 2.04-2.07M | 16,492-16,508 → 16,513-16,587 |
   | 1 | NY sorted 2M | 2.68-2.69M → 2.83M | 1,217-1,224 → 1,154-1,157 |
   | 1 | synthetic 2M | 278-301k → 279-299k | 11,247-11,777 → 11,275-11,764 |
+
+## November 14: batch JSON and dicts reuse each vehicle's output
+
+- **Bottleneck.** On sorted NY the stream serves ~97% of rows from the
+  result cache, but every output path but `decode-compact` still rebuilt
+  its whole output per VIN: ~14 KB of full JSON, ~2 KB of flat JSON, ~45
+  dict stores (flat) or ~66 element dicts (full) under the GIL.
+- **JSON** ([json.rs](crates/ultravin/src/json.rs) `Rows`, `join`; full,
+  flat and JSON lines from `decode_batch_json*`/`decode_batch_jsonl_at`,
+  so Python's `decode_batch_json` too). Rows with one result id differ only
+  in `vin` (`NativeBatch::result_ids`), and every object starts with
+  `{"vin":`. A worker encodes a batch's new rows into a reused scratch
+  buffer, then makes one exact-size copy that the batch's rows share; a row
+  whose id appeared earlier in the batch, or that the worker's table
+  remembers (256 ids, direct-mapped, taken from a per-call pool like
+  compact's builders), is `{"vin":` + its own quoted `vin` + the shared
+  text after the first row's `vin`, with no encoding. Remembering costs a
+  slot only: the rows hold the text until the join anyway. The caller no
+  longer places rows in input order: it keeps each batch's rows, sums
+  their lengths into input-order offsets, and the decoder pool copies each
+  batch's rows into one exact-size output, freeing a batch's text once
+  written (one `unsafe` write through a raw pointer; every input index has
+  exactly one row, asserted, so the spans tile the output). Calls below
+  the stream thresholds keep their per-row allocation.
+- **Why full JSON peaked at 9.5 GB.** Each row's `String` was allocated
+  with room for 400 bytes per element (~27-30 KB for 14-21 KB of text), all
+  200k of them alive while the joined output was built: about three times
+  the output. Exact batch texts and shared rows remove that; what remains
+  on sorted NY is the output and the previous call's freed output.
+  Python's `decode_batch_json` still holds the Rust string and its Python
+  copy at once; under `abi3` the extension cannot write into a `str`'s
+  buffer, so that copy stays.
+- **Python dicts** ([lib.rs](crates/ultravin-py/src/lib.rs) `Dicts::build`).
+  A row whose id an earlier row of the call had is a copy of that row's
+  dict with the new `vin`: `PyDict_Copy` of the dict, a new `error_codes`
+  list, and for flat a copied `attributes` dict with every list value
+  copied; for full a new element list of copied element dicts. Every other
+  value is an immutable `str`, `int`, `bool` or `None`, so no dict or list
+  is shared between two results. The source dict is one this call built
+  and has not returned, so nothing can have changed it. The index of the
+  first dict per id is a `HashMap` (one entry per distinct id, beside dicts
+  of kilobytes). A flat row repeating an id earlier in its batch is not
+  even flattened on the worker (`Db::decode_batch_map_ids_at`).
+- **Crate boundary.** `NativeBatch::result_ids` is `pub` but
+  `#[doc(hidden)]`, as is the new `Db::decode_batch_map_ids_at`; neither
+  is in the documented API.
+- **Correctness.** Output hashed per call against 66dd299's wheel (sha256
+  of the JSON text, of each JSON-lines and JSONL-writer stream, and of the
+  `repr` of every dict, so key order counts): 118 cases, 0 differences.
+  They cover the first 200k sorted NY and 200k synthetic VINs and a 90k
+  mixed corpus (half NY, half synthetic, with wrong check digits, padded
+  lowercase, short, long, non-ASCII and empty inputs, and 30k shuffled
+  repeats), each with and without per-row years, full and flat, as one
+  JSON call, JSON lines, the JSONL writer at two budgets, dicts in 10k-row
+  (streamed), 5k-row (direct) and 100k-row calls, and JSON calls of 1, 7,
+  8,191-8,193 and 65,535-65,537 rows. New tests: streamed full and flat
+  JSON, JSON lines and the JSONL writer equal the direct path byte for byte
+  on a 68,536-row corpus of serial siblings, cover VINs and messy input
+  with per-row years (run at 1, 2 and 12 threads); repeated results in
+  streamed Python dicts equal single decodes, in key order, share no dict
+  or list (checked by `id`), and survive clearing every other result. That
+  test fails if the copies share the flat lists or the element dicts.
+- **Results.** `scripts/bench/api_compare.py`, 2M VINs, two alternating
+  rounds against 66dd299 (ranges are the two rounds); peak RSS from the
+  harness:
+
+  | path | input | workers | VIN/s before → after | peak RSS GB before → after |
+  |---|---|---:|---:|---:|
+  | Rust full JSON | NY sorted | 1 | 158k → **538-544k** (3.4×) | 9.48 → 4.67 |
+  | Rust full JSON | NY sorted | 8 | 463-466k → **1.70-1.73M** (3.7×) | 9.61-9.64 → 4.90 |
+  | Rust full JSON | synthetic | 1 | 127-128k → 132k (+3%) | 9.42 → 8.78 |
+  | Rust full JSON | synthetic | 8 | 329k → 628-631k (1.9×) | 9.76-9.78 → 9.00 |
+  | Rust flat JSON | NY sorted | 1 | 345-346k → **1.64M** (4.7×) | 1.43 → 0.92 |
+  | Rust flat JSON | NY sorted | 8 | 1.83M → **6.20-6.30M** (3.4×) | 1.53-1.57 → 1.34-1.39 |
+  | Rust flat JSON | synthetic | 1 | 157-158k → 163-164k (+4%) | 1.77 → 1.71 |
+  | Rust flat JSON | synthetic | 8 | 769-771k → 1.02M (+32%) | 1.83-1.87 → 1.82 |
+  | Rust JSON lines (flat) | NY sorted | 1 | 344-346k → 1.63-1.70M | 1.42 → 0.92 |
+  | Rust JSON lines (flat) | NY sorted | 8 | 1.82-1.83M → 6.16-6.25M | 1.53-1.57 → 1.37-1.40 |
+  | Rust JSON lines (flat) | synthetic | 1 | 157-158k → 162k | 1.77 → 1.72 |
+  | Rust JSON lines (flat) | synthetic | 8 | 770-772k → 1.01-1.04M | 1.83-1.89 → 1.80-1.90 |
+  | Python `decode_batch_json` | NY sorted | 1 | 316-323k → 1.13-1.15M (3.5×) | 4.31 → 3.79 |
+  | Python `decode_batch_json` | NY sorted | 8 | 1.21M → 2.34-2.38M (1.9×) | 4.35 → 3.90-3.92 |
+  | Python `decode_batch_json` | synthetic | 1 | 142-143k → 145k | 5.53 → 5.50 |
+  | Python `decode_batch_json` | synthetic | 8 | 503-509k → 589-592k (+16%) | 5.66-5.67 → 5.64 |
+  | Python flat dicts | NY sorted | 1 | 210k → **469-470k** (2.2×) | 0.281 → 0.256 |
+  | Python flat dicts | NY sorted | 8 | 216k → **504-507k** (2.3×) | 0.369 → 0.311-0.313 |
+  | Python flat dicts | synthetic | 1 | 130-131k → 129-130k (−0.2%, −1.1%) | 0.336 → 0.337 |
+  | Python flat dicts | synthetic | 8 | 167-168k → 165k (−1.6%, −0.8%) | 0.386 → 0.387 |
+  | Python full dicts | NY sorted | 1 | 41-42k → 77k (1.9×) | 1.114 → 0.908 |
+  | Python full dicts | NY sorted | 8 | 43-44k → 82-83k (1.9×) | 1.160 → 0.957-0.961 |
+  | Python full dicts | synthetic | 1 | 33.0-33.5k → 33.4-33.5k | 1.024 → 1.025 |
+  | Python full dicts | synthetic | 8 | 34.9-35.2k → 35.2-35.3k | 1.073 → 1.074 |
+
+  The bare stream (`rust-native-discard`) is unchanged: NY 2.83-2.86M →
+  2.80-2.86M (1 worker), 12.05-12.09M → 12.03-12.08M (8); synthetic
+  289-295k → 290-291k, 1.85-1.91M → 1.90-1.91M. Python dict cells call
+  `decode_batch` in 10k-row slices, so a vehicle is built once per slice.
+- **Tried and dropped.**
+  - *An exact-size copy per row* (encode into a scratch buffer, copy each
+    row out): synthetic full JSON at one worker 3-5% slower than before
+    (121k against 127k VIN/s, three pairs). One copy per batch is cheaper
+    than one per row and than any spare capacity.
+  - *Encoding straight into an allocation sized from the previous row or
+    batch* (no copy): as fast as the batch copy, but synthetic full JSON
+    peaked 0.5-0.8 GB higher (9.75-10.05 against 8.6-8.9 GB): the guessed
+    room is touched memory once an allocator reuses pages.
+  - *Placing rows in input order as batches arrive, then a parallel join*:
+    flat JSON on synthetic peaked ~60 MB higher than writing each batch's
+    rows into place and freeing its text (every batch text stayed alive
+    until the end of the join).
+  - *The same reuse in the `decode-batch --jsonl` writer*
+    (`write_batch_jsonl_at`): a row repeating an id earlier in its batch
+    copied that row's text. Identical bytes; the CLI cell on sorted NY ran
+    2.8-3.1× faster at one worker (342-366k → 1.03-1.07M VIN/s, same RSS),
+    but at eight workers it peaked 24-26 MB higher (266-268 → 291-292 MB;
+    speed within the cell's noise), and a pure-Rust probe of the writer
+    peaked 10-14 MB higher (375-383 → 387-392 MB) at 2.3× the speed.
+    Without pooling the written buffers it was +50 MB: freeing them on the
+    caller's thread while the workers seldom allocate leaves them held.
+    Remembering ids across batches as well was 13% slower than within a
+    batch alone on sorted input. Not shipped: it trades memory for speed.
 
 ## Experiments we rejected or replaced
 

@@ -299,18 +299,31 @@ fn decode_batch<'py>(
     // here (flat results already flattened on the workers); taking the GIL
     // per batch to build its dicts lets the workers decode the next ones
     // meanwhile, and keeps only a bounded number of native results alive
-    // beside the growing list.
+    // beside the growing list. A row whose result id an earlier row of the
+    // call had differs from it only in `vin` (`NativeBatch::result_ids`), so
+    // its dict is an independent copy of that row's; a flat row repeating an
+    // id earlier in its batch is not even flattened.
     let db = ultravin::Db::embedded();
     let mut dicts = Dicts::new(vins.len());
     let decoded = py.detach(|| {
         if full {
             db.decode_batch_stream_at(&vins, years, now_micros, |batch| {
-                dicts.build(batch.input_indices().zip(batch.iter()), result_to_dict)
+                let ids = batch.result_ids().iter().map(|&id| Some(id));
+                let ids = ids.chain(std::iter::repeat(None));
+                let rows = batch.input_indices().zip(ids).zip(batch.iter());
+                let rows = rows.map(|((index, id), result)| (index, id, result));
+                dicts.build(rows, |r| &r.vin, |py, r| result_to_dict(py, r), copy_full)
             })
         } else {
-            let flatten = |result: &DecodeResult<'static>| db.flatten(result);
-            db.decode_batch_map_at(&vins, years, now_micros, flatten, |rows| {
-                dicts.build(rows.into_iter(), |py, r| flat_to_dict(py, &r))
+            let flatten = |result: &DecodeResult<'static>, repeat: bool| {
+                if repeat {
+                    Err(result.vin.clone())
+                } else {
+                    Ok(db.flatten(result))
+                }
+            };
+            db.decode_batch_map_ids_at(&vins, years, now_micros, flatten, |rows| {
+                dicts.build(rows.into_iter(), flat_vin, flat_row_to_dict, copy_flat)
             })
         }
     });
@@ -318,9 +331,86 @@ fn decode_batch<'py>(
     dicts.finish(py)
 }
 
+/// A flat row of a batch call: its result, or only its `vin` when an earlier
+/// row of its batch had the same result id.
+type FlatRow = Result<FlatResult<'static>, String>;
+
+fn flat_vin(row: &FlatRow) -> &str {
+    match row {
+        Ok(flat) => &flat.vin,
+        Err(vin) => vin,
+    }
+}
+
+fn flat_row_to_dict<'py>(py: Python<'py>, row: &FlatRow) -> PyResult<Bound<'py, PyDict>> {
+    match row {
+        Ok(flat) => flat_to_dict(py, flat),
+        Err(_) => Err(PyRuntimeError::new_err(
+            "a repeated flat row arrived before its result",
+        )),
+    }
+}
+
+fn get<'py>(dict: &Bound<'py, PyDict>, key: &Bound<'py, PyString>) -> PyResult<Bound<'py, PyAny>> {
+    dict.get_item(key)?
+        .ok_or_else(|| PyRuntimeError::new_err(format!("a result dict lost its {key} key")))
+}
+
+/// A new list of the items of `list`.
+fn copy_list<'py>(list: &Bound<'py, PyAny>) -> PyResult<Bound<'py, PyList>> {
+    let list = list.cast::<PyList>()?;
+    Ok(list.get_slice(0, list.len()))
+}
+
+/// A copy of a result dict with `vin` replaced and `error_codes` copied;
+/// every other header value is immutable.
+fn copy_header<'py>(dict: &Bound<'py, PyDict>, vin: &str) -> PyResult<Bound<'py, PyDict>> {
+    let py = dict.py();
+    let copy = dict.copy()?;
+    copy.set_item(intern!(py, "vin"), vin)?;
+    let codes = get(dict, intern!(py, "error_codes"))?;
+    copy.set_item(intern!(py, "error_codes"), copy_list(&codes)?)?;
+    Ok(copy)
+}
+
+/// An independent copy of a flat dict with another `vin`: its attributes
+/// dict and their lists are copied too.
+fn copy_flat<'py>(dict: &Bound<'py, PyDict>, vin: &str) -> PyResult<Bound<'py, PyDict>> {
+    let py = dict.py();
+    let copy = copy_header(dict, vin)?;
+    let attributes = get(dict, intern!(py, "attributes"))?;
+    let attributes = attributes.cast::<PyDict>()?;
+    let attributes_copy = attributes.copy()?;
+    for (name, value) in attributes {
+        if value.is_instance_of::<PyList>() {
+            attributes_copy.set_item(name, copy_list(&value)?)?;
+        }
+    }
+    copy.set_item(intern!(py, "attributes"), attributes_copy)?;
+    Ok(copy)
+}
+
+/// An independent copy of a full dict with another `vin`: its element list
+/// and each element dict are copied too; their values are immutable.
+fn copy_full<'py>(dict: &Bound<'py, PyDict>, vin: &str) -> PyResult<Bound<'py, PyDict>> {
+    let py = dict.py();
+    let copy = copy_header(dict, vin)?;
+    let elements = get(dict, intern!(py, "elements"))?;
+    let copies = elements
+        .cast::<PyList>()?
+        .iter()
+        .map(|element| element.cast::<PyDict>()?.copy())
+        .collect::<PyResult<Vec<_>>>()?;
+    copy.set_item(intern!(py, "elements"), PyList::new(py, copies)?)?;
+    Ok(copy)
+}
+
 /// A batch call's dicts, placed by input index as batches arrive.
 struct Dicts {
     out: Vec<Option<Py<PyDict>>>,
+    /// The input index of the first dict built for each result id: at most
+    /// one entry per row, beside dicts of kilobytes each.
+    first: std::collections::HashMap<u64, usize>,
     /// The first conversion error; no dicts are built after it.
     failed: Option<PyErr>,
 }
@@ -329,24 +419,38 @@ impl Dicts {
     fn new(rows: usize) -> Self {
         Self {
             out: (0..rows).map(|_| None).collect(),
+            first: std::collections::HashMap::new(),
             failed: None,
         }
     }
 
-    /// Build one batch's dicts, taking the GIL once.
+    /// Build one batch's dicts, taking the GIL once: each `(index, id, row)`
+    /// is a `copy` of the dict of an earlier row with its id, with the row's
+    /// `vin`, or else built by `to_dict`. No dict is visible to Python code
+    /// before the call returns, so the earlier one is as it was built.
     fn build<R>(
         &mut self,
-        rows: impl Iterator<Item = (usize, R)>,
-        to_dict: impl for<'py> Fn(Python<'py>, R) -> PyResult<Bound<'py, PyDict>>,
+        rows: impl Iterator<Item = (usize, Option<u64>, R)>,
+        vin: impl Fn(&R) -> &str,
+        to_dict: impl for<'py> Fn(Python<'py>, &R) -> PyResult<Bound<'py, PyDict>>,
+        copy: impl for<'py> Fn(&Bound<'py, PyDict>, &str) -> PyResult<Bound<'py, PyDict>>,
     ) {
         if self.failed.is_some() {
             return;
         }
         Python::attach(|py| {
-            for (index, row) in rows {
-                match to_dict(py, row) {
+            for (index, id, row) in rows {
+                let first = id.and_then(|id| self.first.get(&id).copied());
+                let dict = match first.and_then(|first| self.out[first].as_ref()) {
+                    Some(first) => copy(first.bind(py), vin(&row)),
+                    None => to_dict(py, &row),
+                };
+                match dict {
                     Ok(dict) => self.out[index] = Some(dict.unbind()),
                     Err(error) => return self.failed = Some(error),
+                }
+                if let (Some(id), None) = (id, first) {
+                    self.first.insert(id, index);
                 }
             }
         });

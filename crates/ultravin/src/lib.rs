@@ -622,6 +622,52 @@ impl Db {
         })
     }
 
+    /// [`Db::decode_batch_map_at`] for `ultravin-py`, which builds Python
+    /// objects once per result: `convert` also learns whether an earlier row
+    /// of the same batch had the same result id, and `consume` gets each
+    /// value with its row's id ([`NativeBatch::result_ids`]; `None` in a
+    /// call short enough to decode directly). Not part of the API.
+    #[doc(hidden)]
+    pub fn decode_batch_map_ids_at<'db, T, C, F>(
+        &'db self,
+        inputs: &[String],
+        years: Option<&[Option<i32>]>,
+        now_micros: i64,
+        convert: C,
+        mut consume: F,
+    ) -> Result<(), NativeStreamError>
+    where
+        T: Send,
+        C: Fn(&DecodeResult<'db>, bool) -> T + Sync,
+        F: FnMut(Vec<(usize, Option<u64>, T)>),
+    {
+        if inputs.len() < STREAM_MIN_ROWS {
+            let values = batch_at(self, inputs, years, now_micros, |i, r| {
+                (i, None, convert(&r.full(), false))
+            });
+            if !values.is_empty() {
+                consume(values);
+            }
+            return Ok(());
+        }
+        let convert = |batch: &NativeBatch<'_, 'db>| {
+            // Recent ids of the batch; a repeat it forgets is converted again.
+            let mut seen = [u64::MAX; 64];
+            let rows = batch.input_indices().zip(batch.iter());
+            rows.zip(batch.result_ids())
+                .map(|((index, result), &id)| {
+                    let slot = &mut seen[id as usize % seen.len()];
+                    let repeat = *slot == id;
+                    *slot = id;
+                    (index, Some(id), convert(result, repeat))
+                })
+                .collect::<Vec<_>>()
+        };
+        self.batch_stream_at(inputs, years, now_micros, convert, |_, values| {
+            consume(values)
+        })
+    }
+
     /// [`Db::decode_batch_map_at`] collected in input order, streaming only
     /// calls of at least `stream_min_rows`.
     fn batch_map_at<'db, T: Send>(
@@ -649,7 +695,8 @@ impl Db {
 
     /// JSON of every input, full or flat: an array, or with `jsonl` one
     /// object per line, each line ending in a newline. Workers write each
-    /// row's text.
+    /// row's text, once per result id they see, and the decoder pool copies
+    /// the rows into place.
     fn batch_json_at(
         &self,
         inputs: &[String],
@@ -658,20 +705,45 @@ impl Db {
         full: bool,
         jsonl: bool,
     ) -> String {
+        let encode = |result: &DecodeResult<'_>, out: &mut Vec<u8>| {
+            if full {
+                json::encode_into(self, result, out);
+            } else {
+                serde_json::to_writer(out, &self.flatten(result))
+                    .expect("FlatResult is infallibly serializable");
+            }
+        };
         let min_rows = if full {
             STREAM_MIN_ROWS
         } else {
             FLAT_STREAM_MIN_ROWS
         };
-        let parts = self.batch_map_at(inputs, years, now_micros, min_rows, |result| {
-            if full {
-                json::encode(self, result)
-            } else {
-                serde_json::to_string(&self.flatten(result))
-                    .expect("FlatResult is infallibly serializable")
-            }
-        });
-        frame_json(parts, jsonl)
+        if inputs.len() < min_rows {
+            let rows = batch_at(self, inputs, years, now_micros, |i, r| {
+                let result = r.full();
+                let text = if full {
+                    json::encode(self, &result).into_bytes()
+                } else {
+                    serde_json::to_vec(&self.flatten(&result))
+                        .expect("FlatResult is infallibly serializable")
+                };
+                (i, json::Row::whole(&result, text))
+            });
+            return json::join(vec![rows], jsonl);
+        }
+        let tables = json::Rows::default();
+        let mut batches = Vec::with_capacity(inputs.len().div_ceil(64));
+        self.batch_stream_at(
+            inputs,
+            years,
+            now_micros,
+            |batch| tables.of(batch, encode),
+            |_, rows| batches.push(rows),
+        )
+        .expect("native decode workers");
+        // The join frees each batch's text once written; tables would keep some.
+        drop(tables);
+        json::join(batches, jsonl)
     }
 
     /// [`decode_batch_flat`](fn@decode_batch_flat) against this database.
@@ -993,29 +1065,6 @@ pub fn decode_batch_jsonl_at(
     full: bool,
 ) -> String {
     Db::embedded().batch_json_at(inputs, years, now_micros, full, true)
-}
-
-/// Join JSON objects as an array, or with `jsonl` as lines that each end in
-/// a newline.
-fn frame_json(parts: Vec<String>, jsonl: bool) -> String {
-    let cap = parts.iter().map(|part| part.len() + 1).sum::<usize>() + usize::from(!jsonl) * 2;
-    let mut out = String::with_capacity(cap);
-    if !jsonl {
-        out.push('[');
-    }
-    for (index, part) in parts.into_iter().enumerate() {
-        if index > 0 && !jsonl {
-            out.push(',');
-        }
-        out.push_str(&part);
-        if jsonl {
-            out.push('\n');
-        }
-    }
-    if !jsonl {
-        out.push(']');
-    }
-    out
 }
 
 /// One decode pass (a single `spvindecode_core` invocation): its items (with the
@@ -2969,6 +3018,97 @@ mod tests {
             let lines = decode_batch_jsonl_at(inputs, years, now, false);
             assert!(lines.lines().enumerate().all(|(i, l)| l == json[i % 12]));
             assert_eq!(lines.lines().count(), n);
+        }
+    }
+
+    /// Clean VINs that share a result with others (serial siblings with
+    /// valid check digits, and each VIN again), mixed with rows that never
+    /// repeat: wrong check digits, messy, short, garbage and empty input.
+    fn repeating_mixed_inputs(rows: usize) -> Vec<String> {
+        let clean = [
+            "1C4JJXP68PW604973",
+            "1C6SRFJT2NN220929",
+            "1FDUF5HY2DEB64815",
+            "1FMRE11WX3HB40253",
+            "1G11B5SA6DF172868",
+            "1GBJC34U72F217933",
+            "1HGCM82633A004352",
+            "5YJ3E1EA7KF317000",
+        ];
+        let cover = db().cover();
+        let mut inputs = Vec::with_capacity(rows);
+        for n in 0..rows {
+            let seed = match n % 2 {
+                0 => clean[n / 2 % clean.len()],
+                _ => &cover[n * 7 % cover.len()],
+            };
+            let seed = seed.as_bytes();
+            let mut vin = seed.to_vec();
+            if vin.len() == 17 {
+                let serial = format!("{:06}", n % 997);
+                vin[11..].copy_from_slice(serial.as_bytes());
+                let check = checkdigit::check_digit_with_flag(
+                    std::str::from_utf8(&vin).expect("ASCII"),
+                    false,
+                );
+                vin[8] = check.map_or(b'0', |c| c as u8);
+            }
+            let vin = String::from_utf8_lossy(&vin).into_owned();
+            inputs.push(match n % 41 {
+                0 if vin.len() > 9 => vin[..8].to_string() + "?" + &vin[9..],
+                1 => format!("  {}\t", vin.to_lowercase()),
+                2 => vin[..10.min(vin.len())].to_string(),
+                3 => "é\"\\\n".to_string() + &vin,
+                4 => String::new(),
+                _ => vin,
+            });
+        }
+        inputs
+    }
+
+    #[test]
+    fn streamed_json_reuses_rows_and_equals_direct_decodes_byte_for_byte() {
+        if !db().is_loaded() {
+            return;
+        }
+        // Enough rows for each call to stream (full from 8,192, flat from
+        // 65,536); the oracle is the direct path (uncached, every row
+        // encoded) in calls below both thresholds.
+        let all = FLAT_STREAM_MIN_ROWS + 3_000;
+        let inputs = repeating_mixed_inputs(all);
+        let years: Vec<Option<i32>> = (0..all)
+            .map(|i| (i % 3 != 0).then_some(1990 + (i / 3 % 40) as i32))
+            .collect();
+        let now = 1_750_000_000_000_000;
+        for (full, rows, budgets) in [
+            (true, 12_000, &[64 << 10, 8 << 20][..]),
+            (false, all, &[8 << 20]),
+        ] {
+            let (inputs, years) = (&inputs[..rows], &years[..rows]);
+            let calls = inputs.chunks(4_096).zip(years.chunks(4_096));
+            let lines: String = calls
+                .map(|(inputs, years)| decode_batch_jsonl_at(inputs, Some(years), now, full))
+                .collect();
+            assert_eq!(decode_batch_jsonl_at(inputs, Some(years), now, full), lines);
+            let streamed = if full {
+                decode_batch_json_at(inputs, Some(years), now)
+            } else {
+                decode_batch_json_flat_at(inputs, Some(years), now)
+            };
+            let array = format!("[{}]", lines.trim_end().replace('\n', ","));
+            assert_eq!(streamed, array, "full: {full}");
+            for &memory in budgets {
+                let mut written = Vec::new();
+                db().write_batch_jsonl_at(inputs, Some(years), now, full, memory, |bytes| {
+                    written.extend_from_slice(bytes);
+                    Ok::<_, ()>(())
+                })
+                .expect("write");
+                assert!(written == lines.as_bytes(), "written, full: {full}");
+            }
+            if !full {
+                assert!(lines.contains("\"Note\":["), "a multi-valued attribute");
+            }
         }
     }
 

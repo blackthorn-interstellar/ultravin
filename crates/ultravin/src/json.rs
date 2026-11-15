@@ -2,7 +2,11 @@
 //! escaped once per database; each result writes its variable fields into one
 //! buffer.
 
-use crate::{public_decode, tables::ArchivedElement, Db, DecodeResult};
+use std::mem::MaybeUninit;
+use std::ops::Range;
+use std::sync::{Arc, Mutex};
+
+use crate::{public_decode, tables::ArchivedElement, Db, DecodeResult, NativeBatch};
 
 pub(crate) struct ElementJson {
     before_value: Vec<u8>,
@@ -94,7 +98,7 @@ const NULL_WMI: &[u8] = b",\"wmi_id\":null,\"to_be_qced\":false}";
 /// Append `result` to `out` as the JSON object `serde_json` writes for it.
 /// `db` is the database that decoded it.
 pub(crate) fn encode_into(db: &Db, result: &DecodeResult<'_>, out: &mut Vec<u8>) {
-    out.extend_from_slice(b"{\"vin\":");
+    out.extend_from_slice(VIN_KEY);
     string(out, &result.vin);
     out.extend_from_slice(b",\"wmi\":");
     string(out, &result.wmi);
@@ -163,6 +167,307 @@ pub(crate) fn encode(db: &Db, result: &DecodeResult<'_>) -> String {
     let mut out = Vec::with_capacity(result.elements.len() * 400 + 512);
     encode_into(db, result, &mut out);
     String::from_utf8(out).expect("JSON strings and literals are UTF-8")
+}
+
+/// How every JSON object of a result begins, full or flat.
+const VIN_KEY: &[u8] = b"{\"vin\":";
+
+/// Result ids whose text a stream worker remembers across its batches.
+const REMEMBERED: usize = 256;
+
+/// One object of a batch call's JSON, `text[start..end]` for a row decoded
+/// for itself. A row sharing another row's result writes `{"vin":`, its own
+/// `vin`, then that row's text from `rest`, just past its `vin`.
+pub(crate) struct Row {
+    vin: Option<Vin>,
+    text: Arc<Vec<u8>>,
+    start: usize,
+    rest: usize,
+    end: usize,
+}
+
+impl Row {
+    /// The row of `result` whose whole object is `text`.
+    pub(crate) fn whole(result: &DecodeResult<'_>, text: Vec<u8>) -> Self {
+        let end = text.len();
+        Self::within(result, Arc::new(text), 0..end)
+    }
+
+    /// The row of `result` whose whole object is `text[span]`.
+    fn within(result: &DecodeResult<'_>, text: Arc<Vec<u8>>, span: Range<usize>) -> Self {
+        let rest = span.start + VIN_KEY.len() + Vin::new(&result.vin).as_bytes().len();
+        debug_assert_eq!(&text[span.start..span.start + VIN_KEY.len()], VIN_KEY);
+        debug_assert_eq!(
+            &text[span.start + VIN_KEY.len()..rest],
+            Vin::new(&result.vin).as_bytes()
+        );
+        Self {
+            vin: None,
+            text,
+            start: span.start,
+            rest,
+            end: span.end,
+        }
+    }
+
+    /// A row of `result` that shares this row's text after the `vin`.
+    fn sharing(&self, result: &DecodeResult<'_>) -> Self {
+        Self {
+            vin: Some(Vin::new(&result.vin)),
+            ..self.text_only()
+        }
+    }
+
+    /// This row's text, for sharing.
+    fn text_only(&self) -> Self {
+        Self {
+            vin: None,
+            text: Arc::clone(&self.text),
+            ..*self
+        }
+    }
+
+    /// The object after its `vin`.
+    fn after_vin(&self) -> &[u8] {
+        &self.text[self.rest..self.end]
+    }
+
+    fn len(&self) -> usize {
+        match &self.vin {
+            None => self.end - self.start,
+            Some(vin) => VIN_KEY.len() + vin.as_bytes().len() + self.end - self.rest,
+        }
+    }
+
+    /// Write the row and then `end` into `out`, exactly its length plus one.
+    fn write(&self, out: &mut [MaybeUninit<u8>], end: u8) {
+        let (out, last) = out.split_at_mut(out.len() - 1);
+        last[0].write(end);
+        let Some(vin) = &self.vin else {
+            out.write_copy_of_slice(&self.text[self.start..self.end]);
+            return;
+        };
+        let (key, out) = out.split_at_mut(VIN_KEY.len());
+        key.write_copy_of_slice(VIN_KEY);
+        let (quoted, out) = out.split_at_mut(vin.as_bytes().len());
+        quoted.write_copy_of_slice(vin.as_bytes());
+        out.write_copy_of_slice(self.after_vin());
+    }
+}
+
+/// A `vin` as a JSON string, in place when it is short.
+enum Vin {
+    Short(u8, [u8; 30]),
+    Long(Box<[u8]>),
+}
+
+impl Vin {
+    fn new(vin: &str) -> Self {
+        let bytes = vin.as_bytes();
+        if bytes.len() <= 28 && !bytes.iter().any(|&b| b < 0x20 || b == b'"' || b == b'\\') {
+            let mut short = [0; 30];
+            short[0] = b'"';
+            short[1..=bytes.len()].copy_from_slice(bytes);
+            short[bytes.len() + 1] = b'"';
+            return Self::Short(bytes.len() as u8 + 2, short);
+        }
+        let mut quoted = Vec::new();
+        string(&mut quoted, vin);
+        Self::Long(quoted.into_boxed_slice())
+    }
+
+    fn as_bytes(&self) -> &[u8] {
+        match self {
+            Self::Short(len, bytes) => &bytes[..usize::from(*len)],
+            Self::Long(bytes) => bytes,
+        }
+    }
+}
+
+/// Whether `result` is one the result cache stores, so its id can recur.
+fn reusable(result: &DecodeResult<'_>) -> bool {
+    result.error_codes == [0] && result.corrected_vin.is_empty()
+}
+
+/// The JSON a stream's workers write, once per result id they see: two rows
+/// with one id differ only in `vin` ([`NativeBatch::result_ids`]), so a row
+/// whose id appeared earlier in its batch, or that its worker remembers from
+/// an earlier batch, copies that row's text after the `vin` instead of
+/// encoding again. Each worker takes a [`Memo`] for its batch and puts it
+/// back after.
+#[derive(Default)]
+pub(crate) struct Rows {
+    memos: Mutex<Vec<Memo>>,
+}
+
+/// A worker's text of [`REMEMBERED`] result ids, and a buffer to encode in.
+struct Memo {
+    table: Box<[Option<(u64, Row)>]>,
+    scratch: Vec<u8>,
+}
+
+/// Where a batch row's text comes from.
+enum Source {
+    /// A row of an earlier batch with its id.
+    Earlier(Row),
+    /// Encoded by this row, at this span of the batch's text.
+    Encoded(Range<usize>),
+    /// The same as this earlier row of the batch.
+    Repeat(usize),
+}
+
+/// A scratch buffer larger than this is not kept for the next batch.
+const MAX_SCRATCH: usize = 16 << 20;
+
+impl Rows {
+    fn take(&self) -> Memo {
+        let pooled = self.memos.lock().unwrap_or_else(|p| p.into_inner()).pop();
+        pooled.unwrap_or_else(|| Memo {
+            table: (0..REMEMBERED).map(|_| None).collect(),
+            scratch: Vec::new(),
+        })
+    }
+
+    fn put(&self, mut memo: Memo) {
+        memo.scratch.clear();
+        if memo.scratch.capacity() > MAX_SCRATCH {
+            memo.scratch = Vec::new();
+        }
+        self.memos
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .push(memo);
+    }
+
+    /// Each row of `batch` with its input index; `encode` appends a whole
+    /// object, `vin` first. The batch's new text is one allocation of its
+    /// own size that its rows share.
+    pub(crate) fn of(
+        &self,
+        batch: &NativeBatch<'_, '_>,
+        encode: impl Fn(&DecodeResult<'_>, &mut Vec<u8>),
+    ) -> Vec<(usize, Row)> {
+        let ids = batch.result_ids();
+        let mut memo = self.take();
+        // The ids this batch encoded, each with its row.
+        let mut here = [(u64::MAX, 0); 64];
+        let mut sources = Vec::with_capacity(batch.len());
+        for (row, result) in batch.iter().enumerate() {
+            let id = ids.get(row).copied();
+            let repeat = id.and_then(|id| Some(here[id as usize % 64]).filter(|h| h.0 == id));
+            let source = if let Some(earlier) = id.and_then(|id| remembered(&memo.table, id)) {
+                Source::Earlier(earlier.sharing(result))
+            } else if let Some((_, first)) = repeat {
+                Source::Repeat(first)
+            } else {
+                let start = memo.scratch.len();
+                encode(result, &mut memo.scratch);
+                if let Some(id) = id {
+                    here[id as usize % 64] = (id, row);
+                }
+                Source::Encoded(start..memo.scratch.len())
+            };
+            sources.push(source);
+        }
+        // One exact copy of the batch's text: cheaper than spare capacity.
+        let text = Arc::new(memo.scratch.clone());
+        let mut out: Vec<(usize, Row)> = Vec::with_capacity(batch.len());
+        let rows = batch.input_indices().zip(batch.iter()).zip(sources);
+        for (row, ((index, result), source)) in rows.enumerate() {
+            let built = match source {
+                Source::Earlier(row) => row,
+                Source::Repeat(first) => out[first].1.sharing(result),
+                Source::Encoded(span) => {
+                    let built = Row::within(result, Arc::clone(&text), span);
+                    if let Some(&id) = ids.get(row) {
+                        if reusable(result) {
+                            memo.table[id as usize % REMEMBERED] = Some((id, built.text_only()));
+                        }
+                    }
+                    built
+                }
+            };
+            out.push((index, built));
+        }
+        self.put(memo);
+        out
+    }
+}
+
+/// The text `table` remembers for `id`.
+fn remembered(table: &[Option<(u64, Row)>], id: u64) -> Option<&Row> {
+    match &table[id as usize % REMEMBERED] {
+        Some((seen, row)) if *seen == id => Some(row),
+        _ => None,
+    }
+}
+
+/// The rows of `batches`, each with its input index, as a JSON array in
+/// input order, or with `lines` as one object per line, each ending in a
+/// newline. Every index below the row count must appear exactly once. The
+/// decoder pool copies a batch's rows into place, then frees their text.
+pub(crate) fn join(batches: Vec<Vec<(usize, Row)>>, lines: bool) -> String {
+    use rayon::prelude::*;
+
+    let rows = batches.iter().map(Vec::len).sum::<usize>();
+    if rows == 0 {
+        return if lines { String::new() } else { "[]".into() };
+    }
+    // Each row's offset in the output: first its length, then the sum of
+    // the lengths before it.
+    let mut at = vec![usize::MAX; rows];
+    for &(index, ref row) in batches.iter().flatten() {
+        assert_eq!(at[index], usize::MAX, "input {index} has two rows");
+        at[index] = row.len() + 1;
+    }
+    let open = usize::from(!lines);
+    let mut len = open;
+    for offset in &mut at {
+        len += std::mem::replace(offset, len);
+    }
+    let mut out = Vec::<u8>::with_capacity(len);
+    let base = Base(out.spare_capacity_mut().as_mut_ptr());
+    let write = |(index, row): (usize, Row)| {
+        let end = match (lines, index + 1 == rows) {
+            (true, _) => b'\n',
+            (false, false) => b',',
+            (false, true) => b']',
+        };
+        // SAFETY: every index below `rows` has one row (checked above), so
+        // the spans `at[index]..at[index] + row.len() + 1` tile `open..len`
+        // without overlap, inside the capacity, and nothing else uses them.
+        let place = unsafe { std::slice::from_raw_parts_mut(base.at(at[index]), row.len() + 1) };
+        row.write(place, end);
+    };
+    crate::install_batch_work(|| {
+        batches.into_par_iter().for_each(|batch| {
+            batch.into_par_iter().with_min_len(64).for_each(write);
+        });
+    });
+    if !lines {
+        out.spare_capacity_mut()[0].write(b'[');
+    }
+    // SAFETY: the rows and the opening bracket wrote all of `0..len`.
+    unsafe { out.set_len(len) };
+    debug_assert!(std::str::from_utf8(&out).is_ok());
+    // SAFETY: every row is UTF-8 (a quoted `str`, and a UTF-8 object cut
+    // after the ASCII quote that ends its `vin`), as are the framing bytes.
+    unsafe { String::from_utf8_unchecked(out) }
+}
+
+/// The start of an output buffer the decoder pool writes rows into.
+#[derive(Clone, Copy)]
+struct Base(*mut MaybeUninit<u8>);
+
+// SAFETY: threads write through it only to disjoint spans (see `join`).
+unsafe impl Send for Base {}
+unsafe impl Sync for Base {}
+
+impl Base {
+    /// The byte at `offset`, whose span the caller writes alone.
+    fn at(self, offset: usize) -> *mut MaybeUninit<u8> {
+        self.0.wrapping_add(offset)
+    }
 }
 
 #[cfg(test)]

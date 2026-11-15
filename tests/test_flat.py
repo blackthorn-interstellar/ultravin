@@ -114,3 +114,53 @@ def test_mutating_full_element_dictionaries_does_not_change_later_decodes() -> N
     changed["elements"][1].clear()
     assert uv.decode(vin, full=True) == expected
     assert uv.decode_batch([vin], full=True) == [expected]
+
+
+#: Clean VINs, each with notes, so their flat dicts hold lists.
+CLEAN = ["1C4JJXP68PW604973", "1C6SRFJT2NN220929", "1FDUF5HY2DEB64815", "1GBJC34U72F217933"]
+
+
+def _repeating() -> tuple[list[str], list[int | None]]:
+    """Enough rows to stream: clean VINs again and again (rows sharing a
+    result), with wrong check digits, messy and invalid input between them,
+    and a caller year on some rows."""
+    vins = []
+    for i in range(9_000):
+        vin = CLEAN[i % len(CLEAN)]
+        if i % 7 == 0:
+            vin = vin[:8] + "X" + vin[9:]
+        elif i % 11 == 0:
+            vin = f"  {vin.lower()}\t"
+        elif i % 13 == 0:
+            vin = "INVALID"
+        vins.append(vin)
+    years = [None if i % 3 else 2000 + i % 25 for i in range(len(vins))]
+    return vins, years
+
+
+def _containers(value: object) -> list[dict | list]:
+    """Every dict and list reachable from `value`, itself included."""
+    if isinstance(value, dict):
+        return [value, *(c for v in value.values() for c in _containers(v))]
+    if isinstance(value, list):
+        return [value, *(c for v in value for c in _containers(v))]
+    return []
+
+
+@pytest.mark.parametrize("full", [False, True])
+def test_batch_dicts_of_repeated_results_are_equal_and_independent(full: bool) -> None:
+    vins, years = _repeating()
+    singles = {(v, y): uv.decode(v, year=y, full=full) for v, y in set(zip(vins, years))}
+    results = uv.decode_batch(vins, years=years, full=full)
+    assert results == [singles[v, y] for v, y in zip(vins, years)]
+    assert [list(r) for r in results] == [list(singles[v, y]) for v, y in zip(vins, years)]
+    if not full:
+        assert any(isinstance(value, list) for value in results[1]["attributes"].values())
+    # No dict or list is shared between two results, so changing one
+    # result cannot change another.
+    containers = [id(c) for r in results for c in _containers(r)]
+    assert len(containers) == len(set(containers))
+    for result in results[::2]:
+        for container in _containers(result):
+            container.clear()
+    assert results[1::2] == [singles[v, y] for v, y in list(zip(vins, years))[1::2]]

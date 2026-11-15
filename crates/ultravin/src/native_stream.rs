@@ -158,8 +158,9 @@ impl<'batch, 'db> NativeBatch<'batch, 'db> {
     /// equal results apart from `vin`. A row decoded by this batch is
     /// [`Self::fresh`]; any other shares the result of a fresh row of this or
     /// another batch of the stream. Empty for a batch not off a stream.
-    #[cfg_attr(not(feature = "parquet"), allow(dead_code))]
-    pub(crate) fn result_ids(&self) -> &[u64] {
+    /// Not part of the API: `ultravin-py` builds Python objects once per id.
+    #[doc(hidden)]
+    pub fn result_ids(&self) -> &[u64] {
         self.ids
     }
 
