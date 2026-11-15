@@ -2,6 +2,7 @@
 //! batch's lines handed to a writer, so a whole job never sits in memory.
 
 use std::panic::{catch_unwind, resume_unwind, AssertUnwindSafe};
+use std::sync::{Mutex, PoisonError};
 
 use crate::native_stream::Years;
 use crate::predictor::{predict_batch, BatchFormat};
@@ -39,17 +40,21 @@ impl Db {
             return Ok(());
         }
         let config = jsonl_config(inputs.len(), memory_bytes);
-        let convert = |batch: &crate::NativeBatch<'_, '_>| {
-            let mut out = Vec::with_capacity(batch.len() * 2048);
-            for result in batch.iter() {
-                if full {
-                    json::encode_into(self, result, &mut out);
-                } else {
-                    serde_json::to_writer(&mut out, &self.flatten(result))
-                        .expect("FlatResult is infallibly serializable");
-                }
-                out.push(b'\n');
+        let encode = |result: &crate::DecodeResult<'_>, out: &mut Vec<u8>| {
+            if full {
+                json::encode_into(self, result, out);
+            } else {
+                serde_json::to_writer(out, &self.flatten(result))
+                    .expect("FlatResult is infallibly serializable");
             }
+        };
+        // Written buffers go back to the workers: freed on this thread while
+        // the workers seldom allocate, they stay held (+50 MB at 8 workers).
+        let buffers = Mutex::new(Vec::<Vec<u8>>::new());
+        let convert = |batch: &crate::NativeBatch<'_, '_>| {
+            let pooled = buffers.lock().unwrap_or_else(PoisonError::into_inner).pop();
+            let mut out = pooled.unwrap_or_else(|| Vec::with_capacity(batch.len() * 2048));
+            json::lines_into(batch, encode, &mut out);
             out
         };
         let mut failed = None;
@@ -62,10 +67,15 @@ impl Db {
                 config,
                 crate::result_cache::configured_entries(),
                 convert,
-                |_, lines: Vec<u8>| {
+                |_, mut lines: Vec<u8>| {
                     if let Err(error) = write(&lines) {
                         failed = Some(error);
                         resume_unwind(Box::new(Stop));
+                    }
+                    if lines.capacity() <= json::MAX_SCRATCH {
+                        lines.clear();
+                        let mut pool = buffers.lock().unwrap_or_else(PoisonError::into_inner);
+                        pool.push(lines);
                     }
                 },
             )

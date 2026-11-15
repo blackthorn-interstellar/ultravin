@@ -317,7 +317,7 @@ enum Source {
 }
 
 /// A scratch buffer larger than this is not kept for the next batch.
-const MAX_SCRATCH: usize = 16 << 20;
+pub(crate) const MAX_SCRATCH: usize = 16 << 20;
 
 impl Rows {
     fn take(&self) -> Memo {
@@ -391,6 +391,44 @@ impl Rows {
         }
         self.put(memo);
         out
+    }
+}
+
+/// Append the JSON Lines of `batch` to `out`, each object made by `encode`
+/// (`vin` first) and ended by a newline. A row whose id appeared earlier in
+/// the batch is `{"vin":`, its own `vin`, then that row's text after its
+/// `vin`, with no encoding. Ids are not remembered across batches: on sorted
+/// input that measured 13% slower than within a batch alone.
+pub(crate) fn lines_into(
+    batch: &NativeBatch<'_, '_>,
+    encode: impl Fn(&DecodeResult<'_>, &mut Vec<u8>),
+    out: &mut Vec<u8>,
+) {
+    let ids = batch.result_ids();
+    // Each id this batch encoded, with its text after the `vin`.
+    let mut here = [(u64::MAX, 0, 0); 64];
+    for (row, result) in batch.iter().enumerate() {
+        let Some(&id) = ids.get(row) else {
+            encode(result, out);
+            out.push(b'\n');
+            continue;
+        };
+        let slot = &mut here[id as usize % 64];
+        let vin = Vin::new(&result.vin);
+        if slot.0 == id {
+            let (rest, end) = (slot.1, slot.2);
+            out.extend_from_slice(VIN_KEY);
+            out.extend_from_slice(vin.as_bytes());
+            out.extend_from_within(rest..end);
+        } else {
+            let start = out.len();
+            encode(result, out);
+            let rest = start + VIN_KEY.len() + vin.as_bytes().len();
+            debug_assert_eq!(&out[start..start + VIN_KEY.len()], VIN_KEY);
+            debug_assert_eq!(&out[start + VIN_KEY.len()..rest], vin.as_bytes());
+            *slot = (id, rest, out.len());
+        }
+        out.push(b'\n');
     }
 }
 

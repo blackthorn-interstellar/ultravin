@@ -30,6 +30,7 @@ identified as such.
 - [November 14: compact output writes each vehicle once](#november-14-compact-output-writes-each-vehicle-once)
 - [November 14: batch JSON and dicts reuse each vehicle's output](#november-14-batch-json-and-dicts-reuse-each-vehicles-output)
 - [November 14: wide columns decode each vehicle once and encode in parallel](#november-14-wide-columns-decode-each-vehicle-once-and-encode-in-parallel)
+- [November 15: the JSONL writer writes each vehicle once per batch](#november-15-the-jsonl-writer-writes-each-vehicle-once-per-batch)
 - [Experiments we rejected or replaced](#experiments-we-rejected-or-replaced)
 - [SQL oracle and development resources](#sql-oracle-and-development-resources)
 - [Correctness and measurement rules](#correctness-and-measurement-rules)
@@ -1560,7 +1561,8 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
     Without pooling the written buffers it was +50 MB: freeing them on the
     caller's thread while the workers seldom allocate leaves them held.
     Remembering ids across batches as well was 13% slower than within a
-    batch alone on sorted input. Not shipped: it trades memory for speed.
+    batch alone on sorted input. Not shipped then: it trades memory for
+    speed. Shipped on November 15 once that memory was accepted (below).
 
 ## November 14: wide columns decode each vehicle once and encode in parallel
 
@@ -1804,6 +1806,55 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
     full path: from 3.14 CPython never re-tracks an untracked dict (checked
     on 3.14 and 3.15; 3.13 does), so a caller who stored a container in
     one could leak a cycle, and `gc.is_tracked` would change.
+
+## November 15: the JSONL writer writes each vehicle once per batch
+
+- **Bottleneck.** `decode-batch --jsonl` (`Db::write_batch_jsonl_at`)
+  still encoded every row, though ~97% of sorted NY rows share a cached
+  result: 338-360k VIN/s at one worker, against 1.6M for the in-memory
+  JSON lines of the same rows.
+- **Mechanism** ([json.rs](crates/ultravin/src/json.rs) `lines_into`,
+  [jsonl_write.rs](crates/ultravin/src/jsonl_write.rs)). The experiment
+  dropped on November 14, rebuilt on the batch JSON reuse: a row whose
+  result id appeared earlier in its batch is `{"vin":`, its own quoted
+  `vin`, then the earlier row's line after its `vin`, copied within the
+  batch's buffer (a 64-slot direct-mapped table of id, start and end).
+  Ids are not remembered across batches (13% slower on sorted input on
+  November 14). Written buffers go back to a per-call pool for the
+  workers; one over 16 MiB is freed.
+- **Accepted cost.** About 25 MiB more peak RSS at 8 workers on sorted
+  NY, for ~3× at one worker; never-repeating input is unchanged.
+- **Correctness.** The streamed-JSON test (direct path against JSON,
+  JSON lines and the writer, full and flat, per-row years, at 1, 2 and 12
+  threads) covers it; writing the shared text one byte short fails it at 1
+  and 12 threads. CLI stdout sha256, stderr and exit code against
+  6a557a9's wheel at 1 and 8 workers: 29 cases each, 0 differences.
+  They cover sorted NY 2M, synthetic 2M, full on 200k of each, a 180k
+  mixed corpus (wrong check digits, padded lowercase, short, long,
+  non-ASCII and empty lines, 35% `VIN,year` lines, 60k shuffled repeats)
+  flat and full, from a file and stdin, with `\r\n`/`\r`/`\n` endings,
+  `-u`, `--batch-size 5000`, budgets of 1 and 64 MiB, and a bad year or
+  invalid UTF-8 line three quarters through (the same 131,072 rows, then
+  the same message and exit code 2).
+- **Results.** `scripts/bench/api_compare.py --cells cli-decode-batch`,
+  2M VINs, alternating against 6a557a9's wheel: two rounds for every
+  cell, three more 10-second ones for sorted NY at 4 and 8 workers
+  (ranges are the rounds; RSS is the harness's peak over each cell's
+  passes):
+
+  | input | workers | VIN/s before → after | peak RSS MiB before → after |
+  |---|---:|---:|---:|
+  | NY sorted | 1 | 353-360k → **966k-1.05M** (2.8×) | 219-221 → 219 |
+  | NY sorted | 4 | 1.04-1.13M → 0.99-1.48M (four of five 1.24M+) | 245-251 → 264-271 |
+  | NY sorted | 8 | 1.19-1.54M → 1.14-1.43M | 262-269 → 287-299 |
+  | synthetic | 1 | 129-130k → 130-132k | 273 → 271-272 |
+  | synthetic | 4 | 446-447k → 449k | 296 → 294-298 |
+  | synthetic | 8 | 753-755k → 753-757k | 326 → 324 |
+
+  At 8 workers sorted NY is held by the calling thread (`write` under the
+  GIL, ~3 GB/s of lines), and both sides swing ±15% between rounds. Six
+  alternating single runs at 8 workers (`time -l`): sorted NY 261-268 →
+  285-295 MiB, synthetic 325-327 → 325-328 MiB.
 
 ## Experiments we rejected or replaced
 
