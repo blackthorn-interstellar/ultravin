@@ -7,7 +7,7 @@ one** over New York's sorted registrations, and 1,197,917, 827,139 and 234,846
 over twenty million random synthetic VINs. Unlike every earlier headline, these
 time a whole job a customer can run, file in to file out; the earlier ones timed
 the Rust batch call and discarded its results. [By
-output](#by-output-november-14-2026-commit-123f0f2) compares every output path
+output](#by-output-november-14-2026-commit-73e464d) compares every output path
 the same way.
 
 The previous headline was the [September 25 benchmark at commit
@@ -84,7 +84,7 @@ uv run --frozen python -m scripts.bench.api_compare --cells cli-decode-compact \
   --corpus synthetic-20m=target/bench/realistic-corpus.txt
 ```
 
-## By output (November 14, 2026, commit 123f0f2)
+## By output (November 14, 2026, commit 73e464d)
 
 Every public output path on the same input, each cell a fresh process, one
 untimed pass then whole passes for at least three seconds. Rust result cells
@@ -93,8 +93,8 @@ length; Arrow cells build every column; file cells write real files and include
 process startup. Python dict cells are capped at 200,000 VINs. Raw records are in
 [`scripts/bench/api_compare_2026_11_14.json`](../scripts/bench/api_compare_2026_11_14.json),
 which also holds the stream with its results discarded (the method of the
-headlines below): 2,799,519, 7,934,624 and 12,069,006 VIN/s
-sorted, 293,720, 1,068,124 and 1,896,680 synthetic.
+headlines below): 2,779,019, 7,951,029 and 12,089,567 VIN/s
+sorted, 293,728, 1,061,022 and 1,878,385 synthetic.
 
 First 2,000,000 sorted New York VINs: the table is in the
 [README](../README.md#by-output). First 2,000,000 synthetic VINs, where nothing
@@ -102,19 +102,19 @@ repeats:
 
 | output | 1 core | 4 cores | 8 cores | peak memory |
 |---|---:|---:|---:|---:|
-| Rust `ArrowDecoder::decode_batch` — all columns in memory | 189,964 | 583,174 | 892,870 | 0.8 GB |
-| Rust `decode_batch_json_at`, flat — one JSON string | 163,074 | 596,159 | 1,024,776 | 1.8 GB |
-| `ultravin decode-compact` — `vins.parquet` + `vehicles.parquet` on disk | 196,918 | 677,038 | 986,842 | 0.8 GB |
-| Python `decode_stream` — Arrow batches into pyarrow | 197,417 | 585,912 | 878,860 | 0.4 GB |
-| Python `decode_batch_json` — one JSON string | 145,865 | 419,647 | 586,294 | 5.5 GB |
-| `ultravin decode-parquet` — one wide Parquet file on disk | 121,375 | 367,671 | 552,116 | 0.4 GB |
-| Rust `decode_batch_json_at`, full — one JSON string | 132,708 | 410,863 | 613,303 | 8.8 GB |
-| `ultravin decode-batch --jsonl` — JSON lines on disk | 127,745 | 450,151 | 744,201 | 0.3 GB |
-| Rust `decode_batch_flat_at` — flat results, every field read | 149,512 | 273,214 | 311,192 | 1.4 GB |
-| Rust `decode_batch_stream_at` — full results, every field read on the calling thread | 247,662 | 594,964 | 580,750 | 0.5 GB |
-| Rust `decode_batch_at` — full results, every field read | 166,106 | 254,972 | 279,783 | 3.3 GB |
-| Python `decode_batch` — a dict per VIN | 124,805 | 170,157 | 164,550 | 0.4 GB |
-| Python `decode_batch(full=True)` — a dict per VIN with every element | 32,450 | 35,594 | 34,354 | 1.1 GB |
+| Rust `ArrowDecoder::decode_batch` — all columns in memory | 191,999 | 585,217 | 937,853 | 0.8 GB |
+| Rust `decode_batch_json_at`, flat — one JSON string | 161,742 | 587,122 | 1,075,586 | 1.8 GB |
+| `ultravin decode-compact` — `vins.parquet` + `vehicles.parquet` on disk | 196,867 | 684,730 | 1,019,684 | 0.8 GB |
+| Python `decode_stream` — Arrow batches into pyarrow | 194,655 | 591,891 | 904,317 | 0.4 GB |
+| Python `decode_batch_json` — one JSON string | 146,461 | 417,092 | 615,753 | 5.5 GB |
+| `ultravin decode-parquet` — one wide Parquet file on disk | 120,816 | 366,435 | 557,520 | 0.4 GB |
+| Rust `decode_batch_json_at`, full — one JSON string | 132,618 | 410,066 | 626,977 | 8.8 GB |
+| `ultravin decode-batch --jsonl` — JSON lines on disk | 128,306 | 443,398 | 777,079 | 0.3 GB |
+| Rust `decode_batch_flat_at` — flat results, every field read | 145,075 | 272,304 | 291,513 | 1.4 GB |
+| Rust `decode_batch_stream_at` — full results, every field read on the calling thread | 248,639 | 595,557 | 571,505 | 0.5 GB |
+| Rust `decode_batch_at` — full results, every field read | 163,501 | 263,901 | 300,206 | 3.2 GB |
+| Python `decode_batch` — a dict per VIN | 153,238 | 244,572 | 236,765 | 0.4 GB |
+| Python `decode_batch(full=True)` — a dict per VIN with every element | 43,125 | 45,595 | 48,443 | 1.0 GB |
 
 Reading a full result on the calling thread caps the stream near 800,000 VIN/s
 on sorted input however many workers decode; work that can run per batch on the
