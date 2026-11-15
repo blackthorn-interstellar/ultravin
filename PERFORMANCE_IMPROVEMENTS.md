@@ -1693,6 +1693,118 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
   make it cheaper without writing our own encoder. In the grouped decode
   the gather is ~45% of the time and the keys ~7%.
 
+## November 14: Python dicts copy what other vehicles already built
+
+- **Where the time went.** `decode_batch` builds dicts on one thread under
+  the GIL; at 8 workers that thread is the ceiling. Sampled (macOS `sample`,
+  synthetic 200k, 10k-row calls), its time on flat dicts went to SipHash
+  lookups of attribute names in `FLAT_KEYS`, freeing the workers'
+  `FlatResult` strings (~45 cross-thread frees per row), dict inserts and
+  resizes, new value strings, and CPython's cyclic GC (sampling inflates
+  the hashing: fixing it alone measured +8-9%). On full dicts it was the 9 stores and new values per element dict, GC
+  (~28%: since 3.14 every dict is GC-tracked, even one holding only
+  strings), and freeing.
+- **What changed** ([lib.rs](crates/ultravin-py/src/lib.rs) `Memo`,
+  `FlatText`). Each batch call keeps a memo of dicts it has built and not
+  yet returned; a single `decode()` does not use it.
+  - *Full:* an element dict equal to one built earlier in the call (same
+    element id, value, attribute id, source, pattern, schema, keys,
+    created-on, WMI id, QC flag; text compared by address first) is a
+    `dict.copy()` of it instead of a template copy and nine stores. The key
+    hashes borrowed database text by address and owned text by content;
+    every hit is checked field by field, so a collision only costs a
+    rebuild.
+  - *Flat:* an `attributes` dict whose names (by address: `'static`
+    database text) and order match an earlier one is a copy of it, already
+    sized, with only the values that differ stored again (a value equal to
+    the earlier dict's keeps its `str`).
+  - *Both:* a result dict starts as a copy of the call's first, so it is
+    sized and ordered before its eight stores.
+  - *Flat rows* are built on the worker as one text buffer plus spans
+    (`FlatText`, from the new hidden `Db::flatten_map`, which `Db::flatten`
+    now uses too) instead of a `FlatResult` of ~45 `String`s: the
+    dict-building thread frees two or three allocations per row. An
+    experiment that leaked the rows instead of freeing them bounded this at
+    +24% on synthetic flat at 8 workers; it measured +16% there and +9% at
+    1 worker, where the worker itself now allocates less.
+  - `FLAT_KEYS` hashes with FxHash: +8-9% on synthetic flat by itself.
+  - Copies are always new dicts and lists; only `str`, `int`, `bool` and
+    `None` are ever shared between results. The memo holds one reference
+    per distinct shape or element and dies with the call, so it is bounded
+    by that call's output; nothing new is process-wide.
+- **Correctness.** sha256 of a typed `repr` (every value with its type
+  name, in key order) of every dict, against 1a72a29's wheel: 90 hashes, 0
+  differences. They cover the first 200k sorted NY and 200k synthetic VINs
+  and a 90k mixed corpus (half NY, half synthetic, wrong check digits,
+  padded lowercase, short, long, non-ASCII and empty inputs, 30k shuffled
+  repeats), each with and without per-row years, full and flat, in 10k-row
+  calls, plus 5k-, 1,000- and 10-row calls on the mixed corpus, 100k-row
+  flat calls, calls of 1, 2, 7 and 8,191-8,193 rows, 3,000 single
+  `decode()`s per corpus, and flat JSON, JSON lines and the JSONL writer
+  (which go through the reworked `Db::flatten`). New test: 4,000- (direct)
+  and 8,192-row (streamed) calls of generated VINs that share names and
+  elements but few results equal single decodes by `repr`, share no dict or
+  list by `id`, survive clearing every other result, and a later call is
+  unaffected. Handing out a remembered element dict instead of a copy fails
+  it (and the older repeated-results test) on the `id` check; sharing an
+  attributes dict or a list fails it on the values.
+- **Results.** `scripts/bench/api_compare.py`, 200k-VIN cells in 10k-row
+  calls, two alternating rounds against 1a72a29 (ranges are the rounds):
+
+  | path | input | workers | VIN/s before → after | peak RSS MiB before → after |
+  |---|---|---:|---:|---:|
+  | Python flat dicts | NY sorted | 1 | 460-473k → **528-533k** (+14%) | 256-257 → 252-253 |
+  | Python flat dicts | NY sorted | 8 | 505-509k → **588-593k** (+16%) | 311-313 → 301-303 |
+  | Python flat dicts | synthetic | 1 | 129-130k → **153k** (+18%) | 337 → 328-329 |
+  | Python flat dicts | synthetic | 8 | 164-165k → **234-236k** (+43%) | 386-387 → 376-377 |
+  | Python full dicts | NY sorted | 1 | 76.8-78.0k → **84.3-85.4k** (+10%) | 908 → 881 |
+  | Python full dicts | NY sorted | 8 | 77.1-77.2k → **83.2-84.1k** (+8%) | 960-961 → 933-934 |
+  | Python full dicts | synthetic | 1 | 32.7-33.2k → **43.4k** (+32%) | 1,025 → 988 |
+  | Python full dicts | synthetic | 8 | 34.6k → **45.3-45.5k** (+31%) | 1,074-1,075 → 1,020-1,021 |
+
+  One 50k-row call of synthetic VINs (where the memo is largest), two
+  pairs: full 39.7-40.1k → 53.4-53.9k VIN/s peaking at 2,010 → 1,924 MiB;
+  flat 160k → 196-199k at 427 → 405 MiB. Shared values outweigh the memo.
+
+  Small calls, best-of-7 medians, µs per call, 8 workers, two alternating
+  runs (synthetic VINs; sorted NY in parentheses):
+
+  | call | synthetic before → after | sorted NY before → after |
+  |---|---:|---:|
+  | `decode` flat | 6.82-7.19 → 6.41-6.79 | 6.38-6.41 → 5.84-5.92 |
+  | `decode_batch` ×1 flat | 7.01-7.38 → 6.77-7.21 | 6.58-6.62 → 6.01-6.09 |
+  | `decode_batch` ×10 flat | 117-124 → 112-113 | 109-110 → 91 |
+  | `decode_batch` ×1,000 flat | 4,810-5,032 → 3,637-3,667 | 4,157-4,199 → 2,201-2,229 |
+  | `decode` full | 16.9-18.9 → 17.3-17.7 | 15.5-16.2 → 14.9-15.5 |
+  | `decode_batch` ×1 full | 16.7-18.6 → 17.4-17.7 | 15.6-16.0 → 14.7-15.3 |
+  | `decode_batch` ×10 full | 230-237 → 199-204 | 222-231 → 168-169 |
+  | `decode_batch` ×1,000 full | 22,866-24,596 → 17,719-18,281 | 22,501-22,638 → 13,864-13,970 |
+
+  (Three runs for synthetic, two for NY.)
+
+  The Rust flat paths, which now build `FlatResult` through
+  `Db::flatten_map`, two alternating rounds:
+
+  `rust-batch-flat-read`, `rust-json-flat` and `rust-jsonl-flat` at 1 and 8
+  workers on both inputs are within ±2% and their noise; synthetic
+  `decode_batch_flat_at` at 8 workers is bimodal there (280-312k on either
+  side), and four more pairs gave 287-312k → 294-312k. Peak RSS unchanged.
+
+- **Tried and dropped.**
+  - *Sharing value strings across a call* (a map from content hash to the
+    `str`, checked against the text): no faster on synthetic flat (191-195k
+    against 196-197k VIN/s). Hashing and probing a ~47k-entry map costs what
+    allocating a short `str` does. Only the template's equal values are
+    shared now, which needs no map.
+  - *`PyGC_Disable` while a batch's dicts are built*: flat unchanged, full
+    2% slower over three pairs (34.9-35.1k against 35.7-36.0k VIN/s): the
+    deferred collection does the same work at once.
+  - *Untracking element dicts* (`PyObject_GC_UnTrack`; they hold only
+    immutable values) was not tried, though GC is about a quarter of the
+    full path: from 3.14 CPython never re-tracks an untracked dict (checked
+    on 3.14 and 3.15; 3.13 does), so a caller who stored a container in
+    one could leak a cycle, and `gc.is_tracked` would change.
+
 ## Experiments we rejected or replaced
 
 Keeping these failures is part of preserving the performance work. A compatible

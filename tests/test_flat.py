@@ -9,7 +9,9 @@ across vPIC data refreshes.
 
 from __future__ import annotations
 
+import hashlib
 from copy import deepcopy
+from datetime import datetime, timezone
 
 import pytest
 import ultravin as uv
@@ -164,3 +166,50 @@ def test_batch_dicts_of_repeated_results_are_equal_and_independent(full: bool) -
         for container in _containers(result):
             container.clear()
     assert results[1::2] == [singles[v, y] for v, y in list(zip(vins, years))[1::2]]
+
+
+#: A fixed clock, so generated VINs and every decode agree on the year.
+NOW = datetime(2026, 9, 1, tzinfo=timezone.utc)
+
+
+def _distinct() -> tuple[list[str], list[int | None]]:
+    """Vehicles that share attribute names and whole elements but few
+    results: generated VINs of one WMI and of all, and the cover set, then
+    the same again with a caller year per row, to 8,192 rows (streamed)."""
+    vins = uv.generate(2_500, seed=3, wmi="1FT", now=NOW) + uv.generate(2_500, seed=4, now=NOW)
+    vins += uv.cover_vins()
+    years: list[int | None] = [None] * len(vins)
+    extra = 8_192 - len(vins)
+    vins += vins[:extra]
+    years += [1990 + i % 37 for i in range(extra)]
+    return vins, years
+
+
+@pytest.mark.parametrize("full", [False, True])
+@pytest.mark.parametrize("rows", [4_000, 8_192])
+def test_batch_dicts_of_distinct_vehicles_are_exact_and_independent(full: bool, rows: int) -> None:
+    vins, years = _distinct()
+    vins, years = vins[:rows], years[:rows]
+    # repr carries nested key order and value types, not just equality.
+    expected = [_digest(uv.decode(v, year=y, full=full, now=NOW)) for v, y in zip(vins, years)]
+    results = uv.decode_batch(vins, years=years, full=full, now=NOW)
+    assert [_digest(r) for r in results] == expected
+    # The corpus does share dict contents between different vehicles.
+    parts = [p for r in results[:2000] for p in (r["elements"] if full else [list(r["attributes"])])]
+    assert len({_digest(p) for p in parts}) < len(parts) * 3 / 4
+    assert len({r["descriptor"] for r in results}) > len(results) / 4
+    # No dict or list is shared between two results.
+    owned = [_containers(r) for r in results]
+    assert len({id(c) for cs in owned for c in cs}) == sum(map(len, owned))
+    for containers in owned[::2]:
+        for container in containers:
+            container.clear()
+    assert [_digest(r) for r in results[1::2]] == expected[1::2]
+    # Nothing a call built outlives it.
+    del results, parts, owned
+    again = uv.decode_batch(vins[:2000], years=years[:2000], full=full, now=NOW)
+    assert [_digest(r) for r in again] == expected[:2000]
+
+
+def _digest(value: object) -> bytes:
+    return hashlib.blake2b(repr(value).encode(), digest_size=16).digest()

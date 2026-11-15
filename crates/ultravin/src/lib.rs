@@ -196,11 +196,11 @@ impl<'a> From<DecodeResult<'a>> for FlatResult<'a> {
     /// unreachable with the current archive (no model maps to more than one make)
     /// and would be a data change worth catching in the refresh gates.
     fn from(r: DecodeResult<'a>) -> Self {
-        let attributes = flatten_values(
+        let attributes = flat_values(flatten_values(
             r.elements
                 .into_iter()
                 .map(|e| (e.variable, e.element_id, e.value.into_owned())),
-        );
+        ));
         FlatResult {
             vin: r.vin,
             wmi: r.wmi,
@@ -214,26 +214,46 @@ impl<'a> From<DecodeResult<'a>> for FlatResult<'a> {
     }
 }
 
+/// One attribute's value or values, as [`FlatValue`] holds them, of any
+/// value type ([`Db::flatten_map`]). Not part of the API.
+#[doc(hidden)]
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Flat<V> {
+    One(V),
+    Many(Vec<V>),
+}
+
+fn flat_values(attributes: Vec<(&str, Flat<String>)>) -> Vec<(&str, FlatValue)> {
+    let value = |value| match value {
+        Flat::One(value) => FlatValue::One(value),
+        Flat::Many(values) => FlatValue::Many(values),
+    };
+    // Same layout: the collect reuses the allocation.
+    (attributes.into_iter())
+        .map(|(name, flat)| (name, value(flat)))
+        .collect()
+}
+
 /// Keep the first value for each variable name, collecting repeatable notes.
-fn flatten_values<'a>(
-    values: impl Iterator<Item = (&'a str, i32, String)>,
-) -> Vec<(&'a str, FlatValue)> {
-    let mut attributes: Vec<(&'a str, FlatValue)> = Vec::with_capacity(values.size_hint().0);
+fn flatten_values<'a, V>(
+    values: impl Iterator<Item = (&'a str, i32, V)>,
+) -> Vec<(&'a str, Flat<V>)> {
+    let mut attributes: Vec<(&'a str, Flat<V>)> = Vec::with_capacity(values.size_hint().0);
     let mut seen: std::collections::HashMap<&'a str, usize, hash::FxBuildHasher> =
         std::collections::HashMap::default();
     for (variable, element_id, value) in values {
         match seen.get(variable) {
             Some(&i) => {
-                if let (_, FlatValue::Many(list)) = &mut attributes[i] {
+                if let (_, Flat::Many(list)) = &mut attributes[i] {
                     list.push(value);
                 }
             }
             None => {
                 seen.insert(variable, attributes.len());
                 let value = if tables::is_exempt(element_id) {
-                    FlatValue::Many(vec![value])
+                    Flat::Many(vec![value])
                 } else {
-                    FlatValue::One(value)
+                    Flat::One(value)
                 };
                 attributes.push((variable, value));
             }
@@ -244,14 +264,14 @@ fn flatten_values<'a>(
 
 /// With unique variable names and element-sorted rows, repeats are adjacent.
 /// External databases with duplicate names retain the general name-based path.
-fn flatten_unique_variables<'a>(
-    values: impl Iterator<Item = (&'a str, i32, String)>,
-) -> Vec<(&'a str, FlatValue)> {
-    let mut attributes: Vec<(&str, FlatValue)> = Vec::with_capacity(values.size_hint().0);
+fn flatten_unique_variables<'a, V>(
+    values: impl Iterator<Item = (&'a str, i32, V)>,
+) -> Vec<(&'a str, Flat<V>)> {
+    let mut attributes: Vec<(&str, Flat<V>)> = Vec::with_capacity(values.size_hint().0);
     let mut previous = None;
     for (name, id, value) in values {
         if previous == Some(id) {
-            if let Some((_, FlatValue::Many(list))) = attributes.last_mut() {
+            if let Some((_, Flat::Many(list))) = attributes.last_mut() {
                 list.push(value);
             }
         } else {
@@ -259,9 +279,9 @@ fn flatten_unique_variables<'a>(
             attributes.push((
                 name,
                 if tables::is_exempt(id) {
-                    FlatValue::Many(vec![value])
+                    Flat::Many(vec![value])
                 } else {
-                    FlatValue::One(value)
+                    Flat::One(value)
                 },
             ));
         }
@@ -769,10 +789,6 @@ impl Db {
 
     /// `result` as a [`FlatResult`], as `FlatResult::from` makes it.
     pub fn flatten<'a>(&self, result: &DecodeResult<'a>) -> FlatResult<'a> {
-        let values = result
-            .elements
-            .iter()
-            .map(|e| (e.variable, e.element_id, e.value.to_string()));
         FlatResult {
             vin: result.vin.clone(),
             wmi: result.wmi.clone(),
@@ -781,11 +797,24 @@ impl Db {
             error_codes: result.error_codes.clone(),
             check_digit_valid: result.check_digit_valid,
             corrected_vin: result.corrected_vin.clone(),
-            attributes: if self.unique_public_variables() {
-                flatten_unique_variables(values)
-            } else {
-                flatten_values(values)
-            },
+            attributes: flat_values(self.flatten_map(result, |e| e.value.to_string())),
+        }
+    }
+
+    /// [`Db::flatten`]'s attributes with each element's value made by
+    /// `value`, called once per element in order (the Python binding
+    /// gathers a row's text into one buffer). Not part of the API.
+    #[doc(hidden)]
+    pub fn flatten_map<'a, V>(
+        &self,
+        result: &DecodeResult<'a>,
+        mut value: impl FnMut(&DecodedElement<'a>) -> V,
+    ) -> Vec<(&'a str, Flat<V>)> {
+        let values = (result.elements.iter()).map(|e| (e.variable, e.element_id, value(e)));
+        if self.unique_public_variables() {
+            flatten_unique_variables(values)
+        } else {
+            flatten_values(values)
         }
     }
 }
@@ -2822,7 +2851,7 @@ mod tests {
             flatten_unique_variables(rows.clone().into_iter()),
             flatten_values(rows.into_iter())
         );
-        assert!(flatten_unique_variables(std::iter::empty()).is_empty());
+        assert!(flatten_unique_variables(std::iter::empty::<(&str, i32, String)>()).is_empty());
     }
 
     #[test]

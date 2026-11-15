@@ -31,7 +31,6 @@ use ultravin::parquet_io::{
 use ultravin::predictor::{predict_batch, BatchFormat, BatchPrediction};
 use ultravin::{
     ArrowDecoder, ArrowError, ArrowOpts, ColumnNames, ColumnSpec, DecodeResult, DecodedElement,
-    FlatResult, FlatValue,
 };
 
 // The decode engine is allocation-bound; a sharded allocator both speeds the
@@ -64,8 +63,48 @@ thread_local! {
     static ELEM_TEMPLATES: RefCell<Vec<Option<Py<PyDict>>>> = const { RefCell::new(Vec::new()) };
     /// The same finite archive variable names recur in every flat dictionary.
     /// This cache has the same interpreter constraints as ELEM_TEMPLATES above.
-    static FLAT_KEYS: OnceCell<std::collections::HashMap<&'static str, Py<PyString>>> = const { OnceCell::new() };
+    static FLAT_KEYS: OnceCell<FxMap<&'static str, Py<PyString>>> = const { OnceCell::new() };
 }
+
+/// FxHash (rustc's own hasher): the dict paths look up trusted, short keys
+/// many times per VIN; SipHash made flat dicts ~8% slower.
+#[derive(Default)]
+struct Fx(u64);
+
+impl Fx {
+    fn add(&mut self, word: u64) {
+        self.0 = (self.0.rotate_left(5) ^ word).wrapping_mul(0x517c_c1b7_2722_0a95);
+    }
+}
+
+impl std::hash::Hasher for Fx {
+    fn write(&mut self, bytes: &[u8]) {
+        let (words, rest) = bytes.as_chunks::<8>();
+        for word in words {
+            self.add(u64::from_ne_bytes(*word));
+        }
+        for &byte in rest {
+            self.add(u64::from(byte));
+        }
+    }
+    fn write_u8(&mut self, i: u8) {
+        self.add(u64::from(i));
+    }
+    fn write_u32(&mut self, i: u32) {
+        self.add(u64::from(i));
+    }
+    fn write_u64(&mut self, i: u64) {
+        self.add(i);
+    }
+    fn write_usize(&mut self, i: usize) {
+        self.add(i as u64);
+    }
+    fn finish(&self) -> u64 {
+        self.0
+    }
+}
+
+type FxMap<K, V> = std::collections::HashMap<K, V, std::hash::BuildHasherDefault<Fx>>;
 
 /// Construct keys in the public insertion order. Placeholders are overwritten
 /// after copying; the cached dictionary itself is never exposed or modified.
@@ -160,8 +199,12 @@ fn elem_to_dict<'py>(py: Python<'py>, e: &DecodedElement<'_>) -> PyResult<Bound<
     Ok(d)
 }
 
-fn result_to_dict<'py>(py: Python<'py>, r: &DecodeResult<'_>) -> PyResult<Bound<'py, PyDict>> {
-    let d = PyDict::new(py);
+fn result_to_dict<'py>(
+    py: Python<'py>,
+    r: &DecodeResult<'static>,
+    memo: &mut Memo,
+) -> PyResult<Bound<'py, PyDict>> {
+    let d = memo.header(py)?;
     d.set_item(intern!(py, "vin"), &r.vin)?;
     d.set_item(intern!(py, "wmi"), &r.wmi)?;
     d.set_item(intern!(py, "descriptor"), &r.descriptor)?;
@@ -173,9 +216,10 @@ fn result_to_dict<'py>(py: Python<'py>, r: &DecodeResult<'_>) -> PyResult<Bound<
     let dicts: Vec<Bound<'py, PyDict>> = r
         .elements
         .iter()
-        .map(|e| elem_to_dict(py, e))
+        .map(|e| memo.element(py, e))
         .collect::<PyResult<_>>()?;
     d.set_item(intern!(py, "elements"), PyList::new(py, dicts)?)?;
+    memo.remember_header(&d);
     Ok(d)
 }
 
@@ -183,17 +227,75 @@ fn result_to_dict<'py>(py: Python<'py>, r: &DecodeResult<'_>) -> PyResult<Bound<
 /// `variable -> value`. That is ~41 dict stores per VIN instead of the ~615 the
 /// `elements` list costs (one 15-key dict per element), which is the bulk of the
 /// GIL-serial marshalling — see `docs/BENCHMARKS.md`.
-fn flat_to_dict<'py>(py: Python<'py>, r: &FlatResult<'_>) -> PyResult<Bound<'py, PyDict>> {
-    let d = PyDict::new(py);
-    d.set_item(intern!(py, "vin"), &r.vin)?;
-    d.set_item(intern!(py, "wmi"), &r.wmi)?;
-    d.set_item(intern!(py, "descriptor"), &r.descriptor)?;
+fn flat_to_dict<'py>(
+    py: Python<'py>,
+    r: &FlatText,
+    memo: &mut Memo,
+) -> PyResult<Bound<'py, PyDict>> {
+    let d = memo.header(py)?;
+    d.set_item(intern!(py, "vin"), r.text(&r.vin))?;
+    d.set_item(intern!(py, "wmi"), r.text(&r.wmi))?;
+    d.set_item(intern!(py, "descriptor"), r.text(&r.descriptor))?;
     d.set_item(intern!(py, "model_year"), r.model_year)?;
     d.set_item(intern!(py, "error_codes"), &r.error_codes)?;
     d.set_item(intern!(py, "check_digit_valid"), r.check_digit_valid)?;
-    d.set_item(intern!(py, "corrected_vin"), &r.corrected_vin)?;
-    let attrs = PyDict::new(py);
-    FLAT_KEYS.with(|cache| -> PyResult<()> {
+    d.set_item(intern!(py, "corrected_vin"), r.text(&r.corrected_vin))?;
+    d.set_item(intern!(py, "attributes"), memo.attributes(py, r)?)?;
+    memo.remember_header(&d);
+    Ok(d)
+}
+
+/// A flat result as [`Db::flatten`](ultravin::Db::flatten) makes it, with
+/// every text in one buffer: built on a decode worker, it is two or three
+/// allocations for the dict-building thread to free rather than one per
+/// value (freeing those was a fifth of that thread's time).
+struct FlatText {
+    text: String,
+    vin: Span,
+    wmi: Span,
+    descriptor: Span,
+    corrected_vin: Span,
+    model_year: Option<i32>,
+    error_codes: Vec<i32>,
+    check_digit_valid: bool,
+    attributes: Vec<(&'static str, ultravin::Flat<Span>)>,
+}
+
+type Span = std::ops::Range<usize>;
+
+impl FlatText {
+    fn new(db: &'static ultravin::Db, r: &DecodeResult<'static>) -> Self {
+        let header = [&r.vin, &r.wmi, &r.descriptor, &r.corrected_vin];
+        let values = r.elements.iter().map(|e| e.value.len());
+        let len = header.iter().map(|text| text.len()).sum::<usize>() + values.sum::<usize>();
+        let mut text = String::with_capacity(len);
+        let mut push = |part: &str| {
+            text.push_str(part);
+            text.len() - part.len()..text.len()
+        };
+        let [vin, wmi, descriptor, corrected_vin] = header.map(|part| push(part));
+        let attributes = db.flatten_map(r, |e| push(&e.value));
+        Self {
+            text,
+            vin,
+            wmi,
+            descriptor,
+            corrected_vin,
+            model_year: r.model_year,
+            error_codes: r.error_codes.clone(),
+            check_digit_valid: r.check_digit_valid,
+            attributes,
+        }
+    }
+
+    fn text(&self, span: &Span) -> &str {
+        &self.text[span.clone()]
+    }
+}
+
+/// The Python name of a flat attribute, shared by every flat dict.
+fn flat_key<'py>(py: Python<'py>, name: &str) -> Bound<'py, PyString> {
+    FLAT_KEYS.with(|cache| {
         let keys = cache.get_or_init(|| {
             let db = ultravin::Db::embedded();
             db.elements()
@@ -204,27 +306,206 @@ fn flat_to_dict<'py>(py: Python<'py>, r: &FlatResult<'_>) -> PyResult<Bound<'py,
                 })
                 .collect()
         });
-        for (name, value) in &r.attributes {
-            let uncached;
-            let key = match keys.get(name) {
-                Some(key) => key.bind(py),
-                None => {
-                    uncached = PyString::new(py, name);
-                    &uncached
+        match keys.get(name) {
+            Some(key) => key.bind(py).clone(),
+            None => PyString::new(py, name),
+        }
+    })
+}
+
+fn flat_value<'py>(
+    py: Python<'py>,
+    r: &FlatText,
+    value: &ultravin::Flat<Span>,
+) -> PyResult<Bound<'py, PyAny>> {
+    Ok(match value {
+        ultravin::Flat::One(v) if r.text(v) == "Not Applicable" => {
+            intern!(py, "Not Applicable").clone().into_any()
+        }
+        ultravin::Flat::One(v) => PyString::new(py, r.text(v)).into_any(),
+        ultravin::Flat::Many(vs) => PyList::new(py, vs.iter().map(|v| r.text(v)))?.into_any(),
+    })
+}
+
+/// The attribute names of a flat dict, in order, with their Python keys
+/// and the first dict this call built with them. The names are `'static`
+/// text of the embedded database, compared by address and length.
+struct Shape {
+    names: Vec<&'static str>,
+    keys: Vec<Py<PyString>>,
+    /// The first dict's single values by position (`None` for a list).
+    values: Vec<Option<Py<PyString>>>,
+    dict: Py<PyDict>,
+}
+
+/// Dicts one batch call has built, to copy instead of building again:
+/// vehicles that share no result still share most attribute names (flat)
+/// and many whole elements (full). A copy is always a new dict, so no
+/// container is ever shared between results; only the immutable values in
+/// it are. Every dict here is one this call built and has not returned, so
+/// nothing can have changed it. The memo lives for one call, holding a
+/// reference per distinct shape or element, so it is bounded by that
+/// call's output. A single decode does not use it.
+#[derive(Default)]
+struct Memo {
+    /// Off (`Memo::default()`) for a single decode: nothing to reuse.
+    on: bool,
+    /// Flat attribute dicts by a hash of their names' addresses.
+    shapes: FxMap<u64, Shape>,
+    /// Full element dicts by a hash of their content.
+    elements: FxMap<u64, (DecodedElement<'static>, Py<PyDict>)>,
+    /// The first result dict: every result has its keys, in its order.
+    header: Option<Py<PyDict>>,
+}
+
+impl Memo {
+    fn new() -> Self {
+        Self {
+            on: true,
+            ..Self::default()
+        }
+    }
+
+    /// A dict for a result to store every key in: a copy of the first
+    /// result's, so it is sized and ordered already.
+    fn header<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyDict>> {
+        match &self.header {
+            Some(first) => first.bind(py).copy(),
+            None => Ok(PyDict::new(py)),
+        }
+    }
+
+    fn remember_header(&mut self, dict: &Bound<'_, PyDict>) {
+        if self.on && self.header.is_none() {
+            self.header = Some(dict.clone().unbind());
+        }
+    }
+
+    /// A flat `attributes` dict: a copy of the first one with the same
+    /// names, in the same order (no resize, no new keys), its values
+    /// stored again where they differ; or else built key by key.
+    fn attributes<'py>(&mut self, py: Python<'py>, r: &FlatText) -> PyResult<Bound<'py, PyDict>> {
+        let attributes = &r.attributes;
+        if !self.on {
+            let dict = PyDict::new(py);
+            for (name, value) in attributes {
+                dict.set_item(flat_key(py, name), flat_value(py, r, value)?)?;
+            }
+            return Ok(dict);
+        }
+        use std::hash::Hasher;
+        let mut hash = Fx::default();
+        for (name, _) in attributes {
+            hash.write_usize(name.as_ptr() as usize);
+            hash.write_usize(name.len());
+        }
+        let hash = hash.finish();
+        let shape = self.shapes.get(&hash).filter(|shape| {
+            shape.names.len() == attributes.len()
+                && (shape.names.iter().zip(attributes)).all(|(&a, &(b, _))| std::ptr::eq(a, b))
+        });
+        if let Some(shape) = shape {
+            let dict = shape.dict.bind(py).copy()?;
+            let rows = shape.keys.iter().zip(&shape.values).zip(attributes);
+            for ((key, first), (_, value)) in rows {
+                if let (Some(first), ultravin::Flat::One(value)) = (first, value) {
+                    if first
+                        .bind(py)
+                        .to_str()
+                        .is_ok_and(|first| first == r.text(value))
+                    {
+                        continue;
+                    }
                 }
-            };
-            match value {
-                FlatValue::One(v) if v == "Not Applicable" => {
-                    attrs.set_item(key, intern!(py, "Not Applicable"))?
+                dict.set_item(key.bind(py), flat_value(py, r, value)?)?;
+            }
+            return Ok(dict);
+        }
+        let dict = PyDict::new(py);
+        let mut keys = Vec::with_capacity(attributes.len());
+        let mut values = Vec::with_capacity(attributes.len());
+        for (name, value) in attributes {
+            let key = flat_key(py, name);
+            let value = flat_value(py, r, value)?;
+            dict.set_item(&key, &value)?;
+            keys.push(key.unbind());
+            values.push(value.cast_into::<PyString>().ok().map(Bound::unbind));
+        }
+        if let std::collections::hash_map::Entry::Vacant(slot) = self.shapes.entry(hash) {
+            slot.insert(Shape {
+                names: attributes.iter().map(|&(name, _)| name).collect(),
+                keys,
+                values,
+                dict: dict.clone().unbind(),
+            });
+        }
+        Ok(dict)
+    }
+
+    /// A full element dict: a copy of the first equal element's, or else
+    /// built field by field.
+    fn element<'py>(
+        &mut self,
+        py: Python<'py>,
+        e: &DecodedElement<'static>,
+    ) -> PyResult<Bound<'py, PyDict>> {
+        if !self.on {
+            return elem_to_dict(py, e);
+        }
+        use std::hash::{Hash, Hasher};
+        let mut hash = Fx::default();
+        (e.element_id, e.pattern_id, e.vin_schema_id).hash(&mut hash);
+        (e.created_on, e.wmi_id, e.to_be_qced).hash(&mut hash);
+        for text in [&e.value, &e.attribute_id, &e.source, &e.keys] {
+            hash_text(&mut hash, text);
+        }
+        match self.elements.entry(hash.finish()) {
+            std::collections::hash_map::Entry::Occupied(seen) => {
+                let (element, dict) = seen.get();
+                if same_element(element, e) {
+                    dict.bind(py).copy()
+                } else {
+                    elem_to_dict(py, e)
                 }
-                FlatValue::One(v) => attrs.set_item(key, v)?,
-                FlatValue::Many(vs) => attrs.set_item(key, PyList::new(py, vs)?)?,
+            }
+            std::collections::hash_map::Entry::Vacant(slot) => {
+                let dict = elem_to_dict(py, e)?;
+                slot.insert((e.clone(), dict.clone().unbind()));
+                Ok(dict)
             }
         }
-        Ok(())
-    })?;
-    d.set_item(intern!(py, "attributes"), attrs)?;
-    Ok(d)
+    }
+}
+
+/// Borrowed text (database text, mostly) hashes by address and length,
+/// owned text by content. Equal text may then hash apart and be built
+/// again; unequal text never passes [`same_element`].
+#[allow(clippy::ptr_arg)] // which `Cow` variant it is decides the hash
+fn hash_text(hash: &mut Fx, text: &std::borrow::Cow<'static, str>) {
+    use std::hash::{Hash, Hasher};
+    match text {
+        std::borrow::Cow::Borrowed(text) => {
+            hash.write_usize(text.as_ptr() as usize);
+            hash.write_usize(text.len());
+        }
+        std::borrow::Cow::Owned(text) => text.hash(hash),
+    }
+}
+
+/// `a == b`, comparing text by address first.
+fn same_element(a: &DecodedElement<'_>, b: &DecodedElement<'_>) -> bool {
+    let same = |a: &str, b: &str| std::ptr::eq(a, b) || a == b;
+    (a.element_id, a.pattern_id, a.vin_schema_id) == (b.element_id, b.pattern_id, b.vin_schema_id)
+        && (a.created_on, a.wmi_id, a.to_be_qced) == (b.created_on, b.wmi_id, b.to_be_qced)
+        && same(&a.value, &b.value)
+        && same(&a.attribute_id, &b.attribute_id)
+        && same(&a.source, &b.source)
+        && same(&a.keys, &b.keys)
+        && same(a.group_name, b.group_name)
+        && same(a.variable, b.variable)
+        && same(a.code, b.code)
+        && same(a.data_type, b.data_type)
+        && same(a.decode, b.decode)
 }
 
 /// The optional per-VIN caller years for a batch, validated against the VIN
@@ -259,9 +540,17 @@ fn decode<'py>(
 ) -> PyResult<Bound<'py, PyDict>> {
     let (now_micros, _) = decode_clock(now.as_ref())?;
     if full {
-        result_to_dict(py, &ultravin::decode_at(vin, year, now_micros))
+        result_to_dict(
+            py,
+            &ultravin::decode_at(vin, year, now_micros),
+            &mut Memo::default(),
+        )
     } else {
-        flat_to_dict(py, &ultravin::decode_flat_at(vin, year, now_micros))
+        let flat = FlatText::new(
+            ultravin::Db::embedded(),
+            &ultravin::decode_at(vin, year, now_micros),
+        );
+        flat_to_dict(py, &flat, &mut Memo::default())
     }
 }
 
@@ -288,10 +577,12 @@ fn decode_batch<'py>(
         let year = years.and_then(|years| years.first()).copied().flatten();
         let result = if full {
             let result = py.detach(|| ultravin::decode_at(vin, year, now_micros));
-            result_to_dict(py, &result)?
+            result_to_dict(py, &result, &mut Memo::default())?
         } else {
-            let result = py.detach(|| ultravin::decode_flat_at(vin, year, now_micros));
-            flat_to_dict(py, &result)?
+            let db = ultravin::Db::embedded();
+            let result =
+                py.detach(|| FlatText::new(db, &ultravin::decode_at(vin, year, now_micros)));
+            flat_to_dict(py, &result, &mut Memo::default())?
         };
         return Ok(vec![result]);
     }
@@ -312,14 +603,19 @@ fn decode_batch<'py>(
                 let ids = ids.chain(std::iter::repeat(None));
                 let rows = batch.input_indices().zip(ids).zip(batch.iter());
                 let rows = rows.map(|((index, id), result)| (index, id, result));
-                dicts.build(rows, |r| &r.vin, |py, r| result_to_dict(py, r), copy_full)
+                dicts.build(
+                    rows,
+                    |r| &r.vin,
+                    |py, r, memo| result_to_dict(py, r, memo),
+                    copy_full,
+                )
             })
         } else {
             let flatten = |result: &DecodeResult<'static>, repeat: bool| {
                 if repeat {
                     Err(result.vin.clone())
                 } else {
-                    Ok(db.flatten(result))
+                    Ok(FlatText::new(db, result))
                 }
             };
             db.decode_batch_map_ids_at(&vins, years, now_micros, flatten, |rows| {
@@ -333,18 +629,22 @@ fn decode_batch<'py>(
 
 /// A flat row of a batch call: its result, or only its `vin` when an earlier
 /// row of its batch had the same result id.
-type FlatRow = Result<FlatResult<'static>, String>;
+type FlatRow = Result<FlatText, String>;
 
 fn flat_vin(row: &FlatRow) -> &str {
     match row {
-        Ok(flat) => &flat.vin,
+        Ok(flat) => flat.text(&flat.vin),
         Err(vin) => vin,
     }
 }
 
-fn flat_row_to_dict<'py>(py: Python<'py>, row: &FlatRow) -> PyResult<Bound<'py, PyDict>> {
+fn flat_row_to_dict<'py>(
+    py: Python<'py>,
+    row: &FlatRow,
+    memo: &mut Memo,
+) -> PyResult<Bound<'py, PyDict>> {
     match row {
-        Ok(flat) => flat_to_dict(py, flat),
+        Ok(flat) => flat_to_dict(py, flat, memo),
         Err(_) => Err(PyRuntimeError::new_err(
             "a repeated flat row arrived before its result",
         )),
@@ -413,6 +713,7 @@ struct Dicts {
     first: std::collections::HashMap<u64, usize>,
     /// The first conversion error; no dicts are built after it.
     failed: Option<PyErr>,
+    memo: Memo,
 }
 
 impl Dicts {
@@ -421,6 +722,7 @@ impl Dicts {
             out: (0..rows).map(|_| None).collect(),
             first: std::collections::HashMap::new(),
             failed: None,
+            memo: Memo::new(),
         }
     }
 
@@ -432,7 +734,7 @@ impl Dicts {
         &mut self,
         rows: impl Iterator<Item = (usize, Option<u64>, R)>,
         vin: impl Fn(&R) -> &str,
-        to_dict: impl for<'py> Fn(Python<'py>, &R) -> PyResult<Bound<'py, PyDict>>,
+        to_dict: impl for<'py> Fn(Python<'py>, &R, &mut Memo) -> PyResult<Bound<'py, PyDict>>,
         copy: impl for<'py> Fn(&Bound<'py, PyDict>, &str) -> PyResult<Bound<'py, PyDict>>,
     ) {
         if self.failed.is_some() {
@@ -443,7 +745,7 @@ impl Dicts {
                 let first = id.and_then(|id| self.first.get(&id).copied());
                 let dict = match first.and_then(|first| self.out[first].as_ref()) {
                     Some(first) => copy(first.bind(py), vin(&row)),
-                    None => to_dict(py, &row),
+                    None => to_dict(py, &row, &mut self.memo),
                 };
                 match dict {
                     Ok(dict) => self.out[index] = Some(dict.unbind()),
