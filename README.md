@@ -299,8 +299,8 @@ ultravin decode-parquet registrations.parquet decoded.parquet --column-names id
 
 Real fleets repeat: in New York's registrations 97% of VINs decode to a vehicle
 an earlier VIN already did. `decode-compact` writes each such vehicle once, which
-on that file (sorted) runs about 15× faster than `decode-parquet`: 6.9M VIN/s on
-8 cores, disk to disk.
+on that file (sorted) runs more than twice as fast as `decode-parquet`: 6.9M
+VIN/s on 8 cores, disk to disk.
 
 ```bash
 ultravin decode-compact registrations.parquet decoded/  # or a text file, one VIN per line
@@ -365,31 +365,31 @@ written, strings built, every field of every result read.
 
 | output | 1 core | 4 cores | 8 cores | peak memory |
 |---|---:|---:|---:|---:|
-| Rust `decode_batch_json_at`, flat — one JSON string | 1,654,481 | 4,482,992 | 6,213,236 | 1.4 GB |
-| `ultravin decode-compact` — `vins.parquet` + `vehicles.parquet` on disk | 1,610,560 | 3,867,944 | 5,055,862 | 0.6 GB |
-| Python `decode_batch_json` — one JSON string | 1,154,619 | 2,062,928 | 2,430,301 | 3.8 GB |
-| Rust `decode_batch_json_at`, full — one JSON string | 535,903 | 1,332,286 | 1,715,028 | 4.8 GB |
-| `ultravin decode-batch --jsonl` — JSON lines on disk | 341,361 | 1,133,238 | 1,502,185 | 0.3 GB |
-| Rust `decode_batch_flat_at` — flat results, every field read | 516,156 | 907,743 | 1,026,876 | 1.2 GB |
-| Rust `decode_batch_stream_at` — full results, every field read on the calling thread | 718,796 | 807,834 | 824,876 | 0.6 GB |
-| Rust `ArrowDecoder::decode_batch` — all columns in memory | 131,684 | 443,445 | 768,677 | 0.6 GB |
-| Python `decode_stream` — Arrow batches into pyarrow | 131,641 | 463,322 | 762,752 | 0.3 GB |
-| Rust `decode_batch_at` — full results, every field read | 593,173 | 702,048 | 748,524 | 0.7 GB |
-| Python `decode_batch` — a dict per VIN | 468,946 | 522,032 | 506,452 | 0.3 GB |
-| `ultravin decode-parquet` — one wide Parquet file on disk | 116,105 | 317,250 | 454,027 | 0.3 GB |
-| Python `decode_batch(full=True)` — a dict per VIN with every element | 82,123 | 83,071 | 83,190 | 0.9 GB |
+| Rust `ArrowDecoder::decode_batch` — all columns in memory | 1,613,326 | 4,940,832 | 7,050,127 | 0.5 GB |
+| Rust `decode_batch_json_at`, flat — one JSON string | 1,689,469 | 4,665,315 | 6,217,332 | 1.4 GB |
+| `ultravin decode-compact` — `vins.parquet` + `vehicles.parquet` on disk | 1,667,983 | 3,916,817 | 5,068,054 | 0.6 GB |
+| Python `decode_stream` — Arrow batches into pyarrow | 1,632,388 | 3,590,666 | 4,351,597 | 0.3 GB |
+| Python `decode_batch_json` — one JSON string | 1,162,025 | 1,950,058 | 2,382,983 | 3.8 GB |
+| `ultravin decode-parquet` — one wide Parquet file on disk | 598,134 | 1,451,475 | 1,881,728 | 0.3 GB |
+| Rust `decode_batch_json_at`, full — one JSON string | 542,968 | 1,305,612 | 1,697,785 | 4.8 GB |
+| `ultravin decode-batch --jsonl` — JSON lines on disk | 334,120 | 1,110,365 | 1,393,493 | 0.3 GB |
+| Rust `decode_batch_flat_at` — flat results, every field read | 522,190 | 905,796 | 1,033,457 | 1.2 GB |
+| Rust `decode_batch_stream_at` — full results, every field read on the calling thread | 729,438 | 807,312 | 806,657 | 0.6 GB |
+| Rust `decode_batch_at` — full results, every field read | 613,699 | 699,133 | 723,033 | 0.6 GB |
+| Python `decode_batch` — a dict per VIN | 475,033 | 516,635 | 507,336 | 0.3 GB |
+| Python `decode_batch(full=True)` — a dict per VIN with every element | 81,889 | 83,145 | 82,043 | 0.9 GB |
 
 What the result is made of decides the speed, not the decode. A full result
 carries every vPIC element with 15 fields each; building a Python dict or a JSON
 object for each costs far more than decoding it, and Python builds dicts on one
 thread.
-Where vehicles repeat, the compact files, the JSON paths and the Python dicts
-build each distinct vehicle's output once and reuse it. Flat JSON in memory edges
-out `decode-compact` here only because the command's process startup is a large
-share of a 2,000,000-VIN job: it reads 5,055,862 VIN/s here against 6,906,661
-on the whole file above.
+Where vehicles repeat, every path but the plain Rust results builds each
+distinct vehicle's output once and reuses it. Arrow and flat JSON in memory edge
+out `decode-compact` here because they write no file and the command's process
+startup is a large share of a 2,000,000-VIN job: it reads 5,068,054 VIN/s here
+against 6,906,661 on the whole file above.
 Reproduce with `uv run --frozen python -m scripts.bench.api_compare --workers 1 --workers 4 --workers 8`;
-the synthetic corpus is in [the benchmark notes](docs/BENCHMARKS.md#by-output-november-14-2026-commit-2332c48).
+the synthetic corpus is in [the benchmark notes](docs/BENCHMARKS.md#by-output-november-14-2026-commit-123f0f2).
 
 ultravin runs in-process with the database embedded — no server, no round-trip.
 The corgi rows are derived from that project's published per-VIN latency, and
