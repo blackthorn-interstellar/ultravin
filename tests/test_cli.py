@@ -174,7 +174,7 @@ def test_batch_size_rejects_invalid_values(value: str) -> None:
 def test_batch_memory_rejects_zero() -> None:
     result = cli("decode-batch", "-", "--jsonl", "--batch-memory-mb", "0", stdin=HONDA)
     assert result.exit_code == 2
-    assert "x>=1" in result.output
+    assert "greater than or equal to 1" in result.output
 
 
 def test_decode_batch_jsonl_auto_adapts_between_real_chunks(monkeypatch: pytest.MonkeyPatch) -> None:
