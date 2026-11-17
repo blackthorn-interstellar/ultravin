@@ -14,8 +14,8 @@
 #          campaign). A covfuzz probe chunk tops the backlog up each night
 #          (state resumes via actions/cache); a Grok agent resolves ONE
 #          root-cause cluster per night against the live pinned oracle and
-#          fixes-publish delivers it as a PR. Humans merge decoder changes —
-#          always.
+#          fixes-publish delivers it as a PR and fixes-merge MERGES it on
+#          green, same gates as deps. A PR the agent marks needs-human waits.
 #
 # The invariant this file is built around: NO job both runs untrusted code and
 # holds a write token. Every agent job is keyless — it reads untrusted input
@@ -31,8 +31,8 @@
 # gate in data-review.yaml has approved the lock diff AND the security.yaml
 # scanner suite is green on the head SHA. Both verdicts — the reviewer's and the
 # scanners' — stop the lane for a human instead of feeding the remediation
-# agent, which is scoped to mechanical failures. Parity-fix PRs are always left
-# for a human.
+# agent, which is scoped to mechanical failures. Parity-fix PRs merge on the
+# same three gates; anything short of that is labeled needs-human.
 # Same event model as data-refresh.yaml: GITHUB_TOKEN events don't trigger
 # workflows, so CI and the review gate are dispatched explicitly.
 # Runbook: docs/NIGHTLY.md.
@@ -229,8 +229,9 @@ jobs:
           # rather than failing. So poll until a Security run is actually
           # moving instead of asking once and hoping.
           sec=0
-          for _ in $(seq 1 12); do
-            for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id'); do
+          for pass in $(seq 1 12); do
+            parked=$(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id' || true)
+            for rid in $parked; do
               gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
                 || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
             done
@@ -239,7 +240,12 @@ jobs:
             # in_progress and finished all count, because approval races with
             # whatever a human clicked a second earlier.
             sec=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=$head&per_page=100" --jq '[.workflow_runs[] | select(.path == ".github/workflows/security.yaml") | select(.conclusion != "action_required")] | length' || echo 0)
-            if [ "${sec:-0}" -gt 0 ]; then break; fi
+            # Not just "Security is moving": a ci.yaml run parked a beat later
+            # is never approved, and its empty check suite hides the dispatched
+            # run's checks from branch protection — the merge then dies with
+            # "8 of 9 required status checks are expected" (PR #119,
+            # 2026-11-16). Sweep for a minute, and until a pass finds none.
+            if [ "${sec:-0}" -gt 0 ] && [ "$pass" -ge 6 ] && [ -z "$parked" ]; then break; fi
             sleep 10
           done
           if [ "${sec:-0}" -eq 0 ]; then
@@ -514,8 +520,9 @@ jobs:
           # rather than failing. So poll until a Security run is actually
           # moving instead of asking once and hoping.
           sec=0
-          for _ in $(seq 1 12); do
-            for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id'); do
+          for pass in $(seq 1 12); do
+            parked=$(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id' || true)
+            for rid in $parked; do
               gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
                 || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
             done
@@ -524,7 +531,12 @@ jobs:
             # in_progress and finished all count, because approval races with
             # whatever a human clicked a second earlier.
             sec=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=$head&per_page=100" --jq '[.workflow_runs[] | select(.path == ".github/workflows/security.yaml") | select(.conclusion != "action_required")] | length' || echo 0)
-            if [ "${sec:-0}" -gt 0 ]; then break; fi
+            # Not just "Security is moving": a ci.yaml run parked a beat later
+            # is never approved, and its empty check suite hides the dispatched
+            # run's checks from branch protection — the merge then dies with
+            # "8 of 9 required status checks are expected" (PR #119,
+            # 2026-11-16). Sweep for a minute, and until a pass finds none.
+            if [ "${sec:-0}" -gt 0 ] && [ "$pass" -ge 6 ] && [ -z "$parked" ]; then break; fi
             sleep 10
           done
           if [ "${sec:-0}" -eq 0 ]; then
@@ -960,8 +972,9 @@ jobs:
           # rather than failing. So poll until a Security run is actually
           # moving instead of asking once and hoping.
           sec=0
-          for _ in $(seq 1 12); do
-            for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id'); do
+          for pass in $(seq 1 12); do
+            parked=$(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id' || true)
+            for rid in $parked; do
               gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
                 || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
             done
@@ -970,7 +983,12 @@ jobs:
             # in_progress and finished all count, because approval races with
             # whatever a human clicked a second earlier.
             sec=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=$head&per_page=100" --jq '[.workflow_runs[] | select(.path == ".github/workflows/security.yaml") | select(.conclusion != "action_required")] | length' || echo 0)
-            if [ "${sec:-0}" -gt 0 ]; then break; fi
+            # Not just "Security is moving": a ci.yaml run parked a beat later
+            # is never approved, and its empty check suite hides the dispatched
+            # run's checks from branch protection — the merge then dies with
+            # "8 of 9 required status checks are expected" (PR #119,
+            # 2026-11-16). Sweep for a minute, and until a pass finds none.
+            if [ "${sec:-0}" -gt 0 ] && [ "$pass" -ge 6 ] && [ -z "$parked" ]; then break; fi
             sleep 10
           done
           if [ "${sec:-0}" -eq 0 ]; then
@@ -1678,7 +1696,7 @@ jobs:
   # saw the dump, the probe, or the agent's session — git and gh only, no local
   # actions — so it is the only place this lane's write token lives. It rebuilds
   # the branch from the banked patch behind the automation guard, opens or
-  # updates the PR, and kicks the checks. A human still merges decoder changes.
+  # updates the PR, and kicks the checks. fixes-merge takes it from there.
   fixes-publish:
     needs: fixes
     # !cancelled() rather than the implicit success(): the agent job goes red
@@ -1787,8 +1805,9 @@ jobs:
           # rather than failing. So poll until a Security run is actually
           # moving instead of asking once and hoping.
           sec=0
-          for _ in $(seq 1 12); do
-            for rid in $(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id'); do
+          for pass in $(seq 1 12); do
+            parked=$(gh api "repos/${{ github.repository }}/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$GITHUB_REPOSITORY"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id' || true)
+            for rid in $parked; do
               gh api -X POST "repos/${{ github.repository }}/actions/runs/$rid/approve" \
                 || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
             done
@@ -1797,9 +1816,92 @@ jobs:
             # in_progress and finished all count, because approval races with
             # whatever a human clicked a second earlier.
             sec=$(gh api "repos/${{ github.repository }}/actions/runs?head_sha=$head&per_page=100" --jq '[.workflow_runs[] | select(.path == ".github/workflows/security.yaml") | select(.conclusion != "action_required")] | length' || echo 0)
-            if [ "${sec:-0}" -gt 0 ]; then break; fi
+            # Not just "Security is moving": a ci.yaml run parked a beat later
+            # is never approved, and its empty check suite hides the dispatched
+            # run's checks from branch protection — the merge then dies with
+            # "8 of 9 required status checks are expected" (PR #119,
+            # 2026-11-16). Sweep for a minute, and until a pass finds none.
+            if [ "${sec:-0}" -gt 0 ] && [ "$pass" -ge 6 ] && [ -z "$parked" ]; then break; fi
             sleep 10
           done
           if [ "${sec:-0}" -eq 0 ]; then
             echo "::warning::no Security run has started on $head after 12 tries — the scan may be missing from this pull request"
           fi
+
+  # Parity lane, merge half. An unmerged parity-backlog PR is not harmless: it
+  # blocks every later night's drain (no stacking) and rots into conflicts with
+  # the monthly data refresh — PR #114 sat a week that way. So the lane ends
+  # like deps does: CI green AND review-verdict success AND a Security scan that
+  # actually ran -> merge. Anything else is labeled needs-human with the reason,
+  # so an open parity PR always means "a human is wanted", never "nobody looked".
+  # A PR the agent itself marked needs-human is left alone.
+  # Like deps-watch/deps-merge it checks out nothing and runs no repository
+  # code — just `gh` against the API.
+  fixes-merge:
+    needs: [fixes, fixes-publish]
+    if: ${{ !cancelled() && needs['fixes-publish'].result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    permissions:
+      contents: write # merge, delete the branch
+      pull-requests: write # merge, label, comment
+      issues: write # gh label create
+      checks: read
+      statuses: read # review-verdict is a commit status, not a check run
+      actions: read # did a Security run execute on this SHA?
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      BRANCH: ${{ needs.fixes.outputs.branch }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
+      - name: Merge when green
+        run: |
+          if gh pr view "$BRANCH" --repo "$REPO" --json labels --jq '.labels[].name' | grep -qx needs-human; then
+            echo "$BRANCH: the agent asked for a human — not merging" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          stop() {
+            echo "::error::$BRANCH not merged: $1"
+            gh label create needs-human --color B60205 --description "automation stopped — needs a human" || true
+            gh pr edit "$BRANCH" --repo "$REPO" --add-label needs-human
+            gh pr comment "$BRANCH" --repo "$REPO" --body "The nightly parity lane did not merge this PR: $1. See [the run]($RUN_URL). Fix and merge it, or close it — while it is open the lane drains nothing."
+            exit 1
+          }
+          sleep 60 # dispatched runs need a moment to register on the head SHA
+          timeout 3000 gh pr checks "$BRANCH" --repo "$REPO" --watch --interval 30 || stop "its checks are red or never finished"
+          # `gh pr checks` only judges the checks that EXIST — assert the two
+          # gates that can be silently absent (see deps-watch).
+          pr=$(gh pr view "$BRANCH" --repo "$REPO" --json number --jq .number)
+          head=$(gh pr view "$BRANCH" --repo "$REPO" --json headRefOid --jq .headRefOid)
+          verdict=$(gh api "repos/$REPO/commits/$head/status" \
+            --jq '[.statuses[] | select(.context == "review-verdict")] | last | .state // "absent"')
+          [ "$verdict" = success ] || stop "review-verdict is ${verdict:-absent}, not success"
+          sec=$(gh api "repos/$REPO/actions/runs?head_sha=$head&per_page=100" \
+            --jq '[.workflow_runs[] | select(.path == ".github/workflows/security.yaml") | select(.conclusion != "action_required")] | length')
+          [ "${sec:-0}" -gt 0 ] || stop "no Security scan ran on $head"
+          # The machinery may not merge edits to itself. The files endpoint
+          # carries a rename's source path, which `gh pr diff --name-only` hides.
+          files=$(gh api --paginate "repos/$REPO/pulls/$pr/files" --jq '.[] | .filename, (.previous_filename // empty)')
+          guarded=$(printf '%s\n' "$files" | grep -E '^(\.github/|Makefile$)' || true)
+          [ -z "$guarded" ] || stop "it edits the automation itself ($guarded)"
+          for _ in $(seq 1 10); do
+            if gh pr merge "$BRANCH" --repo "$REPO" --squash --delete-branch 2>"$RUNNER_TEMP/merge-err"; then
+              echo "merged $BRANCH" >> "$GITHUB_STEP_SUMMARY"
+              exit 0
+            fi
+            sleep 30
+          done
+          # gh pr merge can refuse client-side on a stale BLOCKED state; the
+          # merge API is the authority (see deps-merge).
+          if gh api -X PUT "repos/$REPO/pulls/$pr/merge" -f merge_method=squash 2>"$RUNNER_TEMP/merge-err"; then
+            gh api -X DELETE "repos/$REPO/git/refs/heads/$BRANCH" || true
+            echo "merged $BRANCH (via merge API)" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          stop "green but not mergeable — $(tr -d '\n' < "$RUNNER_TEMP/merge-err" | cut -c1-300)"

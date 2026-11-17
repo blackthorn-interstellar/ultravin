@@ -25,7 +25,9 @@ deps    lockfile bump (7-day cooldown) ──▶ make check ──▶ deps-publi
 
 fixes   covfuzz probe tops up backlog ──▶ fixes (agent) drains ONE cluster and
                                           banks a patch ──▶ fixes-publish opens
-                                          the PR and kicks its checks (human merges)
+                                          the PR and kicks its checks
+                                          ──▶ fixes-merge: green MERGES,
+                                              else label needs-human
 ```
 
 ## Token discipline
@@ -224,11 +226,12 @@ It commits that work locally, writing its PR title and body to
 `target/fixes/` (plus a `needs-human` marker if it could not finish honestly).
 `fixes-publish` recreates the branch from the banked patch, opens or updates
 the PR — draft and labeled `needs-human` when the marker is there — and
-dispatches CI and the review gate. Parity-fix PRs are **always merged by a
-human** — there is no automerge switch for decoder changes — so their checks
-land under the eyes of whoever merges them. One open `parity-backlog` PR
-blocks the next night's run (no stacking); merge or close it to resume
-draining.
+dispatches CI and the review gate. `fixes-merge` then **merges the PR itself**
+on the same three gates as the deps lane: CI green, `review-verdict` success,
+and a Security scan that actually ran. A PR the agent marked `needs-human` is
+left alone; any other PR it does not merge is labeled `needs-human` with the
+reason in a comment. One open `parity-backlog` PR blocks the next night's run
+(no stacking); merge or close it to resume draining.
 
 On demand: `gh workflow run nightly.yaml -f lane=fixes -f vins="VIN1 VIN2"`
 runs an RCA on exactly those VINs, skipping the probe and the backlog pick.
@@ -253,6 +256,9 @@ fails the run for a human.
   the lane broke before anything could judge the checks (agent banked nothing,
   branch moved under the publish job, automation guard refused the patch, wait
   timed out). The linked run's failing job says which.
+- **`fixes` PR labeled `needs-human` with a "did not merge this PR" comment** —
+  `fixes-merge` refused it; the comment names the gate (red checks, review
+  verdict, missing scan, automation edit, or not mergeable).
 - **`fixes` PR is a `[needs-human]` draft** — the parity agent could not close
   the cluster honestly; `target/fixes/pr-body.md` (now the PR body) has the
   diagnosis.
