@@ -260,7 +260,7 @@ result — so the list is always this month's dump; the full report rides out as
 run's `data-refresh-report` artifact. A month-over-month change in the list is the
 expected signal, not a failure — it self-documents in the refresh PR diff.
 
-Three cells worked through, the ones four still-registered `clean-decode` VINs
+Four cells worked through, the ones five still-registered `clean-decode` VINs
 land on. (Dump 2026_09 rebuilt the Honda `MLH`/`JH2` cache cells that this
 section originally walked through; dump 2026_10 rebuilt the Kawasaki
 `JKA`/`JKB` cells — the 23 restrictive and omitted-row members now match the
@@ -270,6 +270,7 @@ oracle and were retired.)
 |---|---:|---|---|---|
 | `10T`, 2024 | 6, 8 | digits leftover | no digits | extra `0123456789` at 6, `12345` at 8 |
 | `10T`, 2020 | 7, 11 | leftover digits / `CDP` | no digits / no `CDP` | extra `0123456789` at 7, `CDP` at 11 |
+| `10T`, 2026 | 7 | leftover digits | no digits | extra `0123456789` at 7 |
 | `10T`, 1988 | 7 | missing `8` | `89ABCDEFGHJKLMNPRS` | missing `8` |
 
 Both columns come out of the same loaded dump, one query apart:
@@ -285,12 +286,13 @@ select p, string_agg(distinct c, '' order by c)
 cell inside a transaction takes `tmpRowCount` to 0, so the proc runs its own
 `fExtractValidCharsPerWmiYear` fallback over the same dump — and the oracle then
 reproduces ultravin **byte-for-byte** on every probe VIN reaching that cell,
-including the four whose whole decode changes:
+including the five whose whole decode changes:
 
 ```
 10TAK8H20RSAA0000  delete cache rows for (10T,2024) -> oracle MY=1994  parity_now=True
 10T2CE2A?LPY1111S  delete 111 cache rows for (10T,2020) -> oracle MY=1990 codes='5,14,400'  parity_now=True
 1HFTKS3B?RD1111I1  delete 80 cache rows for (1HF,2024) -> oracle MY=1994 codes='5,14,400'  parity_now=True
+10TAFZ9F?TS1691BA  delete 104 cache rows for (10T,2026) -> oracle MY=1996 codes='4,14,400'  parity_now=True
 10TAA68Y6J1111111  delete 91 cache rows for (10T,1988) -> oracle MY=1988 codes='3,14'  parity_now=True
 10TAA68L0J1111111  delete 91 cache rows for (10T,1988) -> oracle MY=1988 codes='3,14'  parity_now=True
 ```
@@ -318,10 +320,11 @@ at, and the registry records it as each entry's `scope`:
    observation names no VIN position, so the cell list cannot excuse it; those
    VINs are registered individually (see §4).
 
-3. **The whole decode** (`clean-decode`, 4 VINs still registered individually
+3. **The whole decode** (`clean-decode`, 5 VINs still registered individually
    after 2026_09 healed 160 Honda/Yamaha/JYA members and 2026_10 healed 23
-   Kawasaki `JKA`/`JKB` members; the four worked through here are
-   `10TAK8H20RSAA0000`, `10T2CE2A?LPY1111S`, `10TAA68Y6J1111111`, and
+   Kawasaki `JKA`/`JKB` members; the five worked through here are
+   `10TAK8H20RSAA0000`, `10T2CE2A?LPY1111S`, `10TAFZ9F?TS1691BA`,
+   `10TAA68Y6J1111111`, and
    `10TAA68L0J1111111`). Same cells, but these
    VINs have an *inconclusive* model year — `fVinModelYear2` cannot choose
    between the two halves of position 10's 30-year cycle, so both years get a
@@ -443,6 +446,31 @@ at, and the registry records it as each entry's `scope`:
 
    Deleting the cell's 91 rows → oracle MY=1988 codes=`3,14` parity_now=True
    on both VINs.
+
+   The 2026-11-18 backlog drain found a live **permissive** member of the same
+   mechanism. The probe VIN has an inconclusive position-10 year (`T`), so
+   both halves of the 30-year cycle get a pass and the cache decides the race.
+   Emptying the cell in a rolled-back transaction made the oracle reproduce
+   ultravin byte-for-byte; the cache was left at its shipped row count.
+
+   `10TAFZ9F?TS1691BA` lands on `(10T, 2026)`, already on the cell list, stale
+   at positions 4, 5, 6, 7, 8, 11. Position 7's leftover digits make the VIN's
+   `9` look valid, so the oracle's 2026 pass flags only position 6 (code 4,
+   weight −200) and beats the 1996 pass; the pattern source flags 6 and 7
+   (code 5, weight −300) and the 1996-schema H Series vehicle wins. No 2026
+   10T pattern key contains `9` at all — schemas 26784
+   (`Oshkosh Corporation Truck (NGDV) Schema for 10T (MY2024-`) and 27467
+   (`Oshkosh Corporation Truck Schema for 10T/4P1 (MY2024-`). Same dump, one
+   query apart:
+
+   ```
+    source  | position | chars
+   ---------+----------+----------------------------
+    cache   |        7 | 0123456789ABCDFGHJK
+    extract |        7 | ABCDFGHJK
+   ```
+
+   Deleting the cell's 104 rows → oracle MY=1996 codes=`4,14,400` parity_now=True.
 
 **Per-VIN registration for this class covers only the `clean-decode` members.** A
 divergence is adjudicated against the cell list by `scripts/parity/stale_cache.py`
