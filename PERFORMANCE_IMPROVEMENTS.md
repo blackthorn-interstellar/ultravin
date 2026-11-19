@@ -31,6 +31,7 @@ identified as such.
 - [November 14: batch JSON and dicts reuse each vehicle's output](#november-14-batch-json-and-dicts-reuse-each-vehicles-output)
 - [November 14: wide columns decode each vehicle once and encode in parallel](#november-14-wide-columns-decode-each-vehicle-once-and-encode-in-parallel)
 - [November 15: the JSONL writer writes each vehicle once per batch](#november-15-the-jsonl-writer-writes-each-vehicle-once-per-batch)
+- [November 18 Metal decoder experiment](#november-18-metal-decoder-experiment)
 - [Experiments we rejected or replaced](#experiments-we-rejected-or-replaced)
 - [SQL oracle and development resources](#sql-oracle-and-development-resources)
 - [Correctness and measurement rules](#correctness-and-measurement-rules)
@@ -1855,6 +1856,15 @@ paired this build with the previous decoder: 1.12–1.30× fewer cycles per VIN.
   GIL, ~3 GB/s of lines), and both sides swing ±15% between rounds. Six
   alternating single runs at 8 workers (`time -l`): sorted NY 261-268 →
   285-295 MiB, synthetic 325-327 → 325-328 MiB.
+
+## November 18 Metal decoder experiment
+
+The complete Rust decoder ran on the M2 Max GPU alongside eight CPU workers.
+For 65,536 full-JSON records, the CPU median was 2.661 s. Giving Metal 1,024
+of those records in parallel brought the median to 2.639 s across three runs,
+within the observed timing spread. All three execution modes produced the same
+912 MB of JSON. The experiment includes the GPU guest, runner, samples, and
+individual timings. [Metal experiment](scripts/bench/metal/README.md)
 
 ## Experiments we rejected or replaced
 

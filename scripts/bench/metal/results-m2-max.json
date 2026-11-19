@@ -1,0 +1,349 @@
+{
+  "date_local": "2026-11-18",
+  "base_commit": "39e5bae",
+  "hardware": "Apple M2 Max, 8 performance CPU cores, 4 efficiency CPU cores, 30 GPU cores",
+  "os": "macOS 27.0.1 (26A434), arm64",
+  "database": "vPIC 2026_11",
+  "clock_micros": 1788220800000000,
+  "cpu_workers": 8,
+  "gpu_backend": "Metal",
+  "wasmgpu_version": "0.0.2",
+  "wgpu_version": "0.32.0",
+  "sets": {
+    "smoke": {
+      "guest_sha256": "5cd0fb04202d41b2a01bf4e63978ac30d1907f7a15613e744d3e09c6f4606374",
+      "gpu_execution": "interpreter",
+      "gpu_setup_seconds": 60.982216,
+      "gpu_lanes": 32,
+      "block_rows": 64,
+      "jobs": {
+        "vins.txt": {
+          "rows": 32,
+          "input_sha256": "d0add2549418f9b38e3548c12c638eaadbd1a80a45a1940a0254d0d2281f71e1",
+          "output_bytes": 305583,
+          "output_sha256": "1d6337f433d9d03801a8356174d81c12c48798f5faa143aac80fa7cf97a0814d",
+          "seconds_by_trial": {
+            "cpu": [
+              0.01867
+            ],
+            "gpu": [
+              185.010632
+            ],
+            "hybrid": [
+              103.950516
+            ]
+          },
+          "hybrid_cpu_rows": 16,
+          "hybrid_gpu_rows": 16
+        }
+      }
+    },
+    "field": {
+      "guest_sha256": "5cd0fb04202d41b2a01bf4e63978ac30d1907f7a15613e744d3e09c6f4606374",
+      "gpu_execution": "interpreter",
+      "gpu_setup_seconds": 60.124146,
+      "gpu_lanes": 1024,
+      "block_rows": 2048,
+      "jobs": {
+        "ny-honda-1024.txt": {
+          "rows": 1024,
+          "input_sha256": "ae17c9c2fa5d1614a3507232a9530246b5109499d521e043a5156a63f545e53e",
+          "output_bytes": 14255227,
+          "output_sha256": "883018f061f948e7a7e490d0fc6f3f774e0023f75781960bc701f848b9301e41",
+          "seconds_by_trial": {
+            "cpu": [
+              0.025327
+            ],
+            "gpu": [
+              1.43557
+            ],
+            "hybrid": [
+              0.992722
+            ]
+          },
+          "hybrid_cpu_rows": 512,
+          "hybrid_gpu_rows": 512
+        },
+        "ny-sorted-16.txt": {
+          "rows": 16,
+          "input_sha256": "0336d84102a9aa069b5b174b81b1db154763d3837e61953136c840e4be7d8837",
+          "output_bytes": 307421,
+          "output_sha256": "2d1206b49140300317be101b7c58750d218ba3cd9fe7be47adecd33cd41b2692",
+          "seconds_by_trial": {
+            "cpu": [
+              0.086299
+            ],
+            "gpu": [
+              134.49706
+            ],
+            "hybrid": [
+              118.30286
+            ]
+          },
+          "hybrid_cpu_rows": 8,
+          "hybrid_gpu_rows": 8
+        },
+        "ny-shuffled-16.txt": {
+          "rows": 16,
+          "input_sha256": "6de587b6f227aeedf66a8022c5cc68e204f1ac1db235d82f160fdb53773fec59",
+          "output_bytes": 273279,
+          "output_sha256": "529bf09834b4969085a406c4d36067984ada268e65f6fb6bb828b7c794b69c00",
+          "seconds_by_trial": {
+            "cpu": [
+              0.037465
+            ],
+            "gpu": [
+              30.373098
+            ],
+            "hybrid": [
+              21.122431
+            ]
+          },
+          "hybrid_cpu_rows": 8,
+          "hybrid_gpu_rows": 8
+        },
+        "synthetic-16.txt": {
+          "rows": 16,
+          "input_sha256": "4866b55d367015d1c7c1767126f8d397bb2d81930b29ccfa362cd516bd6060b3",
+          "output_bytes": 349121,
+          "output_sha256": "329b9a879a6850090fa2ea3ce61aae536c42923a5210045fb60baea97ddc96eb",
+          "seconds_by_trial": {
+            "cpu": [
+              0.019359
+            ],
+            "gpu": [
+              7.993904
+            ],
+            "hybrid": [
+              4.532384
+            ]
+          },
+          "hybrid_cpu_rows": 8,
+          "hybrid_gpu_rows": 8
+        },
+        "edge.jsonl": {
+          "rows": 13,
+          "input_sha256": "b52b305273f975baeb9ca9307f0353d79eab151c4c8b2e15a2be4fdf19102863",
+          "output_bytes": 108101,
+          "output_sha256": "64a87c05cbcef4f09448a667642863a60cfdc8b2c4621d8b83f6f4898eaf2876",
+          "seconds_by_trial": {
+            "cpu": [
+              0.007391
+            ],
+            "gpu": [
+              3.911757
+            ],
+            "hybrid": [
+              2.735952
+            ]
+          },
+          "hybrid_cpu_rows": 6,
+          "hybrid_gpu_rows": 7
+        }
+      }
+    },
+    "balanced": {
+      "guest_sha256": "5cd0fb04202d41b2a01bf4e63978ac30d1907f7a15613e744d3e09c6f4606374",
+      "gpu_execution": "interpreter",
+      "gpu_setup_seconds": 59.814788,
+      "gpu_lanes": 1024,
+      "block_rows": 65536,
+      "jobs": {
+        "ny-honda-repeated-65536.txt": {
+          "rows": 65536,
+          "input_sha256": "4ec0e2901361eedb969b5e9078346938833deb9c4e18958ff74b967d473037f5",
+          "output_bytes": 912334465,
+          "output_sha256": "83c253999b40e9039b754f7eca548889a2b0dc55d7c8523862d9805b993aded2",
+          "seconds_by_trial": {
+            "cpu": [
+              2.6587,
+              2.661256,
+              5.383003
+            ],
+            "gpu": [
+              91.615194,
+              91.569875,
+              92.193251
+            ],
+            "hybrid": [
+              2.63869,
+              2.625333,
+              3.018029
+            ]
+          },
+          "hybrid_cpu_rows": 64512,
+          "hybrid_gpu_rows": 1024
+        }
+      },
+      "native_pipeline_compilations": 0
+    },
+    "compiled": {
+      "guest_sha256": "5cd0fb04202d41b2a01bf4e63978ac30d1907f7a15613e744d3e09c6f4606374",
+      "gpu_execution": "compiled",
+      "gpu_setup_seconds": 61.07593,
+      "gpu_lanes": 64,
+      "block_rows": 128,
+      "jobs": {
+        "ny-honda-compiled.txt": {
+          "rows": 64,
+          "input_sha256": "a48e966288bd19f4d2e412e5ef3d71bc699d3399c97e4f48612499547aca6e56",
+          "output_bytes": 916929,
+          "output_sha256": "157b2022517d902f4a46533c80f6d6399b83840ec38793730dcf51996b145522",
+          "seconds_by_trial": {
+            "cpu": [
+              0.001115
+            ],
+            "gpu": [],
+            "hybrid": []
+          },
+          "gpu_dispatches_by_trial": {
+            "gpu": [],
+            "hybrid": []
+          },
+          "guest_instructions_by_trial": {
+            "gpu": [],
+            "hybrid": []
+          }
+        }
+      },
+      "incomplete_job": {
+        "source": "ny-honda-compiled.txt",
+        "mode": "gpu",
+        "trial": 1,
+        "seconds_lower_bound": 900,
+        "reason": "Interrupted after 15 minutes without a completed GPU batch."
+      },
+      "gpu_capacity_retries": 0,
+      "max_completed_gpu_lanes": 0
+    },
+    "final": {
+      "guest_sha256": "4cd377dc19b3cf79b7c9e4b3dfbfcb270e39e2526fea69030d0beec651cab355",
+      "gpu_execution": "interpreter",
+      "gpu_setup_seconds": 60.010325,
+      "gpu_lanes": 1024,
+      "block_rows": 2048,
+      "jobs": {
+        "ny-honda-1024.txt": {
+          "rows": 1024,
+          "input_sha256": "ae17c9c2fa5d1614a3507232a9530246b5109499d521e043a5156a63f545e53e",
+          "output_bytes": 14255227,
+          "output_sha256": "883018f061f948e7a7e490d0fc6f3f774e0023f75781960bc701f848b9301e41",
+          "seconds_by_trial": {
+            "cpu": [
+              0.024447
+            ],
+            "gpu": [
+              1.436395
+            ],
+            "hybrid": [
+              1.436062
+            ]
+          },
+          "hybrid_cpu_rows": 512,
+          "hybrid_gpu_rows": 512,
+          "gpu_dispatches_by_trial": {
+            "gpu": [
+              34
+            ],
+            "hybrid": [
+              34
+            ]
+          },
+          "guest_instructions_by_trial": {
+            "gpu": [
+              245699521
+            ],
+            "hybrid": [
+              123288911
+            ]
+          }
+        },
+        "edge.jsonl": {
+          "rows": 13,
+          "input_sha256": "b52b305273f975baeb9ca9307f0353d79eab151c4c8b2e15a2be4fdf19102863",
+          "output_bytes": 108101,
+          "output_sha256": "64a87c05cbcef4f09448a667642863a60cfdc8b2c4621d8b83f6f4898eaf2876",
+          "seconds_by_trial": {
+            "cpu": [
+              0.014005
+            ],
+            "gpu": [
+              3.91472
+            ],
+            "hybrid": [
+              2.202247
+            ]
+          },
+          "hybrid_cpu_rows": 6,
+          "hybrid_gpu_rows": 7,
+          "gpu_dispatches_by_trial": {
+            "gpu": [
+              190
+            ],
+            "hybrid": [
+              142
+            ]
+          },
+          "guest_instructions_by_trial": {
+            "gpu": [
+              4472459
+            ],
+            "hybrid": [
+              1907304
+            ]
+          }
+        }
+      },
+      "native_pipeline_compilations": 0,
+      "gpu_capacity_retries": 0,
+      "max_completed_gpu_lanes": 1024
+    },
+    "compiled-empty": {
+      "guest_sha256": "4cd377dc19b3cf79b7c9e4b3dfbfcb270e39e2526fea69030d0beec651cab355",
+      "gpu_execution": "compiled",
+      "gpu_setup_seconds": 60.834355,
+      "gpu_lanes": 1,
+      "block_rows": 2,
+      "jobs": {
+        "empty-vin.txt": {
+          "rows": 1,
+          "input_sha256": "01ba4719c80b6fe911b091a7c05124b64eeece964e09c058ef8f9805daca546b",
+          "output_bytes": 2496,
+          "output_sha256": "22fa715452cd18cf4e3ddcc21c54ebfd7d8257dfb9f6f5e7170729ca7ec788e7",
+          "seconds_by_trial": {
+            "cpu": [
+              0.003714
+            ],
+            "gpu": [
+              175.9199
+            ],
+            "hybrid": [
+              3.498827
+            ]
+          },
+          "hybrid_cpu_rows": 0,
+          "hybrid_gpu_rows": 1,
+          "gpu_dispatches_by_trial": {
+            "gpu": [
+              1157
+            ],
+            "hybrid": [
+              1127
+            ]
+          },
+          "guest_instructions_by_trial": {
+            "gpu": [
+              46880
+            ],
+            "hybrid": [
+              46880
+            ]
+          }
+        }
+      },
+      "native_pipeline_compilations": 406,
+      "gpu_capacity_retries": 0,
+      "max_completed_gpu_lanes": 1
+    }
+  }
+}

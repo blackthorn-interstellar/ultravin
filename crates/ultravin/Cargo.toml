@@ -107,3 +107,9 @@ required-features = ["parquet"]
 [[example]]
 name = "decode_files"
 required-features = ["parquet"]
+
+# The same guest is built as a native reference and as WebAssembly for the
+# experimental Metal runner in scripts/bench/metal.
+[[example]]
+name = "metal_guest"
+crate-type = ["cdylib"]
