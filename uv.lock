@@ -784,9 +784,6 @@ wheels = [
 [[package]]
 name = "ultravin"
 source = { editable = "." }
-dependencies = [
-    { name = "typer" },
-]
 
 [package.dev-dependencies]
 dev = [
@@ -801,10 +798,10 @@ dev = [
     { name = "pytest-xdist" },
     { name = "ruff" },
     { name = "ty" },
+    { name = "typer" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "typer" }]
 
 [package.metadata.requires-dev]
 dev = [
@@ -817,4 +814,5 @@ dev = [
     { name = "pytest-xdist", specifier = ">=3.8.0" },
     { name = "ruff" },
     { name = "ty" },
+    { name = "typer" },
 ]

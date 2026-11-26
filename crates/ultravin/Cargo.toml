@@ -33,6 +33,8 @@ arrow = ["dep:arrow-array", "dep:arrow-buffer", "dep:arrow-cast", "dep:arrow-sch
 # column sniffing layered on `arrow`. Both are off by default so an embedder that
 # only decodes does not compile arrow.
 parquet = ["arrow", "dep:parquet"]
+# The `ultravin` command (`ultravin::cli`), as the Python wheel ships it.
+cli = ["parquet", "dep:clap"]
 
 [package.metadata.docs.rs]
 all-features = true
@@ -55,6 +57,7 @@ rkyv = "0.8"
 # The result reuse table: workers read shared entries without writing a
 # shared cache line (pure Rust, no unsafe of ours).
 arc-swap = "1.9.5"
+clap = { version = "4", features = ["derive"], optional = true }
 # JSON output path: serializing the decode result in Rust (during the parallel,
 # GIL-released phase) hands Python a single string instead of building ~900
 # PyDict_SetItem/VIN — the only way past the list[dict] marshalling floor. Both

@@ -16,7 +16,7 @@ crate-type = ["cdylib"]
 # at crates/ultravin/data/vpic.rkyv before maturin runs), so the crate's
 # download-data route is dead weight here — and enabling it would compile ureq
 # + ring into all 17 wheel jobs for nothing.
-ultravin = { path = "../ultravin", default-features = false, features = ["parquet"] }
+ultravin = { path = "../ultravin", default-features = false, features = ["cli"] }
 # `decode_stream` moves arrow data across the Python boundary as C structs, in
 # both directions: the `ffi` feature is what supplies `FFI_ArrowArrayStream` /
 # `FFI_ArrowSchema` and the import/export helpers, so a decode stream can be

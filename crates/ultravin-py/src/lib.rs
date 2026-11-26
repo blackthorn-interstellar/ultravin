@@ -3,7 +3,7 @@
 
 use std::any::Any;
 use std::cell::{OnceCell, RefCell};
-use std::ffi::CStr;
+use std::ffi::{CStr, OsString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -1591,7 +1591,7 @@ impl PyBatchSize {
     }
 }
 
-/// Shared native policy for the Python JSONL loop. No decode or clock work is
+/// The predictive JSONL batch policy, for the predictor's calibration and benchmarks. No decode or clock work is
 /// performed at construction; callers report only completed real batches.
 #[pyclass(name = "_BatchTuner", module = "ultravin._ultravin")]
 struct PyBatchTuner {
@@ -1930,49 +1930,16 @@ fn _ultravin(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(seeded, m)?)?;
     m.add_function(wrap_pyfunction!(decode_stream, m)?)?;
     m.add_function(wrap_pyfunction!(decode_compact, m)?)?;
-    m.add_function(wrap_pyfunction!(_write_batch_jsonl, m)?)?;
+    m.add_function(wrap_pyfunction!(_cli, m)?)?;
     m.add_class::<DecodeStream>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
 
-/// Internal CLI path: decode `vins` and write their JSON Lines to the binary
-/// stream `out` as they decode, the bytes `_decode_batch_jsonl` returns.
-///
-/// The decode runs with the GIL released; it is taken back only to hand each
-/// batch's lines to `out.write`, and to check for signals after each one, so
-/// Ctrl-C stops the job as promptly as a write error does.
+/// The `ultravin` command: run the command line `args` (the program name
+/// first) on the process's own stdin, stdout and stderr, and return its exit
+/// code. Nothing passes through `sys.stdout`, and the GIL is released throughout.
 #[pyfunction]
-#[pyo3(signature = (vins, out, *, years = None, full = false, now = None, memory_bytes = 8 << 20))]
-fn _write_batch_jsonl(
-    py: Python<'_>,
-    vins: Vec<String>,
-    out: &Bound<'_, PyAny>,
-    years: Option<Vec<Option<i32>>>,
-    full: bool,
-    now: Option<Bound<'_, PyDateTime>>,
-    memory_bytes: usize,
-) -> PyResult<()> {
-    check_years(&vins, &years)?;
-    let (now_micros, _) = decode_clock(now.as_ref())?;
-    let write = out.getattr(intern!(py, "write"))?.unbind();
-    py.detach(|| {
-        ultravin::Db::embedded().write_batch_jsonl_at(
-            &vins,
-            years.as_deref(),
-            now_micros,
-            full,
-            memory_bytes,
-            |lines| {
-                Python::attach(|py| {
-                    write.call1(py, (pyo3::types::PyBytes::new(py, lines),))?;
-                    py.check_signals()
-                })
-            },
-        )
-    })
-    .map_err(|error| match error {
-        ultravin::WriteJsonlError::Write(error) => error,
-        ultravin::WriteJsonlError::Stream(error) => PyRuntimeError::new_err(error.to_string()),
-    })
+fn _cli(py: Python<'_>, args: Vec<OsString>) -> i32 {
+    py.detach(|| ultravin::cli::main(args))
 }

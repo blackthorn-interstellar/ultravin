@@ -12,7 +12,6 @@ from ultravin._ultravin import (
     __version__,
     _BatchTuner as _BatchTuner,
     _decode_batch_jsonl as _decode_batch_jsonl,
-    _write_batch_jsonl as _write_batch_jsonl,
     cover_vins,
     decode,
     decode_batch,

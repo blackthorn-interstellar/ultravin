@@ -32,3 +32,4 @@
 - No logging config or side-effects at import time.
 - Keep interfaces (CLI, web, etc.) thin; put logic elsewhere.
 - Use `typer` for CLI interfaces, `fastapi` for web interfaces, and `pydantic` for data models.
+- The exception is the shipped `ultravin` command, which is Rust (`crates/ultravin/src/cli.rs`) so the wheel has no Python dependencies. `python/ultravin/cli.py` only hands it argv. `typer` is a dev dependency, for `scripts/`.
