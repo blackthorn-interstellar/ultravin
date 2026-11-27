@@ -7,7 +7,7 @@ import os
 import platform
 import shutil
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -41,7 +41,7 @@ def _archive_candidate() -> tuple[Path, Path, dict[str, str]]:
     if not BUILT.is_file():
         msg = f"build the release throughput example first: {BUILT}"
         raise typer.BadParameter(msg)
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     archive = ROOT / "target/bench" / f"native-million-{stamp}"
     archive.mkdir(parents=True, exist_ok=False)
     binary = archive / "throughput"
@@ -136,7 +136,7 @@ def main(output: Path = DEFAULT_OUTPUT, screen: bool = False) -> None:
         "schema_version": 1,
         "status": "running",
         "screen": screen,
-        "measured_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+        "measured_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "configuration": {
             "sequence": sequence,
             "workers": WORKERS,
@@ -178,7 +178,7 @@ def main(output: Path = DEFAULT_OUTPUT, screen: bool = False) -> None:
         output.write_text(json.dumps(result, indent=2) + "\n")
         typer.echo(f"finished {samples[-1]['rows_per_second']:,.0f} VIN/s", err=True)
     result["status"] = "complete"
-    result["completed_at_utc"] = datetime.now(UTC).isoformat(timespec="seconds")
+    result["completed_at_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     output.write_text(json.dumps(result, indent=2) + "\n")
     typer.echo(f"wrote {output}")
 

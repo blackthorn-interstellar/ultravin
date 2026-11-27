@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import typer
@@ -31,7 +31,7 @@ def main(output: Path = OUTPUT) -> None:
     result = {
         "schema_version": 1,
         "status": "running",
-        "measured_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+        "measured_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "purpose": "alternating B200/S5 and B100/S5 drift controls followed by W1 B200/S5 reference",
         "parent_evidence": str(SWEEP),
         "immutable_binary": str(binary),
@@ -46,7 +46,7 @@ def main(output: Path = OUTPUT) -> None:
         output.write_text(json.dumps(result, indent=2) + "\n")
         typer.echo(f"finished {samples[-1]['rows_per_second']:,.0f} VIN/s", err=True)
     result["status"] = "complete"
-    result["completed_at_utc"] = datetime.now(UTC).isoformat(timespec="seconds")
+    result["completed_at_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     output.write_text(json.dumps(result, indent=2) + "\n")
 
 

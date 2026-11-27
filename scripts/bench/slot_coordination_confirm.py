@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import typer
@@ -27,7 +27,7 @@ def main(output: Path = OUTPUT) -> None:
     result = {
         "schema_version": 1,
         "status": "running",
-        "measured_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+        "measured_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "configuration": {"sequence": ["atomic-map", "slots"], "full_warm_pass": True, "timed_full_pass": True},
         "corpus": original["corpus"],
         "original_screen": str(ORIGINAL),

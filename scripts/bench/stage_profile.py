@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -17,7 +17,7 @@ def main(output: Path = ROOT / "scripts/bench/stage_profile_2026_09_14.json") ->
     binary = ROOT / "target/bench/instrumentation-traced-pipeline_probe"
     corpus = ROOT / "target/bench/multicore-corpus.txt"
     data: dict[str, Any] = {
-        "captured_at": datetime.now(UTC).isoformat(),
+        "captured_at": datetime.now(timezone.utc).isoformat(),
         "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
         "corpus_sha256": hashlib.sha256(corpus.read_bytes()).hexdigest(),
         "method": "Same compiled feature binary; every=0 disables collection, every=64 records whole batches 0,64,... . Each run warms all ten million unique VINs first.",
