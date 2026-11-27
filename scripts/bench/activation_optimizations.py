@@ -7,7 +7,7 @@ import json
 import os
 import subprocess
 import time
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -73,7 +73,7 @@ def main(
     """
     results: dict[str, Any] = {
         "status": "running",
-        "captured_at": datetime.now(UTC).isoformat(),
+        "captured_at": datetime.now(timezone.utc).isoformat(),
         "corpus_sha256": hashlib.sha256(CORPUS.read_bytes()).hexdigest(),
         "runs": [],
     }

@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -31,7 +31,7 @@ def main(
         msg = "baseline or previously validated unique corpus hash changed"
         raise typer.BadParameter(msg)
     built = ROOT / "target/release/examples/throughput"
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     archive = ROOT / "target/bench" / f"native-worker-auto-{stamp}"
     archive.mkdir(parents=True, exist_ok=False)
     binary = archive / "throughput"
@@ -59,7 +59,7 @@ def main(
     samples: list[dict[str, Any]] = []
     result: dict[str, Any] = {
         "status": "running",
-        "measured_at_utc": datetime.now(UTC).isoformat(),
+        "measured_at_utc": datetime.now(timezone.utc).isoformat(),
         "corpus_sha256": CORPUS_SHA,
         "unique_rows": 20_000_000,
         "binary": str(binary),

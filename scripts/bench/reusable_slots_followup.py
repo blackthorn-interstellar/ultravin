@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import typer
@@ -35,7 +35,7 @@ def main(output: Path = OUTPUT) -> None:
     data = {
         "schema_version": 1,
         "status": "running",
-        "measured_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+        "measured_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "corpus": corpus,
         "immutable_binary": str(SNAPSHOT),
         "binary_sha256": expected_binary,

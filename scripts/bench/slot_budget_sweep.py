@@ -8,7 +8,7 @@ import platform
 import shutil
 import subprocess
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -80,7 +80,7 @@ def main(output: Path = OUTPUT) -> None:
     )
     source_hash = _sha256(SOURCE)
     binary_hash = _sha256(BUILT)
-    archive_dir = ARCHIVE / f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}-{binary_hash[:12]}"
+    archive_dir = ARCHIVE / f"{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}-{binary_hash[:12]}"
     archive_dir.mkdir(parents=True, exist_ok=False)
     binary = archive_dir / "slot-budget-probe"
     source = archive_dir / "slot_budget_probe.rs"
@@ -93,7 +93,7 @@ def main(output: Path = OUTPUT) -> None:
     result = {
         "schema_version": 1,
         "status": "running",
-        "measured_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+        "measured_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "configuration": {
             "full_warm_pass": True,
             "timed_full_pass": True,
@@ -127,7 +127,7 @@ def main(output: Path = OUTPUT) -> None:
         output.write_text(json.dumps(result, indent=2) + "\n")
         typer.echo(f"finished {samples[-1]['rows_per_second']:,.0f} VIN/s", err=True)
     result["status"] = "complete"
-    result["completed_at_utc"] = datetime.now(UTC).isoformat(timespec="seconds")
+    result["completed_at_utc"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     output.write_text(json.dumps(result, indent=2) + "\n")
     typer.echo(f"wrote {output}")
 
