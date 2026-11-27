@@ -1836,8 +1836,8 @@ jobs:
   # an advisory that was red on master too and had nothing to do with its diff.
   # So when master has moved since a held PR was last judged, bring master into
   # it, drop the hold and hand it back to fixes-merge. It is left alone when
-  # the agent asked for the human (draft), when a human has pushed to it, or
-  # when master has not moved (nothing new to judge). Like fixes-merge it
+  # the agent asked for the human (draft), when a human has pushed to it, when
+  # the review gate did not approve it, or when master has not moved (nothing new to judge). Like fixes-merge it
   # checks out nothing and runs no repository code.
   fixes-retry:
     if: (github.event_name == 'schedule' || inputs.lane != 'deps') && !inputs.vins
@@ -1873,6 +1873,16 @@ jobs:
           human=$(gh api --paginate "repos/$REPO/pulls/$pr/commits" --jq '.[].commit.author.email' | grep -vxF "$bot" || true)
           if [ -n "$human" ]; then
             echo "#$pr holds commits the bot did not make — it stays with its human" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          # A review rejection is a verdict, not a stale red: re-dispatching the
+          # gate each night until some run approves would be the pipeline
+          # working around its own judge.
+          head=$(gh pr view "$pr" --repo "$REPO" --json headRefOid --jq .headRefOid)
+          verdict=$(gh api "repos/$REPO/commits/$head/status" \
+            --jq '[.statuses[] | select(.context == "review-verdict")] | last | .state // "absent"')
+          if [ "$verdict" != success ]; then
+            echo "#$pr: review-verdict is $verdict on $head — a verdict stays with its human" >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           behind=$(gh api "repos/$REPO/compare/master...$branch" --jq .behind_by)

@@ -356,9 +356,23 @@ def test_advisories_keeps_the_cooldown_when_osv_is_down(monkeypatch):
     assert advisories("PyPI", [("jinja2", "3.1.2")]) == {}
 
 
+def test_cleared_exempts_only_a_move_that_drops_an_advisory(monkeypatch):
+    """chrono's unmaintained notice covers every release: a new chrono clears nothing and must wait."""
+    unmaintained = {"vulns": [{"id": "RUSTSEC-2026-0543"}]}
+    sent = _osv(monkeypatch, {"results": [{"vulns": [{"id": "RUSTSEC-2026-0595"}]}, unmaintained, {}, unmaintained]})
+    found = bump_deps.cleared("crates.io", [("parquet", "59.3.2", "59.3.3"), ("chrono", "0.4.45", "0.4.46")])
+    assert found == {"parquet": ["RUSTSEC-2026-0595"]}
+    assert [q["version"] for q in sent[0]["queries"]] == ["59.3.2", "0.4.45", "59.3.3", "0.4.46"]
+
+
+def test_cleared_keeps_the_cooldown_when_osv_is_down(monkeypatch):
+    _osv(monkeypatch, OSError("unreachable"))
+    assert bump_deps.cleared("crates.io", [("parquet", "59.3.2", "59.3.3")]) == {}
+
+
 def test_fix_notes_name_the_advisories_behind_each_exemption():
     notes = fix_notes({"rustls": ["RUSTSEC-1"]}, [("rustls", "0.23.45", "0.23.46"), ("serde", "1", "2")])
-    assert notes == ["`rustls` 0.23.45 → 0.23.46 skipped the cooldown: 0.23.45 has RUSTSEC-1"]
+    assert notes == ["`rustls` 0.23.45 → 0.23.46 skipped the cooldown: it clears RUSTSEC-1"]
 
 
 def test_uv_fixes_prints_one_flag_per_vulnerable_package(monkeypatch, tmp_path, capsys):

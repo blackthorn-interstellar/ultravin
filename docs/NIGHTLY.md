@@ -61,8 +61,8 @@ Anything it cannot revert safely — a crate new to the tree, a young transitive
 dep whose kept parent requires it — abandons the whole Cargo.lock bump for the
 night, by name, in the report. Fail closed; tomorrow retries.
 
-One exception: a package whose current pin has an open OSV advisory skips the
-cooldown (`bump_deps.py uv-fixes` for uv, built into `cooldown` for cargo), and
+One exception: a move that clears an open OSV advisory (open on the old pin,
+gone on the new) skips the cooldown (`bump_deps.py uv-fixes` for uv, built into `cooldown` for cargo), and
 the report names the advisories. Otherwise a fresh security fix waits a week
 while every PR's security scan stays red. The fix ships even when the cooldown
 reverts or abandons the rest of the bump: it is never reverted as a dependent
@@ -238,8 +238,8 @@ reason in a comment. One open `parity-backlog` PR blocks the next night's run
 master has moved, `fixes-retry` merges master into it, drops the label and
 hands it back to `fixes-merge` — a red that master has since fixed (a scanner
 finding unrelated to the diff, say) clears without anyone touching it. It
-leaves alone a `[needs-human]` draft, a branch a human has pushed to, and a
-PR that already holds current master.
+leaves alone a `[needs-human]` draft, a branch a human has pushed to, a PR the
+review gate did not approve, and a PR that already holds current master.
 
 On demand: `gh workflow run nightly.yaml -f lane=fixes -f vins="VIN1 VIN2"`
 runs an RCA on exactly those VINs, skipping the probe and the backlog pick.

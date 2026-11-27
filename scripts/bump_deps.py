@@ -12,8 +12,8 @@ it, a multi-version shuffle, a version crates.io does not report — fails
 closed: Cargo.lock is restored wholesale and the bump waits for a cleaner
 night.
 
-The one exception is a security fix: a package whose current pin has an open
-OSV advisory (RustSec, GHSA, PyPI) skips the cooldown. Waiting out the window
+The one exception is a security fix: a move that clears an open OSV advisory
+(RustSec, GHSA, PyPI) — on the old pin, gone on the new — skips the cooldown. Waiting out the window
 would keep a known vulnerability to dodge a hypothetical one, and every PR's
 security scan stays red until the fix lands. `uv-fixes` prints the uv flags
 for that; `cooldown` exempts the cargo moves itself.
@@ -189,13 +189,10 @@ def crates_io_ages(pairs: list[tuple[str, str]]) -> dict[tuple[str, str], dateti
     return ages
 
 
-def advisories(ecosystem: str, pairs: list[tuple[str, str]]) -> dict[str, list[str]]:
-    """name -> open OSV advisory ids, for each pinned (name, version) that has any.
-
-    A failed lookup returns {}: no exemptions, the cooldown holds.
-    """
+def _osv(ecosystem: str, pairs: list[tuple[str, str]]) -> list[set[str]] | None:
+    """Open OSV advisory ids for each (name, version), in order. None when the lookup failed."""
     if not pairs:
-        return {}
+        return []
     queries = [{"package": {"name": n, "ecosystem": ecosystem}, "version": v} for n, v in pairs]
     req = urllib.request.Request(
         "https://api.osv.dev/v1/querybatch",
@@ -209,15 +206,42 @@ def advisories(ecosystem: str, pairs: list[tuple[str, str]]) -> dict[str, list[s
             results = json.load(resp)["results"]
     except (OSError, TimeoutError, KeyError, json.JSONDecodeError) as e:
         log(f"OSV lookup failed: {e} — no advisory exemptions tonight")
-        return {}
+        return None
+    if len(results) != len(pairs):
+        log("OSV answered a different number of queries than it was sent — no advisory exemptions tonight")
+        return None
+    return [{v["id"] for v in r.get("vulns", [])} for r in results]
+
+
+def advisories(ecosystem: str, pairs: list[tuple[str, str]]) -> dict[str, list[str]]:
+    """name -> open OSV advisory ids, for each pinned (name, version) that has any.
+
+    A failed lookup returns {}: no exemptions, the cooldown holds.
+    """
     found: dict[str, list[str]] = {}
-    for (name, _), r in zip(pairs, results, strict=True):
-        found.setdefault(name, []).extend(v["id"] for v in r.get("vulns", []))
+    for (name, _), ids in zip(pairs, _osv(ecosystem, pairs) or [], strict=False):
+        found.setdefault(name, []).extend(sorted(ids))
     return {n: ids for n, ids in found.items() if ids}
 
 
+def cleared(ecosystem: str, clean: list[Move]) -> dict[str, list[str]]:
+    """name -> the advisory ids its move gets rid of: open on the old pin, gone on the new.
+
+    Only that is a security fix. An advisory with no fixed version (an
+    unmaintained crate) sits on every release, so a new release of that crate
+    clears nothing and waits out the cooldown like any other — "has an
+    advisory" must never be a standing pass around it. One query for both
+    sides, so a failed lookup exempts nothing.
+    """
+    ids = _osv(ecosystem, [(n, o) for n, o, _ in clean] + [(n, v) for n, _, v in clean])
+    if ids is None:
+        return {}
+    gone = {m[0]: sorted(old - new) for m, old, new in zip(clean, ids[: len(clean)], ids[len(clean) :], strict=True)}
+    return {n: g for n, g in gone.items() if g}
+
+
 def fix_notes(fixes: dict[str, list[str]], clean: list[Move]) -> list[str]:
-    return [f"`{n}` {o} → {v} skipped the cooldown: {o} has {', '.join(fixes[n])}" for n, o, v in clean if n in fixes]
+    return [f"`{n}` {o} → {v} skipped the cooldown: it clears {', '.join(fixes[n])}" for n, o, v in clean if n in fixes]
 
 
 def reapply_fixes(fix_moves: list[Move]) -> None:
@@ -270,7 +294,7 @@ def cmd_cooldown(args: argparse.Namespace) -> int:
     cargo_notes: list[str] = []
     last_young: list[str] = []
     bumped = lock_moves("Cargo.lock")[0]
-    fixes = advisories("crates.io", [(n, o) for n, o, _ in bumped])
+    fixes = cleared("crates.io", bumped)
     fix_moves = [m for m in bumped if m[0] in fixes]
 
     # Up to four passes: a precise revert shuffles transitive pins of its own,
@@ -335,7 +359,7 @@ def cmd_cooldown(args: argparse.Namespace) -> int:
 
     py_clean, py_unclean = lock_moves("uv.lock")
     cargo_clean, cargo_unclean = lock_moves("Cargo.lock")
-    py_fixes = advisories("PyPI", [(n, o) for n, o, _ in py_clean])
+    py_fixes = cleared("PyPI", py_clean)
     report = "\n".join(
         [
             f"## deps: nightly bump {datetime.now(timezone.utc):%Y-%m-%d}",
