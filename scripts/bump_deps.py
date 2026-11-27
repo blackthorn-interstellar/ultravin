@@ -136,7 +136,10 @@ def plan(
     can revert it in place. The whole Cargo.lock bump is abandoned tonight.
 
     A clean move named in `fixes` (its old pin has an open advisory) is never
-    young: it ships tonight, and so does anything bumped only to pin it.
+    young and never reverted as a dependent: it ships tonight, and so does
+    anything bumped only to pin it. The young crates it reaches still revert
+    on their own — the name-level graph over-reports, so reaching one is no
+    proof the fix needs it.
     """
     young_clean = [m for m in clean if m[0] not in fixes and _young((m[0], m[2]), ages, cutoff)]
     young_unclean = [(n, v) for n, added in unclean for v in sorted(added) if _young((n, v), ages, cutoff)]
@@ -147,7 +150,7 @@ def plan(
     pinned: dict[str, list[str]] = {}
     for m in clean:
         pins = sorted(young[n] for n in reach[m[0]] & young.keys())
-        if m not in young_clean and pins:
+        if m not in young_clean and m[0] not in fixes and pins:
             pinned[m[0]] = pins
 
     # Dependents first: reverting one usually drags its young pin back down
@@ -217,6 +220,24 @@ def fix_notes(fixes: dict[str, list[str]], clean: list[Move]) -> list[str]:
     return [f"`{n}` {o} → {v} skipped the cooldown: {o} has {', '.join(fixes[n])}" for n, o, v in clean if n in fixes]
 
 
+def reapply_fixes(fix_moves: list[Move]) -> None:
+    """Put back every security fix the cooldown took out of Cargo.lock.
+
+    A fix that truly requires a young crate cannot survive the reverts, and an
+    abandoned night restores the whole lockfile. Either way the advisory would
+    outlive the night, so move just the fix and let cargo's resolver bring
+    along the least it needs.
+    """
+    pinned = versions((ROOT / "Cargo.lock").read_text())
+    for name, old_v, new_v in fix_moves:
+        if new_v in pinned.get(name, ()):
+            continue
+        try:
+            sh(["cargo", "update", "-p", f"{name}@{old_v}", "--precise", new_v])
+        except subprocess.CalledProcessError:
+            log(f"could not re-apply the security fix {name} {old_v} -> {new_v}")
+
+
 def lock_moves(path: str) -> tuple[list[Move], list[tuple[str, set[str]]]]:
     old_text = sh(["git", "show", f"HEAD:{path}"], capture=True).stdout
     new_text = (ROOT / path).read_text()
@@ -248,7 +269,9 @@ def cmd_cooldown(args: argparse.Namespace) -> int:
     cutoff = datetime.now(timezone.utc) - timedelta(days=args.days)
     cargo_notes: list[str] = []
     last_young: list[str] = []
-    fixes = advisories("crates.io", [(n, o) for n, o, _ in lock_moves("Cargo.lock")[0]])
+    bumped = lock_moves("Cargo.lock")[0]
+    fixes = advisories("crates.io", [(n, o) for n, o, _ in bumped])
+    fix_moves = [m for m in bumped if m[0] in fixes]
 
     # Up to four passes: a precise revert shuffles transitive pins of its own,
     # and a dependent revert can uncover the next young crate above it.
@@ -301,6 +324,7 @@ def cmd_cooldown(args: argparse.Namespace) -> int:
             + ", ".join(last_young)
             + f" stayed inside the {args.days}-day cooldown after reverts. Tomorrow's run retries."
         ]
+    reapply_fixes(fix_moves)
 
     # An empty night has to *look* empty: the caller decides whether to open a PR
     # by asking git whether the lockfiles moved, so a leftover `[options]` stanza

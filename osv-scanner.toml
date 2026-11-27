@@ -1,0 +1,13 @@
+# OSV-Scanner exceptions for the lockfiles in this directory (Cargo.lock, uv.lock).
+#
+# OSV-Scanner fails on every advisory, including RustSec "unmaintained" notices
+# that have no fixed version. deny.toml already rules those non-blocking for
+# transitive crates (`unmaintained = "workspace"`), and cargo-deny still fails
+# on a direct one — so the ones listed here are that same policy, spelled per
+# ID because OSV-Scanner cannot filter by class. Every entry expires: when it
+# does the scan goes red again and the entry is re-judged, not rubber-stamped.
+
+[[IgnoredVulns]]
+id = "RUSTSEC-2026-0543"
+ignoreUntil = 2027-02-26
+reason = "chrono is unmaintained (no fixed version exists). Transitive only, via arrow-array/arrow-cast/parquet; it leaves when arrow drops it."

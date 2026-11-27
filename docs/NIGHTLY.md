@@ -64,7 +64,10 @@ night, by name, in the report. Fail closed; tomorrow retries.
 One exception: a package whose current pin has an open OSV advisory skips the
 cooldown (`bump_deps.py uv-fixes` for uv, built into `cooldown` for cargo), and
 the report names the advisories. Otherwise a fresh security fix waits a week
-while every PR's security scan stays red. An OSV outage means no exemptions.
+while every PR's security scan stays red. The fix ships even when the cooldown
+reverts or abandons the rest of the bump: it is never reverted as a dependent
+of a young crate, and anything that still took it out is re-applied on its own
+(`cargo update -p <crate> --precise <fixed>`). An OSV outage means no exemptions.
 
 A green bump becomes a lockfile-only PR on the rolling `deps/nightly` branch
 (body = the bump report). A broken bump banks the evidence (bumped lockfiles,
@@ -231,7 +234,12 @@ on the same three gates as the deps lane: CI green, `review-verdict` success,
 and a Security scan that actually ran. A PR the agent marked `needs-human` is
 left alone; any other PR it does not merge is labeled `needs-human` with the
 reason in a comment. One open `parity-backlog` PR blocks the next night's run
-(no stacking); merge or close it to resume draining.
+(no stacking), so a held one is not left to rot: on any later night where
+master has moved, `fixes-retry` merges master into it, drops the label and
+hands it back to `fixes-merge` — a red that master has since fixed (a scanner
+finding unrelated to the diff, say) clears without anyone touching it. It
+leaves alone a `[needs-human]` draft, a branch a human has pushed to, and a
+PR that already holds current master.
 
 On demand: `gh workflow run nightly.yaml -f lane=fixes -f vins="VIN1 VIN2"`
 runs an RCA on exactly those VINs, skipping the probe and the backlog pick.
@@ -266,7 +274,14 @@ fails the run for a human.
   in the bumped tree and `ci`/`data-review` are green. The comment names the
   failing jobs. No agent touched it: scanner verdicts are human-owned. Triage,
   push a fix and re-run (`gh workflow run security.yaml --ref deps/nightly`),
-  or close the PR and let tomorrow retry.
+  or close the PR and let tomorrow retry. Two cases clear themselves: a
+  finding with a fixed release (the next bump takes the fix past the cooldown)
+  and a dated exception in `osv-scanner.toml` (master-only; the branch is
+  rebuilt from master every night).
+- **an advisory issue (`RUSTSEC-…`) is open** — the weekly Security run filed
+  it. It closes itself on master once cargo-audit stops reporting the ID. An
+  advisory with no fix (an unmaintained transitive crate) never stops: give it
+  a dated `osv-scanner.toml` exception and close the issue by hand.
 - **deps PR labeled `needs-human`, `review-verdict` red** — the adversarial
   review gate rejected the bump's content; its findings comment says why. The
   pipeline deliberately stops rather than remediate a verdict. Address the
