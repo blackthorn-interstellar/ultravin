@@ -8,7 +8,7 @@ import platform
 import shutil
 import subprocess
 import sys
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -75,7 +75,7 @@ def main(output: Path = OUTPUT) -> None:
     result = {
         "schema_version": 1,
         "status": "running",
-        "measured_at_utc": datetime.now(UTC).isoformat(timespec="seconds"),
+        "measured_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "configuration": {
             "sequence": [mode for _, mode, _, _ in runs],
             "full_warm_pass": True,

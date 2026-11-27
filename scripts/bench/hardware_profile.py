@@ -7,7 +7,7 @@ import json
 import os
 import plistlib
 import subprocess
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -118,7 +118,7 @@ def main(output: Path = ROOT / "scripts/bench/hardware_profile_2026_09_14.json")
     binary = ROOT / "target/bench/coordination-placement-multicore_probe"
     corpus = ROOT / "target/bench/multicore-corpus.txt"
     data: dict[str, Any] = {
-        "captured_at": datetime.now(UTC).isoformat(),
+        "captured_at": datetime.now(timezone.utc).isoformat(),
         "binary_sha256": hashlib.sha256(binary.read_bytes()).hexdigest(),
         "corpus_sha256": hashlib.sha256(corpus.read_bytes()).hexdigest(),
         "method": "Ten 1-second process counter intervals after full corpus warmup; throughput is whole timed pass, not exactly the counter window.",
