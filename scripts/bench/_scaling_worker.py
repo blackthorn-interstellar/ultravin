@@ -6,7 +6,6 @@ import json
 import os
 import sys
 import time
-from contextlib import redirect_stdout
 from datetime import datetime
 from pathlib import Path
 
@@ -40,14 +39,9 @@ def main() -> None:
         return count
 
     def jsonl_pass() -> int:
-        from ultravin._batch_cli import rows, write_jsonl  # noqa: PLC0415
-
-        with (
-            corpus_path.open(encoding="utf-8") as source,
-            Path(os.devnull).open("w") as sink,
-            redirect_stdout(sink),
-        ):
-            write_jsonl(rows(source), full=False, batch_size=batch_size, now=now)
+        with Path(os.devnull).open("w") as sink:
+            for chunk in chunks:
+                sink.write(uv._decode_batch_jsonl(chunk, full=False, now=now))
         return len(corpus)
 
     if path == "parquet":

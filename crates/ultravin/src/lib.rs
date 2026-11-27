@@ -14,6 +14,8 @@ pub mod adaptive;
 #[cfg(feature = "arrow")]
 pub mod arrow_io;
 mod checkdigit;
+#[cfg(feature = "cli")]
+pub mod cli;
 mod conversion;
 pub mod cover;
 pub mod db;

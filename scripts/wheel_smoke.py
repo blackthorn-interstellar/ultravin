@@ -81,8 +81,8 @@ def run_checks() -> int:
 
     def console_script() -> None:
         # No __main__.py exists, so `python -m ultravin` is not an entry point; the
-        # console script is what `pip install ultravin` actually gives a user. typer
-        # is a runtime dependency, so the bare wheel install already provides it.
+        # console script is what `pip install ultravin` actually gives a user. The
+        # command is Rust inside the extension, so the bare wheel install runs it.
         exe = "ultravin.exe" if os.name == "nt" else "ultravin"
         script = Path(sys.executable).parent / exe
         assert script.exists(), f"console script not found at {script}"

@@ -39,8 +39,8 @@ server, no runtime data files. Install it and decode.
 uv add ultravin
 ```
 
-Prebuilt wheels require **Python 3.10+** and nothing else — the data ships inside
-the wheel.
+Prebuilt wheels require **Python 3.10+** and nothing else: no dependencies, and
+the data ships inside the wheel.
 
 ### Usage
 

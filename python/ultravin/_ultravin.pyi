@@ -17,13 +17,8 @@ class ArrowArraySource(Protocol):
 
     def __arrow_c_array__(self, requested_schema: object | None = None) -> tuple[object, object]: ...
 
-class _BytesWriter(Protocol):
-    """What `_write_batch_jsonl` writes to: only `write(bytes)` is called."""
-
-    def write(self, data: bytes, /) -> object: ...
-
 class _BatchTuner:
-    """Internal predictive JSONL chunk controller for ``decode-batch --jsonl``."""
+    """Predictive JSONL chunk controller, for the predictor's calibration and benchmarks."""
 
     def __init__(self, *, memory_bytes: int) -> None: ...
     def next_rows(self) -> int: ...
@@ -126,15 +121,12 @@ def _decode_batch_jsonl(
     full: bool = False,
     now: datetime | None = None,
 ) -> str: ...
-def _write_batch_jsonl(
-    vins: list[str],
-    out: _BytesWriter,
-    *,
-    years: list[int | None] | None = None,
-    full: bool = False,
-    now: datetime | None = None,
-    memory_bytes: int = 8 << 20,
-) -> None: ...
+def _cli(args: list[str]) -> int:
+    """Run the ``ultravin`` command line ``args`` (program name first); returns its exit code.
+
+    Reads and writes the process's own stdin, stdout and stderr, not ``sys.stdout``.
+    """
+
 def provenance() -> dict[str, str]:
     """Return ``data_month``, ``artifact_blake3``, and ``decoder_version``."""
 

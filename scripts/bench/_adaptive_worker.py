@@ -6,10 +6,8 @@ import json
 import os
 import sys
 import time
-from contextlib import redirect_stdout
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 import ultravin as uv
 
@@ -36,48 +34,29 @@ def main() -> None:
         if stream.batch_prediction is not None:
             predictions.append(stream.batch_prediction)
     elif mode == "jsonl":
-        from ultravin._batch_cli import (  # noqa: PLC0415
-            rows as parse_rows,
-            write_jsonl,
-        )
-
-        if batch_size == "auto":
-            native_tuner = uv._BatchTuner
-
-            class ObservedTuner:
-                def __init__(self, **kwargs: Any) -> None:
-                    self._inner = native_tuner(**kwargs)
-
-                def next_rows(self) -> int:
-                    size = self._inner.next_rows()
-                    requested_batches.append(size)
-                    return size
-
-                def observe(self, *, rows: int, seconds: float, output_bytes: int) -> None:
-                    self._inner.observe(rows=rows, seconds=seconds, output_bytes=output_bytes)
-
-                def decode_jsonl(
-                    self, vins: list[str], *, years: list[int | None] | None, full: bool, now: datetime
-                ) -> str:
-                    encoded = self._inner.decode_jsonl(vins, years=years, full=full, now=now)
-                    if not predictions and self._inner.prediction is not None:
-                        predictions.append(self._inner.prediction)
-                    return encoded
-
-            uv._BatchTuner = ObservedTuner  # ty: ignore[invalid-assignment]
-
-        with (
-            text_path.open(encoding="utf-8") as source,
-            Path(os.devnull).open("w") as sink,
-            redirect_stdout(sink),
-        ):
-            write_jsonl(
-                parse_rows(source),
-                full=False,
-                batch_size=batch_size,
-                batch_memory_mb=batch_memory_mb,
-                now=now,
-            )
+        # The predictive tuner's loop: it chooses each chunk, and learns from
+        # the chunk it just decoded.
+        vins = [line.strip() for line in text_path.read_text().splitlines() if line.strip()]
+        tuner = uv._BatchTuner(memory_bytes=batch_memory_mb * 1024 * 1024) if batch_size == "auto" else None
+        at = 0
+        with Path(os.devnull).open("w") as sink:
+            while at < len(vins):
+                chunk_started = time.perf_counter()
+                size = int(batch_size) if tuner is None else tuner.next_rows()
+                chunk, at = vins[at : at + size], at + size
+                if tuner is None:
+                    sink.write(uv._decode_batch_jsonl(chunk, now=now))
+                    continue
+                requested_batches.append(size)
+                encoded = tuner.decode_jsonl(chunk, now=now)
+                sink.write(encoded)
+                tuner.observe(
+                    rows=len(chunk),
+                    seconds=time.perf_counter() - chunk_started,
+                    output_bytes=sys.getsizeof(encoded),
+                )
+                if not predictions and tuner.prediction is not None:
+                    predictions.append(tuner.prediction)
         count = rows
     else:
         raise ValueError(mode)

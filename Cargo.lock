@@ -1517,6 +1517,7 @@ dependencies = [
  "arrow-schema",
  "arrow-select",
  "blake3",
+ "clap",
  "criterion",
  "libc",
  "memchr",

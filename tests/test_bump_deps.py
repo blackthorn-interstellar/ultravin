@@ -308,6 +308,29 @@ def test_plan_does_not_blame_a_mover_for_a_young_crate_behind_an_unmoved_one():
     assert (reverts, pinned, blockers) == ([("cc", "1.5.1", "1.9.0")], {}, [])
 
 
+def test_plan_ships_a_security_fix_that_merely_reaches_a_young_crate():
+    """2026-11-26: parquet 59.3.3 (RUSTSEC-2026-0595) was reverted for nine nights as a
+    dependent of a young `ahash` it never required."""
+    clean = [("parquet", "59.3.2", "59.3.3"), ("ahash", "0.8.12", "0.8.14")]
+    ages: dict[tuple[str, str], datetime | None] = {("parquet", "59.3.3"): OLD_AGE, ("ahash", "0.8.14"): YOUNG_AGE}
+    graph = {"parquet": {"ahash"}}
+    reverts, pinned, _ = plan(clean, [], ages, CUTOFF, graph)
+    assert {n for n, *_ in reverts} == {"parquet", "ahash"}  # without the exemption both wait
+    reverts, pinned, blockers = plan(clean, [], ages, CUTOFF, graph, fixes={"parquet"})
+    assert (reverts, pinned, blockers) == ([("ahash", "0.8.12", "0.8.14")], {}, [])
+
+
+def test_reapply_fixes_moves_only_the_fixes_the_cooldown_took_out(monkeypatch, tmp_path):
+    (tmp_path / "Cargo.lock").write_text(
+        '[[package]]\nname = "parquet"\nversion = "59.3.2"\n\n[[package]]\nname = "rustls"\nversion = "0.23.46"\n'
+    )
+    monkeypatch.setattr(bump_deps, "ROOT", tmp_path)
+    ran: list[list[str]] = []
+    monkeypatch.setattr(bump_deps, "sh", lambda cmd, **_: ran.append(cmd))
+    bump_deps.reapply_fixes([("parquet", "59.3.2", "59.3.3"), ("rustls", "0.23.45", "0.23.46")])
+    assert ran == [["cargo", "update", "-p", "parquet@59.3.2", "--precise", "59.3.3"]]
+
+
 def _osv(monkeypatch: pytest.MonkeyPatch, payload: object) -> list[dict]:
     sent: list[dict] = []
 

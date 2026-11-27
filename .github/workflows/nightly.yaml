@@ -16,6 +16,9 @@
 #          root-cause cluster per night against the live pinned oracle and
 #          fixes-publish delivers it as a PR and fixes-merge MERGES it on
 #          green, same gates as deps. A PR the agent marks needs-human waits.
+#          A PR the lane itself held is re-judged (fixes-retry) on any later
+#          night master has moved, so a red that master has since fixed
+#          releases the lane without a human.
 #
 # The invariant this file is built around: NO job both runs untrusted code and
 # holds a write token. Every agent job is keyless — it reads untrusted input
@@ -1828,6 +1831,83 @@ jobs:
             echo "::warning::no Security run has started on $head after 12 tries — the scan may be missing from this pull request"
           fi
 
+  # Parity lane, second chance. fixes-merge holds a PR it cannot merge, and one
+  # open parity-backlog PR stops every later drain — PR #121 sat eight nights on
+  # an advisory that was red on master too and had nothing to do with its diff.
+  # So when master has moved since a held PR was last judged, bring master into
+  # it, drop the hold and hand it back to fixes-merge. It is left alone when
+  # the agent asked for the human (draft), when a human has pushed to it, or
+  # when master has not moved (nothing new to judge). Like fixes-merge it
+  # checks out nothing and runs no repository code.
+  fixes-retry:
+    if: (github.event_name == 'schedule' || inputs.lane != 'deps') && !inputs.vins
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # update-branch merges master into the PR branch
+      pull-requests: write # update-branch, drop the label
+      issues: write # drop the label
+      actions: write # dispatch ci.yaml/data-review.yaml/security.yaml, approve gated runs
+    outputs:
+      branch: ${{ steps.retry.outputs.branch }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
+        # The runner image's CA bundle still trusts them via emSign ECC Root CA - G3;
+        # rustup, cargo, git, curl and Python all read it. A no-op once images ship
+        # ca-certificates >= 20260816. Probe with scripts/check_emudhra.py.
+        run: sudo sed -i 's|^mozilla/emSign_ECC_Root_CA_-_G3\.crt$|!&|' /etc/ca-certificates.conf && sudo update-ca-certificates --fresh >/dev/null
+      - name: Re-judge a held parity PR once master has moved
+        id: retry
+        run: |
+          held=$(gh pr list --repo "$REPO" --label parity-backlog --state open --json number,headRefName,isDraft,labels \
+            --jq '[.[] | select(.isDraft | not) | select(any(.labels[]; .name == "needs-human"))] | first // empty | "\(.number) \(.headRefName)"')
+          if [ -z "$held" ]; then
+            echo "no held parity-backlog PR" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          read -r pr branch <<< "$held"
+          bot="41898282+github-actions[bot]@users.noreply.github.com"
+          human=$(gh api --paginate "repos/$REPO/pulls/$pr/commits" --jq '.[].commit.author.email' | grep -vxF "$bot" || true)
+          if [ -n "$human" ]; then
+            echo "#$pr holds commits the bot did not make — it stays with its human" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          behind=$(gh api "repos/$REPO/compare/master...$branch" --jq .behind_by)
+          if [ "$behind" -eq 0 ]; then
+            echo "#$pr already holds current master — nothing new to judge" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          gh api -X PUT "repos/$REPO/pulls/$pr/update-branch" > /dev/null
+          # update-branch answers 202 and merges asynchronously.
+          for _ in $(seq 1 12); do
+            sleep 5
+            behind=$(gh api "repos/$REPO/compare/master...$branch" --jq .behind_by)
+            [ "$behind" -eq 0 ] && break
+          done
+          [ "$behind" -eq 0 ] || { echo "::error::#$pr did not take master ($behind commits behind) — still held"; exit 1; }
+          gh pr edit "$pr" --repo "$REPO" --remove-label needs-human
+          # GITHUB_TOKEN events don't trigger workflows; explicit dispatches do.
+          gh workflow run ci.yaml --repo "$REPO" --ref "$branch"
+          gh workflow run data-review.yaml --repo "$REPO" -f pr="$pr"
+          gh workflow run security.yaml --repo "$REPO" --ref "$branch"
+          # Approve whatever the merge commit's own pull_request event parked
+          # (see fixes-publish): an unapproved run's empty check suite hides
+          # the dispatched run's checks from branch protection.
+          head=$(gh pr view "$pr" --repo "$REPO" --json headRefOid --jq .headRefOid)
+          for _ in $(seq 1 6); do
+            parked=$(gh api "repos/$REPO/actions/runs?status=action_required&head_sha=$head" --jq '.workflow_runs[] | select(.head_repository.full_name == "'"$REPO"'") | select(.path == ".github/workflows/ci.yaml" or .path == ".github/workflows/data-review.yaml" or .path == ".github/workflows/security.yaml") | .id' || true)
+            for rid in $parked; do
+              gh api -X POST "repos/$REPO/actions/runs/$rid/approve" \
+                || echo "::warning::could not approve gated run $rid — merge may stall on expected checks"
+            done
+            sleep 10
+          done
+          echo "branch=$branch" >> "$GITHUB_OUTPUT"
+          echo "#$pr took master ($head) — re-judging it" >> "$GITHUB_STEP_SUMMARY"
+
   # Parity lane, merge half. An unmerged parity-backlog PR is not harmless: it
   # blocks every later night's drain (no stacking) and rots into conflicts with
   # the monthly data refresh — PR #114 sat a week that way. So the lane ends
@@ -1838,8 +1918,8 @@ jobs:
   # Like deps-watch/deps-merge it checks out nothing and runs no repository
   # code — just `gh` against the API.
   fixes-merge:
-    needs: [fixes, fixes-publish]
-    if: ${{ !cancelled() && needs['fixes-publish'].result == 'success' }}
+    needs: [fixes, fixes-publish, fixes-retry]
+    if: ${{ !cancelled() && (needs['fixes-publish'].result == 'success' || needs['fixes-retry'].outputs.branch != '') }}
     runs-on: ubuntu-latest
     timeout-minutes: 75
     permissions:
@@ -1852,7 +1932,9 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       REPO: ${{ github.repository }}
-      BRANCH: ${{ needs.fixes.outputs.branch }}
+      # fixes-retry only names a branch when a PR is already open, and then
+      # the fixes job publishes nothing (no stacking) — never both.
+      BRANCH: ${{ needs['fixes-retry'].outputs.branch || needs.fixes.outputs.branch }}
       RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
     steps:
       - name: Distrust the leaked eMudhra CA keys (CVE-2026-111943)
@@ -1870,7 +1952,7 @@ jobs:
             echo "::error::$BRANCH not merged: $1"
             gh label create needs-human --color B60205 --description "automation stopped — needs a human" || true
             gh pr edit "$BRANCH" --repo "$REPO" --add-label needs-human
-            gh pr comment "$BRANCH" --repo "$REPO" --body "The nightly parity lane did not merge this PR: $1. See [the run]($RUN_URL). Fix and merge it, or close it — while it is open the lane drains nothing."
+            gh pr comment "$BRANCH" --repo "$REPO" --body "The nightly parity lane did not merge this PR: $1. See [the run]($RUN_URL). Fix and merge it, or close it — while it is open the lane drains nothing. It is re-judged by itself on the next night master has moved."
             exit 1
           }
           sleep 60 # dispatched runs need a moment to register on the head SHA

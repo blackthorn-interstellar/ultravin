@@ -16,7 +16,8 @@
 # on a finding, with these exceptions: CodeQL and Scorecard publish findings
 # without failing their jobs; a scheduled cargo-audit passes on advisories
 # that already have an issue (cargo-deny gates RustSec vulnerabilities on every
-# event); and Snyk skips green off master or without a token, but wherever it
+# event), and on master it closes those issues once the advisory is gone;
+# OSV-Scanner honors the dated exceptions in osv-scanner.toml; and Snyk skips green off master or without a token, but wherever it
 # does run it gates on tool errors as well as findings.
 name: Security
 
@@ -142,6 +143,31 @@ jobs:
       - uses: rustsec/audit-check@69366f33c96575abad1ee0dba8212993eecbe998 # v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+      # audit-check opens one issue per advisory on the weekly run and nothing
+      # closed them: the fix landed and the issue sat open for a human to tidy.
+      # On master, close every advisory issue this workflow opened whose ID
+      # cargo-audit no longer reports for Cargo.lock. An audit that produced no
+      # readable report closes nothing.
+      - name: Close issues for advisories that no longer apply
+        if: always() && github.ref == 'refs/heads/master' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cargo audit --json > "$RUNNER_TEMP/audit.json" || true
+          jq -er '[.vulnerabilities.list[].advisory.id, (.warnings | to_entries[].value[] | select(.advisory != null) | .advisory.id)] | unique | .[]' \
+            "$RUNNER_TEMP/audit.json" > "$RUNNER_TEMP/live.txt" || [ "$(jq -r '.lockfile."dependency-count" // 0' "$RUNNER_TEMP/audit.json")" -gt 0 ] || {
+            echo "::warning::no readable cargo-audit report — closing nothing"
+            exit 0
+          }
+          gh issue list --repo "$GITHUB_REPOSITORY" --state open --author "app/github-actions" --search "RUSTSEC- in:title" --limit 100 \
+            --json number,title --jq '.[] | "\(.number) \(.title)"' > "$RUNNER_TEMP/issues.txt"
+          while read -r number id _; do
+            id=${id%:}
+            case "$id" in RUSTSEC-*) ;; *) continue ;; esac
+            grep -qxF "$id" "$RUNNER_TEMP/live.txt" && continue
+            gh issue close "$number" --repo "$GITHUB_REPOSITORY" --reason completed \
+              --comment "cargo-audit no longer reports $id for \`Cargo.lock\` at $GITHUB_SHA — closing."
+          done < "$RUNNER_TEMP/issues.txt"
 
   cargo-deny:
     name: sca (cargo-deny)

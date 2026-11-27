@@ -17,7 +17,6 @@ against arrow.
 
 from __future__ import annotations
 
-import re
 import subprocess
 import sys
 import threading
@@ -30,9 +29,8 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 import ultravin as uv
-from typer.testing import CliRunner, Result
-from ultravin.cli import app
 
+from tests.cli import cli as run_cli
 from tests.vin_samples import VINS
 
 # Projected elements, pinned by `element_id` — the key NHTSA does not rename
@@ -765,30 +763,8 @@ def test_to_pandas_needs_pyarrow(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 # ── CLI ───────────────────────────────────────────────────────────────────────
 
 
-STYLING = re.compile(r"\x1b\[[0-9;]*m")
-
-
-def cli(*args: str) -> Result:
-    """`decode-parquet` under a console wide enough not to wrap an error message.
-
-    typer renders parameter errors through rich, which wraps them in a panel
-    sized to the console. `COLUMNS` is the one knob still live at call time —
-    the rest of typer's console setup is snapshotted at import.
-    """
-    return CliRunner(env={"COLUMNS": "200"}).invoke(app, ["decode-parquet", *args])
-
-
-def plain(text: str) -> str:
-    """stderr as a human reads it, with rich's styling taken back out.
-
-    Seeing `GITHUB_ACTIONS` in the environment, typer force-enables color, and
-    the highlighter then opens a style run per flag fragment — `--batch-size`
-    arrives as `-`, `-batch`, `-size` with escape codes between them, which is
-    why a substring assert that passes locally failed on CI. The decision is
-    made when `typer.rich_utils` is imported, so no environment the runner sets
-    can undo it; the message is the contract, the styling is not.
-    """
-    return STYLING.sub("", text)
+def cli(*args: str) -> subprocess.CompletedProcess[str]:
+    return run_cli("decode-parquet", *args)
 
 
 def test_cli_writes_parquet_and_reports_the_rows_on_stderr(tmp_path: Path) -> None:
@@ -796,10 +772,10 @@ def test_cli_writes_parquet_and_reports_the_rows_on_stderr(tmp_path: Path) -> No
     dst = tmp_path / "out.parquet"
     result = cli(str(src), str(dst), "--columns", "Make,Model")
 
-    assert result.exit_code == 0, result.output
+    assert result.returncode == 0, result.stderr
     # Nothing on stdout: the summary is progress, not data a pipe should swallow.
     assert result.stdout == ""
-    assert plain(result.stderr) == f"wrote {len(CORPUS)} rows to {dst}\n"
+    assert result.stderr == f"wrote {len(CORPUS)} rows to {dst}\n"
     assert pq.read_table(dst).column("Make")[0].as_py() == "HONDA"
 
 
@@ -808,7 +784,7 @@ def test_cli_columns_take_ids_and_names_together(tmp_path: Path) -> None:
     variable name — so one flag covers both spellings."""
     src = corpus_file(tmp_path / "in.parquet")
     dst = tmp_path / "out.parquet"
-    assert cli(str(src), str(dst), "--columns", f"Make,{CYLINDERS}").exit_code == 0
+    assert cli(str(src), str(dst), "--columns", f"Make,{CYLINDERS}").returncode == 0
     assert pq.read_table(dst).schema.names[-2:] == ["Make", "Engine Number of Cylinders"]
 
 
@@ -817,14 +793,14 @@ def test_cli_rejects_an_unknown_column(tmp_path: Path, token: str) -> None:
     src = corpus_file(tmp_path / "in.parquet")
     result = cli(str(src), str(tmp_path / "out.parquet"), "--columns", token)
 
-    assert result.exit_code == 2
-    assert f'unknown column "{token}"' in plain(result.stderr)
+    assert result.returncode == 2
+    assert f'unknown column "{token}"' in result.stderr
 
 
 def test_cli_column_names_id_labels_by_element_id(tmp_path: Path) -> None:
     src = corpus_file(tmp_path / "in.parquet")
     dst = tmp_path / "out.parquet"
-    assert cli(str(src), str(dst), "--columns", f"Make,{CYLINDERS}", "--column-names", "id").exit_code == 0
+    assert cli(str(src), str(dst), "--columns", f"Make,{CYLINDERS}", "--column-names", "id").returncode == 0
     schema = pq.read_schema(dst)
     assert schema.names[-2:] == [f"attr_{MAKE}", f"attr_{CYLINDERS}"]
     assert schema.field(f"attr_{MAKE}").metadata[b"variable"] == b"Make"
@@ -833,8 +809,22 @@ def test_cli_column_names_id_labels_by_element_id(tmp_path: Path) -> None:
 def test_cli_rejects_an_unknown_column_names_mode(tmp_path: Path) -> None:
     src = corpus_file(tmp_path / "in.parquet")
     result = cli(str(src), str(tmp_path / "out.parquet"), "--column-names", "attr")
-    assert result.exit_code == 2
-    assert "--column-names" in plain(result.stderr)
+    assert result.returncode == 2
+    assert "--column-names" in result.stderr
+
+
+def test_cli_batch_size_sets_the_rows_per_group(tmp_path: Path) -> None:
+    src = corpus_file(tmp_path / "in.parquet")
+    dst = tmp_path / "out.parquet"
+    assert cli(str(src), str(dst), "--columns", "Make", "--batch-size", "2").returncode == 0
+    groups = pq.ParquetFile(dst).metadata
+    assert [groups.row_group(i).num_rows for i in range(groups.num_row_groups)][:-1] == [2] * (len(CORPUS) // 2 - 1)
+
+
+def test_cli_reports_a_missing_source_without_a_traceback(tmp_path: Path) -> None:
+    result = cli(str(tmp_path / "missing.parquet"), str(tmp_path / "out.parquet"))
+    assert result.returncode == 2
+    assert result.stderr.startswith(f"error: {tmp_path / 'missing.parquet'}: ")
 
 
 @pytest.mark.parametrize("flag", ["--batch-size", "--sample-rows"])
@@ -843,8 +833,8 @@ def test_cli_rejects_a_row_count_below_one(tmp_path: Path, flag: str) -> None:
     src = corpus_file(tmp_path / "in.parquet")
     result = cli(str(src), str(tmp_path / "out.parquet"), flag, "0")
 
-    assert result.exit_code == 2
-    assert f"Invalid value for '{flag}'" in plain(result.stderr)
+    assert result.returncode == 2
+    assert f"invalid value '0' for '{flag} <" in result.stderr
 
 
 # ── Cost, not value ───────────────────────────────────────────────────────────
@@ -991,11 +981,9 @@ def test_decode_compact_reports_caller_mistakes_and_missing_files(tmp_path: Path
 
 def test_cli_decode_compact_writes_both_files(tmp_path: Path) -> None:
     src = corpus_file(tmp_path / "in.parquet")
-    result = CliRunner(env={"COLUMNS": "200"}).invoke(
-        app, ["decode-compact", str(src), str(tmp_path / "out"), "--columns", "Make,9"]
-    )
+    result = run_cli("decode-compact", str(src), str(tmp_path / "out"), "--columns", "Make,9")
 
-    assert result.exit_code == 0, result.output
+    assert result.returncode == 0, result.stderr
     assert f"wrote {len(CORPUS)} VINs" in result.stderr
     assert pq.read_table(tmp_path / "out" / "vehicles.parquet").column_names == [
         "vehicle_id",
@@ -1007,8 +995,6 @@ def test_cli_decode_compact_writes_both_files(tmp_path: Path) -> None:
 
 
 def test_cli_decode_compact_reports_a_missing_source_without_a_traceback(tmp_path: Path) -> None:
-    result = CliRunner(env={"COLUMNS": "200"}).invoke(
-        app, ["decode-compact", str(tmp_path / "missing.txt"), str(tmp_path / "out")]
-    )
-    assert result.exit_code == 2
-    assert "Invalid value" in plain(result.output)
+    result = run_cli("decode-compact", str(tmp_path / "missing.txt"), str(tmp_path / "out"))
+    assert result.returncode == 2
+    assert result.stderr.startswith(f"error: {tmp_path / 'missing.txt'}: ")

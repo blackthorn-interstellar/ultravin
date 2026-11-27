@@ -7,9 +7,7 @@ description = "Pure-Rust NHTSA vPIC VIN decoder — CLI + library, with spVinDec
 readme = "README.md"
 requires-python = ">=3.10"
 dynamic = ["version"]
-dependencies = [
-    "typer",
-]
+dependencies = []
 license = "MIT"
 
 [project.scripts]
@@ -33,6 +31,9 @@ dev = [
     "pytest-xdist>=3.8.0",
     "ruff",
     "ty",
+    # The scripts' CLIs (scripts/coverage.py, scripts/parity, scripts/bench). The
+    # shipped `ultravin` command is Rust and needs nothing.
+    "typer",
 ]
 
 [project.urls]
